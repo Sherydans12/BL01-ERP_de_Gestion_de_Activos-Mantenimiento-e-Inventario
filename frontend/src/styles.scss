@@ -1,0 +1,25 @@
+/* frontend/src/styles.scss */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark text-gray-300 font-sans antialiased m-0 min-h-screen flex flex-col;
+  }
+
+  /* Estilos globales para inputs - DevTools Aesthetic */
+  input {
+    @apply bg-dark border border-border text-gray-100 rounded-md px-4 py-2 w-full transition-all duration-200;
+  }
+  
+  input:focus {
+    @apply outline-none border-primary ring-1 ring-primary shadow-[0_0_10px_rgba(0,229,255,0.2)];
+  }
+
+  label {
+    @apply block text-sm font-medium text-gray-400 mb-1 tracking-wide;
+  }
+}
