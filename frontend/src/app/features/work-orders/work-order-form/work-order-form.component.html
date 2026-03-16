@@ -1,0 +1,235 @@
+<div class="max-w-5xl mx-auto space-y-6 pb-10">
+  <div class="flex items-center gap-4">
+    <a
+      routerLink="/app/ots"
+      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-gray-400 hover:text-primary"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        ></path>
+      </svg>
+    </a>
+    <div>
+      <h2
+        class="text-2xl font-bold text-white tracking-tight flex items-center gap-2"
+      >
+        <span class="text-primary font-mono">&lt;OT&gt;</span> Registro de
+        Intervención
+      </h2>
+      <p class="text-sm text-gray-400 mt-1">
+        Complete los datos técnicos del mantenimiento.
+      </p>
+    </div>
+  </div>
+
+  <form [formGroup]="otForm" (ngSubmit)="onSubmit()" class="space-y-6">
+    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
+      <h3
+        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
+      >
+        1. Equipo y Condiciones
+      </h3>
+
+      <div class="grid grid-cols-3 gap-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1"
+            >Equipo a Intervenir <span class="text-error">*</span></label
+          >
+          <select
+            formControlName="equipmentId"
+            class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+          >
+            <option value="" disabled selected>Seleccione...</option>
+            @for (eq of fleet(); track eq.id) {
+              <option [value]="eq.id">
+                {{ eq.internalId }} ({{ eq.type }})
+              </option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1"
+            >Horómetro Inicial <span class="text-error">*</span></label
+          >
+          <input
+            type="number"
+            formControlName="initialHorometer"
+            class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+            placeholder="Ej: 15400"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1"
+            >Horómetro Final <span class="text-error">*</span></label
+          >
+          <input
+            type="number"
+            formControlName="finalHorometer"
+            class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+            placeholder="Ej: 15405"
+          />
+        </div>
+      </div>
+    </div>
+    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
+      <h3
+        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
+      >
+        2. Sistemas Intervenidos (Marque con una X)
+      </h3>
+
+      <div
+        formArrayName="systems"
+        class="grid grid-cols-2 md:grid-cols-4 gap-4"
+      >
+        @for (sysCtrl of systemsArray.controls; track $index) {
+          <label
+            class="flex items-center gap-3 p-3 rounded bg-dark/30 border border-border/50 hover:border-primary/50 cursor-pointer transition-colors"
+          >
+            <input
+              type="checkbox"
+              [formControlName]="$index"
+              class="w-4 h-4 text-primary bg-dark border-border rounded focus:ring-primary focus:ring-offset-dark"
+            />
+            <span
+              class="text-sm font-medium text-gray-300 uppercase tracking-wide"
+            >
+              {{ systemsCatalog()[$index].name }}
+            </span>
+          </label>
+        }
+      </div>
+    </div>
+    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
+      <h3
+        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
+      >
+        3. Descripción del Trabajo
+      </h3>
+      <textarea
+        formControlName="description"
+        rows="4"
+        class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+        placeholder="Detalle la falla, el diagnóstico y el trabajo exacto ejecutado..."
+      ></textarea>
+    </div>
+
+    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
+      <div
+        class="flex justify-between items-center border-b border-border pb-2 mb-4"
+      >
+        <h3 class="text-sm font-mono text-primary uppercase tracking-wider">
+          4. Rellenos y Consumos de Aceite
+        </h3>
+        <button
+          type="button"
+          (click)="addFluidRow()"
+          class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1 px-3 rounded transition-colors"
+        >
+          + AGREGAR FLUIDO
+        </button>
+      </div>
+
+      <div formArrayName="fluids" class="space-y-3">
+        @for (fluidCtrl of fluidsArray.controls; track $index) {
+          <div
+            [formGroupName]="$index"
+            class="flex items-center gap-4 bg-dark/50 p-3 rounded-lg border border-border"
+          >
+            <div class="flex-1">
+              <label class="block text-xs text-gray-400 mb-1"
+                >Tipo de Fluido</label
+              >
+              <select
+                formControlName="fluidId"
+                class="w-full bg-dark border border-border text-gray-300 rounded text-sm p-2 outline-none focus:border-primary"
+              >
+                <option value="" disabled selected>Seleccione fluido...</option>
+                @for (flu of fluidsCatalog(); track flu.id) {
+                  <option [value]="flu.id">{{ flu.name }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="w-32">
+              <label class="block text-xs text-gray-400 mb-1"
+                >Cantidad (Lts)</label
+              >
+              <input
+                type="number"
+                step="0.5"
+                formControlName="liters"
+                class="w-full bg-dark border border-border text-white rounded text-sm p-2 outline-none focus:border-primary font-mono"
+                placeholder="0.0"
+              />
+            </div>
+
+            <div class="w-40">
+              <label class="block text-xs text-gray-400 mb-1">Acción</label>
+              <select
+                formControlName="action"
+                class="w-full bg-dark border border-border text-gray-300 rounded text-sm p-2 outline-none focus:border-primary"
+              >
+                <option value="RELLENO">Relleno</option>
+                <option value="CAMBIO">Cambio Completo</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              (click)="removeFluidRow($index)"
+              class="mt-5 text-error hover:text-red-400 transition-colors"
+              title="Eliminar fila"
+            >
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        }
+
+        @if (fluidsArray.length === 0) {
+          <div
+            class="text-center py-6 text-gray-500 font-mono text-sm border border-dashed border-border rounded-lg"
+          >
+            No se han registrado consumos de fluidos en esta OT.
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 pt-4 border-t border-border">
+      <a
+        routerLink="/app/ots"
+        class="px-6 py-3 font-medium text-gray-400 hover:text-white transition-colors"
+        >Cancelar</a
+      >
+      <button
+        type="submit"
+        [disabled]="otForm.invalid"
+        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-3 px-8 rounded shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        FIRMAR Y ENVIAR OT
+      </button>
+    </div>
+  </form>
+</div>

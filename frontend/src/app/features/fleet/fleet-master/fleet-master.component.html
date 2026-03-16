@@ -28,6 +28,7 @@
         IMPORTAR XLS
       </button>
       <button
+        (click)="openModal()"
         class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded transition-colors flex items-center gap-2"
       >
         <span class="text-lg leading-none">+</span> NUEVO EQUIPO
@@ -147,3 +148,166 @@
     </div>
   </div>
 </div>
+@if (showModal) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+    >
+      <div
+        class="flex justify-between items-center p-6 border-b border-border bg-dark/50"
+      >
+        <h3
+          class="text-xl font-bold text-white tracking-tight flex items-center gap-2"
+        >
+          <span class="text-primary font-mono">&lt;+&gt;</span> Registrar Activo
+        </h3>
+        <button
+          (click)="closeModal()"
+          class="text-gray-400 hover:text-white transition-colors"
+        >
+          <svg
+            class="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            ></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto">
+        <form
+          [formGroup]="equipmentForm"
+          (ngSubmit)="onSubmit()"
+          id="eqForm"
+          class="space-y-6"
+        >
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <label for="internalId"
+                >N° Interno (Ej: EC-3005)
+                <span class="text-error">*</span></label
+              >
+              <input
+                type="text"
+                id="internalId"
+                formControlName="internalId"
+                class="uppercase font-mono text-primary"
+                placeholder="EC-XXXX"
+              />
+            </div>
+            <div>
+              <label for="plate">Patente (Opcional)</label>
+              <input
+                type="text"
+                id="plate"
+                formControlName="plate"
+                class="uppercase font-mono"
+                placeholder="ABCD-12"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-6">
+            <div>
+              <label for="type"
+                >Tipo de Equipo <span class="text-error">*</span></label
+              >
+              <select
+                id="type"
+                formControlName="type"
+                class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="" disabled selected>Seleccione...</option>
+                @for (tipo of equipmentTypes(); track tipo.id) {
+                  <option [value]="tipo.name">{{ tipo.name }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <label for="brand">Marca <span class="text-error">*</span></label>
+              <select
+                id="brand"
+                formControlName="brand"
+                class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="" disabled selected>Seleccione...</option>
+                @for (marca of brands(); track marca.id) {
+                  <option [value]="marca.name">{{ marca.name }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <label for="model"
+                >Modelo <span class="text-error">*</span></label
+              >
+              <input
+                type="text"
+                id="model"
+                formControlName="model"
+                class="w-full uppercase bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+                placeholder="Ej: HILUX"
+              />
+            </div>
+          </div>
+
+          <div class="border-t border-border pt-4 mt-4">
+            <h4
+              class="text-sm font-mono text-gray-400 uppercase tracking-wider mb-4"
+            >
+              Documentación Legal
+            </h4>
+            <div class="grid grid-cols-2 gap-6">
+              <div>
+                <label for="techReviewExp">Vencimiento Revisión Técnica</label>
+                <input
+                  type="date"
+                  id="techReviewExp"
+                  formControlName="techReviewExp"
+                  class="font-mono text-sm text-gray-300 [color-scheme:dark]"
+                />
+              </div>
+              <div>
+                <label for="circPermitExp"
+                  >Vencimiento Permiso Circulación</label
+                >
+                <input
+                  type="date"
+                  id="circPermitExp"
+                  formControlName="circPermitExp"
+                  class="font-mono text-sm text-gray-300 [color-scheme:dark]"
+                />
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="p-4 border-t border-border bg-dark/50 flex justify-end gap-3">
+        <button
+          (click)="closeModal()"
+          type="button"
+          class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          form="eqForm"
+          [disabled]="equipmentForm.invalid"
+          class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-6 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          GUARDAR ACTIVO
+        </button>
+      </div>
+    </div>
+  </div>
+}

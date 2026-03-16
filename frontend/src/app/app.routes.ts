@@ -29,6 +29,27 @@ export const routes: Routes = [
             (m) => m.FleetMasterComponent,
           ),
       },
+      {
+        path: 'catalogos',
+        loadComponent: () =>
+          import('./features/settings/catalog-master/catalog-master.component').then(
+            (m) => m.CatalogMasterComponent,
+          ),
+      },
+      {
+        path: 'ots',
+        loadComponent: () =>
+          import('./features/work-orders/work-order-list/work-order-list.component').then(
+            (m) => m.WorkOrderListComponent,
+          ),
+      },
+      {
+        path: 'ots/nueva',
+        loadComponent: () =>
+          import('./features/work-orders/work-order-form/work-order-form.component').then(
+            (m) => m.WorkOrderFormComponent,
+          ),
+      },
     ],
   },
   { path: '', redirectTo: 'login', pathMatch: 'full' },
