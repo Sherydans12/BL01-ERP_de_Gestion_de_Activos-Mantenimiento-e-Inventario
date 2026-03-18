@@ -1,25 +1,61 @@
-# 🚛 TPM - Sistema de Gestión de Activos y Mantenimiento
+🚛 TPM - Sistema de Gestión de Activos y Mantenimiento
+Software integral diseñado para la digitalización del control de flota, gestión de Órdenes de Trabajo (OT) y generación de reportes automáticos de mantenimiento.
 
-Bienvenido al repositorio de **TPM**. Este software está diseñado para digitalizar el control de flota, gestionar Órdenes de Trabajo (OT) y generar reportes automáticos de mantenimiento.
+🛠️ Requisitos Previos
+Asegúrese de tener instaladas las siguientes herramientas antes de iniciar el despliegue local:
 
----
+Node.js (Versión LTS recomendada) - nodejs.org
 
-## 🛠️ Requisitos Previos (Instalar antes de empezar)
+Docker Desktop (Para orquestación de la base de datos) - docker.com
 
-Para que el sistema funcione en tu computadora, necesitas instalar estas tres herramientas:
+Git - git-scm.com
 
-1. **Node.js**: [Descargar aquí (Versión LTS)](https://nodejs.org/) - Es el motor que ejecuta el código.
-2. **Docker Desktop**: [Descargar aquí](https://www.docker.com/products/docker-desktop/) - Lo usaremos para "encender" la base de datos de forma automática.
-3. **Git**: [Descargar aquí](https://git-scm.com/) - Para bajar el proyecto a tu PC.
+🚀 Instalación y Despliegue
+Siga este flujo secuencial para poner en marcha el entorno de desarrollo:
 
----
-
-## 🚀 Pasos para ejecutar el proyecto en tu PC
-
-Sigue estos pasos en orden. Si te pierdes, abre una terminal (PowerShell o CMD) y escribe los comandos tal cual aparecen.
-
-### 1. Clonar el proyecto
-Primero, descarga una copia del código a tu computadora:
-```bash
-git clone [https://github.com/TU_USUARIO/TU_REPOSITORIO.git](https://github.com/TU_USUARIO/TU_REPOSITORIO.git)
+1. Clonar el repositorio
+Bash
+git clone https://github.com/TU_USUARIO/TU_REPOSITORIO.git
 cd TU_REPOSITORIO
+2. Infraestructura (Database)
+Asegúrese de que el motor de Docker esté en ejecución y levante el contenedor de la base de datos:
+
+Bash
+docker-compose up -d
+3. Configuración del Backend (Servidor)
+Acceda al directorio del servidor, instale dependencias y ejecute las migraciones de Prisma:
+
+Bash
+cd backend
+npm install
+npx prisma migrate dev --name init
+npm run start:dev
+El servidor estará disponible en el puerto configurado (por defecto 3000).
+
+4. Configuración del Frontend (Interfaz)
+En una nueva terminal, instale las dependencias de la UI y levante el servidor de desarrollo:
+
+Bash
+cd frontend
+npm install
+npm start
+Acceso local: http://localhost:4200
+
+📖 Guía de Uso Rápido
+Configuración Inicial: Acceda al módulo de Configuración para poblar los diccionarios base (Tipos de equipo, Marcas, Modelos).
+
+Gestión de Flota: Registre las unidades en el Maestro de Flota.
+
+Operaciones: Genere Órdenes de Trabajo vinculadas a los equipos registrados.
+
+Analytics: Utilice las funciones de "Exportar a Excel" y "Descargar Hoja de Vida" (PDF) para obtener reportes técnicos.
+
+⚠️ Notas Técnicas para Colaboradores
+Persistencia: La base de datos depende del estado del contenedor Docker. No detenga el servicio docker-compose mientras el backend esté en ejecución.
+
+Hot Reload: Tanto el backend (NestJS) como el frontend cuentan con recarga en caliente. Los cambios en el código se reflejarán automáticamente.
+
+Soporte: En caso de errores de conexión con la base de datos, verifique las variables de entorno (.env) y el estado de los volúmenes en Docker.
+
+🗺️ Roadmap / Próximos Pasos
+Fase 9: Gestión de Usuarios. Implementación de RBAC (Role-Based Access Control) y módulos de perfil de usuario para entornos colaborativos.
