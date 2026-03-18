@@ -1,61 +1,77 @@
-🚛 TPM - Sistema de Gestión de Activos y Mantenimiento
-Software integral diseñado para la digitalización del control de flota, gestión de Órdenes de Trabajo (OT) y generación de reportes automáticos de mantenimiento.
+# 🚛 TPM - Sistema de Gestión de Activos y Mantenimiento
 
-🛠️ Requisitos Previos
-Asegúrese de tener instaladas las siguientes herramientas antes de iniciar el despliegue local:
+Bienvenido al repositorio de **TPM**. Este software está diseñado para digitalizar el control de flota, gestionar Órdenes de Trabajo (OT) y generar reportes automáticos de mantenimiento.
 
-Node.js (Versión LTS recomendada) - nodejs.org
+---
 
-Docker Desktop (Para orquestación de la base de datos) - docker.com
+## 🛠️ Requisitos Previos
 
-Git - git-scm.com
+Para que el sistema funcione correctamente en tu entorno local, es necesario instalar:
 
-🚀 Instalación y Despliegue
-Siga este flujo secuencial para poner en marcha el entorno de desarrollo:
+1. **Node.js** (Versión LTS): [Descargar](https://nodejs.org/) - Entorno de ejecución para JavaScript.
+2. **Docker Desktop**: [Descargar](https://www.docker.com/products/docker-desktop/) - Para la orquestación automatizada de la base de datos.
+3. **Git**: [Descargar](https://git-scm.com/) - Control de versiones para clonar el proyecto.
 
-1. Clonar el repositorio
-Bash
-git clone https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-cd TU_REPOSITORIO
-2. Infraestructura (Database)
-Asegúrese de que el motor de Docker esté en ejecución y levante el contenedor de la base de datos:
+---
 
-Bash
+## 🚀 Pasos para ejecutar el proyecto
+
+Ejecuta los siguientes comandos en tu terminal (PowerShell, CMD o Bash) siguiendo este orden estricto:
+
+### 1. Clonar el repositorio
+```bash
+git clone https://github.com/Sherydans12/BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario.git
+cd BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario
+```
+
+### 2. Levantar la infraestructura (Docker)
+Asegúrate de tener Docker Desktop abierto y ejecuta:
+```bash
 docker-compose up -d
-3. Configuración del Backend (Servidor)
-Acceda al directorio del servidor, instale dependencias y ejecute las migraciones de Prisma:
+```
+*Esto desplegará la base de datos de forma automática.*
 
-Bash
+### 3. Configurar el Backend (Servidor)
+Accede a la carpeta del servidor para instalar dependencias y sincronizar la base de datos:
+```bash
 cd backend
 npm install
 npx prisma migrate dev --name init
 npm run start:dev
-El servidor estará disponible en el puerto configurado (por defecto 3000).
+```
+*El servidor estará activo cuando visualices el mensaje "Application is running".*
 
-4. Configuración del Frontend (Interfaz)
-En una nueva terminal, instale las dependencias de la UI y levante el servidor de desarrollo:
-
-Bash
+### 4. Configurar el Frontend (Interfaz)
+En una **nueva terminal**, accede a la carpeta de la interfaz:
+```bash
 cd frontend
 npm install
 npm start
-Acceso local: http://localhost:4200
+```
+*El sistema se abrirá automáticamente en: http://localhost:4200*
 
-📖 Guía de Uso Rápido
-Configuración Inicial: Acceda al módulo de Configuración para poblar los diccionarios base (Tipos de equipo, Marcas, Modelos).
+---
 
-Gestión de Flota: Registre las unidades en el Maestro de Flota.
+## 📖 Guía de Uso Rápido
 
-Operaciones: Genere Órdenes de Trabajo vinculadas a los equipos registrados.
+1. **Configuración**: Ve al módulo de Configuración y define los "Diccionarios" (Tipos de equipo, Marcas, etc.).
+2. **Flota**: En el Maestro de Flota, registra las unidades (camiones, camionetas).
+3. **Mantención**: Crea una Orden de Trabajo vinculada a un equipo registrado.
+4. **Reportes**: Utiliza las funciones de "Exportar a Excel" y "Descargar Hoja de Vida" (PDF).
 
-Analytics: Utilice las funciones de "Exportar a Excel" y "Descargar Hoja de Vida" (PDF) para obtener reportes técnicos.
+---
 
-⚠️ Notas Técnicas para Colaboradores
-Persistencia: La base de datos depende del estado del contenedor Docker. No detenga el servicio docker-compose mientras el backend esté en ejecución.
+## ⚠️ Notas para el colaborador
 
-Hot Reload: Tanto el backend (NestJS) como el frontend cuentan con recarga en caliente. Los cambios en el código se reflejarán automáticamente.
+* **Persistencia de procesos**: No cierres las terminales donde se ejecutan el Backend y el Frontend, de lo contrario el sistema se detendrá.
+* **Base de Datos**: Docker debe estar iniciado **antes** de arrancar el Backend.
+* **Depuración**: Si encuentras errores (texto en rojo), captura la pantalla y envíamela.
 
-Soporte: En caso de errores de conexión con la base de datos, verifique las variables de entorno (.env) y el estado de los volúmenes en Docker.
+---
 
-🗺️ Roadmap / Próximos Pasos
-Fase 9: Gestión de Usuarios. Implementación de RBAC (Role-Based Access Control) y módulos de perfil de usuario para entornos colaborativos.
+## 🗺️ Próximos Pasos (Fase 9)
+
+El siguiente hito del proyecto se centrará en la **Gestión de Usuarios**:
+* Implementación de roles y permisos (RBAC).
+* Creación de perfiles de usuario individuales.
+* Control de acceso por colaborador.
