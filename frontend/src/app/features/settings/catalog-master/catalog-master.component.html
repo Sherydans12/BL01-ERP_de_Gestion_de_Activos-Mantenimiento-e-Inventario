@@ -18,49 +18,18 @@
         Diccionarios
       </h3>
 
-      <button
-        (click)="setCategory('EQUIPMENT_TYPES')"
-        [class.bg-dark]="activeCategory() === 'EQUIPMENT_TYPES'"
-        [class.text-primary]="activeCategory() === 'EQUIPMENT_TYPES'"
-        [class.border-l-2]="activeCategory() === 'EQUIPMENT_TYPES'"
-        [class.border-primary]="activeCategory() === 'EQUIPMENT_TYPES'"
-        class="text-left px-4 py-3 rounded-md text-sm font-medium text-gray-300 hover:bg-dark/50 transition-all"
-      >
-        Tipos de Equipo
-      </button>
-
-      <button
-        (click)="setCategory('BRANDS')"
-        [class.bg-dark]="activeCategory() === 'BRANDS'"
-        [class.text-primary]="activeCategory() === 'BRANDS'"
-        [class.border-l-2]="activeCategory() === 'BRANDS'"
-        [class.border-primary]="activeCategory() === 'BRANDS'"
-        class="text-left px-4 py-3 rounded-md text-sm font-medium text-gray-300 hover:bg-dark/50 transition-all"
-      >
-        Marcas de Flota
-      </button>
-
-      <button
-        (click)="setCategory('SYSTEMS')"
-        [class.bg-dark]="activeCategory() === 'SYSTEMS'"
-        [class.text-primary]="activeCategory() === 'SYSTEMS'"
-        [class.border-l-2]="activeCategory() === 'SYSTEMS'"
-        [class.border-primary]="activeCategory() === 'SYSTEMS'"
-        class="text-left px-4 py-3 rounded-md text-sm font-medium text-gray-300 hover:bg-dark/50 transition-all"
-      >
-        Sistemas Intervenidos
-      </button>
-
-      <button
-        (click)="setCategory('FLUIDS')"
-        [class.bg-dark]="activeCategory() === 'FLUIDS'"
-        [class.text-primary]="activeCategory() === 'FLUIDS'"
-        [class.border-l-2]="activeCategory() === 'FLUIDS'"
-        [class.border-primary]="activeCategory() === 'FLUIDS'"
-        class="text-left px-4 py-3 rounded-md text-sm font-medium text-gray-300 hover:bg-dark/50 transition-all"
-      >
-        Fluidos y Aceites
-      </button>
+      @for (cat of categoryList; track cat.id) {
+        <button
+          (click)="setCategory(cat.id)"
+          [class.bg-dark]="activeCategory() === cat.id"
+          [class.text-primary]="activeCategory() === cat.id"
+          [class.border-l-2]="activeCategory() === cat.id"
+          [class.border-primary]="activeCategory() === cat.id"
+          class="text-left px-4 py-3 rounded-md text-sm font-medium text-gray-300 hover:bg-dark/50 transition-all"
+        >
+          {{ cat.name }}
+        </button>
+      }
     </div>
 
     <div
@@ -73,6 +42,7 @@
           {{ categoryNames[activeCategory()] }}
         </h3>
         <button
+          (click)="openModal()"
           class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded transition-colors flex items-center gap-2"
         >
           <span>+</span> NUEVO REGISTRO
@@ -125,11 +95,24 @@
                     >
                   }
                 </td>
-                <td class="py-3 px-6 text-right">
+                <td class="py-3 px-6 text-right space-x-3">
                   <button
+                    (click)="editItem(item)"
                     class="text-gray-400 hover:text-primary transition-colors font-mono text-xs"
                   >
                     EDITAR
+                  </button>
+                  <button
+                    (click)="toggleActive(item)"
+                    class="text-gray-400 hover:text-warning transition-colors font-mono text-xs"
+                  >
+                    {{ item.isActive ? "DESACTIVAR" : "ACTIVAR" }}
+                  </button>
+                  <button
+                    (click)="requestDelete(item.id)"
+                    class="text-error/80 hover:text-error transition-colors font-mono text-xs"
+                  >
+                    ELIMINAR
                   </button>
                 </td>
               </tr>
@@ -149,3 +132,118 @@
     </div>
   </div>
 </div>
+
+<!-- ═══════════ MODAL: Nuevo Registro ═══════════ -->
+@if (showModal()) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    (click)="closeModal()"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+      (click)="$event.stopPropagation()"
+    >
+      <!-- Header -->
+      <div class="p-5 border-b border-border bg-dark/40">
+        <h3 class="text-lg font-bold text-white tracking-tight">
+          {{ isEditMode() ? "Editar Registro" : "Nuevo Registro" }}
+        </h3>
+        <p class="text-xs text-gray-400 mt-1 font-mono">
+          {{ categoryNames[activeCategory()] }}
+        </p>
+      </div>
+
+      <!-- Body -->
+      <form
+        [formGroup]="catalogForm"
+        (ngSubmit)="submitForm()"
+        class="p-5 space-y-4"
+      >
+        <!-- Código -->
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 uppercase tracking-wider mb-1.5"
+          >
+            Código
+          </label>
+          <input
+            formControlName="code"
+            type="text"
+            placeholder="Ej: SYS-06"
+            class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/50 focus:border-[#00E5FF] transition-all"
+          />
+        </div>
+
+        <!-- Nombre -->
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 uppercase tracking-wider mb-1.5"
+          >
+            Nombre / Descripción
+          </label>
+          <input
+            formControlName="name"
+            type="text"
+            placeholder="Ej: SISTEMA DE REFRIGERACIÓN"
+            class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/50 focus:border-[#00E5FF] transition-all"
+          />
+        </div>
+
+        <!-- Categoría (readonly, se asigna por tab) -->
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 uppercase tracking-wider mb-1.5"
+          >
+            Categoría
+          </label>
+          <input
+            [value]="categoryNames[activeCategory()]"
+            readonly
+            class="w-full bg-dark/60 border border-border rounded-lg px-4 py-2.5 text-sm text-gray-400 cursor-not-allowed"
+          />
+        </div>
+
+        <!-- Estado -->
+        <div class="flex items-center gap-3">
+          <input
+            formControlName="isActive"
+            type="checkbox"
+            id="isActiveCheck"
+            class="w-4 h-4 rounded border-border bg-dark text-[#00E5FF] focus:ring-[#00E5FF]/50"
+          />
+          <label for="isActiveCheck" class="text-sm text-gray-300">
+            Registro activo
+          </label>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            (click)="closeModal()"
+            class="px-4 py-2 text-sm font-mono text-gray-400 hover:text-white border border-border rounded-lg hover:bg-dark/50 transition-all"
+          >
+            CANCELAR
+          </button>
+          <button
+            type="submit"
+            [disabled]="catalogForm.invalid"
+            class="px-5 py-2 text-sm font-bold font-mono text-dark bg-[#00E5FF] rounded-lg hover:bg-[#00E5FF]/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            {{ isEditMode() ? "GUARDAR CAMBIOS" : "CREAR REGISTRO" }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<app-confirm-modal
+  [isOpen]="showConfirmModal()"
+  title="Eliminar Registro Maestro"
+  message="¿Estás seguro de eliminar este ítem de catálogo? Esta acción no se puede deshacer y podría afectar los registros históricos de otras tablas (N/A)."
+  confirmText="Eliminar"
+  cancelText="Cancelar"
+  (confirm)="confirmDelete()"
+  (cancel)="cancelDelete()"
+></app-confirm-modal>

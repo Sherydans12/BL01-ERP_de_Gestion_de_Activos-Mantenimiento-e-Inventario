@@ -1,10 +1,15 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, tap } from 'rxjs';
 
 export type CatalogCategory =
-  | 'EQUIPMENT_TYPES'
-  | 'BRANDS'
-  | 'SYSTEMS'
-  | 'FLUIDS';
+  | 'EQUIPMENT_TYPE'
+  | 'BRAND'
+  | 'SYSTEM'
+  | 'FLUID'
+  | 'FUEL_TYPE'
+  | 'DRIVE_TYPE'
+  | 'OWNERSHIP';
 
 export interface CatalogItem {
   id: string;
@@ -18,101 +23,87 @@ export interface CatalogItem {
   providedIn: 'root',
 })
 export class CatalogService {
-  // Estado global de los catálogos (Más adelante, se llenará con un HTTP GET al backend)
-  private catalogsSignal = signal<CatalogItem[]>([
-    {
-      id: '1',
-      code: 'EQ-01',
-      name: 'CAMIONETA',
-      category: 'EQUIPMENT_TYPES',
-      isActive: true,
-    },
-    {
-      id: '2',
-      code: 'EQ-02',
-      name: 'CAMIÓN ALJIBE',
-      category: 'EQUIPMENT_TYPES',
-      isActive: true,
-    },
-    {
-      id: '3',
-      code: 'EQ-03',
-      name: 'BULLDOZER',
-      category: 'EQUIPMENT_TYPES',
-      isActive: true,
-    },
-    {
-      id: '4',
-      code: 'EQ-04',
-      name: 'EXCAVADORA',
-      category: 'EQUIPMENT_TYPES',
-      isActive: true,
-    },
-    {
-      id: '5',
-      code: 'BR-01',
-      name: 'TOYOTA',
-      category: 'BRANDS',
-      isActive: true,
-    },
-    {
-      id: '6',
-      code: 'BR-02',
-      name: 'CATERPILLAR',
-      category: 'BRANDS',
-      isActive: true,
-    },
-    {
-      id: '7',
-      code: 'BR-03',
-      name: 'FOTON',
-      category: 'BRANDS',
-      isActive: true,
-    },
-    {
-      id: '8',
-      code: 'SYS-01',
-      name: 'MOTOR',
-      category: 'SYSTEMS',
-      isActive: true,
-    },
-    {
-      id: '9',
-      code: 'SYS-02',
-      name: 'TRANSMISIÓN',
-      category: 'SYSTEMS',
-      isActive: true,
-    },
-    {
-      id: '10',
-      code: 'FLD-01',
-      name: 'ACEITE DE MOTOR 15W40',
-      category: 'FLUIDS',
-      isActive: true,
-    },
-  ]);
+  private http = inject(HttpClient);
+  private apiUrl = 'http://localhost:3000/api/catalogs';
 
-  // Computed signals globales que cualquier componente puede leer
+  // Signal central que almacenará los datos de la BD
+  private catalogsSignal = signal<CatalogItem[]>([]);
+
+  // Computed signals para los dropdowns y checkboxes
   public equipmentTypes = computed(() =>
     this.catalogsSignal().filter(
-      (c) => c.category === 'EQUIPMENT_TYPES' && c.isActive,
+      (c) => c.category === 'EQUIPMENT_TYPE' && c.isActive,
+    ),
+  );
+  public brands = computed(() =>
+    this.catalogsSignal().filter((c) => c.category === 'BRAND' && c.isActive),
+  );
+  public systems = computed(() =>
+    this.catalogsSignal().filter((c) => c.category === 'SYSTEM' && c.isActive),
+  );
+  public fluids = computed(() =>
+    this.catalogsSignal().filter((c) => c.category === 'FLUID' && c.isActive),
+  );
+  public fuelTypes = computed(() =>
+    this.catalogsSignal().filter(
+      (c) => c.category === 'FUEL_TYPE' && c.isActive,
+    ),
+  );
+  public driveTypes = computed(() =>
+    this.catalogsSignal().filter(
+      (c) => c.category === 'DRIVE_TYPE' && c.isActive,
+    ),
+  );
+  public ownerships = computed(() =>
+    this.catalogsSignal().filter(
+      (c) => c.category === 'OWNERSHIP' && c.isActive,
     ),
   );
 
-  public brands = computed(() =>
-    this.catalogsSignal().filter((c) => c.category === 'BRANDS' && c.isActive),
-  );
+  // Método para cargar desde el backend
+  loadCatalogs(): Observable<CatalogItem[]> {
+    return this.http
+      .get<CatalogItem[]>(this.apiUrl)
+      .pipe(tap((data) => this.catalogsSignal.set(data)));
+  }
 
-  public systems = computed(() =>
-    this.catalogsSignal().filter((c) => c.category === 'SYSTEMS' && c.isActive),
-  );
+  // POST: Crear un nuevo ítem y actualizar el Signal
+  createItem(data: Omit<CatalogItem, 'id'>): Observable<CatalogItem> {
+    return this.http
+      .post<CatalogItem>(this.apiUrl, data)
+      .pipe(
+        tap((newItem) =>
+          this.catalogsSignal.update((prev) => [...prev, newItem]),
+        ),
+      );
+  }
 
-  public fluids = computed(() =>
-    this.catalogsSignal().filter((c) => c.category === 'FLUIDS' && c.isActive),
-  );
+  // PATCH: Actualizar un ítem y actualizar el Signal
+  updateItem(id: string, data: Partial<CatalogItem>): Observable<CatalogItem> {
+    return this.http.patch<CatalogItem>(`${this.apiUrl}/${id}`, data).pipe(
+      tap((updatedItem) => {
+        this.catalogsSignal.update((prev) =>
+          prev.map((item) =>
+            item.id === id ? { ...item, ...updatedItem } : item,
+          ),
+        );
+      }),
+    );
+  }
 
-  // Método general para obtener todo el catálogo (usado por el administrador)
-  public getAllCatalogs() {
+  // DELETE: Eliminar un ítem y actualizar el Signal
+  deleteItem(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`).pipe(
+      tap(() => {
+        this.catalogsSignal.update((prev) =>
+          prev.filter((item) => item.id !== id),
+        );
+      }),
+    );
+  }
+
+  // Obtenemos el Signal completo para la vista de Administración
+  getAllCatalogs() {
     return this.catalogsSignal;
   }
 }

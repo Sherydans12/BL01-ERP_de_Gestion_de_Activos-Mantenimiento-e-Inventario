@@ -8,8 +8,11 @@ import {
   Validators,
   ReactiveFormsModule,
 } from '@angular/forms';
-import { RouterLink, Router } from '@angular/router';
+import { RouterLink, Router, ActivatedRoute } from '@angular/router';
 import { CatalogService } from '../../../core/services/catalog/catalog.service';
+import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { NotificationService } from '../../../core/services/notification/notification.service';
 
 @Component({
   selector: 'app-work-order-form',
@@ -21,16 +24,21 @@ export class WorkOrderFormComponent implements OnInit {
   private fb = inject(FormBuilder);
   private catalogService = inject(CatalogService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private workOrdersService = inject(WorkOrdersService);
+  private fleetService = inject(FleetService);
+  private notificationService = inject(NotificationService);
+
+  otId: string | null = null;
+  mode: 'CREATING' | 'EDITING' | 'READONLY' = 'CREATING';
+  currentStatus: string = '';
 
   // Exponemos catálogos globales
   fluidsCatalog = this.catalogService.fluids;
   systemsCatalog = this.catalogService.systems; // <-- Este Signal alimenta los checkboxes
 
-  // Mock de la flota
-  fleet = signal([
-    { id: '1', internalId: 'EC-3005', type: 'CAMIONETA' },
-    { id: '2', internalId: 'EC-2995', type: 'BULLDOZER' },
-  ]);
+  // Catálogo de flota real
+  fleet = signal<any[]>([]);
 
   otForm: FormGroup;
 
@@ -40,6 +48,7 @@ export class WorkOrderFormComponent implements OnInit {
       equipmentId: ['', Validators.required],
       type: ['NUEVA', Validators.required],
       category: ['PROGRAMADA', Validators.required],
+      maintenanceType: ['PREVENTIVO', Validators.required],
       initialHorometer: ['', [Validators.required, Validators.min(0)]],
       finalHorometer: ['', [Validators.required, Validators.min(0)]],
       description: ['', Validators.required],
@@ -49,8 +58,74 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Construimos los checkboxes dinámicamente cuando el componente carga
+    this.fleetService.getEquipments({ limit: 1000 }).subscribe({
+      next: (res) => this.fleet.set(res.data),
+      error: (err) => console.error('Error al cargar flota:', err),
+    });
+
     this.buildSystemsCheckboxes();
+
+    // Verificamos si estamos editando
+    this.route.paramMap.subscribe((params) => {
+      this.otId = params.get('id');
+      if (this.otId) {
+        this.mode = 'EDITING';
+        this.loadWorkOrder(this.otId);
+      }
+    });
+  }
+
+  private loadWorkOrder(id: string) {
+    this.workOrdersService.getWorkOrder(id).subscribe({
+      next: (ot) => {
+        this.currentStatus = ot.status;
+        if (ot.status === 'CLOSED') {
+          this.mode = 'READONLY';
+        }
+
+        this.otForm.patchValue({
+          equipmentId: ot.equipmentId,
+          type: ot.type,
+          category: ot.category,
+          maintenanceType: ot.maintenanceType || 'PREVENTIVO',
+          initialHorometer: ot.initialHorometer,
+          finalHorometer: ot.finalHorometer,
+          description: ot.description,
+        });
+
+        // Marcar sistemas
+        const catalogSystems = this.systemsCatalog();
+        const existingSystemIds =
+          ot.systems?.map((s: any) => s.catalogItemId) || [];
+        const checkedArray = catalogSystems.map((cs) =>
+          existingSystemIds.includes(cs.id),
+        );
+
+        checkedArray.forEach((isChecked, i) => {
+          (this.otForm.get('systems') as FormArray).at(i).setValue(isChecked);
+        });
+
+        // Cargar fluidos
+        if (ot.fluids && ot.fluids.length > 0) {
+          ot.fluids.forEach((f: any) => {
+            const fluidGroup = this.fb.group({
+              fluidId: [f.catalogItemId, Validators.required],
+              liters: [f.liters, [Validators.required, Validators.min(0.1)]],
+              action: [f.action, Validators.required],
+            });
+            this.fluidsArray.push(fluidGroup);
+          });
+        }
+
+        if (this.mode === 'READONLY') {
+          this.otForm.disable(); // Bloquea todos los inputs
+        }
+      },
+      error: (err) => {
+        console.error('OT no encontrada:', err);
+        this.router.navigate(['/app/ots']);
+      },
+    });
   }
 
   // Atajos para el HTML
@@ -87,12 +162,11 @@ export class WorkOrderFormComponent implements OnInit {
 
   // --- GUARDADO ---
   onSubmit() {
-    if (this.otForm.invalid) {
+    if (this.otForm.invalid || this.mode === 'READONLY') {
       this.otForm.markAllAsTouched();
       return;
     }
 
-    // Mapeo Crítico: Traducir el array de true/false a los IDs reales de los sistemas seleccionados
     const selectedSystemIds = this.otForm.value.systems
       .map((checked: boolean, i: number) =>
         checked ? this.systemsCatalog()[i].id : null,
@@ -101,13 +175,26 @@ export class WorkOrderFormComponent implements OnInit {
 
     const finalPayload = {
       ...this.otForm.value,
-      systems: selectedSystemIds, // Reemplazamos el array de booleanos por los IDs
+      systems: selectedSystemIds,
     };
 
-    console.log('Payload Final de la OT:', finalPayload);
-    alert(
-      'OT Guardada con éxito. Revisa la consola para ver el JSON estructurado.',
-    );
-    this.router.navigate(['/app/ots']);
+    if (this.mode === 'EDITING' && this.otId) {
+      // Si tuviéramos un endpoint de Update, se llamaría aquí.
+      // Por ahora el sistema asume que la OT no se edita en profundidad, solo se cambia de estado.
+      // Así que podríamos implementar un update o dejarlo como "Solo creamos".
+      this.notificationService.warning(
+        'La edición completa aún no está implementada en el backend.',
+      );
+    } else {
+      this.workOrdersService.createOT(finalPayload).subscribe({
+        next: () => {
+          this.notificationService.success(
+            'Orden de Trabajo creada exitosamente.',
+          );
+          this.router.navigate(['/app/ots']);
+        },
+        error: (err) => console.error('Error al crear OT:', err),
+      });
+    }
   }
 }

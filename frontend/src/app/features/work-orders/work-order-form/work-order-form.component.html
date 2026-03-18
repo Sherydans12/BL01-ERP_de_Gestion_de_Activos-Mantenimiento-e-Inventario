@@ -22,8 +22,27 @@
       <h2
         class="text-2xl font-bold text-white tracking-tight flex items-center gap-2"
       >
-        <span class="text-primary font-mono">&lt;OT&gt;</span> Registro de
-        Intervención
+        <span class="text-primary font-mono">&lt;OT&gt;</span>
+        @if (mode === "CREATING") {
+          Nueva Intervención
+        } @else {
+          Orden de Trabajo:
+          <span class="text-gray-300 font-mono">#{{ otId }}</span>
+        }
+
+        @if (currentStatus === "CLOSED") {
+          <span
+            class="ml-3 text-xs font-mono px-2 py-1 rounded-full border border-success/30 bg-success/10 text-success uppercase"
+          >
+            CERRADA (HISTÓRICO)
+          </span>
+        } @else if (currentStatus === "IN_PROGRESS") {
+          <span
+            class="ml-3 text-xs font-mono px-2 py-1 rounded-full border border-[#00E5FF]/30 bg-[#00E5FF]/10 text-[#00E5FF] uppercase"
+          >
+            EN PROGRESO
+          </span>
+        }
       </h2>
       <p class="text-sm text-gray-400 mt-1">
         Complete los datos técnicos del mantenimiento.
@@ -39,14 +58,14 @@
         1. Equipo y Condiciones
       </h3>
 
-      <div class="grid grid-cols-3 gap-6">
-        <div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="md:col-span-2">
           <label class="block text-sm font-medium text-gray-300 mb-1"
             >Equipo a Intervenir <span class="text-error">*</span></label
           >
           <select
             formControlName="equipmentId"
-            class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+            class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="" disabled selected>Seleccione...</option>
             @for (eq of fleet(); track eq.id) {
@@ -56,6 +75,34 @@
             }
           </select>
         </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1"
+            >Categoría <span class="text-error">*</span></label
+          >
+          <select
+            formControlName="category"
+            class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+          >
+            <option value="PROGRAMADA">Programada</option>
+            <option value="NO_PROGRAMADA">No Programada</option>
+            <option value="ACCIDENTE">Accidente</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1"
+            >Tipo de Mantenimiento <span class="text-error">*</span></label
+          >
+          <select
+            formControlName="maintenanceType"
+            class="w-full bg-dark border border-border text-[#00E5FF] font-bold rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+          >
+            <option value="PREVENTIVO">Preventivo</option>
+            <option value="CORRECTIVO">Correctivo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1"
             >Horómetro Inicial <span class="text-error">*</span></label
@@ -130,13 +177,15 @@
         <h3 class="text-sm font-mono text-primary uppercase tracking-wider">
           4. Rellenos y Consumos de Aceite
         </h3>
-        <button
-          type="button"
-          (click)="addFluidRow()"
-          class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1 px-3 rounded transition-colors"
-        >
-          + AGREGAR FLUIDO
-        </button>
+        @if (mode !== "READONLY") {
+          <button
+            type="button"
+            (click)="addFluidRow()"
+            class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1 px-3 rounded transition-colors"
+          >
+            + AGREGAR FLUIDO
+          </button>
+        }
       </div>
 
       <div formArrayName="fluids" class="space-y-3">
@@ -177,33 +226,35 @@
               <label class="block text-xs text-gray-400 mb-1">Acción</label>
               <select
                 formControlName="action"
-                class="w-full bg-dark border border-border text-gray-300 rounded text-sm p-2 outline-none focus:border-primary"
+                class="w-full bg-dark border border-border text-gray-300 rounded text-sm p-2 outline-none focus:border-primary disabled:opacity-60"
               >
                 <option value="RELLENO">Relleno</option>
                 <option value="CAMBIO">Cambio Completo</option>
               </select>
             </div>
 
-            <button
-              type="button"
-              (click)="removeFluidRow($index)"
-              class="mt-5 text-error hover:text-red-400 transition-colors"
-              title="Eliminar fila"
-            >
-              <svg
-                class="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            @if (mode !== "READONLY") {
+              <button
+                type="button"
+                (click)="removeFluidRow($index)"
+                class="mt-5 text-error hover:text-red-400 transition-colors"
+                title="Eliminar fila"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                ></path>
-              </svg>
-            </button>
+                <svg
+                  class="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  ></path>
+                </svg>
+              </button>
+            }
           </div>
         }
 
@@ -221,15 +272,17 @@
       <a
         routerLink="/app/ots"
         class="px-6 py-3 font-medium text-gray-400 hover:text-white transition-colors"
-        >Cancelar</a
+        >Volver al Listado</a
       >
-      <button
-        type="submit"
-        [disabled]="otForm.invalid"
-        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-3 px-8 rounded shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        FIRMAR Y ENVIAR OT
-      </button>
+      @if (mode !== "READONLY") {
+        <button
+          type="submit"
+          [disabled]="otForm.invalid"
+          class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-3 px-8 rounded shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          FIRMAR Y CERRAR PARTE
+        </button>
+      }
     </div>
   </form>
 </div>

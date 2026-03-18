@@ -50,6 +50,13 @@ export const routes: Routes = [
             (m) => m.WorkOrderFormComponent,
           ),
       },
+      {
+        path: 'ots/:id',
+        loadComponent: () =>
+          import('./features/work-orders/work-order-form/work-order-form.component').then(
+            (m) => m.WorkOrderFormComponent,
+          ),
+      },
     ],
   },
   { path: '', redirectTo: 'login', pathMatch: 'full' },

@@ -10,7 +10,10 @@
     </div>
     <div class="flex gap-3">
       <button
+        (click)="showFilters.set(!showFilters())"
         class="bg-dark hover:bg-surface border border-border text-gray-300 font-mono text-sm py-2 px-4 rounded transition-colors"
+        [class.border-primary]="showFilters()"
+        [class.text-primary]="showFilters()"
       >
         <svg
           class="w-4 h-4 inline-block mr-2"
@@ -27,6 +30,26 @@
         </svg>
         FILTRAR
       </button>
+      <button
+        (click)="exportToExcel()"
+        class="bg-dark hover:bg-surface border border-border text-gray-300 font-mono text-sm py-2 px-4 rounded transition-colors flex items-center gap-2"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+        EXPORTAR
+      </button>
+
       <a
         routerLink="/app/ots/nueva"
         class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
@@ -35,6 +58,132 @@
       </a>
     </div>
   </div>
+
+  <!-- KPI DASHBOARD -->
+  @if (stats()) {
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in">
+      <div class="bg-surface border border-border rounded-xl p-4 shadow-sm">
+        <p class="text-xs font-mono text-gray-500 uppercase">OTs Abiertas</p>
+        <p class="text-2xl font-bold text-white mt-1">
+          {{ stats().otsByStatus.OPEN }}
+        </p>
+      </div>
+      <div
+        class="bg-surface border border-border rounded-xl p-4 shadow-sm border-l-4 border-l-[#00E5FF]"
+      >
+        <p class="text-xs font-mono text-[#00E5FF] uppercase">En Progreso</p>
+        <p class="text-2xl font-bold text-white mt-1">
+          {{ stats().otsByStatus.IN_PROGRESS }}
+        </p>
+      </div>
+      <div
+        class="bg-surface border border-border rounded-xl p-4 shadow-sm border-l-4 border-l-warning"
+      >
+        <p class="text-xs font-mono text-warning uppercase">En Espera</p>
+        <p class="text-2xl font-bold text-white mt-1">
+          {{ stats().otsByStatus.ON_HOLD }}
+        </p>
+      </div>
+      <div
+        class="bg-surface border border-border rounded-xl p-4 shadow-sm border-l-4 border-l-success"
+      >
+        <p class="text-xs font-mono text-success uppercase">Cerradas</p>
+        <p class="text-2xl font-bold text-white mt-1">
+          {{ stats().otsByStatus.CLOSED }}
+        </p>
+      </div>
+    </div>
+  }
+  <!-- PANEL DE FILTROS -->
+  @if (showFilters()) {
+    <div
+      class="bg-surface border border-border rounded-xl p-5 space-y-4 animate-in"
+    >
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <div class="col-span-1 md:col-span-2">
+          <label
+            class="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider"
+            >Buscar (N°, Equipo)</label
+          >
+          <input
+            type="text"
+            [(ngModel)]="filterSearch"
+            placeholder="Ej: OT-2026-001"
+            class="w-full bg-dark border border-border rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider"
+            >Estado</label
+          >
+          <select
+            [(ngModel)]="filterStatus"
+            class="w-full bg-dark border border-border rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+          >
+            <option value="">Todos</option>
+            <option value="OPEN">Abierta / Pendiente</option>
+            <option value="IN_PROGRESS">En Progreso</option>
+            <option value="ON_HOLD">En Espera</option>
+            <option value="CLOSED">Cerrada</option>
+          </select>
+        </div>
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider"
+            >Desde</label
+          >
+          <input
+            type="date"
+            [(ngModel)]="filterDateFrom"
+            class="w-full bg-dark border border-border rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider"
+            >Hasta</label
+          >
+          <input
+            type="date"
+            [(ngModel)]="filterDateTo"
+            class="w-full bg-dark border border-border rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider"
+            >Equipo</label
+          >
+          <select
+            [(ngModel)]="filterEquipmentId"
+            class="w-full bg-dark border border-border rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+          >
+            <option value="">Todos</option>
+            @for (eq of fleet(); track eq.id) {
+              <option [value]="eq.id">
+                {{ eq.internalId }} — {{ eq.type }}
+              </option>
+            }
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <button
+            (click)="applyFilters()"
+            class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded transition-colors"
+          >
+            APLICAR
+          </button>
+          <button
+            (click)="clearFilters()"
+            class="bg-dark hover:bg-surface border border-border text-gray-400 font-mono text-sm py-2 px-4 rounded transition-colors"
+          >
+            LIMPIAR
+          </button>
+        </div>
+      </div>
+    </div>
+  }
 
   <div
     class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden"
@@ -69,26 +218,34 @@
                 <div class="font-mono text-primary font-bold">
                   {{ ot.correlative }}
                 </div>
-                <div class="text-xs text-gray-500 mt-1">{{ ot.date }}</div>
+                <div class="text-xs text-gray-500 mt-1">
+                  {{ ot.createdAt | date: "yyyy-MM-dd" }}
+                </div>
               </td>
 
               <td class="py-4 px-6">
                 <div class="font-mono text-white">
-                  {{ ot.equipmentInternalId }}
+                  {{ ot.equipment?.internalId }}
                 </div>
                 <div class="text-xs text-gray-500 uppercase">
-                  {{ ot.equipmentType }}
+                  {{ ot.equipment?.type }}
                 </div>
               </td>
 
               <td class="py-4 px-6">
                 <div class="font-medium text-gray-300">{{ ot.category }}</div>
+                <div class="font-mono text-[10px] text-gray-500 mt-0.5">
+                  Mantenimiento:
+                  <span class="text-gray-400 font-bold">{{
+                    ot.maintenanceType || "NO_ESPECIFICADO"
+                  }}</span>
+                </div>
                 <div class="flex gap-1 mt-1 flex-wrap">
-                  @for (sys of ot.systems; track sys) {
+                  @for (sys of ot.systems; track sys.catalogItemId) {
                     <span
                       class="inline-block px-1.5 py-0.5 bg-dark border border-border rounded text-[10px] font-mono text-gray-400"
                     >
-                      {{ sys }}
+                      {{ sys.catalogItem.name }}
                     </span>
                   }
                 </div>
@@ -113,26 +270,105 @@
                 }
               </td>
 
-              <td class="py-4 px-6 text-right space-x-3">
+              <td class="py-4 px-6 text-right space-x-2">
                 <button
-                  class="text-gray-400 hover:text-white transition-colors font-mono text-xs"
+                  (click)="viewPdf(ot.id)"
+                  class="text-gray-400 hover:text-white transition-colors font-mono text-xs border border-transparent hover:border-border px-2 py-1 rounded"
                 >
                   VER PDF
                 </button>
+                <a
+                  [routerLink]="['/app/ots', ot.id]"
+                  class="text-gray-400 hover:text-primary transition-colors font-mono text-xs border border-transparent hover:border-border px-2 py-1 rounded"
+                >
+                  DETALLE
+                </a>
 
-                @if (ot.status === "EN_REVISION") {
+                @if (ot.status === "OPEN") {
                   <button
-                    (click)="approveWorkOrder(ot.id)"
-                    class="text-primary hover:text-white transition-colors font-mono text-xs font-bold bg-primary/10 px-3 py-1 rounded border border-primary/30 hover:bg-primary/20"
+                    (click)="changeStatus(ot.id, 'IN_PROGRESS')"
+                    class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs font-bold bg-[#00E5FF]/10 px-2 py-1 rounded border border-[#00E5FF]/30 hover:bg-[#00E5FF]/20"
                   >
-                    APROBAR Y CERRAR
+                    INICIAR TRABAJO
+                  </button>
+                } @else if (ot.status === "IN_PROGRESS") {
+                  <button
+                    (click)="changeStatus(ot.id, 'ON_HOLD')"
+                    class="text-warning hover:text-white transition-colors font-mono text-xs font-bold bg-warning/10 px-2 py-1 rounded border border-warning/30 hover:bg-warning/20"
+                  >
+                    PAUSAR
+                  </button>
+                  <button
+                    (click)="confirmCloseOt(ot.id)"
+                    class="text-success hover:text-white transition-colors font-mono text-xs font-bold bg-success/10 px-2 py-1 rounded border border-success/30 hover:bg-success/20 ml-2"
+                  >
+                    CERRAR
+                  </button>
+                } @else if (ot.status === "ON_HOLD") {
+                  <button
+                    (click)="changeStatus(ot.id, 'IN_PROGRESS')"
+                    class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs font-bold bg-[#00E5FF]/10 px-2 py-1 rounded border border-[#00E5FF]/30 hover:bg-[#00E5FF]/20"
+                  >
+                    REANUDAR
                   </button>
                 }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td
+                colspan="5"
+                class="py-12 text-center text-gray-500 font-mono text-sm"
+              >
+                No se encontraron órdenes de trabajo.
               </td>
             </tr>
           }
         </tbody>
       </table>
     </div>
+
+    <!-- Paginación -->
+    @if (totalPages() > 1 || totalItems() > 0) {
+      <div
+        class="px-6 py-4 border-t border-border bg-dark/50 flex items-center justify-between"
+      >
+        <span class="text-sm text-gray-400 font-mono">
+          Mostrando página
+          <span class="font-bold text-white">{{ currentPage() }}</span>
+          de
+          <span class="font-bold text-white">{{ totalPages() }}</span>
+          ({{ totalItems() }} registros totales)
+        </span>
+
+        <div class="flex items-center gap-2">
+          <button
+            (click)="changePage(currentPage() - 1)"
+            [disabled]="currentPage() === 1"
+            class="px-3 py-1.5 rounded bg-dark border border-border text-gray-300 font-mono text-sm hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Ant
+          </button>
+          <button
+            (click)="changePage(currentPage() + 1)"
+            [disabled]="currentPage() >= totalPages()"
+            class="px-3 py-1.5 rounded bg-dark border border-border text-gray-300 font-mono text-sm hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Sig
+          </button>
+        </div>
+      </div>
+    }
   </div>
 </div>
+
+@if (selectedOtForClose()) {
+  <app-confirm-modal
+    title="Cerrar Orden de Trabajo"
+    message="Al cerrar esta OT, el Horómetro Final registrado actualizará automáticamente el contador del equipo en la Flota de forma irreversible. El formulario pasará a Solo Lectura. ¿Deseas firmar y cerrar esta OT?"
+    confirmText="CERRAR OT"
+    cancelText="Cancelar"
+    (confirm)="executeCloseOt()"
+    (cancel)="cancelCloseModal()"
+  ></app-confirm-modal>
+}

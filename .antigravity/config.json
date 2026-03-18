@@ -1,0 +1,10 @@
+{
+  "agent": {
+    "contextManagement": {
+      "autoTruncate": true,
+      "maxContextTokens": 32000,
+      "strategy": "rolling_window",
+      "priorityFiles": ["package.json", "src/index.ts"]
+    }
+  }
+}

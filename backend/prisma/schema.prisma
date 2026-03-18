@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// 1. MAESTRO DE FLOTA (EQUIPMENT)
+// ==========================================
+model Equipment {
+  id                      String    @id @default(uuid()) @db.Uuid
+  internalId              String    @unique @map("internal_id") @db.VarChar(50) // Ej: EC-3005
+  plate                   String?   @unique @db.VarChar(20) // Ej: VCJW-21 (Bulls pueden no tener)
+  type                    String    @db.VarChar(50) // Ej: CAMIONETA, BULLDOZER
+  brand                   String    @db.VarChar(50) // Ej: TOYOTA, CAT
+  model                   String    @db.VarChar(50) // Ej: HILUX
+  initialHorometer        Int       @default(0) @map("initial_horometer")
+  currentHorometer        Int       @default(0) @map("current_horometer")
+  
+  // Identificación Extendida
+  vin                     String?   @unique @db.VarChar(50)
+  engineNumber            String?   @map("engine_number") @db.VarChar(50)
+  year                    Int?
+
+  // Operación y Mantenimiento
+  fuelType                String?   @map("fuel_type") @db.VarChar(50)
+  driveType               String?   @map("drive_type") @db.VarChar(50)
+  ownership               String?   @db.VarChar(50)
+  maintenanceFrequency    Int?      @map("maintenance_frequency")
+  
+  // Vencimientos Legales
+  techReviewExp           DateTime? @map("tech_review_exp") @db.Date
+  circPermitExp           DateTime? @map("circ_permit_exp") @db.Date
+
+  // Auditoría
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  // Relaciones
+  workOrders              WorkOrder[]
+
+  @@map("equipments")
+}
+
+// ==========================================
+// 2. CATÁLOGOS GLOBALES (SYSTEMS, FLUIDS)
+// ==========================================
+model CatalogItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(20) // Ej: SYS-01, FLD-01
+  name        String   @db.VarChar(100)
+  category    CatalogCategory
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Relaciones
+  systemInterventions WorkOrderSystem[]
+  fluidConsumptions   WorkOrderFluid[]
+
+  @@map("catalog_items")
+}
+
+enum CatalogCategory {
+  EQUIPMENT_TYPE
+  BRAND
+  SYSTEM
+  FLUID
+  FUEL_TYPE
+  DRIVE_TYPE
+  OWNERSHIP
+}
+
+// ==========================================
+// 3. ÓRDENES DE TRABAJO (OT)
+// ==========================================
+model WorkOrder {
+  id                String    @id @default(uuid()) @db.Uuid
+  correlative       String    @unique @db.VarChar(30) // Ej: OT-2026-001
+  equipmentId       String    @map("equipment_id") @db.Uuid
+  type              OtType    @default(NUEVA)
+  category          OtCategory
+  maintenanceType   MaintenanceType @map("maintenance_type") // PREVENTIVO o CORRECTIVO
+  status            OtStatus  @default(OPEN)
+  
+  initialHorometer  Int       @map("initial_horometer")
+  finalHorometer    Int       @map("final_horometer")
+  description       String    @db.Text
+  
+  hasBacklog        Boolean   @default(false) @map("has_backlog")
+
+  // Auditoría (Para soportar Sync Offline después)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  syncedAt          DateTime? @map("synced_at")
+  closedAt          DateTime? @map("closed_at")
+
+  // Relaciones
+  equipment         Equipment         @relation(fields: [equipmentId], references: [id])
+  systems           WorkOrderSystem[]
+  fluids            WorkOrderFluid[]
+
+  @@map("work_orders")
+}
+
+enum OtType {
+  NUEVA
+  CONTINUIDAD
+}
+
+enum OtCategory {
+  PROGRAMADA
+  NO_PROGRAMADA
+  ACCIDENTE
+}
+
+enum MaintenanceType {
+  PREVENTIVO
+  CORRECTIVO
+}
+
+enum OtStatus {
+  OPEN
+  IN_PROGRESS
+  ON_HOLD
+  CLOSED
+}
+
+// ==========================================
+// 4. TABLAS INTERMEDIAS (RELACIONES M:N)
+// ==========================================
+model WorkOrderSystem {
+  workOrderId   String @map("work_order_id") @db.Uuid
+  catalogItemId String @map("catalog_item_id") @db.Uuid
+
+  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  @@id([workOrderId, catalogItemId])
+  @@map("work_order_systems")
+}
+
+model WorkOrderFluid {
+  id            String @id @default(uuid()) @db.Uuid
+  workOrderId   String @map("work_order_id") @db.Uuid
+  catalogItemId String @map("catalog_item_id") @db.Uuid
+  
+  liters        Float
+  action        FluidAction
+
+  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  @@map("work_order_fluids")
+}
+
+enum FluidAction {
+  RELLENO
+  CAMBIO
+}
