@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient, CatalogCategory } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
@@ -37,18 +38,92 @@ const seedData: SeedItem[] = [
 ];
 
 async function main() {
-  console.log('🌱 Seeding catalog_items...');
+  // ── TENANT predeterminado (TPM) ──
+  console.log('\n🏢 Verificando TENANT predeterminado (TPM)...');
+  const tpmTenant = await prisma.tenant.upsert({
+    where: { code: 'TPM' },
+    update: {},
+    create: {
+      code: 'TPM',
+      name: 'Transportes Portuarios y Minería',
+    },
+  });
+
+  console.log('🌱 Seeding catalog_items para TPM...');
 
   for (const item of seedData) {
-    await prisma.catalogItem.upsert({
-      where: { code: item.code },
+    await (prisma.catalogItem.upsert as any)({
+      where: {
+        tenantId_code: {
+          tenantId: tpmTenant.id,
+          code: item.code,
+        },
+      },
       update: { name: item.name, category: item.category },
-      create: { code: item.code, name: item.name, category: item.category },
+      create: {
+        tenantId: tpmTenant.id,
+        code: item.code,
+        name: item.name,
+        category: item.category,
+      },
     });
     console.log(`  ✔ ${item.code} — ${item.name}`);
   }
 
-  console.log(`\n✅ Seed completado: ${seedData.length} registros procesados.`);
+  console.log('\n👤 Verificando usuario ADMIN...');
+  const adminEmail = 'admin@tpm.cl';
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail },
+  });
+
+  if (!existingAdmin) {
+    const hashedPassword = await bcrypt.hash('admin', 10);
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        password: hashedPassword,
+        name: 'Administrador TPM',
+        role: 'ADMIN',
+        isActive: true,
+        tenantId: tpmTenant.id,
+      },
+    });
+    console.log('  ✔ Usuario ADMIN creado exitosamente (admin@tpm.cl).');
+  } else {
+    // Asegurar que tenga el tenant asignado si no lo tiene
+    if (!existingAdmin.tenantId) {
+      await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: { tenantId: tpmTenant.id },
+      });
+      console.log('  ✔ Tenant TPM asignado al usuario ADMIN existente.');
+    }
+    console.log('  ✔ Usuario ADMIN ya existe.');
+  }
+
+  // ── Equipo de Prueba ──
+  console.log('\n🚜 Verificando Equipo de Prueba para TPM...');
+  const testEquipment = await prisma.equipment.upsert({
+    where: {
+      tenantId_internalId: {
+        tenantId: tpmTenant.id,
+        internalId: 'TEST-001',
+      },
+    } as any,
+    update: {},
+    create: {
+      tenantId: tpmTenant.id,
+      internalId: 'TEST-001',
+      plate: 'TEST-21',
+      type: 'CAMIONETA',
+      brand: 'TOYOTA',
+      model: 'HILUX',
+      currentHorometer: 1000,
+    } as any,
+  });
+  console.log(`  ✔ Equipo de prueba creado: ${testEquipment.internalId}`);
+
+  console.log(`\n✅ Seed completado: ${seedData.length} catálogos procesados.`);
 }
 
 main()

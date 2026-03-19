@@ -1,6 +1,7 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
+import { environment } from '../../../../environments/environment';
 
 export type CatalogCategory =
   | 'EQUIPMENT_TYPE'
@@ -24,7 +25,7 @@ export interface CatalogItem {
 })
 export class CatalogService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:3000/api/catalogs';
+  private apiUrl = `${environment.apiUrl}/catalogs`;
 
   // Signal central que almacenará los datos de la BD
   private catalogsSignal = signal<CatalogItem[]>([]);

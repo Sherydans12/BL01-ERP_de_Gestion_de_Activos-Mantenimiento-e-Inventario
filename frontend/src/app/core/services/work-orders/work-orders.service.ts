@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../../../environments/environment';
 
 export interface CreateWorkOrderPayload {
   equipmentId: string;
@@ -19,7 +20,7 @@ export interface CreateWorkOrderPayload {
 })
 export class WorkOrdersService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:3000/api/work-orders';
+  private apiUrl = `${environment.apiUrl}/work-orders`;
 
   createOT(payload: CreateWorkOrderPayload): Observable<any> {
     return this.http.post(this.apiUrl, payload);

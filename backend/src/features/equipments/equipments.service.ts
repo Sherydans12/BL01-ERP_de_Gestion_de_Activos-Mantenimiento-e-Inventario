@@ -14,10 +14,10 @@ export class EquipmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // POST: Crear un nuevo equipo
-  async create(data: Prisma.EquipmentCreateInput) {
+  async create(tenantId: string, data: any) {
     try {
       return await this.prisma.equipment.create({
-        data,
+        data: { ...data, tenantId },
       });
     } catch (error: any) {
       if (
@@ -37,18 +37,21 @@ export class EquipmentsService {
   }
 
   // GET: Traer toda la flota (paginada y con filtros)
-  async findAll(query?: {
-    page?: number;
-    limit?: number;
-    type?: string;
-    brand?: string;
-    search?: string;
-  }) {
+  async findAll(
+    tenantId: string,
+    query?: {
+      page?: number;
+      limit?: number;
+      type?: string;
+      brand?: string;
+      search?: string;
+    },
+  ) {
     const page = Number(query?.page) || 1;
     const limit = Number(query?.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.EquipmentWhereInput = {};
+    const where: Prisma.EquipmentWhereInput = { tenantId };
 
     if (query?.type) where.type = query.type;
     if (query?.brand) where.brand = query.brand;
@@ -74,15 +77,21 @@ export class EquipmentsService {
   }
 
   // GET: Traer un solo equipo por su UUID
-  async findOne(id: string) {
-    return this.prisma.equipment.findUnique({
-      where: { id },
+  async findOne(tenantId: string, id: string) {
+    return this.prisma.equipment.findFirst({
+      where: { id, tenantId },
     });
   }
 
   // PUT: Actualizar un equipo existente
-  async update(id: string, data: Prisma.EquipmentUpdateInput) {
+  async update(tenantId: string, id: string, data: any) {
     try {
+      // Verificamos propiedad del tenant
+      const existing = await this.prisma.equipment.findFirst({
+        where: { id, tenantId },
+      });
+      if (!existing) throw new BadRequestException('Equipo no encontrado');
+
       return await this.prisma.equipment.update({
         where: { id },
         data,
@@ -107,8 +116,13 @@ export class EquipmentsService {
   }
 
   // DELETE: Eliminar un equipo
-  async remove(id: string) {
+  async remove(tenantId: string, id: string) {
     try {
+      const existing = await this.prisma.equipment.findFirst({
+        where: { id, tenantId },
+      });
+      if (!existing) throw new BadRequestException('Equipo no encontrado');
+
       return await this.prisma.equipment.delete({
         where: { id },
       });

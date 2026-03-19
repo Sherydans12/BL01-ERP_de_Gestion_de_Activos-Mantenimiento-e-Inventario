@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../../../environments/environment';
 
 export interface PaginatedEquipments {
   data: any[];
@@ -15,7 +16,7 @@ export interface PaginatedEquipments {
 export class FleetService {
   private http = inject(HttpClient);
   // URL de tu backend
-  private apiUrl = 'http://localhost:3000/api/equipments';
+  private apiUrl = `${environment.apiUrl}/equipments`;
 
   // GET: Traer toda la flota desde PostgreSQL (Paginada y filtrada)
   getEquipments(params?: any): Observable<PaginatedEquipments> {

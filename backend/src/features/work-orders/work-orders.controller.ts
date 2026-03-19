@@ -6,25 +6,30 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { WorkOrdersService } from './work-orders.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@Controller('api/work-orders') // <-- http://localhost:3000/api/work-orders
+@Controller('work-orders')
+@UseGuards(JwtAuthGuard)
 export class WorkOrdersController {
   constructor(private readonly workOrdersService: WorkOrdersService) {}
 
   @Post()
-  create(@Body() createWorkOrderDto: any) {
-    return this.workOrdersService.create(createWorkOrderDto);
+  create(@Body() createWorkOrderDto: any, @Req() req: any) {
+    return this.workOrdersService.create(req.user.tenantId, createWorkOrderDto);
   }
 
   @Get('stats')
-  getStats() {
-    return this.workOrdersService.getStats();
+  getStats(@Req() req: any) {
+    return this.workOrdersService.getStats(req.user.tenantId);
   }
 
   @Get()
   findAll(
+    @Req() req: any,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -33,7 +38,7 @@ export class WorkOrdersController {
     @Query('dateTo') dateTo?: string,
     @Query('equipmentId') equipmentId?: string,
   ) {
-    return this.workOrdersService.findAll({
+    return this.workOrdersService.findAll(req.user.tenantId, {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       search,
@@ -45,12 +50,16 @@ export class WorkOrdersController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.workOrdersService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.workOrdersService.findOne(req.user.tenantId, id);
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.workOrdersService.updateStatus(id, status);
+  updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+    @Req() req: any,
+  ) {
+    return this.workOrdersService.updateStatus(req.user.tenantId, id, status);
   }
 }

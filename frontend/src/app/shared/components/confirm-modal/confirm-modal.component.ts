@@ -13,11 +13,16 @@ import { CommonModule } from '@angular/common';
         <div
           class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md flex flex-col scale-in"
         >
-          <!-- Header -->
           <div
             class="flex items-center gap-3 p-5 border-b border-border bg-dark/50"
           >
-            <div class="p-2 bg-error/10 text-error rounded-full">
+            <div
+              [class]="
+                isDanger
+                  ? 'p-2 bg-error/10 text-error rounded-full'
+                  : 'p-2 bg-primary/10 text-primary rounded-full'
+              "
+            >
               <svg
                 class="w-6 h-6"
                 fill="none"
@@ -35,12 +40,10 @@ import { CommonModule } from '@angular/common';
             <h3 class="text-lg font-bold text-white">{{ title }}</h3>
           </div>
 
-          <!-- Body -->
           <div class="p-5 text-gray-300">
             <p>{{ message }}</p>
           </div>
 
-          <!-- Footer -->
           <div
             class="p-5 border-t border-border bg-dark/30 flex justify-end gap-3"
           >
@@ -50,9 +53,14 @@ import { CommonModule } from '@angular/common';
             >
               {{ cancelText }}
             </button>
+
             <button
               (click)="onConfirm()"
-              class="px-5 py-2 rounded-lg bg-error hover:bg-error/90 text-white shadow-lg shadow-error/20 transition-colors font-medium text-sm"
+              [class]="
+                isDanger
+                  ? 'px-5 py-2 rounded-lg bg-error hover:bg-error/90 text-white shadow-lg shadow-error/20 transition-colors font-medium text-sm'
+                  : 'px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-colors font-medium text-sm'
+              "
             >
               {{ confirmText }}
             </button>
@@ -96,6 +104,7 @@ export class ConfirmModalComponent {
   @Input() message = '¿Estás seguro de que deseas realizar esta acción?';
   @Input() confirmText = 'Confirmar';
   @Input() cancelText = 'Cancelar';
+  @Input() isDanger = false;
 
   @Output() confirm = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();

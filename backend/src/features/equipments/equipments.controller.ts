@@ -7,28 +7,33 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { EquipmentsService } from './equipments.service';
 import { Prisma } from '@prisma/client';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@Controller('api/equipments') // <-- Ruta base: http://localhost:3000/api/equipments
+@Controller('equipments')
+@UseGuards(JwtAuthGuard)
 export class EquipmentsController {
   constructor(private readonly equipmentsService: EquipmentsService) {}
 
   @Post()
-  create(@Body() createEquipmentDto: Prisma.EquipmentCreateInput) {
-    return this.equipmentsService.create(createEquipmentDto);
+  create(@Body() createEquipmentDto: any, @Req() req: any) {
+    return this.equipmentsService.create(req.user.tenantId, createEquipmentDto);
   }
 
   @Get()
   findAll(
+    @Req() req: any,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('type') type?: string,
     @Query('brand') brand?: string,
     @Query('search') search?: string,
   ) {
-    return this.equipmentsService.findAll({
+    return this.equipmentsService.findAll(req.user.tenantId, {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       type,
@@ -38,20 +43,25 @@ export class EquipmentsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.equipmentsService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.equipmentsService.findOne(req.user.tenantId, id);
   }
 
   @Put(':id')
   update(
     @Param('id') id: string,
-    @Body() updateEquipmentDto: Prisma.EquipmentUpdateInput,
+    @Body() updateEquipmentDto: any,
+    @Req() req: any,
   ) {
-    return this.equipmentsService.update(id, updateEquipmentDto);
+    return this.equipmentsService.update(
+      req.user.tenantId,
+      id,
+      updateEquipmentDto,
+    );
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.equipmentsService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.equipmentsService.remove(req.user.tenantId, id);
   }
 }

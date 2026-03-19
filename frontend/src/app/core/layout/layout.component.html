@@ -66,6 +66,23 @@
         <span class="font-mono mr-3 text-gray-500">~/cfg</span>
         Catálogos Maestros
       </a>
+
+      @if (currentUser()?.role === "ADMIN") {
+        <p
+          class="px-3 text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 mt-6"
+        >
+          Administración
+        </p>
+
+        <a
+          routerLink="/app/usuarios"
+          routerLinkActive="bg-dark text-primary border-r-2 border-primary"
+          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-dark hover:text-white transition-colors"
+        >
+          <span class="font-mono mr-3 text-gray-500">[]</span>
+          Gestión de Usuarios
+        </a>
+      }
     </nav>
 
     <div class="p-4 border-t border-border">
@@ -76,8 +93,12 @@
           N
         </div>
         <div class="ml-3">
-          <p class="text-sm font-medium text-white">Nicolás (Dev)</p>
-          <p class="text-xs text-gray-500 font-mono">admin</p>
+          <p class="text-sm font-medium text-white">
+            {{ currentUser()?.name || "Usuario" }}
+          </p>
+          <p class="text-xs text-gray-500 font-mono">
+            {{ currentUser()?.role || "Invitado" }}
+          </p>
         </div>
       </div>
     </div>
@@ -89,7 +110,8 @@
     >
       <h1 class="text-lg font-semibold text-white">Panel de Control</h1>
       <button
-        class="text-sm bg-dark border border-border hover:border-primary text-gray-300 py-1.5 px-4 rounded transition-colors font-mono"
+        (click)="logout()"
+        class="text-sm bg-dark border border-border hover:border-error text-gray-300 hover:text-error py-1.5 px-4 rounded transition-colors font-mono"
       >
         LOGOUT
       </button>

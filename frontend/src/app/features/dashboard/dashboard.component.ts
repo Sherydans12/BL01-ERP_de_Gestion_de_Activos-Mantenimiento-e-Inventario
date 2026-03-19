@@ -13,6 +13,7 @@ export class DashboardComponent implements OnInit {
   private workOrdersService = inject(WorkOrdersService);
 
   stats = signal<any>(null);
+  lastUpdated = signal<Date>(new Date());
 
   ngOnInit() {
     this.loadStats();
@@ -20,7 +21,10 @@ export class DashboardComponent implements OnInit {
 
   loadStats() {
     this.workOrdersService.getStats().subscribe({
-      next: (data) => this.stats.set(data),
+      next: (data) => {
+        this.stats.set(data);
+        this.lastUpdated.set(new Date());
+      },
       error: (err) => console.error('Error al cargar stats:', err),
     });
   }

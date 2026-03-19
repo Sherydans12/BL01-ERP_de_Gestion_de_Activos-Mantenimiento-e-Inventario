@@ -1,5 +1,5 @@
 /* frontend/src/styles.scss */
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -10,16 +10,38 @@
     @apply bg-dark text-gray-300 font-sans antialiased m-0 min-h-screen flex flex-col;
   }
 
-  /* Estilos globales para inputs - DevTools Aesthetic */
-  input {
-    @apply bg-dark border border-border text-gray-100 rounded-md px-4 py-2 w-full transition-all duration-200;
+  /* Estilos globales para inputs y selects - DevTools Aesthetic */
+  input,
+  select {
+    @apply bg-dark border border-border text-gray-100 rounded-md px-4 py-2 w-full transition-all duration-200 appearance-none;
   }
-  
-  input:focus {
+
+  input:focus,
+  select:focus {
     @apply outline-none border-primary ring-1 ring-primary shadow-[0_0_10px_rgba(0,229,255,0.2)];
+  }
+
+  select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
   }
 
   label {
     @apply block text-sm font-medium text-gray-400 mb-1 tracking-wide;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-gray-900 font-bold px-6 py-2.5 rounded-lg transition-all duration-200 
+           hover:bg-opacity-90 hover:scale-[1.02] active:scale-95 shadow-lg shadow-primary/20 
+           flex items-center justify-center gap-2 uppercase tracking-wider text-xs;
+  }
+
+  .input-field {
+    @apply bg-dark border border-border text-gray-100 rounded-md px-4 py-2 w-full transition-all duration-200;
   }
 }

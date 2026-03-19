@@ -1,15 +1,24 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './core/services/auth/auth.guard';
 
 export const routes: Routes = [
   {
-    path: 'login',
+    path: 'auth/login',
     loadComponent: () =>
       import('./features/auth/login/login.component').then(
         (m) => m.LoginComponent,
       ),
   },
   {
+    path: 'auth/activate',
+    loadComponent: () =>
+      import('./features/auth/activate-account/activate-account.component').then(
+        (m) => m.ActivateAccountComponent,
+      ),
+  },
+  {
     path: 'app',
+    canActivate: [authGuard],
     loadComponent: () =>
       import('./core/layout/layout.component').then((m) => m.LayoutComponent),
     // Todo lo que esté aquí adentro se renderizará dentro del <router-outlet> del Layout
@@ -57,8 +66,17 @@ export const routes: Routes = [
             (m) => m.WorkOrderFormComponent,
           ),
       },
+      {
+        path: 'usuarios',
+        canActivate: [authGuard],
+        data: { roles: ['ADMIN'] },
+        loadComponent: () =>
+          import('./features/users/user-management/user-management.component').then(
+            (m) => m.UserManagementComponent,
+          ),
+      },
     ],
   },
-  { path: '', redirectTo: 'login', pathMatch: 'full' },
-  { path: '**', redirectTo: 'login' },
+  { path: '', redirectTo: 'app/dashboard', pathMatch: 'full' },
+  { path: '**', redirectTo: 'auth/login' },
 ];

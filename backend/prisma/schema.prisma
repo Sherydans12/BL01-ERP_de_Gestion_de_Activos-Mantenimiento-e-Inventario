@@ -11,8 +11,9 @@ datasource db {
 // ==========================================
 model Equipment {
   id                      String    @id @default(uuid()) @db.Uuid
-  internalId              String    @unique @map("internal_id") @db.VarChar(50) // Ej: EC-3005
-  plate                   String?   @unique @db.VarChar(20) // Ej: VCJW-21 (Bulls pueden no tener)
+  tenantId                String    @map("tenant_id") @db.Uuid
+  internalId              String    @map("internal_id") @db.VarChar(50) // Ej: EC-3005
+  plate                   String?   @db.VarChar(20) // Ej: VCJW-21 (Bulls pueden no tener)
   type                    String    @db.VarChar(50) // Ej: CAMIONETA, BULLDOZER
   brand                   String    @db.VarChar(50) // Ej: TOYOTA, CAT
   model                   String    @db.VarChar(50) // Ej: HILUX
@@ -20,7 +21,7 @@ model Equipment {
   currentHorometer        Int       @default(0) @map("current_horometer")
   
   // Identificación Extendida
-  vin                     String?   @unique @db.VarChar(50)
+  vin                     String?   @db.VarChar(50)
   engineNumber            String?   @map("engine_number") @db.VarChar(50)
   year                    Int?
 
@@ -39,8 +40,12 @@ model Equipment {
   updatedAt               DateTime  @updatedAt @map("updated_at")
 
   // Relaciones
+  tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workOrders              WorkOrder[]
 
+  @@unique([tenantId, internalId])
+  @@unique([tenantId, plate])
+  @@unique([tenantId, vin])
   @@map("equipments")
 }
 
@@ -49,15 +54,18 @@ model Equipment {
 // ==========================================
 model CatalogItem {
   id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique @db.VarChar(20) // Ej: SYS-01, FLD-01
+  tenantId    String   @map("tenant_id") @db.Uuid
+  code        String   @db.VarChar(20) // Ej: SYS-01, FLD-01
   name        String   @db.VarChar(100)
   category    CatalogCategory
   isActive    Boolean  @default(true) @map("is_active")
 
   // Relaciones
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   systemInterventions WorkOrderSystem[]
   fluidConsumptions   WorkOrderFluid[]
 
+  @@unique([tenantId, code])
   @@map("catalog_items")
 }
 
@@ -76,7 +84,8 @@ enum CatalogCategory {
 // ==========================================
 model WorkOrder {
   id                String    @id @default(uuid()) @db.Uuid
-  correlative       String    @unique @db.VarChar(30) // Ej: OT-2026-001
+  tenantId          String    @map("tenant_id") @db.Uuid
+  correlative       String    @db.VarChar(30) // Ej: OT-2026-001
   equipmentId       String    @map("equipment_id") @db.Uuid
   type              OtType    @default(NUEVA)
   category          OtCategory
@@ -95,10 +104,12 @@ model WorkOrder {
   closedAt          DateTime? @map("closed_at")
 
   // Relaciones
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   equipment         Equipment         @relation(fields: [equipmentId], references: [id])
   systems           WorkOrderSystem[]
   fluids            WorkOrderFluid[]
 
+  @@unique([tenantId, correlative])
   @@map("work_orders")
 }
 
@@ -156,4 +167,58 @@ model WorkOrderFluid {
 enum FluidAction {
   RELLENO
   CAMBIO
+}
+
+// ==========================================
+// 5. USUARIOS Y AUTENTICACIÓN
+// ==========================================
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique @db.VarChar(100)
+  password        String    @db.VarChar(255)
+  name            String    @db.VarChar(100)
+  role            UserRole  @default(MECHANIC)
+  isActive        Boolean   @default(false) @map("is_active")
+  activationToken String?   @map("activation_token") @db.VarChar(255)
+  
+  // Perfil Adicional
+  rut             String?   @db.VarChar(20)
+  phone           String?   @db.VarChar(20)
+  birthDate       DateTime? @map("birth_date") @db.Date
+  position        String?   @db.VarChar(100)
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relaciones
+  tenantId        String?   @map("tenant_id") @db.Uuid
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, rut])
+  @@map("users")
+}
+
+model Tenant {
+  id              String    @id @default(uuid()) @db.Uuid
+  code            String    @unique @db.VarChar(20) // Ej: TPM, BAR-01
+  name            String    @db.VarChar(100)
+  logoUrl         String?   @map("logo_url") @db.VarChar(255)
+  isActive        Boolean   @default(true) @map("is_active")
+  
+  users           User[]
+  equipments      Equipment[]
+  workOrders      WorkOrder[]
+  catalogs        CatalogItem[]
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("tenants")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPERVISOR
+  MECHANIC
 }

@@ -21,11 +21,11 @@ interface CreateWorkOrderDto {
 export class WorkOrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateWorkOrderDto) {
+  async create(tenantId: string, dto: CreateWorkOrderDto) {
     try {
       // 1. Generar correlativo: OT-{AÑO}-{NNN}
       const year = new Date().getFullYear();
-      const count = await this.prisma.workOrder.count();
+      const count = await this.prisma.workOrder.count({ where: { tenantId } });
       const correlative = `OT-${year}-${String(count + 1).padStart(3, '0')}`;
 
       // 2. Transacción atómica
@@ -33,6 +33,7 @@ export class WorkOrdersService {
         // 2a. Crear la OT principal
         const workOrder = await tx.workOrder.create({
           data: {
+            tenantId,
             correlative,
             equipmentId: dto.equipmentId,
             type: dto.type,
@@ -85,16 +86,19 @@ export class WorkOrdersService {
     }
   }
 
-  async findAll(query?: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    equipmentId?: string;
-    status?: string;
-  }) {
-    const where: any = {};
+  async findAll(
+    tenantId: string,
+    query?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      equipmentId?: string;
+      status?: string;
+    },
+  ) {
+    const where: any = { tenantId };
 
     if (query?.equipmentId) {
       where.equipmentId = query.equipmentId;
@@ -145,37 +149,42 @@ export class WorkOrdersService {
     return { data, total };
   }
 
-  async getStats() {
+  async getStats(tenantId: string) {
     const now = new Date();
 
     // Conteo por estado
     const [open, inProgress, onHold, closed] = await Promise.all([
-      this.prisma.workOrder.count({ where: { status: 'OPEN' } }),
-      this.prisma.workOrder.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.workOrder.count({ where: { status: 'ON_HOLD' } }),
-      this.prisma.workOrder.count({ where: { status: 'CLOSED' } }),
+      this.prisma.workOrder.count({ where: { tenantId, status: 'OPEN' } }),
+      this.prisma.workOrder.count({
+        where: { tenantId, status: 'IN_PROGRESS' },
+      }),
+      this.prisma.workOrder.count({ where: { tenantId, status: 'ON_HOLD' } }),
+      this.prisma.workOrder.count({ where: { tenantId, status: 'CLOSED' } }),
     ]);
 
     // 2. Equipos con documentación vencida (Conteo)
     const expiredDocs = await this.prisma.equipment.count({
       where: {
+        tenantId,
         OR: [{ techReviewExp: { lt: now } }, { circPermitExp: { lt: now } }],
       },
     });
 
     // 3. Total de equipos
-    const totalEquipments = await this.prisma.equipment.count();
+    const totalEquipments = await this.prisma.equipment.count({
+      where: { tenantId },
+    });
 
     // 4. Equipos en mantenimiento (Conteo de IDs únicos con OTs activas)
     const activeOts = await this.prisma.workOrder.groupBy({
       by: ['equipmentId'],
-      where: { status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] } },
+      where: { tenantId, status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] } },
     });
     const equiposEnMantenimientoCount = activeOts.length;
 
     // 5. Últimas 5 OTs cerradas
     const lastClosed = await this.prisma.workOrder.findMany({
-      where: { status: 'CLOSED' },
+      where: { tenantId, status: 'CLOSED' },
       orderBy: { closedAt: 'desc' },
       take: 5,
       include: {
@@ -186,6 +195,7 @@ export class WorkOrdersService {
     // 6. Alertas Documentales (Top 5 próximos a vencer o vencidos recientes)
     const topAlertsData = await this.prisma.equipment.findMany({
       where: {
+        tenantId,
         OR: [
           { techReviewExp: { not: null } },
           { circPermitExp: { not: null } },
@@ -244,9 +254,9 @@ export class WorkOrdersService {
     };
   }
 
-  async findOne(id: string) {
-    return this.prisma.workOrder.findUnique({
-      where: { id },
+  async findOne(tenantId: string, id: string) {
+    return this.prisma.workOrder.findFirst({
+      where: { id, tenantId },
       include: {
         equipment: true,
         systems: { include: { catalogItem: true } },
@@ -255,13 +265,13 @@ export class WorkOrdersService {
     });
   }
 
-  async updateStatus(id: string, status: string) {
+  async updateStatus(tenantId: string, id: string, status: string) {
     try {
       if (status === 'CLOSED') {
         return await this.prisma.$transaction(async (tx: any) => {
           // 1. Obtener la OT actual
-          const workOrder = await tx.workOrder.findUnique({
-            where: { id },
+          const workOrder = await tx.workOrder.findFirst({
+            where: { id, tenantId },
             include: { equipment: true },
           });
 
@@ -302,6 +312,11 @@ export class WorkOrdersService {
           return updatedOt;
         });
       } else {
+        const existing = await this.prisma.workOrder.findFirst({
+          where: { id, tenantId },
+        });
+        if (!existing) throw new BadRequestException('Orden no encontrada');
+
         return await this.prisma.workOrder.update({
           where: { id },
           data: { status: status as any },

@@ -11,7 +11,7 @@ import {
 import { CatalogsService } from './catalogs.service';
 import { Prisma } from '@prisma/client';
 
-@Controller('api/catalogs') // <-- http://localhost:3000/api/catalogs
+@Controller('catalogs')
 export class CatalogsController {
   constructor(private readonly catalogsService: CatalogsService) {}
 
