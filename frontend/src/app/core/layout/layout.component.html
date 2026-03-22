@@ -1,21 +1,25 @@
 <div class="flex h-screen bg-dark overflow-hidden">
-  <aside class="w-64 bg-surface border-r border-border flex flex-col">
+  <aside class="w-64 bg-sidebar border-r border-border flex flex-col">
     <div class="h-16 flex items-center px-6 border-b border-border">
-      <span class="text-primary font-mono text-lg font-bold mr-2"
-        >&lt;B_&gt;</span
-      >
-      <span class="text-white font-semibold uppercase tracking-wider">
-        @if (currentTenant()) {
-          {{ currentTenant()?.name }}
-        } @else {
-          ERP SYSTEM
-        }
-      </span>
+      @if (currentTenant()?.logoUrl) {
+        <img
+          [src]="currentTenant()?.logoUrl"
+          alt="Logo"
+          class="max-h-10 max-w-[180px] object-contain"
+        />
+      } @else {
+        <span class="text-primary font-mono text-lg font-bold mr-2"
+          >&lt;B_&gt;</span
+        >
+        <span class="text-main font-semibold uppercase tracking-wider">
+          {{ currentTenant()?.name || "ERP SYSTEM" }}
+        </span>
+      }
     </div>
 
     <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
       <p
-        class="px-3 text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 mt-4"
+        class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-4"
       >
         Principal
       </p>
@@ -23,14 +27,14 @@
       <a
         routerLink="/app/dashboard"
         routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-dark hover:text-white transition-colors"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
       >
-        <span class="font-mono mr-3 text-gray-500">~/</span>
+        <span class="font-mono mr-3 text-muted">~/</span>
         Dashboard
       </a>
 
       <p
-        class="px-3 text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 mt-6"
+        class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
       >
         Módulos
       </p>
@@ -38,22 +42,22 @@
       <a
         routerLink="/app/flota"
         routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-dark hover:text-white transition-colors"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
       >
-        <span class="font-mono mr-3 text-gray-500">[]</span>
+        <span class="font-mono mr-3 text-muted">[]</span>
         Maestro de Flota
       </a>
 
       <a
         routerLink="/app/ots"
         routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-dark hover:text-white transition-colors"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
       >
-        <span class="font-mono mr-3 text-gray-500">{{ "{}" }}</span>
+        <span class="font-mono mr-3 text-muted">{{ "{}" }}</span>
         Órdenes de Trabajo
       </a>
       <p
-        class="px-3 text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 mt-6"
+        class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
       >
         Configuración
       </p>
@@ -61,15 +65,36 @@
       <a
         routerLink="/app/catalogos"
         routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-dark hover:text-white transition-colors"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
       >
-        <span class="font-mono mr-3 text-gray-500">~/cfg</span>
+        <span class="font-mono mr-3 text-muted">~/cfg</span>
         Catálogos Maestros
       </a>
 
       @if (currentUser()?.role === "ADMIN") {
+        <a
+          routerLink="/app/configuracion/faenas"
+          routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
+          [routerLinkActiveOptions]="{ exact: true }"
+          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
+        >
+          <span class="font-mono mr-3 text-muted">/site</span>
+          Maestro de Faenas
+        </a>
+
+        <a
+          routerLink="/app/configuracion/empresa"
+          routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
+          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
+        >
+          <span class="font-mono mr-3 text-muted">/org</span>
+          Configuración Empresa
+        </a>
+      }
+
+      @if (currentUser()?.role === "ADMIN") {
         <p
-          class="px-3 text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 mt-6"
+          class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
         >
           Administración
         </p>
@@ -77,9 +102,9 @@
         <a
           routerLink="/app/usuarios"
           routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-300 hover:bg-dark hover:text-white transition-colors"
+          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
         >
-          <span class="font-mono mr-3 text-gray-500">[]</span>
+          <span class="font-mono mr-3 text-muted">[]</span>
           Gestión de Usuarios
         </a>
       }
@@ -93,10 +118,10 @@
           N
         </div>
         <div class="ml-3">
-          <p class="text-sm font-medium text-white">
+          <p class="text-sm font-medium text-main">
             {{ currentUser()?.name || "Usuario" }}
           </p>
-          <p class="text-xs text-gray-500 font-mono">
+          <p class="text-xs text-muted font-mono">
             {{ currentUser()?.role || "Invitado" }}
           </p>
         </div>
@@ -106,12 +131,105 @@
 
   <main class="flex-1 flex flex-col h-screen overflow-hidden">
     <header
-      class="h-16 bg-surface border-b border-border flex items-center justify-between px-8"
+      class="h-16 bg-surface border-b border-border flex items-center justify-between px-8 relative"
     >
-      <h1 class="text-lg font-semibold text-white">Panel de Control</h1>
+      <div class="flex items-center gap-6">
+        <h1 class="text-lg font-semibold text-main">Panel de Control</h1>
+
+        <!-- Contenedor del Selector de Faena -->
+        @if (
+          currentUser()?.role === "ADMIN" ||
+          (currentUser()?.allowedSites?.length ?? 0) > 0
+        ) {
+          <div class="relative z-50">
+            <button
+              (click)="toggleSiteDropdown()"
+              class="flex items-center gap-2 px-4 py-1.5 bg-dark border border-border rounded-full backdrop-blur-md text-sm text-main hover:text-main hover:bg-dark transition-all shadow-lg"
+            >
+              <svg
+                class="w-4 h-4 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                />
+              </svg>
+              <span class="font-medium font-mono truncate max-w-[150px]">{{
+                getCurrentSiteName()
+              }}</span>
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                [class.rotate-180]="isSiteDropdownOpen()"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            <!-- Menú Desplegable Glassmorphism -->
+            @if (isSiteDropdownOpen()) {
+              <div
+                class="absolute top-12 left-0 w-64 rounded-xl bg-surface border border-border backdrop-blur-xl shadow-2xl py-2 z-[60] animate-fade-in divide-y divide-border"
+              >
+                @if (currentUser()?.role === "ADMIN") {
+                  <button
+                    (click)="selectSite('ALL')"
+                    class="w-full text-left px-4 py-2 text-sm transition-colors {{
+                      currentSiteId() === 'ALL'
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-muted hover:bg-dark hover:text-main'
+                    }}"
+                  >
+                    <span class="font-semibold">Todas las Faenas</span>
+                  </button>
+                }
+
+                <div class="py-1 max-h-60 overflow-y-auto">
+                  @for (site of availableSites(); track site.id) {
+                    <button
+                      (click)="selectSite(site.id)"
+                      class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between group {{
+                        currentSiteId() === site.id
+                          ? 'bg-primary/20 text-primary'
+                          : 'text-muted hover:bg-dark hover:text-main'
+                      }}"
+                    >
+                      <span class="truncate pr-2">{{ site.name }}</span>
+                      <span
+                        class="text-xs font-mono opacity-50 group-hover:opacity-100 transition-opacity bg-dark/40 px-1.5 py-0.5 rounded border border-white/5"
+                      >
+                        {{ site.code }}
+                      </span>
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <!-- Clickaway listener (fondo invisible) -->
+              <div
+                class="fixed inset-0 z-40"
+                (click)="isSiteDropdownOpen.set(false)"
+              ></div>
+            }
+          </div>
+        }
+      </div>
+
       <button
         (click)="logout()"
-        class="text-sm bg-dark border border-border hover:border-error text-gray-300 hover:text-error py-1.5 px-4 rounded transition-colors font-mono"
+        class="text-sm bg-dark border border-border hover:border-error text-muted hover:text-error py-1.5 px-4 rounded transition-colors font-mono"
       >
         LOGOUT
       </button>
@@ -122,3 +240,4 @@
     </div>
   </main>
 </div>
+

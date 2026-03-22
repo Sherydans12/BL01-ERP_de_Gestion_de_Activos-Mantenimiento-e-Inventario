@@ -5,6 +5,13 @@ import { UsersService, User } from '../../../core/services/users/users.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { finalize } from 'rxjs';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { SitesService } from '../../../core/services/sites/sites.service';
+
+export interface Site {
+  id: string;
+  name: string;
+  code: string;
+}
 
 @Component({
   selector: 'app-user-management',
@@ -13,11 +20,11 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
   template: `
     <div class="space-y-6 animate-fade-in pb-10">
       <header
-        class="flex justify-between items-center bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-700"
+        class="flex justify-between items-center bg-surface p-6 rounded-2xl shadow-lg border border-border"
       >
         <div>
           <h1
-            class="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3"
+            class="text-3xl font-extrabold text-main tracking-tight flex items-center gap-3"
           >
             <svg
               class="w-8 h-8 text-primary"
@@ -34,7 +41,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
             </svg>
             Gestión de Usuarios
           </h1>
-          <p class="text-gray-400 mt-1">
+          <p class="text-muted mt-1">
             Invita y administra a los miembros del equipo.
           </p>
         </div>
@@ -60,65 +67,65 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
       </header>
 
       <div
-        class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden"
+        class="bg-surface rounded-xl shadow-lg border border-border overflow-hidden"
       >
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-700">
-            <thead class="bg-gray-900/50">
+            <thead class="bg-dark/50">
               <tr>
                 <th
-                  class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
                 >
                   Nombre
                 </th>
                 <th
-                  class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
                 >
                   Email
                 </th>
                 <th
-                  class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
                 >
                   Rol
                 </th>
                 <th
-                  class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
                 >
                   RUT
                 </th>
                 <th
-                  class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
                 >
                   Cargo
                 </th>
                 <th
-                  class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
                 >
                   Estado
                 </th>
                 <th
-                  class="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase"
+                  class="px-6 py-4 text-right text-xs font-medium text-muted uppercase"
                 >
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-700 bg-gray-800">
+            <tbody class="divide-y divide-gray-700 bg-surface">
               @for (user of paginatedUsers(); track user.id) {
                 <tr class="hover:bg-gray-750 transition-colors duration-200">
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center gap-3">
                       <div
-                        class="h-8 w-8 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-sm font-bold text-white uppercase"
+                        class="h-8 w-8 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-sm font-bold text-main uppercase"
                       >
                         {{ user.name.charAt(0) }}
                       </div>
-                      <div class="text-sm font-medium text-white">
+                      <div class="text-sm font-medium text-main">
                         {{ user.name }}
                       </div>
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-300">
+                  <td class="px-6 py-4 text-sm text-muted">
                     {{ user.email }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
@@ -129,17 +136,17 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
                           user.role === 'ADMIN',
                         'bg-blue-900/40 text-blue-400 border-blue-500/30':
                           user.role === 'SUPERVISOR',
-                        'bg-gray-700 text-gray-300 border-gray-600':
+                        'bg-gray-700 text-muted border-gray-600':
                           user.role === 'MECHANIC',
                       }"
                     >
                       {{ user.role }}
                     </span>
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-300 font-mono">
+                  <td class="px-6 py-4 text-sm text-muted font-mono">
                     {{ user.rut || '-' }}
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-300">
+                  <td class="px-6 py-4 text-sm text-muted">
                     {{ user.position || '-' }}
                   </td>
                   <td class="px-6 py-4">
@@ -157,7 +164,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
                       <button
                         (click)="toggleUserStatus(user)"
                         [disabled]="isUpdatingStatus() === user.id"
-                        class="p-1 rounded-lg hover:bg-gray-700 text-gray-400 transition-all disabled:opacity-30"
+                        class="p-1 rounded-lg hover:bg-dark text-muted transition-all disabled:opacity-30"
                       >
                         @if (isUpdatingStatus() === user.id) {
                           <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -234,7 +241,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                  <td colspan="7" class="px-6 py-12 text-center text-muted">
                     No hay usuarios registrados
                   </td>
                 </tr>
@@ -245,32 +252,32 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
 
         @if (totalItems() > 0) {
           <div
-            class="px-6 py-4 border-t border-gray-700 bg-gray-900/50 flex items-center justify-between"
+            class="px-6 py-4 border-t border-border bg-dark/50 flex items-center justify-between"
           >
-            <div class="text-sm text-gray-400">
+            <div class="text-sm text-muted">
               Mostrando
-              <span class="text-white">{{
+              <span class="text-main">{{
                 (currentPage() - 1) * pageSize() + 1
               }}</span>
               a
-              <span class="text-white">{{
+              <span class="text-main">{{
                 mathMin(currentPage() * pageSize(), totalItems())
               }}</span>
               de
-              <span class="text-white">{{ totalItems() }}</span>
+              <span class="text-main">{{ totalItems() }}</span>
             </div>
             <div class="flex gap-2">
               <button
                 (click)="changePage(currentPage() - 1)"
                 [disabled]="currentPage() === 1"
-                class="px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+                class="px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-muted hover:bg-dark disabled:opacity-50"
               >
                 Anterior
               </button>
               <button
                 (click)="changePage(currentPage() + 1)"
                 [disabled]="currentPage() >= totalPages()"
-                class="px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+                class="px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-muted hover:bg-dark disabled:opacity-50"
               >
                 Siguiente
               </button>
@@ -288,10 +295,10 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
             (click)="closeFormModal()"
           ></div>
           <div
-            class="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 w-full max-w-lg z-10 overflow-hidden"
+            class="bg-surface rounded-xl shadow-2xl border border-border w-full max-w-lg z-10 overflow-hidden"
           >
             <div class="p-6">
-              <h3 class="text-lg font-bold text-white mb-4">
+              <h3 class="text-lg font-bold text-main mb-4">
                 {{ isEditing() ? 'Editar Usuario' : 'Invitar Usuario' }}
               </h3>
               <form [formGroup]="userForm" class="space-y-4">
@@ -347,12 +354,92 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
                   <option value="SUPERVISOR">Supervisor</option>
                   <option value="ADMIN">Administrador</option>
                 </select>
+
+                <!-- Selector de Faenas -->
+                @if (
+                  userForm.get('role')?.value === 'SUPERVISOR' ||
+                  userForm.get('role')?.value === 'MECHANIC'
+                ) {
+                  <div class="mt-5 pt-5 border-t border-border">
+                    <label
+                      class="block text-xs font-mono text-muted mb-3 uppercase tracking-wider"
+                    >
+                      Faenas Permitidas
+                    </label>
+                    <div
+                      class="bg-black/40 border border-white/5 rounded-xl p-4 max-h-52 overflow-y-auto space-y-2 relative shadow-inner"
+                    >
+                      @for (site of availableSites(); track site.id) {
+                        <label
+                          class="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-all border border-transparent hover:border-border"
+                        >
+                          <div
+                            class="relative flex items-center justify-center"
+                          >
+                            <input
+                              type="checkbox"
+                              class="peer appearance-none w-5 h-5 border-2 border-border rounded shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)] bg-black/50 checked:bg-primary checked:border-primary transition-all duration-300 cursor-pointer"
+                              [checked]="isSiteSelected(site.id)"
+                              (change)="toggleSiteSelection(site.id)"
+                            />
+                            <svg
+                              class="absolute w-3.5 h-3.5 text-dark opacity-0 peer-checked:opacity-100 transition-opacity duration-300 pointer-events-none scale-50 peer-checked:scale-100"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="3"
+                                d="M5 13l4 4L19 7"
+                              ></path>
+                            </svg>
+                          </div>
+                          <div class="flex flex-col">
+                            <span
+                              class="text-sm text-main font-medium tracking-wide"
+                              >{{ site.name }}</span
+                            >
+                            <span
+                              class="text-xs text-primary font-mono bg-primary/10 px-1.5 py-0.5 mt-1 rounded inline-block w-fit border border-primary/20"
+                              >{{ site.code }}</span
+                            >
+                          </div>
+                        </label>
+                      }
+                      @if (availableSites().length === 0) {
+                        <div
+                          class="flex flex-col items-center justify-center py-6 text-muted gap-2"
+                        >
+                          <svg
+                            class="w-8 h-8 opacity-50 mb-2"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="1.5"
+                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            ></path>
+                          </svg>
+                          <span
+                            class="text-xs font-mono tracking-wider uppercase text-center"
+                            >No hay faenas creadas<br />en el sistema.</span
+                          >
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
               </form>
             </div>
-            <div class="bg-gray-900 p-4 flex justify-end gap-3">
+            <div class="bg-surface p-4 flex justify-end gap-3">
               <button
                 (click)="closeFormModal()"
-                class="px-4 py-2 text-gray-300 hover:text-white"
+                class="px-4 py-2 text-muted hover:text-main"
               >
                 Cancelar
               </button>
@@ -383,29 +470,29 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
             (click)="closeDeleteModal()"
           ></div>
           <div
-            class="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-md z-10 overflow-hidden"
+            class="bg-surface rounded-xl border border-border w-full max-w-md z-10 overflow-hidden"
           >
             <div class="p-6">
-              <h3 class="text-lg font-bold text-white mb-2 text-red-500">
+              <h3 class="text-lg font-bold text-main mb-2 text-red-500">
                 Eliminar Usuario
               </h3>
-              <p class="text-gray-400">
+              <p class="text-muted">
                 ¿Estás seguro de eliminar a
                 <strong>{{ userToDelete()?.name }}</strong
                 >?
               </p>
             </div>
-            <div class="bg-gray-900 p-4 flex justify-end gap-3">
+            <div class="bg-surface p-4 flex justify-end gap-3">
               <button
                 (click)="closeDeleteModal()"
-                class="px-4 py-2 text-gray-300"
+                class="px-4 py-2 text-muted"
               >
                 Cancelar
               </button>
               <button
                 (click)="deleteUser()"
                 [disabled]="isDeleting()"
-                class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg"
+                class="bg-red-600 hover:bg-red-700 text-main px-6 py-2 rounded-lg"
               >
                 {{ isDeleting() ? 'Eliminando...' : 'Confirmar' }}
               </button>
@@ -443,10 +530,12 @@ export class UserManagementComponent implements OnInit {
   });
 
   private usersService = inject(UsersService);
+  private sitesService = inject(SitesService);
   private fb = inject(FormBuilder);
   private notification = inject(NotificationService);
 
   users = signal<User[]>([]);
+  availableSites = signal<Site[]>([]);
 
   // Paginación
   currentPage = signal(1);
@@ -478,10 +567,19 @@ export class UserManagementComponent implements OnInit {
     birthDate: [''],
     position: [''],
     isActive: [true],
+    siteIds: [[] as string[]],
   });
 
   ngOnInit() {
     this.loadUsers();
+    this.loadSites();
+  }
+
+  loadSites() {
+    this.sitesService.findAll().subscribe({
+      next: (sites) => this.availableSites.set(sites),
+      error: () => console.error('Error cargando faenas'),
+    });
   }
 
   totalItems = signal(0);
@@ -562,7 +660,7 @@ export class UserManagementComponent implements OnInit {
   openInviteModal() {
     this.isEditing.set(false);
     this.selectedUser.set(null);
-    this.userForm.reset({ role: 'MECHANIC', isActive: true });
+    this.userForm.reset({ role: 'MECHANIC', isActive: true, siteIds: [] });
     this.formModalOpen.set(true);
   }
 
@@ -584,9 +682,24 @@ export class UserManagementComponent implements OnInit {
       birthDate: formattedDate,
       position: user.position || '',
       isActive: user.isActive,
+      siteIds: user.siteAccess ? user.siteAccess.map((sa) => sa.siteId) : [],
     });
 
     this.formModalOpen.set(true);
+  }
+
+  isSiteSelected(id: string): boolean {
+    const current = (this.userForm.get('siteIds')?.value as string[]) || [];
+    return current.includes(id);
+  }
+
+  toggleSiteSelection(id: string) {
+    const current = (this.userForm.get('siteIds')?.value as string[]) || [];
+    if (current.includes(id)) {
+      this.userForm.patchValue({ siteIds: current.filter((s) => s !== id) });
+    } else {
+      this.userForm.patchValue({ siteIds: [...current, id] });
+    }
   }
 
   closeFormModal() {

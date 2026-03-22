@@ -8,6 +8,8 @@ import { CatalogsModule } from './features/catalogs/catalogs.module';
 import { WorkOrdersModule } from './features/work-orders/work-orders.module';
 import { AuthModule } from './features/auth/auth.module';
 import { UsersModule } from './features/users/users.module';
+import { SitesModule } from './features/sites/sites.module';
+import { TenantConfigModule } from './features/tenant-config/tenant-config.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { UsersModule } from './features/users/users.module';
     WorkOrdersModule,
     AuthModule,
     UsersModule,
+    SitesModule,
+    TenantConfigModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Headers,
 } from '@nestjs/common';
 import { WorkOrdersService } from './work-orders.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,18 +19,23 @@ export class WorkOrdersController {
   constructor(private readonly workOrdersService: WorkOrdersService) {}
 
   @Post()
-  create(@Body() createWorkOrderDto: any, @Req() req: any) {
-    return this.workOrdersService.create(req.user.tenantId, createWorkOrderDto);
+  create(
+    @Body() createWorkOrderDto: any,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+  ) {
+    return this.workOrdersService.create(req.user, createWorkOrderDto, siteId);
   }
 
   @Get('stats')
-  getStats(@Req() req: any) {
-    return this.workOrdersService.getStats(req.user.tenantId);
+  getStats(@Req() req: any, @Headers('x-site-id') siteId?: string) {
+    return this.workOrdersService.getStats(req.user, siteId);
   }
 
   @Get()
   findAll(
     @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -38,7 +44,7 @@ export class WorkOrdersController {
     @Query('dateTo') dateTo?: string,
     @Query('equipmentId') equipmentId?: string,
   ) {
-    return this.workOrdersService.findAll(req.user.tenantId, {
+    return this.workOrdersService.findAll(req.user, siteId, {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       search,
@@ -50,8 +56,12 @@ export class WorkOrdersController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: any) {
-    return this.workOrdersService.findOne(req.user.tenantId, id);
+  findOne(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+  ) {
+    return this.workOrdersService.findOne(req.user, id, siteId);
   }
 
   @Patch(':id/status')
@@ -59,7 +69,8 @@ export class WorkOrdersController {
     @Param('id') id: string,
     @Body('status') status: string,
     @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
   ) {
-    return this.workOrdersService.updateStatus(req.user.tenantId, id, status);
+    return this.workOrdersService.updateStatus(req.user, id, status, siteId);
   }
 }

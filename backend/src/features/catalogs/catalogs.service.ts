@@ -34,6 +34,14 @@ export class CatalogsService {
     });
   }
 
+  // GET: Traer todas las faenas (Sites)
+  async findAllSites(tenantId: string) {
+    return this.prisma.site.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // PATCH: Actualizar un ítem de catálogo (Ej: Desactivar o corregir nombre)
   async update(id: string, data: Prisma.CatalogItemUpdateInput) {
     try {

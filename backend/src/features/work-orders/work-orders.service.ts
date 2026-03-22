@@ -21,7 +21,15 @@ interface CreateWorkOrderDto {
 export class WorkOrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, dto: CreateWorkOrderDto) {
+  async create(user: any, dto: CreateWorkOrderDto, siteHeader?: string) {
+    const tenantId = user.tenantId;
+    let siteId = (dto as any).siteId;
+
+    if (!siteId && siteHeader && siteHeader !== 'ALL') {
+      if (user.role === 'ADMIN' || user.allowedSites?.includes(siteHeader)) {
+        siteId = siteHeader;
+      }
+    }
     try {
       // 1. Generar correlativo: OT-{AÑO}-{NNN}
       const year = new Date().getFullYear();
@@ -34,6 +42,7 @@ export class WorkOrdersService {
         const workOrder = await tx.workOrder.create({
           data: {
             tenantId,
+            ...(siteId && { siteId }),
             correlative,
             equipmentId: dto.equipmentId,
             type: dto.type,
@@ -87,7 +96,8 @@ export class WorkOrdersService {
   }
 
   async findAll(
-    tenantId: string,
+    user: any,
+    siteHeader: string | undefined,
     query?: {
       page?: number;
       limit?: number;
@@ -98,7 +108,22 @@ export class WorkOrdersService {
       status?: string;
     },
   ) {
+    const tenantId = user.tenantId;
     const where: any = { tenantId };
+
+    if (user.role === 'ADMIN') {
+      if (
+        siteHeader &&
+        siteHeader !== 'ALL' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          siteHeader,
+        )
+      ) {
+        where.siteId = siteHeader;
+      }
+    } else {
+      where.siteId = { in: user.allowedSites || [] };
+    }
 
     if (query?.equipmentId) {
       where.equipmentId = query.equipmentId;
@@ -141,6 +166,7 @@ export class WorkOrdersService {
           equipment: { select: { internalId: true, type: true } },
           systems: { include: { catalogItem: { select: { name: true } } } },
           fluids: { include: { catalogItem: { select: { name: true } } } },
+          site: { select: { name: true, code: true } },
         },
       }),
       this.prisma.workOrder.count({ where }),
@@ -149,42 +175,70 @@ export class WorkOrdersService {
     return { data, total };
   }
 
-  async getStats(tenantId: string) {
+  async getStats(user: any, siteHeader?: string) {
     const now = new Date();
+    const tenantId = user.tenantId;
+
+    const siteWhere: any = {};
+    if (user.role === 'ADMIN') {
+      if (
+        siteHeader &&
+        siteHeader !== 'ALL' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          siteHeader,
+        )
+      ) {
+        siteWhere.siteId = siteHeader;
+      }
+    } else {
+      siteWhere.siteId = { in: user.allowedSites || [] };
+    }
+
+    const whereBaseWO = { tenantId, ...siteWhere };
+    const whereBaseEq = { tenantId, ...siteWhere };
 
     // Conteo por estado
     const [open, inProgress, onHold, closed] = await Promise.all([
-      this.prisma.workOrder.count({ where: { tenantId, status: 'OPEN' } }),
       this.prisma.workOrder.count({
-        where: { tenantId, status: 'IN_PROGRESS' },
+        where: { ...whereBaseWO, status: 'OPEN' },
       }),
-      this.prisma.workOrder.count({ where: { tenantId, status: 'ON_HOLD' } }),
-      this.prisma.workOrder.count({ where: { tenantId, status: 'CLOSED' } }),
+      this.prisma.workOrder.count({
+        where: { ...whereBaseWO, status: 'IN_PROGRESS' },
+      }),
+      this.prisma.workOrder.count({
+        where: { ...whereBaseWO, status: 'ON_HOLD' },
+      }),
+      this.prisma.workOrder.count({
+        where: { ...whereBaseWO, status: 'CLOSED' },
+      }),
     ]);
 
     // 2. Equipos con documentación vencida (Conteo)
     const expiredDocs = await this.prisma.equipment.count({
       where: {
-        tenantId,
+        ...whereBaseEq,
         OR: [{ techReviewExp: { lt: now } }, { circPermitExp: { lt: now } }],
       },
     });
 
     // 3. Total de equipos
     const totalEquipments = await this.prisma.equipment.count({
-      where: { tenantId },
+      where: whereBaseEq,
     });
 
     // 4. Equipos en mantenimiento (Conteo de IDs únicos con OTs activas)
     const activeOts = await this.prisma.workOrder.groupBy({
       by: ['equipmentId'],
-      where: { tenantId, status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] } },
+      where: {
+        ...whereBaseWO,
+        status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] },
+      },
     });
     const equiposEnMantenimientoCount = activeOts.length;
 
     // 5. Últimas 5 OTs cerradas
     const lastClosed = await this.prisma.workOrder.findMany({
-      where: { tenantId, status: 'CLOSED' },
+      where: { ...whereBaseWO, status: 'CLOSED' },
       orderBy: { closedAt: 'desc' },
       take: 5,
       include: {
@@ -195,7 +249,7 @@ export class WorkOrdersService {
     // 6. Alertas Documentales (Top 5 próximos a vencer o vencidos recientes)
     const topAlertsData = await this.prisma.equipment.findMany({
       where: {
-        tenantId,
+        ...whereBaseEq,
         OR: [
           { techReviewExp: { not: null } },
           { circPermitExp: { not: null } },
@@ -254,9 +308,18 @@ export class WorkOrdersService {
     };
   }
 
-  async findOne(tenantId: string, id: string) {
+  async findOne(user: any, id: string, siteHeader?: string) {
+    const tenantId = user.tenantId;
+    const where: any = { id, tenantId };
+
+    if (user.role !== 'ADMIN') {
+      where.siteId = { in: user.allowedSites || [] };
+    } else if (siteHeader && siteHeader !== 'ALL') {
+      where.siteId = siteHeader;
+    }
+
     return this.prisma.workOrder.findFirst({
-      where: { id, tenantId },
+      where,
       include: {
         equipment: true,
         systems: { include: { catalogItem: true } },
@@ -265,13 +328,25 @@ export class WorkOrdersService {
     });
   }
 
-  async updateStatus(tenantId: string, id: string, status: string) {
+  async updateStatus(
+    user: any,
+    id: string,
+    status: string,
+    siteHeader?: string,
+  ) {
+    const tenantId = user.tenantId;
+    const where: any = { id, tenantId };
+
+    if (user.role !== 'ADMIN') {
+      where.siteId = { in: user.allowedSites || [] };
+    }
+
     try {
       if (status === 'CLOSED') {
         return await this.prisma.$transaction(async (tx: any) => {
           // 1. Obtener la OT actual
           const workOrder = await tx.workOrder.findFirst({
-            where: { id, tenantId },
+            where,
             include: { equipment: true },
           });
 
@@ -313,7 +388,7 @@ export class WorkOrdersService {
         });
       } else {
         const existing = await this.prisma.workOrder.findFirst({
-          where: { id, tenantId },
+          where,
         });
         if (!existing) throw new BadRequestException('Orden no encontrada');
 

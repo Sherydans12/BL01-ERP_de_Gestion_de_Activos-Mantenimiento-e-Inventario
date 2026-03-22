@@ -2,7 +2,7 @@
   <div class="flex items-center gap-4">
     <a
       routerLink="/app/ots"
-      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-gray-400 hover:text-primary"
+      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-muted hover:text-primary"
     >
       <svg
         class="w-5 h-5"
@@ -20,14 +20,14 @@
     </a>
     <div>
       <h2
-        class="text-2xl font-bold text-white tracking-tight flex items-center gap-2"
+        class="text-2xl font-bold text-main tracking-tight flex items-center gap-2"
       >
         <span class="text-primary font-mono">&lt;OT&gt;</span>
         @if (mode === "CREATING") {
           Nueva Intervención
         } @else {
           Orden de Trabajo:
-          <span class="text-gray-300 font-mono">#{{ otId }}</span>
+          <span class="text-muted font-mono">#{{ otId }}</span>
         }
 
         @if (currentStatus === "CLOSED") {
@@ -44,7 +44,7 @@
           </span>
         }
       </h2>
-      <p class="text-sm text-gray-400 mt-1">
+      <p class="text-sm text-muted mt-1">
         Complete los datos técnicos del mantenimiento.
       </p>
     </div>
@@ -60,12 +60,12 @@
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div class="md:col-span-2">
-          <label class="block text-sm font-medium text-gray-300 mb-1"
+          <label class="block text-sm font-medium text-muted mb-1"
             >Equipo a Intervenir <span class="text-error">*</span></label
           >
           <select
             formControlName="equipmentId"
-            class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            class="w-full bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="" disabled selected>Seleccione...</option>
             @for (eq of fleet(); track eq.id) {
@@ -76,12 +76,12 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1"
+          <label class="block text-sm font-medium text-muted mb-1"
             >Categoría <span class="text-error">*</span></label
           >
           <select
             formControlName="category"
-            class="w-full bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+            class="w-full bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
           >
             <option value="PROGRAMADA">Programada</option>
             <option value="NO_PROGRAMADA">No Programada</option>
@@ -89,7 +89,7 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1"
+          <label class="block text-sm font-medium text-muted mb-1"
             >Tipo de Mantenimiento <span class="text-error">*</span></label
           >
           <select
@@ -104,24 +104,24 @@
 
       <div class="grid grid-cols-2 gap-6">
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1"
+          <label class="block text-sm font-medium text-muted mb-1"
             >Horómetro Inicial <span class="text-error">*</span></label
           >
           <input
             type="number"
             formControlName="initialHorometer"
-            class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
             placeholder="Ej: 15400"
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-1"
+          <label class="block text-sm font-medium text-muted mb-1"
             >Horómetro Final <span class="text-error">*</span></label
           >
           <input
             type="number"
             formControlName="finalHorometer"
-            class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
             placeholder="Ej: 15405"
           />
         </div>
@@ -148,7 +148,7 @@
               class="w-4 h-4 text-primary bg-dark border-border rounded focus:ring-primary focus:ring-offset-dark"
             />
             <span
-              class="text-sm font-medium text-gray-300 uppercase tracking-wide"
+              class="text-sm font-medium text-muted uppercase tracking-wide"
             >
               {{ systemsCatalog()[$index].name }}
             </span>
@@ -165,7 +165,7 @@
       <textarea
         formControlName="description"
         rows="4"
-        class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+        class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary resize-none"
         placeholder="Detalle la falla, el diagnóstico y el trabajo exacto ejecutado..."
       ></textarea>
     </div>
@@ -195,12 +195,12 @@
             class="flex items-center gap-4 bg-dark/50 p-3 rounded-lg border border-border"
           >
             <div class="flex-1">
-              <label class="block text-xs text-gray-400 mb-1"
+              <label class="block text-xs text-muted mb-1"
                 >Tipo de Fluido</label
               >
               <select
                 formControlName="fluidId"
-                class="w-full bg-dark border border-border text-gray-300 rounded text-sm p-2 outline-none focus:border-primary"
+                class="w-full bg-dark border border-border text-muted rounded text-sm p-2 outline-none focus:border-primary"
               >
                 <option value="" disabled selected>Seleccione fluido...</option>
                 @for (flu of fluidsCatalog(); track flu.id) {
@@ -210,23 +210,23 @@
             </div>
 
             <div class="w-32">
-              <label class="block text-xs text-gray-400 mb-1"
+              <label class="block text-xs text-muted mb-1"
                 >Cantidad (Lts)</label
               >
               <input
                 type="number"
                 step="0.5"
                 formControlName="liters"
-                class="w-full bg-dark border border-border text-white rounded text-sm p-2 outline-none focus:border-primary font-mono"
+                class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary font-mono"
                 placeholder="0.0"
               />
             </div>
 
             <div class="w-40">
-              <label class="block text-xs text-gray-400 mb-1">Acción</label>
+              <label class="block text-xs text-muted mb-1">Acción</label>
               <select
                 formControlName="action"
-                class="w-full bg-dark border border-border text-gray-300 rounded text-sm p-2 outline-none focus:border-primary disabled:opacity-60"
+                class="w-full bg-dark border border-border text-muted rounded text-sm p-2 outline-none focus:border-primary disabled:opacity-60"
               >
                 <option value="RELLENO">Relleno</option>
                 <option value="CAMBIO">Cambio Completo</option>
@@ -260,7 +260,7 @@
 
         @if (fluidsArray.length === 0) {
           <div
-            class="text-center py-6 text-gray-500 font-mono text-sm border border-dashed border-border rounded-lg"
+            class="text-center py-6 text-muted font-mono text-sm border border-dashed border-border rounded-lg"
           >
             No se han registrado consumos de fluidos en esta OT.
           </div>
@@ -271,7 +271,7 @@
     <div class="flex justify-end gap-4 pt-4 border-t border-border">
       <a
         routerLink="/app/ots"
-        class="px-6 py-3 font-medium text-gray-400 hover:text-white transition-colors"
+        class="px-6 py-3 font-medium text-muted hover:text-main transition-colors"
         >Volver al Listado</a
       >
       @if (mode !== "READONLY") {

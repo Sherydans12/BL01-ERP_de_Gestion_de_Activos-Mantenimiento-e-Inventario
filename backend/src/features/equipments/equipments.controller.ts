@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Headers,
 } from '@nestjs/common';
 import { EquipmentsService } from './equipments.service';
 import { Prisma } from '@prisma/client';
@@ -20,20 +21,25 @@ export class EquipmentsController {
   constructor(private readonly equipmentsService: EquipmentsService) {}
 
   @Post()
-  create(@Body() createEquipmentDto: any, @Req() req: any) {
-    return this.equipmentsService.create(req.user.tenantId, createEquipmentDto);
+  create(
+    @Body() createEquipmentDto: any,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+  ) {
+    return this.equipmentsService.create(req.user, createEquipmentDto, siteId);
   }
 
   @Get()
   findAll(
     @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('type') type?: string,
     @Query('brand') brand?: string,
     @Query('search') search?: string,
   ) {
-    return this.equipmentsService.findAll(req.user.tenantId, {
+    return this.equipmentsService.findAll(req.user, siteId, {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       type,
@@ -43,8 +49,12 @@ export class EquipmentsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: any) {
-    return this.equipmentsService.findOne(req.user.tenantId, id);
+  findOne(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+  ) {
+    return this.equipmentsService.findOne(req.user, id, siteId);
   }
 
   @Put(':id')
@@ -52,16 +62,22 @@ export class EquipmentsController {
     @Param('id') id: string,
     @Body() updateEquipmentDto: any,
     @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
   ) {
     return this.equipmentsService.update(
-      req.user.tenantId,
+      req.user,
       id,
       updateEquipmentDto,
+      siteId,
     );
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: any) {
-    return this.equipmentsService.remove(req.user.tenantId, id);
+  remove(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+  ) {
+    return this.equipmentsService.remove(req.user, id, siteId);
   }
 }

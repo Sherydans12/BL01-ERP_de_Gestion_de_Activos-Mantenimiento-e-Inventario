@@ -1,15 +1,16 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { AuthService } from '../../../core/services/auth/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, RouterModule],
   template: `
     <div
-      class="min-h-screen flex items-center justify-center p-4 bg-gray-900 overflow-hidden relative"
+      class="min-h-screen flex items-center justify-center p-4 bg-surface overflow-hidden relative"
     >
       <!-- Decoración de fondo -->
       <div
@@ -20,20 +21,20 @@ import { AuthService } from '../../../core/services/auth/auth.service';
       ></div>
 
       <div
-        class="w-full max-w-md bg-gray-800/50 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl overflow-hidden z-10"
+        class="w-full max-w-md bg-surface/50 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden z-10"
       >
-        <div class="p-8 border-b border-gray-700/50 text-center">
+        <div class="p-8 border-b border-border/50 text-center">
           <div
-            class="inline-flex items-center justify-center w-14 h-14 bg-gray-900 border border-primary/30 rounded-xl mb-4 shadow-[0_0_20px_rgba(0,229,255,0.15)]"
+            class="inline-flex items-center justify-center w-14 h-14 bg-surface border border-primary/30 rounded-xl mb-4 shadow-[0_0_20px_rgba(0,229,255,0.15)]"
           >
             <span class="text-primary font-mono text-2xl font-bold italic"
               >TPM</span
             >
           </div>
-          <h2 class="text-2xl font-bold text-white tracking-tight">
+          <h2 class="text-2xl font-bold text-main tracking-tight">
             Acceso Operativo
           </h2>
-          <p class="text-sm text-gray-400 mt-2">
+          <p class="text-sm text-muted mt-2">
             ERP Gestión de Activos y Mantenimiento
           </p>
         </div>
@@ -46,19 +47,19 @@ import { AuthService } from '../../../core/services/auth/auth.service';
           <div>
             <label
               for="tenantCode"
-              class="block text-sm font-medium text-gray-300 mb-1"
+              class="block text-sm font-medium text-muted mb-1"
               >ID de Empresa / Faena</label
             >
             <div class="relative">
               <span
-                class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-mono text-sm"
+                class="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-mono text-sm"
                 >&#64;</span
               >
               <input
                 type="text"
                 id="tenantCode"
                 formControlName="tenantCode"
-                class="w-full pl-8 py-2.5 font-mono uppercase tracking-wider text-primary bg-gray-900 border border-gray-700 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all placeholder-gray-600"
+                class="w-full pl-8 py-2.5 font-mono uppercase tracking-wider text-primary bg-surface border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all placeholder-gray-600"
                 placeholder="TPM"
               />
             </div>
@@ -67,26 +68,26 @@ import { AuthService } from '../../../core/services/auth/auth.service';
           <div>
             <label
               for="email"
-              class="block text-sm font-medium text-gray-300 mb-1"
+              class="block text-sm font-medium text-muted mb-1"
               >Correo Electrónico</label
             >
             <input
               type="email"
               id="email"
               formControlName="email"
-              class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all placeholder-gray-600"
+              class="w-full bg-surface border border-border rounded-lg p-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all placeholder-gray-600"
               placeholder="admin@tpm.cl"
             />
           </div>
 
           <div>
             <div class="flex justify-between items-center mb-1">
-              <label for="password" class="text-sm font-medium text-gray-300"
+              <label for="password" class="text-sm font-medium text-muted"
                 >Contraseña</label
               >
               <a
-                href="#"
-                class="text-xs text-primary hover:text-white transition-colors"
+                routerLink="/auth/forgot-password"
+                class="text-xs text-primary hover:text-main transition-colors"
                 >¿Olvidaste tu clave?</a
               >
             </div>
@@ -94,7 +95,7 @@ import { AuthService } from '../../../core/services/auth/auth.service';
               type="password"
               id="password"
               formControlName="password"
-              class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all placeholder-gray-600"
+              class="w-full bg-surface border border-border rounded-lg p-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all placeholder-gray-600"
               placeholder="••••••••"
             />
           </div>
@@ -164,3 +165,4 @@ export class LoginComponent {
     }
   }
 }
+

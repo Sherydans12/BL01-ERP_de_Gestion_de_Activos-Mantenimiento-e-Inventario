@@ -1,4 +1,11 @@
-import { Component, inject, OnInit, signal, computed } from '@angular/core'; // <-- Agregar OnInit y signal
+import {
+  Component,
+  inject,
+  OnInit,
+  signal,
+  computed,
+  effect,
+} from '@angular/core'; // <-- Agregar OnInit y signal
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -8,7 +15,8 @@ import {
   FormsModule,
 } from '@angular/forms';
 import { CatalogService } from '../../../core/services/catalog/catalog.service';
-import { FleetService } from '../../../core/services/fleet/fleet.service'; // <-- Importar
+import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
@@ -34,6 +42,7 @@ export interface Equipment {
   currentHorometer: number;
   techReviewExp: string | null;
   circPermitExp: string | null;
+  site?: { name: string; code: string };
 }
 
 @Component({
@@ -55,6 +64,7 @@ export class FleetMasterComponent implements OnInit {
   private exportService = inject(ExportService);
   private pdfService = inject(PdfService);
   private workOrdersService = inject(WorkOrdersService);
+  authService = inject(AuthService);
 
   equipmentTypes = this.catalogService.equipmentTypes;
   brands = this.catalogService.brands;
@@ -121,10 +131,19 @@ export class FleetMasterComponent implements OnInit {
         this.currentPage.set(1); // Reset a primera página al buscar
         this.loadFleet();
       });
+
+    effect(
+      () => {
+        const siteId = this.authService.currentSiteId();
+        this.currentPage.set(1);
+        this.loadFleet();
+      },
+      { allowSignalWrites: true },
+    );
   }
 
   ngOnInit() {
-    this.loadFleet();
+    // Initial fetch handled by effect
   }
 
   onSearch(event: Event) {
@@ -174,7 +193,7 @@ export class FleetMasterComponent implements OnInit {
     cssClass: string;
   } {
     if (!expirationDate)
-      return { label: 'N/A', cssClass: 'text-gray-500 bg-dark border-border' };
+      return { label: 'N/A', cssClass: 'text-muted bg-dark border-border' };
     const exp = new Date(expirationDate);
     const today = new Date();
     const diffTime = exp.getTime() - today.getTime();

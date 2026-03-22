@@ -26,6 +26,7 @@ export class UsersService {
       phone?: string;
       birthDate?: string | Date;
       position?: string;
+      siteIds?: string[];
     },
     tenantId?: string,
   ) {
@@ -45,20 +46,37 @@ export class UsersService {
     const activationToken = crypto.randomBytes(32).toString('hex');
 
     try {
-      const newUser = await this.prisma.user.create({
-        data: {
-          email: data.email,
-          name: data.name,
-          role: data.role as any,
-          password: '',
-          isActive: false,
-          activationToken,
-          tenantId: data.role === 'SUPER_ADMIN' ? null : tenantId,
-          rut: data.rut,
-          phone: data.phone,
-          birthDate: data.birthDate ? new Date(data.birthDate) : null,
-          position: data.position,
-        },
+      const newUser = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: data.email,
+            name: data.name,
+            role: data.role as any,
+            password: '',
+            isActive: false,
+            activationToken,
+            tenantId: data.role === 'SUPER_ADMIN' ? null : tenantId,
+            rut: data.rut,
+            phone: data.phone,
+            birthDate: data.birthDate ? new Date(data.birthDate) : null,
+            position: data.position,
+          },
+        });
+
+        if (
+          data.siteIds &&
+          data.siteIds.length > 0 &&
+          user.role !== 'SUPER_ADMIN' &&
+          user.role !== 'ADMIN'
+        ) {
+          const siteConnections = data.siteIds.map((siteId: string) => ({
+            userId: user.id,
+            siteId: siteId,
+          }));
+          await tx.userSite.createMany({ data: siteConnections });
+        }
+
+        return user;
       });
 
       const frontendUrl =
@@ -132,6 +150,7 @@ export class UsersService {
           phone: true,
           birthDate: true,
           position: true,
+          siteAccess: { select: { siteId: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -167,31 +186,53 @@ export class UsersService {
     }
 
     try {
-      return await this.prisma.user.update({
-        where: { id },
-        data: {
-          name: data.name,
-          email: data.email,
-          role: data.role,
-          rut: data.rut,
-          phone: data.phone,
-          birthDate: data.birthDate ? new Date(data.birthDate) : null,
-          position: data.position,
-          isActive: data.isActive,
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
-          tenantId: true,
-          rut: true,
-          phone: true,
-          birthDate: true,
-          position: true,
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const updatedUser = await tx.user.update({
+          where: { id },
+          data: {
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            rut: data.rut,
+            phone: data.phone,
+            birthDate: data.birthDate ? new Date(data.birthDate) : null,
+            position: data.position,
+            isActive: data.isActive,
+          },
+        });
+
+        if (data.siteIds !== undefined) {
+          if (data.role === 'ADMIN' || data.role === 'SUPER_ADMIN') {
+            await tx.userSite.deleteMany({ where: { userId: updatedUser.id } });
+          } else {
+            await tx.userSite.deleteMany({ where: { userId: updatedUser.id } });
+            if (data.siteIds.length > 0) {
+              const siteConnections = data.siteIds.map((siteId: string) => ({
+                userId: updatedUser.id,
+                siteId: siteId,
+              }));
+              await tx.userSite.createMany({ data: siteConnections });
+            }
+          }
+        }
+
+        return await tx.user.findUnique({
+          where: { id: updatedUser.id },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+            tenantId: true,
+            rut: true,
+            phone: true,
+            birthDate: true,
+            position: true,
+            siteAccess: { select: { siteId: true } },
+          },
+        });
       });
     } catch (error) {
       this.handlePrismaError(error);

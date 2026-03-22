@@ -4,13 +4,13 @@
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
       <div>
         <h2
-          class="text-3xl font-bold text-white tracking-tight flex items-center gap-3"
+          class="text-3xl font-bold text-main tracking-tight flex items-center gap-3"
         >
           <span class="w-2 h-8 bg-primary rounded-full"></span>
           Resumen Operativo
         </h2>
         <p
-          class="text-sm text-gray-400 mt-2 font-mono uppercase tracking-widest"
+          class="text-sm text-muted mt-2 font-mono uppercase tracking-widest"
         >
           Sincronizado: {{ lastUpdated() | date: "HH:mm:ss" }}
         </p>
@@ -22,7 +22,7 @@
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="w-5 h-5 text-gray-400 group-hover:text-primary transition-colors"
+            class="w-5 h-5 text-muted group-hover:text-primary transition-colors"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -49,7 +49,7 @@
         ></div>
 
         <h3
-          class="text-gray-400 text-xs font-mono uppercase tracking-widest mb-8"
+          class="text-muted text-xs font-mono uppercase tracking-widest mb-8"
         >
           Disponibilidad de Flota
         </h3>
@@ -82,10 +82,10 @@
           <div
             class="absolute inset-0 flex flex-col items-center justify-center"
           >
-            <span class="text-5xl font-bold text-white font-mono"
+            <span class="text-5xl font-bold text-main font-mono"
               >{{ stats().disponibilidad }}%</span
             >
-            <span class="text-[10px] text-gray-500 font-mono mt-1"
+            <span class="text-[10px] text-muted font-mono mt-1"
               >OPERATIVO</span
             >
           </div>
@@ -95,7 +95,7 @@
           class="grid grid-cols-2 w-full mt-10 gap-4 border-t border-border pt-6"
         >
           <div class="text-center">
-            <div class="text-2xl font-bold text-white font-mono">
+            <div class="text-2xl font-bold text-main font-mono">
               {{ stats().totalEquipments - stats().equiposEnMantenimiento }}
             </div>
             <div
@@ -141,9 +141,9 @@
                 />
               </svg>
             </div>
-            <h3 class="text-white font-semibold">Alertas Documentales</h3>
+            <h3 class="text-main font-semibold">Alertas Documentales</h3>
           </div>
-          <span class="text-[10px] font-mono text-gray-500">PRÓX. 30 DÍAS</span>
+          <span class="text-[10px] font-mono text-muted">PRÓX. 30 DÍAS</span>
         </div>
 
         <div class="flex-1 overflow-y-auto px-6 py-2">
@@ -156,15 +156,15 @@
                   <div>
                     <div class="flex items-center gap-2 mb-0.5">
                       <span
-                        class="text-white font-bold text-sm leading-tight"
+                        class="text-main font-bold text-sm leading-tight"
                         >{{ alert.internalId }}</span
                       >
                       <span
-                        class="text-[10px] px-1.5 py-0.5 rounded bg-dark text-gray-400 font-mono border border-border"
+                        class="text-[10px] px-1.5 py-0.5 rounded bg-dark text-muted font-mono border border-border"
                         >{{ alert.plate || "SIN P." }}</span
                       >
                     </div>
-                    <p class="text-xs text-gray-500 font-medium">
+                    <p class="text-xs text-muted font-medium">
                       {{ alert.type }}
                     </p>
                   </div>
@@ -214,14 +214,14 @@
                   />
                 </svg>
               </div>
-              <p class="text-sm text-gray-500">Sin alertas pendientes.</p>
+              <p class="text-sm text-muted">Sin alertas pendientes.</p>
             </div>
           }
         </div>
         <div class="p-4 bg-dark/20 border-t border-border">
           <a
             routerLink="/app/fleet"
-            class="block w-full text-center py-2 text-xs font-mono text-gray-400 hover:text-white transition-colors"
+            class="block w-full text-center py-2 text-xs font-mono text-muted hover:text-main transition-colors"
             >IR AL MAESTRO DE FLOTA →</a
           >
         </div>
@@ -251,9 +251,9 @@
                 />
               </svg>
             </div>
-            <h3 class="text-white font-semibold">Actividad Reciente</h3>
+            <h3 class="text-main font-semibold">Actividad Reciente</h3>
           </div>
-          <span class="text-[10px] font-mono text-gray-500 italic"
+          <span class="text-[10px] font-mono text-muted italic"
             >CLOSED OTS</span
           >
         </div>
@@ -273,7 +273,7 @@
                   <div class="flex items-start justify-between">
                     <div>
                       <div class="flex items-center gap-2">
-                        <span class="text-sm font-bold text-white font-mono">{{
+                        <span class="text-sm font-bold text-main font-mono">{{
                           ot.correlative
                         }}</span>
                         <span
@@ -281,7 +281,7 @@
                           >{{ ot.equipment?.internalId }}</span
                         >
                       </div>
-                      <p class="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      <p class="text-xs text-muted mt-0.5 leading-relaxed">
                         {{ ot.description | slice: 0 : 60
                         }}{{ ot.description.length > 60 ? "..." : "" }}
                       </p>
@@ -296,7 +296,7 @@
             </div>
           } @else {
             <div
-              class="flex flex-col items-center justify-center py-12 text-center text-gray-500 font-mono text-sm"
+              class="flex flex-col items-center justify-center py-12 text-center text-muted font-mono text-sm"
             >
               <p>Sin actividad reciente.</p>
             </div>
@@ -306,7 +306,7 @@
         <div class="p-4 bg-dark/20 border-t border-border">
           <a
             routerLink="/app/ots"
-            class="block w-full text-center py-2 text-xs font-mono text-gray-400 hover:text-white transition-colors"
+            class="block w-full text-center py-2 text-xs font-mono text-muted hover:text-main transition-colors"
             >VER TODAS LAS OT →</a
           >
         </div>
@@ -338,16 +338,16 @@
             </svg>
           </div>
           <div>
-            <h4 class="text-sm font-semibold text-white">
+            <h4 class="text-sm font-semibold text-main">
               Pendientes de Revisión
             </h4>
-            <p class="text-xs text-gray-500">
+            <p class="text-xs text-muted">
               OTs que requieren aprobación técnica
             </p>
           </div>
         </div>
         <span
-          class="text-2xl font-bold font-mono text-white group-hover:text-warning transition-colors"
+          class="text-2xl font-bold font-mono text-main group-hover:text-warning transition-colors"
           >{{ stats().otsByStatus.ON_HOLD || 0 }}</span
         >
       </div>
@@ -375,14 +375,14 @@
             </svg>
           </div>
           <div>
-            <h4 class="text-sm font-semibold text-white">
+            <h4 class="text-sm font-semibold text-main">
               Mantenimientos al Día
             </h4>
-            <p class="text-xs text-gray-500">Sin alertas de flota críticas</p>
+            <p class="text-xs text-muted">Sin alertas de flota críticas</p>
           </div>
         </div>
         <span
-          class="text-2xl font-bold font-mono text-white group-hover:text-primary transition-colors"
+          class="text-2xl font-bold font-mono text-main group-hover:text-primary transition-colors"
           >{{ stats().totalEquipments - stats().expiredDocs }}</span
         >
       </div>

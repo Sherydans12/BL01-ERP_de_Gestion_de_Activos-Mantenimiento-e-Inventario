@@ -17,6 +17,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'auth/forgot-password',
+    loadComponent: () =>
+      import('./features/auth/forgot-password/forgot-password.component').then(
+        (m) => m.ForgotPasswordComponent,
+      ),
+  },
+  {
+    path: 'auth/reset-password',
+    loadComponent: () =>
+      import('./features/auth/reset-password/reset-password.component').then(
+        (m) => m.ResetPasswordComponent,
+      ),
+  },
+  {
     path: 'app',
     canActivate: [authGuard],
     loadComponent: () =>
@@ -64,6 +78,24 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
+          ),
+      },
+      {
+        path: 'configuracion/faenas',
+        canActivate: [authGuard],
+        data: { roles: ['ADMIN'] },
+        loadComponent: () =>
+          import('./features/settings/site-master/site-master.component').then(
+            (m) => m.SiteMasterComponent,
+          ),
+      },
+      {
+        path: 'configuracion/empresa',
+        canActivate: [authGuard],
+        data: { roles: ['ADMIN'] },
+        loadComponent: () =>
+          import('./features/settings/company-config/company-config.component').then(
+            (m) => m.CompanyConfigComponent,
           ),
       },
       {

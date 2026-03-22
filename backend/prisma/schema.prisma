@@ -12,6 +12,7 @@ datasource db {
 model Equipment {
   id                      String    @id @default(uuid()) @db.Uuid
   tenantId                String    @map("tenant_id") @db.Uuid
+  siteId                  String?   @map("site_id") @db.Uuid
   internalId              String    @map("internal_id") @db.VarChar(50) // Ej: EC-3005
   plate                   String?   @db.VarChar(20) // Ej: VCJW-21 (Bulls pueden no tener)
   type                    String    @db.VarChar(50) // Ej: CAMIONETA, BULLDOZER
@@ -41,6 +42,7 @@ model Equipment {
 
   // Relaciones
   tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site            Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
   workOrders              WorkOrder[]
 
   @@unique([tenantId, internalId])
@@ -85,6 +87,7 @@ enum CatalogCategory {
 model WorkOrder {
   id                String    @id @default(uuid()) @db.Uuid
   tenantId          String    @map("tenant_id") @db.Uuid
+  siteId          String?   @map("site_id") @db.Uuid
   correlative       String    @db.VarChar(30) // Ej: OT-2026-001
   equipmentId       String    @map("equipment_id") @db.Uuid
   type              OtType    @default(NUEVA)
@@ -105,6 +108,7 @@ model WorkOrder {
 
   // Relaciones
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site              Site?             @relation(fields: [siteId], references: [id], onDelete: SetNull)
   equipment         Equipment         @relation(fields: [equipmentId], references: [id])
   systems           WorkOrderSystem[]
   fluids            WorkOrderFluid[]
@@ -180,6 +184,8 @@ model User {
   role            UserRole  @default(MECHANIC)
   isActive        Boolean   @default(false) @map("is_active")
   activationToken String?   @map("activation_token") @db.VarChar(255)
+  resetPasswordToken   String?   @map("reset_password_token") @db.VarChar(255)
+  resetPasswordExpires DateTime? @map("reset_password_expires")
   
   // Perfil Adicional
   rut             String?   @db.VarChar(20)
@@ -193,6 +199,7 @@ model User {
   // Relaciones
   tenantId        String?   @map("tenant_id") @db.Uuid
   tenant          Tenant?   @relation(fields: [tenantId], references: [id])
+  siteAccess      UserSite[]
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -202,9 +209,20 @@ model Tenant {
   id              String    @id @default(uuid()) @db.Uuid
   code            String    @unique @db.VarChar(20) // Ej: TPM, BAR-01
   name            String    @db.VarChar(100)
+  
+  // Datos
+  rut             String?   @db.VarChar(20)
+  address         String?   @db.VarChar(255)
+  phone           String?   @db.VarChar(20)
+
+  // Marca
   logoUrl         String?   @map("logo_url") @db.VarChar(255)
+  primaryColor    String    @default("#FF3366") @map("primary_color") @db.VarChar(50)
+  backgroundPreference BackgroundPreference @default(DARK) @map("background_preference")
+
   isActive        Boolean   @default(true) @map("is_active")
   
+  sites           Site[]
   users           User[]
   equipments      Equipment[]
   workOrders      WorkOrder[]
@@ -221,4 +239,44 @@ enum UserRole {
   ADMIN
   SUPERVISOR
   MECHANIC
+}
+
+enum BackgroundPreference {
+  DARK
+  LIGHT
+}
+
+// ==========================================
+// 6. FAENAS Y PROYECTOS (SITES)
+// ==========================================
+model Site {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  code        String   @db.VarChar(20) // Ej: FAE-NORTE, PROY-01
+  name        String   @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Relaciones
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users       UserSite[]
+  equipments  Equipment[]
+  workOrders  WorkOrder[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, code])
+  @@map("sites")
+}
+
+// Tabla intermedia para asignar usuarios a múltiples faenas (si es necesario)
+model UserSite {
+  userId      String @map("user_id") @db.Uuid
+  siteId      String @map("site_id") @db.Uuid
+
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site        Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, siteId])
+  @@map("user_sites")
 }

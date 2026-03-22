@@ -11,6 +11,7 @@ export interface UserPayload {
   email: string;
   name: string;
   role: 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+  allowedSites: string[];
 }
 
 @Injectable({
@@ -22,6 +23,7 @@ export class AuthService {
   // Signals for reactive state
   currentUser = signal<UserPayload | null>(null);
   isAuthenticated = signal<boolean>(false);
+  currentSiteId = signal<string | null>(null);
 
   constructor(
     private http: HttpClient,
@@ -85,21 +87,69 @@ export class AuthService {
       );
   }
 
+  forgotPassword(email: string) {
+    return this.http.post<{ success: boolean; message: string }>(
+      `${this.apiUrl}/forgot-password`,
+      { email },
+    );
+  }
+
+  resetPassword(token: string, password: string) {
+    return this.http.post<{ success: boolean; message: string }>(
+      `${this.apiUrl}/reset-password`,
+      { token, password },
+    );
+  }
+
   logout() {
     if (isPlatformBrowser(this.platformId)) {
       localStorage.removeItem('tpm_token');
       localStorage.removeItem('tpm_user');
+      localStorage.removeItem('tpm_site_id');
     }
     this.currentUser.set(null);
     this.isAuthenticated.set(false);
+    this.currentSiteId.set(null);
     this.router.navigate(['/auth/login']);
   }
 
   private setSession(token: string, user: UserPayload) {
+    let initialSite = 'ALL';
+
     if (isPlatformBrowser(this.platformId)) {
       localStorage.setItem('tpm_token', token);
+      if (user.role === 'ADMIN' && !user.allowedSites?.includes('ALL')) {
+        user.allowedSites = ['ALL', ...(user.allowedSites || [])];
+      }
       localStorage.setItem('tpm_user', JSON.stringify(user));
+
+      const savedSite = localStorage.getItem('tpm_site_id');
+      if (
+        savedSite &&
+        (user.allowedSites?.includes(savedSite) ||
+          user.allowedSites?.includes('ALL'))
+      ) {
+        initialSite = savedSite;
+      } else if (
+        user.role !== 'ADMIN' &&
+        user.allowedSites?.length > 0 &&
+        !user.allowedSites.includes('ALL')
+      ) {
+        initialSite = user.allowedSites[0];
+      }
+
+      localStorage.setItem('tpm_site_id', initialSite);
+    } else {
+      if (
+        user.role !== 'ADMIN' &&
+        user.allowedSites?.length > 0 &&
+        !user.allowedSites.includes('ALL')
+      ) {
+        initialSite = user.allowedSites[0];
+      }
     }
+
+    this.currentSiteId.set(initialSite);
     this.currentUser.set(user);
     this.isAuthenticated.set(true);
   }
@@ -113,12 +163,44 @@ export class AuthService {
         const parsedUser = JSON.parse(user);
         this.currentUser.set(parsedUser);
         this.isAuthenticated.set(true);
+
+        const siteId = localStorage.getItem('tpm_site_id');
+        if (siteId) {
+          this.currentSiteId.set(siteId);
+        } else {
+          if (
+            parsedUser.role !== 'ADMIN' &&
+            parsedUser.allowedSites?.length > 0 &&
+            !parsedUser.allowedSites.includes('ALL')
+          ) {
+            this.currentSiteId.set(parsedUser.allowedSites[0]);
+          } else {
+            this.currentSiteId.set('ALL');
+          }
+        }
+
+        // Fix up ADMIN missing ALL in memory
+        if (
+          parsedUser.role === 'ADMIN' &&
+          !parsedUser.allowedSites?.includes('ALL')
+        ) {
+          parsedUser.allowedSites = ['ALL', ...(parsedUser.allowedSites || [])];
+          this.currentUser.set({ ...parsedUser });
+        }
       } catch (e) {
         this.logout();
       }
     } else {
       this.isAuthenticated.set(false);
       this.currentUser.set(null);
+      this.currentSiteId.set(null);
+    }
+  }
+
+  setCurrentSite(siteId: string) {
+    this.currentSiteId.set(siteId);
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.setItem('tpm_site_id', siteId);
     }
   }
 

@@ -11,18 +11,18 @@ import { NotificationService } from '../../../core/services/notification/notific
   imports: [CommonModule, ReactiveFormsModule],
   template: `
     <div
-      class="min-h-screen bg-gray-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
+      class="min-h-screen bg-surface flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
     >
       <div
-        class="max-w-md w-full space-y-8 bg-gray-800 p-10 rounded-xl shadow-2xl border border-gray-700"
+        class="max-w-md w-full space-y-8 bg-surface p-10 rounded-xl shadow-2xl border border-border"
       >
         <div>
           <h2
-            class="mt-6 text-center text-3xl font-extrabold text-white tracking-tight"
+            class="mt-6 text-center text-3xl font-extrabold text-main tracking-tight"
           >
             Activar Cuenta
           </h2>
-          <p class="mt-2 text-center text-sm text-gray-400">
+          <p class="mt-2 text-center text-sm text-muted">
             Define tu nueva contraseña para acceder al sistema TPM.
           </p>
         </div>
@@ -54,7 +54,7 @@ import { NotificationService } from '../../../core/services/notification/notific
                   id="password"
                   type="password"
                   required
-                  class="appearance-none rounded-lg relative block w-full px-4 py-3 border border-gray-600 bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
+                  class="appearance-none rounded-lg relative block w-full px-4 py-3 border border-gray-600 bg-gray-700 text-main placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
                   placeholder="Nueva Contraseña (mínimo 6 caracteres)"
                 />
               </div>
@@ -67,7 +67,7 @@ import { NotificationService } from '../../../core/services/notification/notific
                   id="confirmPassword"
                   type="password"
                   required
-                  class="appearance-none rounded-lg relative block w-full px-4 py-3 border border-gray-600 bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
+                  class="appearance-none rounded-lg relative block w-full px-4 py-3 border border-gray-600 bg-gray-700 text-main placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
                   placeholder="Confirmar Contraseña"
                 />
               </div>
@@ -168,3 +168,4 @@ export class ActivateAccountComponent implements OnInit {
     }
   }
 }
+

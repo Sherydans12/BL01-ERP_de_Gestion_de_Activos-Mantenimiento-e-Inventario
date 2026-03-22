@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Req,
 } from '@nestjs/common';
 import { CatalogsService } from './catalogs.service';
 import { Prisma } from '@prisma/client';
@@ -18,6 +19,11 @@ export class CatalogsController {
   @Post()
   create(@Body() createCatalogDto: Prisma.CatalogItemCreateInput) {
     return this.catalogsService.create(createCatalogDto);
+  }
+
+  @Get('sites')
+  findAllSites(@Req() req: any) {
+    return this.catalogsService.findAllSites(req.user?.tenantId);
   }
 
   @Get()

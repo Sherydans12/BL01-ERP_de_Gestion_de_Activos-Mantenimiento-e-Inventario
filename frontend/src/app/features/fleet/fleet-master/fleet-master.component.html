@@ -1,9 +1,9 @@
 <div class="space-y-6 flex flex-col h-full">
   <div>
-    <h2 class="text-2xl font-bold text-white tracking-tight">
+    <h2 class="text-2xl font-bold text-main tracking-tight">
       Maestro de Flota
     </h2>
-    <p class="text-sm text-gray-400 mt-1">
+    <p class="text-sm text-muted mt-1">
       Gestión de activos, patentes y estado de documentación legal.
     </p>
   </div>
@@ -19,7 +19,7 @@
           class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
         >
           <svg
-            class="h-4 w-4 text-gray-500"
+            class="h-4 w-4 text-muted"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -37,7 +37,7 @@
           placeholder="Buscar por ID..."
           [ngModel]="searchQuery()"
           (input)="onSearch($event)"
-          class="w-full bg-dark border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF3366] transition-all"
+          class="w-full bg-dark border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-main placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF3366] transition-all"
         />
       </div>
 
@@ -45,7 +45,7 @@
       <select
         [ngModel]="filterType()"
         (ngModelChange)="filterType.set($event); onFilterChange()"
-        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF3366]"
+        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:ring-2 focus:ring-[#FF3366]"
       >
         <option value="">Todos los Tipos</option>
         @for (item of equipmentTypes(); track item.id) {
@@ -56,7 +56,7 @@
       <select
         [ngModel]="filterBrand()"
         (ngModelChange)="filterBrand.set($event); onFilterChange()"
-        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF3366]"
+        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:ring-2 focus:ring-[#FF3366]"
       >
         <option value="">Todas las Marcas</option>
         @for (item of brands(); track item.id) {
@@ -68,7 +68,7 @@
     <!-- Actions -->
     <button
       (click)="exportToExcel()"
-      class="bg-dark hover:bg-surface border border-border text-gray-300 font-mono text-sm py-2 px-5 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+      class="bg-dark hover:bg-surface border border-border text-muted font-mono text-sm py-2 px-5 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap"
     >
       <svg
         class="w-4 h-4"
@@ -88,7 +88,7 @@
 
     <button
       (click)="openModal()"
-      class="bg-[#FF3366] hover:bg-[#FF3366]/90 text-white font-bold font-mono text-sm py-2 px-5 rounded-lg shadow-lg shadow-[#FF3366]/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+      class="bg-[#FF3366] hover:bg-[#FF3366]/90 text-main font-bold font-mono text-sm py-2 px-5 rounded-lg shadow-lg shadow-[#FF3366]/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
     >
       <svg
         class="w-4 h-4"
@@ -117,7 +117,7 @@
         class="max-w-md bg-dark border-border text-sm"
       />
       <select
-        class="bg-dark border border-border text-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+        class="bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
       >
         <option value="">Todos los tipos</option>
         <option value="CAMIONETA">Camionetas</option>
@@ -129,7 +129,7 @@
       <table class="w-full text-left border-collapse">
         <thead>
           <tr
-            class="bg-dark text-gray-400 font-mono text-xs uppercase tracking-wider"
+            class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
           >
             <th class="py-3 px-4 border-b border-border font-medium">
               N° Interno
@@ -150,12 +150,19 @@
             >
               Perm. Circulación
             </th>
+            @if (authService.currentSiteId() === "ALL") {
+              <th
+                class="py-3 px-4 border-b border-border font-medium text-left"
+              >
+                Faena
+              </th>
+            }
             <th class="py-3 px-4 border-b border-border font-medium text-right">
               Acciones
             </th>
           </tr>
         </thead>
-        <tbody class="text-sm text-gray-300 divide-y divide-border/50">
+        <tbody class="text-sm text-muted divide-y divide-border/50">
           @for (eq of fleet(); track eq.id) {
             <tr class="hover:bg-dark/40 transition-colors">
               <td class="py-3 px-4 font-mono text-primary">
@@ -163,8 +170,8 @@
               </td>
               <td class="py-3 px-4 font-mono">{{ eq.plate }}</td>
               <td class="py-3 px-4">
-                <div class="font-medium text-white">{{ eq.type }}</div>
-                <div class="text-xs text-gray-500 uppercase">
+                <div class="font-medium text-main">{{ eq.type }}</div>
+                <div class="text-xs text-muted uppercase">
                   {{ eq.brand }} {{ eq.model }}
                 </div>
               </td>
@@ -178,7 +185,7 @@
                   {{ rtStatus.label }}
                 </span>
                 @if (eq.techReviewExp) {
-                  <div class="text-[10px] text-gray-500 mt-1">
+                  <div class="text-[10px] text-muted mt-1">
                     {{ eq.techReviewExp }}
                   </div>
                 }
@@ -193,17 +200,25 @@
                   {{ pcStatus.label }}
                 </span>
                 @if (eq.circPermitExp) {
-                  <div class="text-[10px] text-gray-500 mt-1">
+                  <div class="text-[10px] text-muted mt-1">
                     {{ eq.circPermitExp }}
                   </div>
                 }
               </td>
 
+              @if (authService.currentSiteId() === "ALL") {
+                <td class="py-3 px-4">
+                  <div class="font-mono text-muted text-xs">
+                    {{ eq.site?.name || "N/A" }}
+                  </div>
+                </td>
+              }
+
               <td class="py-3 px-4 text-right space-x-3">
                 <button
                   (click)="downloadResume(eq)"
                   [disabled]="isDownloadingPdf() === eq.id"
-                  class="text-gray-400 hover:text-success transition-colors font-mono text-xs flex inline-flex items-center gap-1"
+                  class="text-muted hover:text-success transition-colors font-mono text-xs flex inline-flex items-center gap-1"
                 >
                   @if (isDownloadingPdf() === eq.id) {
                     <svg
@@ -245,13 +260,13 @@
                 </button>
                 <button
                   (click)="editEquipment(eq)"
-                  class="text-gray-400 hover:text-primary transition-colors font-mono text-xs"
+                  class="text-muted hover:text-primary transition-colors font-mono text-xs"
                 >
                   EDITAR
                 </button>
                 <button
                   (click)="deleteEquipment(eq.id)"
-                  class="text-gray-400 hover:text-error transition-colors font-mono text-xs"
+                  class="text-muted hover:text-error transition-colors font-mono text-xs"
                 >
                   ELIMINAR
                 </button>
@@ -259,7 +274,10 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="6" class="py-8 text-center text-gray-500 font-mono">
+              <td
+                [attr.colspan]="authService.currentSiteId() === 'ALL' ? 7 : 6"
+                class="py-8 text-center text-muted font-mono"
+              >
                 No hay equipos registrados.
               </td>
             </tr>
@@ -272,10 +290,10 @@
     <div
       class="px-6 py-4 flex items-center justify-between border-t border-border/50 bg-dark/20 text-sm"
     >
-      <div class="text-gray-400 font-mono">
+      <div class="text-muted font-mono">
         Mostrando página
-        <span class="font-bold text-white">{{ currentPage() }}</span> de
-        <span class="font-bold text-white">{{ totalPages() || 1 }}</span>
+        <span class="font-bold text-main">{{ currentPage() }}</span> de
+        <span class="font-bold text-main">{{ totalPages() || 1 }}</span>
         (Total: {{ totalItems() }} activos)
       </div>
 
@@ -283,14 +301,14 @@
         <button
           (click)="prevPage()"
           [disabled]="currentPage() === 1"
-          class="px-3 py-1.5 rounded bg-dark border border-border text-gray-300 font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           ANTERIOR
         </button>
         <button
           (click)="nextPage()"
           [disabled]="currentPage() >= totalPages()"
-          class="px-3 py-1.5 rounded bg-dark border border-border text-gray-300 font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           SIGUIENTE
         </button>
@@ -310,7 +328,7 @@
         class="flex justify-between items-center p-6 border-b border-border bg-dark/50"
       >
         <h3
-          class="text-xl font-bold text-white tracking-tight flex items-center gap-2"
+          class="text-xl font-bold text-main tracking-tight flex items-center gap-2"
         >
           <span class="text-primary font-mono"
             >&lt;{{ isEditMode ? "*" : "+" }}&gt;</span
@@ -319,7 +337,7 @@
         </h3>
         <button
           (click)="closeModal()"
-          class="text-gray-400 hover:text-white transition-colors"
+          class="text-muted hover:text-main transition-colors"
         >
           <svg
             class="w-6 h-6"
@@ -347,13 +365,13 @@
           <!-- Identificación Base -->
           <div>
             <h4
-              class="text-sm font-mono text-gray-400 uppercase tracking-wider mb-4 border-b border-border pb-2"
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
               Identificación Base
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label for="internalId" class="block text-sm text-gray-300 mb-1"
+                <label for="internalId" class="block text-sm text-muted mb-1"
                   >N° Interno <span class="text-error">*</span></label
                 >
                 <input
@@ -370,7 +388,7 @@
                 />
               </div>
               <div>
-                <label for="plate" class="block text-sm text-gray-300 mb-1"
+                <label for="plate" class="block text-sm text-muted mb-1"
                   >Patente</label
                 >
                 <input
@@ -381,19 +399,19 @@
                   [ngClass]="
                     hasDuplicateError()
                       ? 'border-error text-error'
-                      : 'border-border text-white'
+                      : 'border-border text-main'
                   "
                   placeholder="Ej: ABCD-12"
                 />
               </div>
               <div>
-                <label for="type" class="block text-sm text-gray-300 mb-1"
+                <label for="type" class="block text-sm text-muted mb-1"
                   >Tipo de Equipo <span class="text-error">*</span></label
                 >
                 <select
                   id="type"
                   formControlName="type"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 >
                   <option value="" disabled selected>Seleccione...</option>
                   @for (tipo of equipmentTypes(); track tipo.id) {
@@ -402,13 +420,13 @@
                 </select>
               </div>
               <div>
-                <label for="brand" class="block text-sm text-gray-300 mb-1"
+                <label for="brand" class="block text-sm text-muted mb-1"
                   >Marca <span class="text-error">*</span></label
                 >
                 <select
                   id="brand"
                   formControlName="brand"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 >
                   <option value="" disabled selected>Seleccione...</option>
                   @for (marca of brands(); track marca.id) {
@@ -417,14 +435,14 @@
                 </select>
               </div>
               <div>
-                <label for="model" class="block text-sm text-gray-300 mb-1"
+                <label for="model" class="block text-sm text-muted mb-1"
                   >Modelo <span class="text-error">*</span></label
                 >
                 <input
                   type="text"
                   id="model"
                   formControlName="model"
-                  class="w-full bg-dark border border-border text-white uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
                   placeholder="Ej: HILUX"
                 />
               </div>
@@ -434,13 +452,13 @@
           <!-- Identificación Extendida -->
           <div>
             <h4
-              class="text-sm font-mono text-gray-400 uppercase tracking-wider mb-4 border-b border-border pb-2"
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
               Identificación Extendida
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label for="vin" class="block text-sm text-gray-300 mb-1"
+                <label for="vin" class="block text-sm text-muted mb-1"
                   >VIN / Chasis</label
                 >
                 <input
@@ -451,32 +469,32 @@
                   [ngClass]="
                     hasDuplicateError()
                       ? 'border-error text-error'
-                      : 'border-border text-white'
+                      : 'border-border text-main'
                   "
                 />
               </div>
               <div>
                 <label
                   for="engineNumber"
-                  class="block text-sm text-gray-300 mb-1"
+                  class="block text-sm text-muted mb-1"
                   >N° Motor</label
                 >
                 <input
                   type="text"
                   id="engineNumber"
                   formControlName="engineNumber"
-                  class="w-full bg-dark border border-border text-white uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
                 />
               </div>
               <div>
-                <label for="year" class="block text-sm text-gray-300 mb-1"
+                <label for="year" class="block text-sm text-muted mb-1"
                   >Año Fabricación</label
                 >
                 <input
                   type="number"
                   id="year"
                   formControlName="year"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                   placeholder="Ej: 2021"
                 />
               </div>
@@ -486,19 +504,19 @@
           <!-- Operación y Mantenimiento -->
           <div>
             <h4
-              class="text-sm font-mono text-gray-400 uppercase tracking-wider mb-4 border-b border-border pb-2"
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
               Operación y Mantenimiento
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label for="fuelType" class="block text-sm text-gray-300 mb-1"
+                <label for="fuelType" class="block text-sm text-muted mb-1"
                   >Combustible</label
                 >
                 <select
                   id="fuelType"
                   formControlName="fuelType"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 >
                   <option [ngValue]="null">N/A</option>
                   @for (fuel of fuelTypes(); track fuel.id) {
@@ -507,13 +525,13 @@
                 </select>
               </div>
               <div>
-                <label for="driveType" class="block text-sm text-gray-300 mb-1"
+                <label for="driveType" class="block text-sm text-muted mb-1"
                   >Tracción / Drive</label
                 >
                 <select
                   id="driveType"
                   formControlName="driveType"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 >
                   <option [ngValue]="null">N/A</option>
                   @for (drive of driveTypes(); track drive.id) {
@@ -522,13 +540,13 @@
                 </select>
               </div>
               <div>
-                <label for="ownership" class="block text-sm text-gray-300 mb-1"
+                <label for="ownership" class="block text-sm text-muted mb-1"
                   >Propiedad</label
                 >
                 <select
                   id="ownership"
                   formControlName="ownership"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 >
                   <option [ngValue]="null">N/A</option>
                   @for (owner of ownerships(); track owner.id) {
@@ -539,21 +557,21 @@
               <div>
                 <label
                   for="maintenanceFrequency"
-                  class="block text-sm text-gray-300 mb-1"
+                  class="block text-sm text-muted mb-1"
                   >Frecuencia Mantención (Hrs/Kms)</label
                 >
                 <input
                   type="number"
                   id="maintenanceFrequency"
                   formControlName="maintenanceFrequency"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                   placeholder="Ej: 250"
                 />
               </div>
               <div>
                 <label
                   for="currentHorometer"
-                  class="block text-sm text-gray-300 mb-1"
+                  class="block text-sm text-muted mb-1"
                   >Horómetro Inicial / Actual
                   <span class="text-error">*</span></label
                 >
@@ -561,7 +579,7 @@
                   type="number"
                   id="currentHorometer"
                   formControlName="currentHorometer"
-                  class="w-full bg-dark border border-border text-white rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 />
               </div>
             </div>
@@ -570,7 +588,7 @@
           <!-- Documentación Legal -->
           <div>
             <h4
-              class="text-sm font-mono text-gray-400 uppercase tracking-wider mb-4 border-b border-border pb-2"
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
               Documentación Legal
             </h4>
@@ -578,27 +596,27 @@
               <div>
                 <label
                   for="techReviewExp"
-                  class="block text-sm text-gray-300 mb-1"
+                  class="block text-sm text-muted mb-1"
                   >Vto. Revisión Técnica</label
                 >
                 <input
                   type="date"
                   id="techReviewExp"
                   formControlName="techReviewExp"
-                  class="w-full bg-dark border border-border font-mono text-white rounded-md px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                  class="w-full bg-dark border border-border font-mono text-main rounded-md px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
                 />
               </div>
               <div>
                 <label
                   for="circPermitExp"
-                  class="block text-sm text-gray-300 mb-1"
+                  class="block text-sm text-muted mb-1"
                   >Vto. Permiso Circulación</label
                 >
                 <input
                   type="date"
                   id="circPermitExp"
                   formControlName="circPermitExp"
-                  class="w-full bg-dark border border-border font-mono text-white rounded-md px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                  class="w-full bg-dark border border-border font-mono text-main rounded-md px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
                 />
               </div>
             </div>
@@ -612,7 +630,7 @@
         <button
           (click)="closeModal()"
           type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+          class="px-4 py-2 text-sm font-medium text-muted hover:text-main transition-colors"
         >
           Cancelar
         </button>

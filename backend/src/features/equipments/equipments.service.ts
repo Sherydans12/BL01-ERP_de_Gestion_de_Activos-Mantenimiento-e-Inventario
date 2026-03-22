@@ -14,10 +14,19 @@ export class EquipmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // POST: Crear un nuevo equipo
-  async create(tenantId: string, data: any) {
+  async create(user: any, data: any, siteHeader?: string) {
+    const tenantId = user.tenantId;
+    let siteId = data.siteId;
+
+    if (!siteId && siteHeader && siteHeader !== 'ALL') {
+      if (user.role === 'ADMIN' || user.allowedSites?.includes(siteHeader)) {
+        siteId = siteHeader;
+      }
+    }
+
     try {
       return await this.prisma.equipment.create({
-        data: { ...data, tenantId },
+        data: { ...data, tenantId, ...(siteId && { siteId }) },
       });
     } catch (error: any) {
       if (
@@ -38,7 +47,8 @@ export class EquipmentsService {
 
   // GET: Traer toda la flota (paginada y con filtros)
   async findAll(
-    tenantId: string,
+    user: any,
+    siteHeader: string | undefined,
     query?: {
       page?: number;
       limit?: number;
@@ -47,11 +57,26 @@ export class EquipmentsService {
       search?: string;
     },
   ) {
+    const tenantId = user.tenantId;
     const page = Number(query?.page) || 1;
     const limit = Number(query?.limit) || 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.EquipmentWhereInput = { tenantId };
+
+    if (user.role === 'ADMIN') {
+      if (
+        siteHeader &&
+        siteHeader !== 'ALL' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          siteHeader,
+        )
+      ) {
+        where.siteId = siteHeader;
+      }
+    } else {
+      where.siteId = { in: user.allowedSites || [] };
+    }
 
     if (query?.type) where.type = query.type;
     if (query?.brand) where.brand = query.brand;
@@ -69,6 +94,7 @@ export class EquipmentsService {
         skip,
         take: limit,
         orderBy: { internalId: 'asc' },
+        include: { site: { select: { name: true, code: true } } },
       }),
       this.prisma.equipment.count({ where }),
     ]);
@@ -77,18 +103,33 @@ export class EquipmentsService {
   }
 
   // GET: Traer un solo equipo por su UUID
-  async findOne(tenantId: string, id: string) {
+  async findOne(user: any, id: string, siteHeader?: string) {
+    const where: Prisma.EquipmentWhereInput = { id, tenantId: user.tenantId };
+
+    if (user.role !== 'ADMIN') {
+      where.siteId = { in: user.allowedSites || [] };
+    } else if (siteHeader && siteHeader !== 'ALL') {
+      // Optional: verify it falls under the requested siteHeader for ADMIN
+      where.siteId = siteHeader;
+    }
+
     return this.prisma.equipment.findFirst({
-      where: { id, tenantId },
+      where,
     });
   }
 
   // PUT: Actualizar un equipo existente
-  async update(tenantId: string, id: string, data: any) {
+  async update(user: any, id: string, data: any, siteHeader?: string) {
+    const tenantId = user.tenantId;
     try {
-      // Verificamos propiedad del tenant
+      const where: Prisma.EquipmentWhereInput = { id, tenantId };
+      if (user.role !== 'ADMIN') {
+        where.siteId = { in: user.allowedSites || [] };
+      }
+
+      // Verificamos propiedad del tenant y sitios
       const existing = await this.prisma.equipment.findFirst({
-        where: { id, tenantId },
+        where,
       });
       if (!existing) throw new BadRequestException('Equipo no encontrado');
 
@@ -116,10 +157,16 @@ export class EquipmentsService {
   }
 
   // DELETE: Eliminar un equipo
-  async remove(tenantId: string, id: string) {
+  async remove(user: any, id: string, siteHeader?: string) {
+    const tenantId = user.tenantId;
     try {
+      const where: Prisma.EquipmentWhereInput = { id, tenantId };
+      if (user.role !== 'ADMIN') {
+        where.siteId = { in: user.allowedSites || [] };
+      }
+
       const existing = await this.prisma.equipment.findFirst({
-        where: { id, tenantId },
+        where,
       });
       if (!existing) throw new BadRequestException('Equipo no encontrado');
 

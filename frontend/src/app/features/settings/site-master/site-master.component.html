@@ -1,0 +1,145 @@
+<div class="h-full flex flex-col">
+  <div class="flex justify-between items-center mb-6">
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        Maestro de Faenas
+      </h2>
+      <p class="text-muted mt-1">
+        Gestión de sitios operativos y locaciones de la empresa
+      </p>
+    </div>
+    <button
+      (click)="openModal()"
+      class="flex items-center gap-2 px-4 py-2 bg-primary text-dark font-medium rounded hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 4v16m8-8H4"
+        ></path>
+      </svg>
+      Nueva Faena
+    </button>
+  </div>
+
+  <div
+    class="bg-surface border border-white/5 rounded-xl shadow-2xl overflow-hidden flex-1 flex flex-col"
+  >
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm text-muted">
+        <thead
+          class="text-xs uppercase bg-black/40 text-muted border-b border-border backdrop-blur-md"
+        >
+          <tr>
+            <th class="px-6 py-4 font-mono">Nombre</th>
+            <th class="px-6 py-4 font-mono">Código</th>
+            <th class="px-6 py-4 font-mono text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          @for (site of sites(); track site.id) {
+            <tr class="hover:bg-white/5 transition-colors">
+              <td class="px-6 py-4 font-semibold text-main">
+                {{ site.name }}
+              </td>
+              <td class="px-6 py-4">
+                <span
+                  class="font-mono text-xs text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20"
+                  >{{ site.code }}</span
+                >
+              </td>
+              <td class="px-6 py-4 text-right">
+                <button
+                  (click)="openModal(site)"
+                  class="text-muted hover:text-main transition-colors mr-3 uppercase font-mono text-xs"
+                >
+                  Editar
+                </button>
+                <button
+                  (click)="deleteSite(site.id)"
+                  class="text-muted hover:text-error transition-colors uppercase font-mono text-xs"
+                >
+                  Eliminar
+                </button>
+              </td>
+            </tr>
+          }
+          @if (sites().length === 0) {
+            <tr>
+              <td
+                colspan="3"
+                class="px-6 py-8 text-center text-muted font-mono"
+              >
+                No hay faenas registradas en el sistema.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal Glassmorphism -->
+  @if (isModalOpen()) {
+    <div
+      class="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+    >
+      <div
+        class="bg-surface/90 border border-border rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-md animate-fade-in p-8 relative backdrop-blur-xl"
+      >
+        <h3 class="text-xl font-bold text-main mb-6 tracking-tight">
+          {{ editingSite() ? "Editar Faena" : "Nueva Faena" }}
+        </h3>
+
+        <div class="space-y-5">
+          <div>
+            <label
+              class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
+              >Nombre</label
+            >
+            <input
+              type="text"
+              [(ngModel)]="formData().name"
+              class="w-full bg-black/50 border border-border rounded-lg px-4 py-2.5 text-main focus:outline-none focus:border-primary transition-colors focus:ring-1 focus:ring-primary/50"
+              placeholder="Ej: Faena Norte"
+            />
+          </div>
+          <div>
+            <label
+              class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
+              >Código</label
+            >
+            <input
+              type="text"
+              [(ngModel)]="formData().code"
+              class="w-full bg-black/50 border border-border rounded-lg px-4 py-2.5 text-main focus:outline-none focus:border-primary transition-colors font-mono focus:ring-1 focus:ring-primary/50"
+              placeholder="Ej: F-NTE"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-border">
+          <button
+            (click)="closeModal()"
+            class="px-4 py-2 border border-border text-muted hover:text-main rounded-lg hover:bg-white/5 transition-colors text-sm font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            (click)="saveSite()"
+            class="px-4 py-2 bg-primary text-dark font-medium rounded-lg hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 text-sm active:scale-95"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

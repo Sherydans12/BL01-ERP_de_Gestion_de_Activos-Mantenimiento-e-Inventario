@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,6 +8,7 @@ import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
 
 @Component({
   selector: 'app-work-order-list',
@@ -21,6 +22,7 @@ export class WorkOrderListComponent implements OnInit {
   private fleetService = inject(FleetService);
   private notificationService = inject(NotificationService);
   private exportService = inject(ExportService);
+  authService = inject(AuthService);
 
   workOrders = signal<any[]>([]);
   fleet = signal<any[]>([]);
@@ -42,9 +44,19 @@ export class WorkOrderListComponent implements OnInit {
   // Modal State
   selectedOtForClose = signal<string | null>(null);
 
+  constructor() {
+    effect(
+      () => {
+        const siteId = this.authService.currentSiteId();
+        this.currentPage.set(1);
+        this.loadWorkOrders();
+        this.loadStats();
+      },
+      { allowSignalWrites: true },
+    );
+  }
+
   ngOnInit() {
-    this.loadStats();
-    this.loadWorkOrders();
     this.fleetService.getEquipments({ limit: 1000 }).subscribe({
       next: (res) => this.fleet.set(res.data),
     });
@@ -108,7 +120,7 @@ export class WorkOrderListComponent implements OnInit {
       case 'OPEN':
         return {
           label: 'ABIERTA',
-          css: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+          css: 'bg-gray-500/10 text-muted border-gray-500/20',
         };
       case 'IN_PROGRESS':
         return {
@@ -128,7 +140,7 @@ export class WorkOrderListComponent implements OnInit {
       default:
         return {
           label: status,
-          css: 'bg-gray-800 text-gray-300 border-gray-700',
+          css: 'bg-surface text-muted border-border',
         };
     }
   }
