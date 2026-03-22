@@ -33,11 +33,26 @@ trigger: always_on
 - **Manejo de Estado (Signals):** Usa `signal()`, `computed()` y `effect()` para el estado local y global. Evita `RxJS` (BehaviorSubjects) y `.subscribe()` manuales si existe una alternativa nativa con Signals o `toSignal`.
 - **Control de Flujo:** Usa exclusivamente la nueva sintaxis `@if`, `@for` y `@switch` en el HTML. Prohibido usar `*ngIf` o `*ngFor`.
 
-## 5. REGLAS DE DISEÑO UI (Industrial Glassmorphism)
+## 5. REGLAS DE DISEÑO UI (Bitematic Industrial Glassmorphism)
 
-- Todo nuevo componente debe usar Tailwind CSS siguiendo la estética "Industrial Glassmorphism".
-- **Colores y Estilos Base:** Fondo oscuro (`bg-[#0a0f1a]` o `bg-dark`), contenedores con desenfoque (`backdrop-blur-xl` o `-md`), fondos semitransparentes (`bg-gray-900/50`) y bordes sutiles (`border border-white/10`).
-- No uses CSS personalizado (`.css`/`.scss`) a menos que sea para animaciones complejas (ej. `@keyframes`). Usa utilidades de Tailwind.
+- **Tokens Semánticos Obligatorios:** Prohibido usar clases de colores estáticos (ej. `text-white`, `bg-gray-900`, `border-white/10`). Usa exclusivamente:
+  - `text-main`: Para títulos y textos principales (Contraste alto).
+  - `text-muted`: Para descripciones y textos secundarios (Contraste medio).
+  - `bg-surface`: Para tarjetas, modales y contenedores (Glassmorphism).
+  - `bg-dark`: Para el fondo base de la aplicación.
+  - `border-border` / `divide-border`: Para bordes y separadores.
+  - `primary`: Solo para botones de acción, estados activos y acentos de marca.
+
+- **REGLA DE LINTING SEMÁNTICO:** Si detectas una clase de color de Tailwind que no sea semántica (ej. `text-gray-400`, `bg-slate-800`, `border-white/5`), **DETENTE inmediatamente** y solicita permiso al usuario para refactorizarla a su equivalente semántico antes de continuar.
+
+- **Adaptabilidad de Tema:**
+  - El sistema debe ser 100% funcional en `data-theme='dark'` y `data-theme='light'`.
+  - En modo claro, usa `shadow-sm` y `bg-white/80` para mantener la legibilidad.
+  - Asegúrate de que los iconos SVG usen `text-muted` o `text-main` para no perderse en el cambio de fondo.
+
+- **Estética Industrial:**
+  - Mantén `backdrop-blur-xl` en todos los elementos `bg-surface`.
+  - Bordes redondeados estándar: `rounded-xl` para tarjetas y `rounded-lg` para botones/inputs.
 
 ## 6. WORKFLOWS Y SKILLS OBLIGATORIOS
 
