@@ -514,6 +514,12 @@ export class WorkOrderFormComponent implements OnInit {
 
   // --- GUARDADO ---
   onSubmit() {
+    // Si estamos editando y el usuario apretó el botón, en realidad quiere cerrar.
+    if (this.mode === 'EDITING' && this.otId) {
+      this.closeWorkOrder();
+      return;
+    }
+
     if (this.otForm.invalid || this.mode === 'READONLY') {
       this.otForm.markAllAsTouched();
       return;
@@ -562,6 +568,47 @@ export class WorkOrderFormComponent implements OnInit {
         },
       });
     }
+  }
+
+  closeWorkOrder() {
+    if (this.otForm.invalid) {
+      this.otForm.markAllAsTouched();
+      this.notificationService.error(
+        'Complete todos los campos obligatorios antes de cerrar.',
+      );
+      return;
+    }
+
+    const currentValues = this.otForm.getRawValue();
+
+    // 1. Verificar bodega si hay repuestos vinculados
+    const linkedParts = currentValues.parts.filter(
+      (p: any) => p.inventoryItemId,
+    );
+    if (linkedParts.length > 0 && !currentValues.warehouseId) {
+      this.notificationService.error(
+        'Debe seleccionar una Bodega de Origen para descontar el stock.',
+      );
+      return;
+    }
+
+    // 2. Ejecutar el cierre
+    this.workOrdersService
+      .updateStatus(this.otId!, 'CLOSED', currentValues.warehouseId)
+      .subscribe({
+        next: () => {
+          this.notificationService.success(
+            'OT Cerrada. Stock descontado y Kárdex actualizado.',
+          );
+          this.router.navigate(['/app/ots']);
+        },
+        error: (err) => {
+          console.error('Error al cerrar OT:', err);
+          this.notificationService.error(
+            err.error?.message || 'Error al cerrar la OT.',
+          );
+        },
+      });
   }
 
   // --- APLICACIÓN DE KITS CON AUTO-LINK DE INVENTARIO ---
@@ -641,5 +688,20 @@ export class WorkOrderFormComponent implements OnInit {
       next: (stocks) => this.warehouseStocks.set(stocks),
       error: () => this.warehouseStocks.set([]),
     });
+  }
+
+  // --- HELPERS PARA LA VISTA DE STOCK ---
+  getAvailableStock(itemId: string | null | undefined): number {
+    if (!itemId) return 0;
+    const stock = this.warehouseStocks().find((s) => s.itemId === itemId);
+    return stock ? stock.quantity : 0;
+  }
+
+  hasEnoughStock(index: number): boolean {
+    const partGroup = this.partsArray.at(index);
+    const reqQty = Number(partGroup.get('quantity')?.value || 0);
+    const itemId = partGroup.get('inventoryItemId')?.value;
+    if (!itemId) return false;
+    return this.getAvailableStock(itemId) >= reqQty;
   }
 }

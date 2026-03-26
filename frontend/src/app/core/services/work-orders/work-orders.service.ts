@@ -59,13 +59,9 @@ export class WorkOrdersService {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
   }
 
-  updateStatus(
-    id: string,
-    status: string,
-    warehouseId?: string,
-  ): Observable<any> {
-    const body: any = { status };
-    if (warehouseId) body.warehouseId = warehouseId;
-    return this.http.patch(`${this.apiUrl}/${id}/status`, body);
+  updateStatus(id: string, status: string, warehouseId?: string) {
+    const payload: any = { status };
+    if (warehouseId) payload.warehouseId = warehouseId;
+    return this.http.patch(`${this.apiUrl}/${id}/status`, payload);
   }
 }

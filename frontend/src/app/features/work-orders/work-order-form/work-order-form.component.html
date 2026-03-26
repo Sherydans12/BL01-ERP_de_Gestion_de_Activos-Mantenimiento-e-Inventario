@@ -150,14 +150,15 @@
         </div>
       </div>
 
-      <!-- SELECTOR DE BODEGA (INTEGRACIÓN FASE C) -->
       @if (otForm.get("equipmentId")?.value && warehouses().length > 0) {
         <div class="border-t border-border pt-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label class="block text-sm font-medium text-muted mb-1">
+              <label
+                class="block text-sm font-medium text-muted mb-1 flex items-center gap-1"
+              >
                 <svg
-                  class="w-4 h-4 inline mr-1 text-primary"
+                  class="w-4 h-4 text-primary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -170,13 +171,27 @@
                   ></path>
                 </svg>
                 Bodega de Origen
-                <span class="text-muted text-[10px] ml-1"
-                  >(Opcional al crear)</span
-                >
+                @if (partsArray.length > 0) {
+                  <span class="text-error text-[10px] ml-1"
+                    >(Requerida para descontar stock)</span
+                  >
+                } @else {
+                  <span class="text-muted text-[10px] ml-1"
+                    >(Opcional al crear)</span
+                  >
+                }
               </label>
               <select
                 formControlName="warehouseId"
-                class="w-full bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+                [class.border-error]="
+                  partsArray.length > 0 && !otForm.get('warehouseId')?.value
+                "
+                class="w-full bg-dark border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 transition-colors"
+                [ngClass]="{
+                  'border-border': !(
+                    partsArray.length > 0 && !otForm.get('warehouseId')?.value
+                  ),
+                }"
               >
                 <option value="">Sin bodega asignada</option>
                 @for (wh of warehouses(); track wh.id) {
@@ -188,10 +203,6 @@
                   </option>
                 }
               </select>
-              <p class="text-[10px] text-muted font-mono mt-1">
-                Obligatoria al cerrar la OT si hay repuestos vinculados al
-                catálogo.
-              </p>
             </div>
           </div>
         </div>
@@ -207,7 +218,6 @@
         >
           Pauta de Mantenimiento (Checklist)
         </h3>
-
         <div formArrayName="tasks" class="space-y-2">
           @for (taskCtrl of tasksArray.controls; track $index) {
             <div
@@ -225,7 +235,6 @@
                 <p class="text-sm font-medium text-main">
                   {{ taskCtrl.get("description")?.value }}
                 </p>
-
                 <div class="flex gap-4 mt-2">
                   <input
                     type="text"
@@ -237,11 +246,10 @@
                     type="number"
                     formControlName="measurement"
                     class="w-24 bg-dark border border-border/50 text-xs px-2 py-1 rounded outline-none focus:border-primary font-mono text-muted"
-                    placeholder="Valor (mm/bar)"
+                    placeholder="Valor"
                   />
                 </div>
               </div>
-
               @if (mode !== "READONLY") {
                 <button
                   type="button"
@@ -267,7 +275,6 @@
             </div>
           }
         </div>
-
         @if (mode !== "READONLY") {
           <button
             type="button"
@@ -294,7 +301,6 @@
               descontar stock automáticamente.
             </p>
           </div>
-
           <div class="flex items-center gap-3 w-full md:w-auto">
             @if (mode !== "READONLY") {
               <select
@@ -308,7 +314,6 @@
                   </option>
                 }
               </select>
-
               <button
                 type="button"
                 (click)="addPartRow()"
@@ -321,14 +326,19 @@
         </div>
 
         <div formArrayName="parts" class="space-y-3">
-          @for (partCtrl of partsArray.controls; track $index) {
+          @for (
+            partCtrl of partsArray.controls;
+            track $index;
+            let partIndex = $index
+          ) {
             <div
-              [formGroupName]="$index"
-              class="bg-dark/50 p-3 rounded-lg border border-border"
+              [formGroupName]="partIndex"
+              class="bg-dark/50 p-3 rounded-lg border border-border relative"
             >
-              <!-- Indicador de vinculación -->
-              @if (partCtrl.get("inventoryItemId")?.value) {
-                <div class="flex items-center justify-between mb-2 px-1">
+              <div
+                class="flex flex-col sm:flex-row sm:items-center justify-between mb-3 px-1 gap-2 border-b border-border/50 pb-2"
+              >
+                @if (partCtrl.get("inventoryItemId")?.value) {
                   <span
                     class="text-[10px] font-mono text-success flex items-center gap-1"
                   >
@@ -345,19 +355,76 @@
                     </svg>
                     VINCULADO: {{ partCtrl.get("linkedItemName")?.value }}
                   </span>
-                  @if (mode !== "READONLY") {
-                    <button
-                      type="button"
-                      (click)="unlinkInventoryItem($index)"
-                      class="text-[10px] font-mono text-error hover:text-red-400 transition-colors"
-                    >
-                      DESVINCULAR
-                    </button>
-                  }
-                </div>
-              }
 
-              <div class="flex items-center gap-4">
+                  <div class="flex items-center gap-3">
+                    @if (otForm.get("warehouseId")?.value) {
+                      <span
+                        class="text-[10px] font-mono px-2 py-0.5 rounded flex items-center gap-1"
+                        [ngClass]="
+                          hasEnoughStock(partIndex)
+                            ? 'bg-success/10 text-success border border-success/30'
+                            : 'bg-warning/10 text-warning border border-warning/30'
+                        "
+                      >
+                        Disp. Bodega:
+                        {{
+                          getAvailableStock(
+                            partCtrl.get("inventoryItemId")?.value
+                          )
+                        }}
+                        @if (!hasEnoughStock(partIndex)) {
+                          <span class="font-bold">(Generará Negativo)</span>
+                        }
+                      </span>
+                    } @else {
+                      <span
+                        class="text-[10px] font-mono text-warning bg-warning/10 px-2 py-0.5 rounded border border-warning/30"
+                      >
+                        Seleccione bodega para ver stock
+                      </span>
+                    }
+
+                    @if (mode !== "READONLY") {
+                      <button
+                        type="button"
+                        (click)="unlinkInventoryItem(partIndex)"
+                        class="text-[10px] font-mono text-error hover:text-red-400 transition-colors"
+                      >
+                        DESVINCULAR
+                      </button>
+                    }
+                  </div>
+                } @else if (
+                  partCtrl.get("partNumber")?.value &&
+                  !partCtrl.get("inventoryItemId")?.value
+                ) {
+                  <span
+                    class="text-[10px] font-mono text-warning flex items-center gap-1 bg-warning/5 px-2 py-0.5 rounded border border-warning/20"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      ></path>
+                    </svg>
+                    NO VINCULADO: Se registrará en la OT pero no descontará
+                    stock de Bodega.
+                  </span>
+                } @else {
+                  <span class="text-[10px] font-mono text-muted/50 italic">
+                    Busque un repuesto por P/N para vincularlo al stock.
+                  </span>
+                }
+              </div>
+
+              <div class="flex flex-wrap md:flex-nowrap items-center gap-4">
                 <div class="w-20">
                   <label class="block text-[10px] text-muted mb-1">Cant.</label>
                   <input
@@ -367,23 +434,23 @@
                     placeholder="1"
                   />
                 </div>
-                <div class="w-40 relative">
+                <div class="w-full md:w-48 relative">
                   <label class="block text-[10px] text-muted mb-1"
-                    >N° Parte (CAT/Fleetguard)</label
+                    >N° Parte (P/N)</label
                   >
                   <input
                     type="text"
                     formControlName="partNumber"
-                    (input)="onPartSearch($event, $index)"
+                    (input)="onPartSearch($event, partIndex)"
                     (blur)="closeSearch()"
                     autocomplete="off"
                     class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary uppercase font-mono"
                     placeholder="Ej: 577-1440"
                   />
 
-                  <!-- DROPDOWN AUTOCOMPLETE -->
                   @if (
-                    activeSearchIndex() === $index && searchResults().length > 0
+                    activeSearchIndex() === partIndex &&
+                    searchResults().length > 0
                   ) {
                     <div
                       class="absolute z-50 top-full left-0 right-0 mt-1 bg-dark border border-primary/50 rounded-lg shadow-2xl max-h-48 overflow-y-auto"
@@ -391,7 +458,7 @@
                       @for (item of searchResults(); track item.id) {
                         <button
                           type="button"
-                          (mousedown)="selectInventoryItem(item, $index)"
+                          (mousedown)="selectInventoryItem(item, partIndex)"
                           class="w-full text-left px-3 py-2 hover:bg-primary/10 border-b border-border/30 last:border-0 transition-colors"
                         >
                           <span class="text-xs font-mono text-primary">{{
@@ -410,7 +477,7 @@
                     </div>
                   }
                 </div>
-                <div class="flex-1">
+                <div class="flex-1 w-full">
                   <label class="block text-[10px] text-muted mb-1"
                     >Descripción</label
                   >
@@ -421,11 +488,10 @@
                     placeholder="Ej: FILTRO ACEITE"
                   />
                 </div>
-
                 @if (mode !== "READONLY") {
                   <button
                     type="button"
-                    (click)="removePartRow($index)"
+                    (click)="removePartRow(partIndex)"
                     class="mt-5 text-error hover:text-red-400 transition-colors"
                   >
                     <svg
@@ -520,7 +586,6 @@
           </button>
         }
       </div>
-
       <div formArrayName="fluids" class="space-y-3">
         @for (fluidCtrl of fluidsArray.controls; track $index) {
           <div
@@ -616,7 +681,6 @@
             </button>
           }
         </div>
-
         <div formArrayName="fluidSamples" class="space-y-3">
           @for (sampleCtrl of fluidSamplesArray.controls; track $index) {
             <div
@@ -650,7 +714,6 @@
                   placeholder="Ej: APD-998877"
                 />
               </div>
-
               @if (mode !== "READONLY") {
                 <button
                   type="button"
@@ -697,9 +760,9 @@
             Basado en el CPP de la bodega seleccionada.
           </p>
         </div>
-        <span class="text-2xl font-bold font-mono text-primary">
-          ${{ estimatedCost() | number: "1.0-0" }}
-        </span>
+        <span class="text-2xl font-bold font-mono text-primary"
+          >${{ estimatedCost() | number: "1.0-0" }}</span
+        >
       </div>
     }
 

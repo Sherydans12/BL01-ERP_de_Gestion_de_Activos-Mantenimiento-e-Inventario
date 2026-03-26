@@ -143,29 +143,50 @@ export class WorkOrdersService {
         }
 
         if (dto.parts && dto.parts.length > 0) {
-          await tx.workOrderPart.createMany({
-            data: dto.parts.map((p: any) => ({
+          const partsData = [];
+          const linkedPartsForReservation = [];
+
+          for (const p of dto.parts) {
+            let invItemId = p.inventoryItemId;
+
+            // AUTO-ENLACE: Si no trae ID pero sí partNumber, lo buscamos en el catálogo maestro
+            if (!invItemId) {
+              const catalogItem = await tx.inventoryItem.findFirst({
+                where: { tenantId, partNumber: p.partNumber },
+              });
+              if (catalogItem) invItemId = catalogItem.id;
+            }
+
+            partsData.push({
               workOrderId: workOrder.id,
               partNumber: p.partNumber,
               description: p.description,
               quantity: Number(p.quantity),
-              inventoryItemId: p.inventoryItemId || null,
-            })),
-          });
+              inventoryItemId: invItemId || null,
+            });
 
-          // --- RESERVAS: Crear reservas iniciales si hay bodega y parts vinculados ---
-          if (dto.warehouseId) {
-            const linkedParts = dto.parts.filter((p) => p.inventoryItemId);
-            if (linkedParts.length > 0) {
-              await tx.stockReservation.createMany({
-                data: linkedParts.map((p) => ({
-                  workOrderId: workOrder.id,
-                  itemId: p.inventoryItemId!,
-                  warehouseId: dto.warehouseId!,
-                  quantity: Number(p.quantity),
-                })),
+            // Si logramos enlazarlo, lo preparamos para la reserva de stock
+            if (invItemId) {
+              linkedPartsForReservation.push({
+                itemId: invItemId,
+                quantity: Number(p.quantity),
               });
             }
+          }
+
+          // Guardar las piezas en la OT
+          await tx.workOrderPart.createMany({ data: partsData });
+
+          // --- RESERVAS: Crear reservas iniciales si hay bodega ---
+          if (dto.warehouseId && linkedPartsForReservation.length > 0) {
+            await tx.stockReservation.createMany({
+              data: linkedPartsForReservation.map((p) => ({
+                workOrderId: workOrder.id,
+                itemId: p.itemId,
+                warehouseId: dto.warehouseId!,
+                quantity: p.quantity,
+              })),
+            });
           }
         }
 
@@ -649,6 +670,12 @@ export class WorkOrdersService {
                   item: { connect: { id: part.inventoryItemId } },
                   user: { connect: { id: userId } },
                 },
+              });
+
+              // [NUEVO] CONGELAR COSTO HISTÓRICO EN LA OT
+              await tx.workOrderPart.update({
+                where: { id: part.id },
+                data: { unitCost: currentStock?.unitCost || 0 },
               });
             }
           }

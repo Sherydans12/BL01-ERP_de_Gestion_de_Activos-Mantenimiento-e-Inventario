@@ -395,14 +395,3 @@
     }
   </div>
 </div>
-
-@if (selectedOtForClose()) {
-  <app-confirm-modal
-    title="Cerrar Orden de Trabajo"
-    message="Al cerrar esta OT, el Medidor Final registrado actualizará automáticamente el contador del equipo en la Flota de forma irreversible. El formulario pasará a Solo Lectura. ¿Deseas firmar y cerrar esta OT?"
-    confirmText="CERRAR OT"
-    cancelText="Cancelar"
-    (confirm)="executeCloseOt()"
-    (cancel)="cancelCloseModal()"
-  ></app-confirm-modal>
-}

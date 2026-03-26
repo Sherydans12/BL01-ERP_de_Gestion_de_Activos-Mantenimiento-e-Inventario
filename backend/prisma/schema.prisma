@@ -234,6 +234,8 @@ model WorkOrderPart {
   partNumber      String         @map("part_number") @db.VarChar(50)
   description     String         @db.VarChar(100)
   quantity        Float          @default(1)
+
+  unitCost        Float?         @map("unit_cost")
   
   workOrder       WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)

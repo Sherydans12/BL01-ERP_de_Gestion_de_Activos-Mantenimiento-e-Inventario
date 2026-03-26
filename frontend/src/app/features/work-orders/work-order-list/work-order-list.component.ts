@@ -9,6 +9,7 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-work-order-list',
@@ -23,6 +24,7 @@ export class WorkOrderListComponent implements OnInit {
   private notificationService = inject(NotificationService);
   private exportService = inject(ExportService);
   authService = inject(AuthService);
+  private router = inject(Router);
 
   workOrders = signal<any[]>([]);
   fleet = signal<any[]>([]);
@@ -147,19 +149,10 @@ export class WorkOrderListComponent implements OnInit {
   }
 
   confirmCloseOt(id: string) {
-    this.selectedOtForClose.set(id);
-  }
-
-  cancelCloseModal() {
-    this.selectedOtForClose.set(null);
-  }
-
-  executeCloseOt() {
-    const id = this.selectedOtForClose();
-    if (id) {
-      this.changeStatus(id, 'CLOSED');
-    }
-    this.selectedOtForClose.set(null);
+    this.router.navigate(['/app/ots', id]);
+    this.notificationService.info(
+      'Revisa los repuestos y bodega antes de cerrar la OT.',
+    );
   }
 
   changeStatus(id: string, newStatus: string) {
