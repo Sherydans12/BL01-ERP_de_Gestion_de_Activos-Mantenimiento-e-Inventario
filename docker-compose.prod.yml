@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: erp-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-erp_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-supersecretpassword}
+      POSTGRES_DB: ${DB_NAME:-erp_database}
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    networks:
+      - erp-network-prod
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: erp-backend-prod
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-erp_admin}:${DB_PASSWORD:-supersecretpassword}@db:5432/${DB_NAME:-erp_database}?schema=public
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+    depends_on:
+      - db
+    networks:
+      - erp-network-prod
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: erp-frontend-prod
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - erp-network-prod
+
+volumes:
+  pgdata-prod:
+
+networks:
+  erp-network-prod:
+    driver: bridge
