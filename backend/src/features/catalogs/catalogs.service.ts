@@ -34,9 +34,9 @@ export class CatalogsService {
     });
   }
 
-  // GET: Traer todas las faenas (Sites)
-  async findAllSites(tenantId: string) {
-    return this.prisma.site.findMany({
+  // GET: Traer todos los contratos (Reemplaza Sites)
+  async findAllContracts(tenantId: string) {
+    return this.prisma.contract.findMany({
       where: { tenantId, isActive: true },
       orderBy: { name: 'asc' },
     });

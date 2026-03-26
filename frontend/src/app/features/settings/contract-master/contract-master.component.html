@@ -1,0 +1,268 @@
+<div class="h-full flex flex-col space-y-6 overflow-y-auto pb-10">
+  <div class="flex justify-between items-center mb-2">
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        Maestro de Contratos
+      </h2>
+      <p class="text-muted mt-1 text-sm">
+        Gestión de contratos principales y subcontratos (Centros de Costo).
+      </p>
+    </div>
+    <button
+      (click)="openContractModal()"
+      class="flex items-center gap-2 px-5 py-2.5 bg-primary text-dark font-bold font-mono text-sm rounded-lg hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 uppercase"
+    >
+      <svg
+        class="w-4 h-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 4v16m8-8H4"
+        ></path>
+      </svg>
+      NUEVO CONTRATO
+    </button>
+  </div>
+
+  @if (contracts().length === 0) {
+    <div
+      class="bg-surface border border-border rounded-xl p-12 text-center text-muted font-mono"
+    >
+      No hay contratos registrados en el sistema.
+    </div>
+  }
+
+  <div class="grid grid-cols-1 gap-6">
+    @for (contract of contracts(); track contract.id) {
+      <div
+        class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden flex flex-col backdrop-blur-xl"
+      >
+        <div
+          class="bg-dark/50 border-b border-border p-4 flex justify-between items-center"
+        >
+          <div class="flex items-center gap-4">
+            <span
+              class="font-mono text-xs text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20"
+            >
+              {{ contract.code }}
+            </span>
+            <h3 class="text-lg font-bold text-main">{{ contract.name }}</h3>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              (click)="openSubcontractModal(contract.id)"
+              class="text-xs font-mono font-bold bg-dark border border-border hover:border-primary text-main px-3 py-1.5 rounded transition-all flex items-center gap-2"
+            >
+              <svg
+                class="w-3 h-3 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 4v16m8-8H4"
+                ></path>
+              </svg>
+              Añadir Subcontrato
+            </button>
+            <div class="w-px h-6 bg-border mx-1"></div>
+            <button
+              (click)="openContractModal(contract)"
+              class="text-muted hover:text-primary transition-colors text-xs font-mono uppercase"
+            >
+              Editar
+            </button>
+            <button
+              (click)="deleteContract(contract.id, contract.name)"
+              class="text-muted hover:text-error transition-colors text-xs font-mono uppercase"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+
+        <div class="p-4">
+          @if (contract.subcontracts && contract.subcontracts.length > 0) {
+            <table class="w-full text-left text-sm text-muted">
+              <thead
+                class="text-xs uppercase bg-black/20 text-muted border-b border-border"
+              >
+                <tr>
+                  <th class="px-4 py-3 font-mono w-1/3">Cód. Subcontrato</th>
+                  <th class="px-4 py-3 font-mono">Nombre / Descripción</th>
+                  <th class="px-4 py-3 font-mono text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/50">
+                @for (sub of contract.subcontracts; track sub.id) {
+                  <tr class="hover:bg-dark/30 transition-colors">
+                    <td class="px-4 py-3 font-mono text-main">
+                      {{ sub.code }}
+                    </td>
+                    <td class="px-4 py-3">{{ sub.name }}</td>
+                    <td class="px-4 py-3 text-right">
+                      <button
+                        (click)="openSubcontractModal(contract.id, sub)"
+                        class="text-muted hover:text-main transition-colors mr-3 uppercase font-mono text-[10px]"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        (click)="deleteSubcontract(sub.id, sub.name)"
+                        class="text-muted hover:text-error transition-colors uppercase font-mono text-[10px]"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          } @else {
+            <div
+              class="py-4 text-center text-muted font-mono text-xs opacity-50"
+            >
+              No hay subcontratos registrados bajo este contrato principal.
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (isContractModalOpen()) {
+    <div
+      class="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+    >
+      <div
+        class="bg-surface/90 border border-border rounded-2xl shadow-2xl w-full max-w-md animate-fade-in p-8 relative backdrop-blur-xl"
+      >
+        <h3
+          class="text-xl font-bold text-main mb-6 tracking-tight flex items-center gap-2"
+        >
+          <span class="text-primary font-mono">&lt;C&gt;</span>
+          {{
+            editingContract() ? "Editar Contrato" : "Nuevo Contrato Principal"
+          }}
+        </h3>
+        <div class="space-y-5">
+          <div>
+            <label
+              class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
+              >Nombre del Contrato</label
+            >
+            <input
+              type="text"
+              [(ngModel)]="contractFormData().name"
+              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:outline-none focus:border-primary transition-colors focus:ring-1 focus:ring-primary/50"
+              placeholder="Ej: Faena Caserones"
+            />
+          </div>
+          <div>
+            <label
+              class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
+              >Código</label
+            >
+            <input
+              type="text"
+              [(ngModel)]="contractFormData().code"
+              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:outline-none focus:border-primary transition-colors font-mono focus:ring-1 focus:ring-primary/50"
+              placeholder="Ej: CTR-CAS"
+            />
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-border">
+          <button
+            (click)="closeContractModal()"
+            class="px-4 py-2 text-muted hover:text-main text-sm font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            (click)="saveContract()"
+            class="px-5 py-2 bg-primary text-dark font-bold font-mono text-sm rounded hover:bg-primary/90 transition-all uppercase"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (isSubcontractModalOpen()) {
+    <div
+      class="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+    >
+      <div
+        class="bg-surface/90 border border-border rounded-2xl shadow-2xl w-full max-w-md animate-fade-in p-8 relative backdrop-blur-xl"
+      >
+        <h3
+          class="text-xl font-bold text-main mb-6 tracking-tight flex items-center gap-2"
+        >
+          <span class="text-primary font-mono">&lt;S&gt;</span>
+          {{
+            editingSubcontract() ? "Editar Subcontrato" : "Nuevo Subcontrato"
+          }}
+        </h3>
+        <div class="space-y-5">
+          <div>
+            <label
+              class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
+              >Nombre / Descripción</label
+            >
+            <input
+              type="text"
+              [(ngModel)]="subcontractFormData().name"
+              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:outline-none focus:border-primary transition-colors focus:ring-1 focus:ring-primary/50"
+              placeholder="Ej: Movimiento de Tierra"
+            />
+          </div>
+          <div>
+            <label
+              class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
+              >Código Subcontrato</label
+            >
+            <input
+              type="text"
+              [(ngModel)]="subcontractFormData().code"
+              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:outline-none focus:border-primary transition-colors font-mono focus:ring-1 focus:ring-primary/50"
+              placeholder="Ej: 448-16"
+            />
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-border">
+          <button
+            (click)="closeSubcontractModal()"
+            class="px-4 py-2 text-muted hover:text-main text-sm font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            (click)="saveSubcontract()"
+            class="px-5 py-2 bg-primary text-dark font-bold font-mono text-sm rounded hover:bg-primary/90 transition-all uppercase"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+  <app-confirm-modal
+    [isOpen]="isDeleteModalOpen()"
+    title="Eliminar Registro"
+    [message]="getDeleteMessage()"
+    confirmText="Eliminar"
+    cancelText="Cancelar"
+    [isDanger]="true"
+    (confirm)="confirmDelete()"
+    (cancel)="cancelDelete()"
+  ></app-confirm-modal>
+</div>

@@ -4,16 +4,14 @@
       Maestro de Flota
     </h2>
     <p class="text-sm text-muted mt-1">
-      Gestión de activos, patentes y estado de documentación legal.
+      Gestión de activos, patentes, medidores y estado de documentación legal.
     </p>
   </div>
 
-  <!-- HEADER & FILTERS -->
   <div
-    class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-xl border border-border shadow-sm"
+    class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-xl border border-border shadow-sm backdrop-blur-xl"
   >
     <div class="flex items-center gap-4 flex-1">
-      <!-- Search -->
       <div class="relative flex-1 max-w-md">
         <div
           class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
@@ -37,15 +35,14 @@
           placeholder="Buscar por ID..."
           [ngModel]="searchQuery()"
           (input)="onSearch($event)"
-          class="w-full bg-dark border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-main placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF3366] transition-all"
+          class="w-full bg-dark border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-main placeholder:text-muted focus:outline-none focus:border-primary transition-all"
         />
       </div>
 
-      <!-- Filters -->
       <select
         [ngModel]="filterType()"
         (ngModelChange)="filterType.set($event); onFilterChange()"
-        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:ring-2 focus:ring-[#FF3366]"
+        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-primary"
       >
         <option value="">Todos los Tipos</option>
         @for (item of equipmentTypes(); track item.id) {
@@ -56,7 +53,7 @@
       <select
         [ngModel]="filterBrand()"
         (ngModelChange)="filterBrand.set($event); onFilterChange()"
-        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:ring-2 focus:ring-[#FF3366]"
+        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-primary"
       >
         <option value="">Todas las Marcas</option>
         @for (item of brands(); track item.id) {
@@ -65,10 +62,9 @@
       </select>
     </div>
 
-    <!-- Actions -->
     <button
       (click)="exportToExcel()"
-      class="bg-dark hover:bg-surface border border-border text-muted font-mono text-sm py-2 px-5 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+      class="bg-dark hover:bg-surface border border-border text-muted font-mono text-sm py-2 px-5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
     >
       <svg
         class="w-4 h-4"
@@ -88,7 +84,7 @@
 
     <button
       (click)="openModal()"
-      class="bg-[#FF3366] hover:bg-[#FF3366]/90 text-main font-bold font-mono text-sm py-2 px-5 rounded-lg shadow-lg shadow-[#FF3366]/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+      class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
     >
       <svg
         class="w-4 h-4"
@@ -108,121 +104,122 @@
   </div>
 
   <div
-    class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden"
+    class="bg-surface border border-border rounded-xl shadow-sm overflow-hidden backdrop-blur-xl"
   >
-    <div class="p-4 border-b border-border flex gap-4">
-      <input
-        type="text"
-        placeholder="Buscar por N° Interno o Patente..."
-        class="max-w-md bg-dark border-border text-sm"
-      />
-      <select
-        class="bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
-      >
-        <option value="">Todos los tipos</option>
-        <option value="CAMIONETA">Camionetas</option>
-        <option value="MAQUINARIA">Maquinaria Pesada</option>
-      </select>
-    </div>
-
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse">
         <thead>
           <tr
             class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
           >
-            <th class="py-3 px-4 border-b border-border font-medium">
-              N° Interno
-            </th>
+            <th class="py-3 px-4 border-b border-border font-medium">Equipo</th>
             <th class="py-3 px-4 border-b border-border font-medium">
               Patente
             </th>
             <th class="py-3 px-4 border-b border-border font-medium">
-              Tipo / Marca
+              Medidor
             </th>
             <th
               class="py-3 px-4 border-b border-border font-medium text-center"
             >
-              Rev. Técnica
+              Documentos
             </th>
-            <th
-              class="py-3 px-4 border-b border-border font-medium text-center"
-            >
-              Perm. Circulación
-            </th>
-            @if (authService.currentSiteId() === "ALL") {
+
+            @if (authService.currentContractId() === "ALL") {
               <th
                 class="py-3 px-4 border-b border-border font-medium text-left"
               >
-                Faena
+                Contrato
               </th>
             }
+
+            <th class="py-3 px-4 border-b border-border font-medium text-left">
+              Subcontrato / C.C.
+            </th>
+
             <th class="py-3 px-4 border-b border-border font-medium text-right">
               Acciones
             </th>
           </tr>
         </thead>
-        <tbody class="text-sm text-muted divide-y divide-border/50">
+        <tbody class="text-sm divide-y divide-border">
           @for (eq of fleet(); track eq.id) {
             <tr class="hover:bg-dark/40 transition-colors">
-              <td class="py-3 px-4 font-mono text-primary">
-                {{ eq.internalId }}
-              </td>
-              <td class="py-3 px-4 font-mono">{{ eq.plate }}</td>
               <td class="py-3 px-4">
-                <div class="font-medium text-main">{{ eq.type }}</div>
+                <div class="font-bold text-main text-base">
+                  {{ eq.internalId }}
+                </div>
                 <div class="text-xs text-muted uppercase">
                   {{ eq.brand }} {{ eq.model }}
                 </div>
+                @if (eq.mineInternalId) {
+                  <div class="text-[10px] text-muted mt-1 font-mono">
+                    Mina: {{ eq.mineInternalId }}
+                  </div>
+                }
               </td>
-
+              <td class="py-3 px-4 font-mono text-main">
+                {{ eq.plate || "N/A" }}
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-mono text-main">
+                  {{ eq.currentMeter | number }}
+                </div>
+                <div class="text-[10px] text-muted uppercase">
+                  {{
+                    eq.meterType === MeterType.HOURS ? "Horas" : "Kilómetros"
+                  }}
+                </div>
+              </td>
               <td class="py-3 px-4 text-center">
                 @let rtStatus = getDocStatus(eq.techReviewExp);
                 <span
-                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-mono border"
+                  class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border"
                   [ngClass]="rtStatus.cssClass"
+                  title="Revisión Técnica: {{ eq.techReviewExp || 'N/A' }}"
                 >
-                  {{ rtStatus.label }}
+                  RT: {{ rtStatus.label }}
                 </span>
-                @if (eq.techReviewExp) {
-                  <div class="text-[10px] text-muted mt-1">
-                    {{ eq.techReviewExp }}
-                  </div>
-                }
-              </td>
-
-              <td class="py-3 px-4 text-center">
-                @let pcStatus = getDocStatus(eq.circPermitExp);
+                <br />
+                @let soapStatus = getDocStatus(eq.soapExp);
                 <span
-                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-mono border"
-                  [ngClass]="pcStatus.cssClass"
+                  class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border mt-1"
+                  [ngClass]="soapStatus.cssClass"
+                  title="SOAP: {{ eq.soapExp || 'N/A' }}"
                 >
-                  {{ pcStatus.label }}
+                  SOAP: {{ soapStatus.label }}
                 </span>
-                @if (eq.circPermitExp) {
-                  <div class="text-[10px] text-muted mt-1">
-                    {{ eq.circPermitExp }}
-                  </div>
-                }
               </td>
 
-              @if (authService.currentSiteId() === "ALL") {
+              @if (authService.currentContractId() === "ALL") {
                 <td class="py-3 px-4">
                   <div class="font-mono text-muted text-xs">
-                    {{ eq.site?.name || "N/A" }}
+                    {{ eq.contract?.name || "N/A" }}
                   </div>
                 </td>
               }
+
+              <td class="py-3 px-4">
+                <div class="font-mono text-main text-xs">
+                  @if (eq.subcontract) {
+                    {{ eq.subcontract.name }}
+                  } @else {
+                    <span class="text-primary opacity-80"
+                      >Asignación Directa</span
+                    >
+                  }
+                </div>
+              </td>
 
               <td class="py-3 px-4 text-right space-x-3">
                 <button
                   (click)="downloadResume(eq)"
                   [disabled]="isDownloadingPdf() === eq.id"
-                  class="text-muted hover:text-success transition-colors font-mono text-xs flex inline-flex items-center gap-1"
+                  class="text-muted hover:text-primary transition-colors font-mono text-xs flex inline-flex items-center gap-1"
                 >
                   @if (isDownloadingPdf() === eq.id) {
                     <svg
-                      class="animate-spin h-3 w-3 text-success"
+                      class="animate-spin h-3 w-3 text-primary"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -264,18 +261,14 @@
                 >
                   EDITAR
                 </button>
-                <button
-                  (click)="deleteEquipment(eq.id)"
-                  class="text-muted hover:text-error transition-colors font-mono text-xs"
-                >
-                  ELIMINAR
-                </button>
               </td>
             </tr>
           } @empty {
             <tr>
               <td
-                [attr.colspan]="authService.currentSiteId() === 'ALL' ? 7 : 6"
+                [attr.colspan]="
+                  authService.currentContractId() === 'ALL' ? 7 : 6
+                "
                 class="py-8 text-center text-muted font-mono"
               >
                 No hay equipos registrados.
@@ -286,9 +279,8 @@
       </table>
     </div>
 
-    <!-- PAGINATION FOOTER -->
     <div
-      class="px-6 py-4 flex items-center justify-between border-t border-border/50 bg-dark/20 text-sm"
+      class="px-6 py-4 flex items-center justify-between border-t border-border bg-dark/20 text-sm"
     >
       <div class="text-muted font-mono">
         Mostrando página
@@ -296,19 +288,18 @@
         <span class="font-bold text-main">{{ totalPages() || 1 }}</span>
         (Total: {{ totalItems() }} activos)
       </div>
-
       <div class="flex items-center gap-2">
         <button
           (click)="prevPage()"
           [disabled]="currentPage() === 1"
-          class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="px-3 py-1.5 rounded-lg bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           ANTERIOR
         </button>
         <button
           (click)="nextPage()"
           [disabled]="currentPage() >= totalPages()"
-          class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="px-3 py-1.5 rounded-lg bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           SIGUIENTE
         </button>
@@ -322,10 +313,10 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
   >
     <div
-      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl flex flex-col my-8"
+      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl flex flex-col my-8 backdrop-blur-xl"
     >
       <div
-        class="flex justify-between items-center p-6 border-b border-border bg-dark/50"
+        class="flex justify-between items-center p-6 border-b border-border bg-dark/50 rounded-t-xl"
       >
         <h3
           class="text-xl font-bold text-main tracking-tight flex items-center gap-2"
@@ -362,7 +353,65 @@
           id="eqForm"
           class="space-y-8"
         >
-          <!-- Identificación Base -->
+          <div>
+            <h4
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
+            >
+              Asignación Contractual
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="contractId" class="block text-sm text-muted mb-1"
+                  >Contrato Principal <span class="text-primary">*</span></label
+                >
+                <select
+                  id="contractId"
+                  formControlName="contractId"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="" disabled selected>
+                    Seleccione Contrato...
+                  </option>
+                  @for (contract of contracts(); track contract.id) {
+                    <option [value]="contract.id">
+                      {{ contract.code }} - {{ contract.name }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              <div>
+                <label for="subcontractId" class="block text-sm text-muted mb-1"
+                  >Subcontrato / C.C. (Opcional)</label
+                >
+                <select
+                  id="subcontractId"
+                  formControlName="subcontractId"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  [disabled]="
+                    !selectedContractId() || filteredSubcontracts().length === 0
+                  "
+                >
+                  <option [ngValue]="null">
+                    Ninguno (Asignación directa al contrato)
+                  </option>
+                  @for (sub of filteredSubcontracts(); track sub.id) {
+                    <option [value]="sub.id">
+                      {{ sub.code }} - {{ sub.name }}
+                    </option>
+                  }
+                </select>
+                @if (
+                  selectedContractId() && filteredSubcontracts().length === 0
+                ) {
+                  <p class="text-[10px] text-warning mt-1 font-mono">
+                    Este contrato no tiene subcontratos.
+                  </p>
+                }
+              </div>
+            </div>
+          </div>
+
           <div>
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
@@ -372,19 +421,33 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label for="internalId" class="block text-sm text-muted mb-1"
-                  >N° Interno <span class="text-error">*</span></label
+                  >N° Interno <span class="text-primary">*</span></label
                 >
                 <input
                   type="text"
                   id="internalId"
                   formControlName="internalId"
-                  class="w-full bg-dark border font-mono uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border font-mono uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
                   [ngClass]="
                     hasDuplicateError()
-                      ? 'border-error text-error'
-                      : 'border-border text-primary'
+                      ? 'border-primary text-primary'
+                      : 'border-border text-main'
                   "
                   placeholder="Ej: EC-3005"
+                />
+              </div>
+              <div>
+                <label
+                  for="mineInternalId"
+                  class="block text-sm text-muted mb-1"
+                  >ID Mina (Opcional)</label
+                >
+                <input
+                  type="text"
+                  id="mineInternalId"
+                  formControlName="mineInternalId"
+                  class="w-full bg-dark border border-border text-main font-mono uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  placeholder="Ej: CM-01-CAS"
                 />
               </div>
               <div>
@@ -395,23 +458,18 @@
                   type="text"
                   id="plate"
                   formControlName="plate"
-                  class="w-full bg-dark border font-mono uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
-                  [ngClass]="
-                    hasDuplicateError()
-                      ? 'border-error text-error'
-                      : 'border-border text-main'
-                  "
+                  class="w-full bg-dark border border-border text-main font-mono uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
                   placeholder="Ej: ABCD-12"
                 />
               </div>
               <div>
                 <label for="type" class="block text-sm text-muted mb-1"
-                  >Tipo de Equipo <span class="text-error">*</span></label
+                  >Tipo de Equipo <span class="text-primary">*</span></label
                 >
                 <select
                   id="type"
                   formControlName="type"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
                 >
                   <option value="" disabled selected>Seleccione...</option>
                   @for (tipo of equipmentTypes(); track tipo.id) {
@@ -421,12 +479,12 @@
               </div>
               <div>
                 <label for="brand" class="block text-sm text-muted mb-1"
-                  >Marca <span class="text-error">*</span></label
+                  >Marca <span class="text-primary">*</span></label
                 >
                 <select
                   id="brand"
                   formControlName="brand"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
                 >
                   <option value="" disabled selected>Seleccione...</option>
                   @for (marca of brands(); track marca.id) {
@@ -436,187 +494,185 @@
               </div>
               <div>
                 <label for="model" class="block text-sm text-muted mb-1"
-                  >Modelo <span class="text-error">*</span></label
+                  >Modelo <span class="text-primary">*</span></label
                 >
                 <input
                   type="text"
                   id="model"
                   formControlName="model"
-                  class="w-full bg-dark border border-border text-main uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
                   placeholder="Ej: HILUX"
                 />
               </div>
             </div>
           </div>
 
-          <!-- Identificación Extendida -->
           <div>
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
-              Identificación Extendida
+              Operación y Medición
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label for="vin" class="block text-sm text-muted mb-1"
-                  >VIN / Chasis</label
+                <label for="meterType" class="block text-sm text-muted mb-1"
+                  >Tipo de Medidor <span class="text-primary">*</span></label
                 >
-                <input
-                  type="text"
-                  id="vin"
-                  formControlName="vin"
-                  class="w-full bg-dark border font-mono uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
-                  [ngClass]="
-                    hasDuplicateError()
-                      ? 'border-error text-error'
-                      : 'border-border text-main'
-                  "
-                />
+                <select
+                  id="meterType"
+                  formControlName="meterType"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                >
+                  @for (type of meterTypesArray; track type) {
+                    <option [value]="type">
+                      {{ type === MeterType.HOURS ? "Horas" : "Kilómetros" }}
+                    </option>
+                  }
+                </select>
               </div>
               <div>
-                <label
-                  for="engineNumber"
-                  class="block text-sm text-muted mb-1"
-                  >N° Motor</label
-                >
-                <input
-                  type="text"
-                  id="engineNumber"
-                  formControlName="engineNumber"
-                  class="w-full bg-dark border border-border text-main uppercase rounded-md px-3 py-2 outline-none focus:border-primary"
-                />
-              </div>
-              <div>
-                <label for="year" class="block text-sm text-muted mb-1"
-                  >Año Fabricación</label
+                <label for="currentMeter" class="block text-sm text-muted mb-1"
+                  >Medidor Inicial / Actual
+                  <span class="text-primary">*</span></label
                 >
                 <input
                   type="number"
-                  id="year"
-                  formControlName="year"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
-                  placeholder="Ej: 2021"
+                  id="currentMeter"
+                  formControlName="currentMeter"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
                 />
-              </div>
-            </div>
-          </div>
-
-          <!-- Operación y Mantenimiento -->
-          <div>
-            <h4
-              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
-            >
-              Operación y Mantenimiento
-            </h4>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <label for="fuelType" class="block text-sm text-muted mb-1"
-                  >Combustible</label
-                >
-                <select
-                  id="fuelType"
-                  formControlName="fuelType"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
-                >
-                  <option [ngValue]="null">N/A</option>
-                  @for (fuel of fuelTypes(); track fuel.id) {
-                    <option [value]="fuel.name">{{ fuel.name }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label for="driveType" class="block text-sm text-muted mb-1"
-                  >Tracción / Drive</label
-                >
-                <select
-                  id="driveType"
-                  formControlName="driveType"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
-                >
-                  <option [ngValue]="null">N/A</option>
-                  @for (drive of driveTypes(); track drive.id) {
-                    <option [value]="drive.name">{{ drive.name }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label for="ownership" class="block text-sm text-muted mb-1"
-                  >Propiedad</label
-                >
-                <select
-                  id="ownership"
-                  formControlName="ownership"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
-                >
-                  <option [ngValue]="null">N/A</option>
-                  @for (owner of ownerships(); track owner.id) {
-                    <option [value]="owner.name">{{ owner.name }}</option>
-                  }
-                </select>
               </div>
               <div>
                 <label
                   for="maintenanceFrequency"
                   class="block text-sm text-muted mb-1"
-                  >Frecuencia Mantención (Hrs/Kms)</label
+                  >Frec. Mantención</label
                 >
                 <input
                   type="number"
                   id="maintenanceFrequency"
                   formControlName="maintenanceFrequency"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
                   placeholder="Ej: 250"
-                />
-              </div>
-              <div>
-                <label
-                  for="currentHorometer"
-                  class="block text-sm text-muted mb-1"
-                  >Horómetro Inicial / Actual
-                  <span class="text-error">*</span></label
-                >
-                <input
-                  type="number"
-                  id="currentHorometer"
-                  formControlName="currentHorometer"
-                  class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
                 />
               </div>
             </div>
           </div>
 
-          <!-- Documentación Legal -->
+          <div>
+            <h4
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
+            >
+              Histórico de Mantenimiento
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label
+                  for="lastMaintenanceDate"
+                  class="block text-sm text-muted mb-1"
+                  >Fecha Últ. Mant.</label
+                >
+                <input
+                  type="date"
+                  id="lastMaintenanceDate"
+                  formControlName="lastMaintenanceDate"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                />
+              </div>
+              <div>
+                <label
+                  for="lastMaintenanceMeter"
+                  class="block text-sm text-muted mb-1"
+                  >Medidor en Últ. Mant.</label
+                >
+                <input
+                  type="number"
+                  id="lastMaintenanceMeter"
+                  formControlName="lastMaintenanceMeter"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label
+                  for="lastMaintenanceType"
+                  class="block text-sm text-muted mb-1"
+                  >Tipo de Intervención</label
+                >
+                <input
+                  type="text"
+                  id="lastMaintenanceType"
+                  formControlName="lastMaintenanceType"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  placeholder="Ej: PM3 - 1000H"
+                />
+              </div>
+            </div>
+          </div>
+
           <div>
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
               Documentación Legal
             </h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label
-                  for="techReviewExp"
-                  class="block text-sm text-muted mb-1"
+                <label for="techReviewExp" class="block text-sm text-muted mb-1"
                   >Vto. Revisión Técnica</label
                 >
                 <input
                   type="date"
                   id="techReviewExp"
                   formControlName="techReviewExp"
-                  class="w-full bg-dark border border-border font-mono text-main rounded-md px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
                 />
               </div>
               <div>
-                <label
-                  for="circPermitExp"
-                  class="block text-sm text-muted mb-1"
-                  >Vto. Permiso Circulación</label
+                <label for="circPermitExp" class="block text-sm text-muted mb-1"
+                  >Vto. Perm. Circulación</label
                 >
                 <input
                   type="date"
                   id="circPermitExp"
                   formControlName="circPermitExp"
-                  class="w-full bg-dark border border-border font-mono text-main rounded-md px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                />
+              </div>
+              <div>
+                <label for="soapExp" class="block text-sm text-muted mb-1"
+                  >Vto. SOAP</label
+                >
+                <input
+                  type="date"
+                  id="soapExp"
+                  formControlName="soapExp"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                />
+              </div>
+              <div>
+                <label
+                  for="mechanicalCertExp"
+                  class="block text-sm text-muted mb-1"
+                  >Cert. Mecánico</label
+                >
+                <input
+                  type="date"
+                  id="mechanicalCertExp"
+                  formControlName="mechanicalCertExp"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
+                />
+              </div>
+              <div>
+                <label
+                  for="liabilityPolicyExp"
+                  class="block text-sm text-muted mb-1"
+                  >Póliza RC</label
+                >
+                <input
+                  type="date"
+                  id="liabilityPolicyExp"
+                  formControlName="liabilityPolicyExp"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary [color-scheme:dark]"
                 />
               </div>
             </div>
@@ -625,7 +681,7 @@
       </div>
 
       <div
-        class="p-4 border-t border-border bg-dark/50 flex justify-end gap-3 mt-auto"
+        class="p-4 border-t border-border bg-dark/50 flex justify-end gap-3 rounded-b-xl"
       >
         <button
           (click)="closeModal()"
@@ -638,7 +694,7 @@
           type="submit"
           form="eqForm"
           [disabled]="equipmentForm.invalid"
-          class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-6 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+          class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
         >
           {{ isEditMode ? "Guardar Cambios" : "Registrar Activo" }}
         </button>

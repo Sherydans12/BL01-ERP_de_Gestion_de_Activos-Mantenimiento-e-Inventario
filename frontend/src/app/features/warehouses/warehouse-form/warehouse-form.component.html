@@ -1,0 +1,158 @@
+<div class="max-w-3xl mx-auto space-y-6 pb-10">
+  <div class="flex items-center gap-4">
+    <a
+      routerLink="/app/bodegas"
+      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-muted hover:text-primary"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        ></path>
+      </svg>
+    </a>
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        {{ mode === "CREATING" ? "Nueva Bodega" : "Editar Bodega" }}
+      </h2>
+      <div class="mt-2 flex items-center gap-2">
+        <span class="text-xs font-mono text-muted">Alcance de Creación:</span>
+        @if (authService.currentContractId() === "ALL") {
+          <span
+            class="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30 font-bold uppercase tracking-wider"
+            >ADMINISTRADOR CENTRAL</span
+          >
+        } @else {
+          <span
+            class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/30 font-bold uppercase tracking-wider"
+            >SOLO CONTRATO ACTUAL</span
+          >
+        }
+      </div>
+    </div>
+  </div>
+
+  <form
+    [formGroup]="warehouseForm"
+    (ngSubmit)="onSubmit()"
+    class="bg-surface border border-border rounded-xl shadow-lg p-6 space-y-6"
+  >
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Código de Bodega <span class="text-error">*</span></label
+        >
+        <input
+          type="text"
+          formControlName="code"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase font-mono"
+          placeholder="Ej: BOD-CAS-01"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Nombre Descriptivo <span class="text-error">*</span></label
+        >
+        <input
+          type="text"
+          formControlName="name"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
+          placeholder="Ej: Pañol Central Caserones"
+        />
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-muted mb-1"
+        >Ubicación Física (Opcional)</label
+      >
+      <input
+        type="text"
+        formControlName="location"
+        class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary"
+        placeholder="Ej: Sector Talleres, Galpón 3"
+      />
+    </div>
+
+    <div
+      class="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-border pt-6"
+    >
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Contrato Asignado <span class="text-error">*</span></label
+        >
+        <select
+          formControlName="contractId"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <option value="" disabled selected>-- Seleccione Contrato --</option>
+          @for (contract of contractsWithSubs(); track contract.id) {
+            <option [value]="contract.id">
+              {{ contract.code }} - {{ contract.name }}
+            </option>
+          }
+        </select>
+        @if (warehouseForm.get("contractId")?.disabled) {
+          <p class="text-[10px] text-primary font-mono mt-1">
+            Bloqueado por el contexto seleccionado arriba.
+          </p>
+        }
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Subcontrato Exclusivo (Opcional)</label
+        >
+        <select
+          formControlName="subcontractId"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary disabled:opacity-50"
+          [disabled]="!warehouseForm.get('contractId')?.value"
+        >
+          <option value="">-- Aplica a todo el Contrato --</option>
+          @for (sub of availableSubcontracts(); track sub.id) {
+            <option [value]="sub.id">{{ sub.code }} - {{ sub.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <div class="border-t border-border pt-6">
+      <div
+        class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border"
+      >
+        <input
+          type="checkbox"
+          formControlName="isActive"
+          id="isActive"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        />
+        <label
+          for="isActive"
+          class="text-sm font-bold text-main cursor-pointer block"
+          >Bodega Activa</label
+        >
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 pt-4">
+      <a
+        routerLink="/app/bodegas"
+        class="px-6 py-2 font-medium text-muted hover:text-main transition-colors"
+        >Cancelar</a
+      >
+      <button
+        type="submit"
+        [disabled]="warehouseForm.invalid"
+        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-2 px-8 rounded shadow-lg disabled:opacity-50"
+      >
+        GUARDAR BODEGA
+      </button>
+    </div>
+  </form>
+</div>

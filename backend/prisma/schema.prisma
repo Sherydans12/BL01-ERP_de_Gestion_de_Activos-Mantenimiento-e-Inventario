@@ -10,40 +10,53 @@ datasource db {
 // 1. MAESTRO DE FLOTA (EQUIPMENT)
 // ==========================================
 model Equipment {
-  id                      String    @id @default(uuid()) @db.Uuid
-  tenantId                String    @map("tenant_id") @db.Uuid
-  siteId                  String?   @map("site_id") @db.Uuid
-  internalId              String    @map("internal_id") @db.VarChar(50) // Ej: EC-3005
-  plate                   String?   @db.VarChar(20) // Ej: VCJW-21 (Bulls pueden no tener)
-  type                    String    @db.VarChar(50) // Ej: CAMIONETA, BULLDOZER
-  brand                   String    @db.VarChar(50) // Ej: TOYOTA, CAT
-  model                   String    @db.VarChar(50) // Ej: HILUX
-  initialHorometer        Int       @default(0) @map("initial_horometer")
-  currentHorometer        Int       @default(0) @map("current_horometer")
+  id                    String      @id @default(uuid()) @db.Uuid
+  tenantId              String      @map("tenant_id") @db.Uuid
+  contractId            String?     @map("contract_id") @db.Uuid // Asignación directa
+  subcontractId         String?     @map("subcontract_id") @db.Uuid // Asignación indirecta
+  mineInternalId        String?     @map("mine_internal_id") @db.VarChar(50)
+  internalId            String      @map("internal_id") @db.VarChar(50)
+  plate                 String?     @db.VarChar(20)
+  type                  String      @db.VarChar(50)
+  brand                 String      @db.VarChar(50)
+  model                 String      @db.VarChar(50)
+  
+  // Lógica de Medición (Evolucionado)
+  meterType             MeterType   @default(HOURS) @map("meter_type")
+  initialMeter          Int         @default(0) @map("initial_meter")
+  currentMeter          Int         @default(0) @map("current_meter")
   
   // Identificación Extendida
-  vin                     String?   @db.VarChar(50)
-  engineNumber            String?   @map("engine_number") @db.VarChar(50)
-  year                    Int?
+  vin                   String?     @db.VarChar(50)
+  engineNumber          String?     @map("engine_number") @db.VarChar(50)
+  year                  Int?
 
-  // Operación y Mantenimiento
-  fuelType                String?   @map("fuel_type") @db.VarChar(50)
-  driveType               String?   @map("drive_type") @db.VarChar(50)
-  ownership               String?   @db.VarChar(50)
-  maintenanceFrequency    Int?      @map("maintenance_frequency")
+  // Operación y Mantenimiento (Evolucionado)
+  fuelType              String?     @map("fuel_type") @db.VarChar(50)
+  driveType             String?     @map("drive_type") @db.VarChar(50)
+  ownership             String?     @db.VarChar(50)
+  maintenanceFrequency  Int?        @map("maintenance_frequency")
+  lastMaintenanceDate   DateTime?   @map("last_maintenance_date") @db.Date
+  lastMaintenanceMeter  Int?        @map("last_maintenance_meter")
+  lastMaintenanceType   String?     @map("last_maintenance_type") @db.VarChar(100)
   
-  // Vencimientos Legales
-  techReviewExp           DateTime? @map("tech_review_exp") @db.Date
-  circPermitExp           DateTime? @map("circ_permit_exp") @db.Date
+  // Vencimientos Legales (Evolucionado)
+  techReviewExp         DateTime?   @map("tech_review_exp") @db.Date
+  circPermitExp         DateTime?   @map("circ_permit_exp") @db.Date
+  soapExp               DateTime?   @map("soap_exp") @db.Date
+  mechanicalCertExp     DateTime?   @map("mechanical_cert_exp") @db.Date
+  liabilityPolicyExp    DateTime?   @map("liability_policy_exp") @db.Date
 
   // Auditoría
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime  @updatedAt @map("updated_at")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
 
   // Relaciones
-  tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site            Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  workOrders              WorkOrder[]
+  tenant                Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract              Contract?    @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract           Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  workOrders            WorkOrder[]
+  meterAdjustments      MeterAdjustment[]
 
   @@unique([tenantId, internalId])
   @@unique([tenantId, plate])
@@ -55,17 +68,18 @@ model Equipment {
 // 2. CATÁLOGOS GLOBALES (SYSTEMS, FLUIDS)
 // ==========================================
 model CatalogItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  code        String   @db.VarChar(20) // Ej: SYS-01, FLD-01
-  name        String   @db.VarChar(100)
-  category    CatalogCategory
-  isActive    Boolean  @default(true) @map("is_active")
+  id                  String            @id @default(uuid()) @db.Uuid
+  tenantId            String            @map("tenant_id") @db.Uuid
+  code                String            @db.VarChar(20) // Ej: SYS-01, FLD-01
+  name                String            @db.VarChar(100)
+  category            CatalogCategory
+  isActive            Boolean           @default(true) @map("is_active")
 
   // Relaciones
   tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   systemInterventions WorkOrderSystem[]
   fluidConsumptions   WorkOrderFluid[]
+  fluidSamples        FluidSample[]     // NUEVA RELACIÓN: Muestras APD por sistema
 
   @@unique([tenantId, code])
   @@map("catalog_items")
@@ -85,34 +99,41 @@ enum CatalogCategory {
 // 3. ÓRDENES DE TRABAJO (OT)
 // ==========================================
 model WorkOrder {
-  id                String    @id @default(uuid()) @db.Uuid
-  tenantId          String    @map("tenant_id") @db.Uuid
-  siteId          String?   @map("site_id") @db.Uuid
-  correlative       String    @db.VarChar(30) // Ej: OT-2026-001
-  equipmentId       String    @map("equipment_id") @db.Uuid
-  type              OtType    @default(NUEVA)
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  subcontractId     String?           @map("subcontract_id") @db.Uuid
+  warehouseId       String?           @map("warehouse_id") @db.Uuid // Bodega de consumo (Integración Fase C)
+  correlative       String            @db.VarChar(30)
+  equipmentId       String            @map("equipment_id") @db.Uuid
+  type              OtType            @default(NUEVA)
   category          OtCategory
-  maintenanceType   MaintenanceType @map("maintenance_type") // PREVENTIVO o CORRECTIVO
-  status            OtStatus  @default(OPEN)
+  maintenanceType   MaintenanceType   @map("maintenance_type")
+  status            OtStatus          @default(OPEN)
+  responsible       String?           @db.VarChar(100)
   
-  initialHorometer  Int       @map("initial_horometer")
-  finalHorometer    Int       @map("final_horometer")
-  description       String    @db.Text
+  initialMeter      Int               @map("initial_meter")
+  finalMeter        Int               @map("final_meter")
+  description       String            @db.Text
   
-  hasBacklog        Boolean   @default(false) @map("has_backlog")
+  hasBacklog        Boolean           @default(false) @map("has_backlog")
 
-  // Auditoría (Para soportar Sync Offline después)
-  createdAt         DateTime  @default(now()) @map("created_at")
-  syncedAt          DateTime? @map("synced_at")
-  closedAt          DateTime? @map("closed_at")
+  // Auditoría
+  createdAt         DateTime          @default(now()) @map("created_at")
+  syncedAt          DateTime?         @map("synced_at")
+  closedAt          DateTime?         @map("closed_at")
 
   // Relaciones
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site              Site?             @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  subcontract       Subcontract?      @relation(fields: [subcontractId], references: [id], onDelete: SetNull)
   equipment         Equipment         @relation(fields: [equipmentId], references: [id])
+  warehouse         Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   systems           WorkOrderSystem[]
   fluids            WorkOrderFluid[]
-
+  tasks             WorkOrderTask[]
+  parts             WorkOrderPart[]
+  fluidSamples      FluidSample[]
+  stockReservations StockReservation[]
+  
   @@unique([tenantId, correlative])
   @@map("work_orders")
 }
@@ -124,8 +145,13 @@ enum OtType {
 
 enum OtCategory {
   PROGRAMADA
-  NO_PROGRAMADA
-  ACCIDENTE
+  NO_PROGRAMADA_CORRECTIVA
+  NO_PROGRAMADA_REACTIVA
+}
+
+enum MeterType {
+  HOURS
+  KILOMETERS
 }
 
 enum MaintenanceType {
@@ -141,11 +167,11 @@ enum OtStatus {
 }
 
 // ==========================================
-// 4. TABLAS INTERMEDIAS (RELACIONES M:N)
+// 4. TABLAS INTERMEDIAS Y COMPONENTES DE OT
 // ==========================================
 model WorkOrderSystem {
-  workOrderId   String @map("work_order_id") @db.Uuid
-  catalogItemId String @map("catalog_item_id") @db.Uuid
+  workOrderId   String      @map("work_order_id") @db.Uuid
+  catalogItemId String      @map("catalog_item_id") @db.Uuid
 
   workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
@@ -155,9 +181,9 @@ model WorkOrderSystem {
 }
 
 model WorkOrderFluid {
-  id            String @id @default(uuid()) @db.Uuid
-  workOrderId   String @map("work_order_id") @db.Uuid
-  catalogItemId String @map("catalog_item_id") @db.Uuid
+  id            String      @id @default(uuid()) @db.Uuid
+  workOrderId   String      @map("work_order_id") @db.Uuid
+  catalogItemId String      @map("catalog_item_id") @db.Uuid
   
   liters        Float
   action        FluidAction
@@ -173,63 +199,162 @@ enum FluidAction {
   CAMBIO
 }
 
+// --- EXTENSIÓN TPM: TAREAS, REPUESTOS Y MUESTRAS ---
+
+model WorkOrderTask {
+  id              String      @id @default(uuid()) @db.Uuid
+  workOrderId     String      @map("work_order_id") @db.Uuid
+  description     String      @db.VarChar(255)
+  action          TaskAction? @default(INSPECT)
+  estimatedHours  Float?      @map("estimated_hours")
+  isCompleted     Boolean     @default(false) @map("is_completed")
+  observation     String?     @db.Text
+  measurement     Float?    
+  trackingCode    String?     @map("tracking_code") @db.VarChar(50)
+  
+  workOrder       WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  
+  @@map("work_order_tasks")
+}
+
+enum TaskAction {
+  INSPECT
+  REPLACE
+  ADJUST
+  CLEAN
+  LUBRICATE
+}
+
+model WorkOrderPart {
+  id              String         @id @default(uuid()) @db.Uuid
+  workOrderId     String         @map("work_order_id") @db.Uuid
+  
+  inventoryItemId String?        @map("inventory_item_id") @db.Uuid 
+  
+  partNumber      String         @map("part_number") @db.VarChar(50)
+  description     String         @db.VarChar(100)
+  quantity        Float          @default(1)
+  
+  workOrder       WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  
+  @@map("work_order_parts")
+}
+
+model FluidSample {
+  id              String       @id @default(uuid()) @db.Uuid
+  workOrderId     String       @map("work_order_id") @db.Uuid
+  systemId        String       @map("system_id") @db.Uuid // Motor, Transmisión, etc.
+  bottleCode      String       @map("bottle_code") @db.VarChar(50) // Código del frasco APD
+  status          SampleStatus @default(PENDING)
+  results         String?      @db.Text
+  
+  workOrder       WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  system          CatalogItem  @relation(fields: [systemId], references: [id], onDelete: Restrict)
+
+  @@map("fluid_samples")
+}
+
+enum SampleStatus {
+  PENDING
+  SENT_TO_LAB
+  ANALYZED
+}
+
 // ==========================================
-// 5. USUARIOS Y AUTENTICACIÓN
+// 5. MANTENIMIENTO: KITS PREDEFINIDOS (PM)
+// ==========================================
+
+model MaintenanceKit {
+  id              String                 @id @default(uuid()) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  contractId      String                 @map("contract_id") @db.Uuid
+  subcontractId   String?                @map("subcontract_id") @db.Uuid
+  code            String                 @db.VarChar(50) 
+  name            String                 @db.VarChar(100)
+  description     String?                @db.Text
+  
+  equipmentBrand  String?                @map("equipment_brand") @db.VarChar(50)
+  equipmentModel  String?                @map("equipment_model") @db.VarChar(50)
+  
+parts           MaintenanceKitPart[]
+  
+  contract        Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  subcontract     Subcontract?           @relation(fields: [subcontractId], references: [id], onDelete: Cascade) // NUEVA RELACIÓN
+
+  @@unique([tenantId, code])
+  @@map("maintenance_kits")
+}
+
+model MaintenanceKitPart {
+  id              String         @id @default(uuid()) @db.Uuid
+  kitId           String         @map("kit_id") @db.Uuid
+  partNumber      String         @map("part_number") @db.VarChar(50)
+  description     String         @db.VarChar(100)
+  quantity        Float          @default(1)
+
+  kit             MaintenanceKit @relation(fields: [kitId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_kit_parts")
+}
+
+// ==========================================
+// 6. USUARIOS Y AUTENTICACIÓN
 // ==========================================
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
-  email           String    @unique @db.VarChar(100)
-  password        String    @db.VarChar(255)
-  name            String    @db.VarChar(100)
-  role            UserRole  @default(MECHANIC)
-  isActive        Boolean   @default(false) @map("is_active")
-  activationToken String?   @map("activation_token") @db.VarChar(255)
-  resetPasswordToken   String?   @map("reset_password_token") @db.VarChar(255)
-  resetPasswordExpires DateTime? @map("reset_password_expires")
+  id                  String          @id @default(uuid()) @db.Uuid
+  email               String          @unique @db.VarChar(100)
+  password            String          @db.VarChar(255)
+  name                String          @db.VarChar(100)
+  role                UserRole        @default(MECHANIC)
+  isActive            Boolean         @default(false) @map("is_active")
+  activationToken     String?         @map("activation_token") @db.VarChar(255)
+  resetPasswordToken  String?         @map("reset_password_token") @db.VarChar(255)
+  resetPasswordExpires DateTime?      @map("reset_password_expires")
   
-  // Perfil Adicional
-  rut             String?   @db.VarChar(20)
-  phone           String?   @db.VarChar(20)
-  birthDate       DateTime? @map("birth_date") @db.Date
-  position        String?   @db.VarChar(100)
+  rut                 String?         @db.VarChar(20)
+  phone               String?         @db.VarChar(20)
+  birthDate           DateTime?       @map("birth_date") @db.Date
+  position            String?         @db.VarChar(100)
   
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
 
-  // Relaciones
-  tenantId        String?   @map("tenant_id") @db.Uuid
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
-  siteAccess      UserSite[]
+  tenantId            String?         @map("tenant_id") @db.Uuid
+  tenant              Tenant?         @relation(fields: [tenantId], references: [id])
+  contractAccess      UserContract[]  
+  inventoryTransactions InventoryTransaction[]
+  meterAdjustments    MeterAdjustment[]
 
   @@unique([tenantId, rut])
   @@map("users")
 }
 
 model Tenant {
-  id              String    @id @default(uuid()) @db.Uuid
-  code            String    @unique @db.VarChar(20) // Ej: TPM, BAR-01
-  name            String    @db.VarChar(100)
+  id                    String                @id @default(uuid()) @db.Uuid
+  code                  String                @unique @db.VarChar(20)
+  name                  String                @db.VarChar(100)
   
-  // Datos
-  rut             String?   @db.VarChar(20)
-  address         String?   @db.VarChar(255)
-  phone           String?   @db.VarChar(20)
+  rut                   String?               @db.VarChar(20)
+  address               String?               @db.VarChar(255)
+  phone                 String?               @db.VarChar(20)
 
-  // Marca
-  logoUrl         String?   @map("logo_url") @db.VarChar(255)
-  primaryColor    String    @default("#FF3366") @map("primary_color") @db.VarChar(50)
-  backgroundPreference BackgroundPreference @default(DARK) @map("background_preference")
+  logoUrl               String?               @map("logo_url") @db.VarChar(255)
+  primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)
+  backgroundPreference  BackgroundPreference  @default(DARK) @map("background_preference")
 
-  isActive        Boolean   @default(true) @map("is_active")
+  isActive              Boolean               @default(true) @map("is_active")
   
-  sites           Site[]
-  users           User[]
-  equipments      Equipment[]
-  workOrders      WorkOrder[]
-  catalogs        CatalogItem[]
+  contracts             Contract[]    
+  users                 User[]
+  equipments            Equipment[]
+  workOrders            WorkOrder[]
+  catalogs              CatalogItem[]
+  warehouses            Warehouse[]
+  inventoryItems        InventoryItem[]
   
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
 
   @@map("tenants")
 }
@@ -247,36 +372,193 @@ enum BackgroundPreference {
 }
 
 // ==========================================
-// 6. FAENAS Y PROYECTOS (SITES)
+// 7. CONTRATOS Y SUBCONTRATOS
 // ==========================================
-model Site {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  code        String   @db.VarChar(20) // Ej: FAE-NORTE, PROY-01
-  name        String   @db.VarChar(100)
-  isActive    Boolean  @default(true) @map("is_active")
+model Contract {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  code          String          @db.VarChar(50)
+  name          String          @db.VarChar(100)
+  isActive      Boolean         @default(true) @map("is_active")
 
-  // Relaciones
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users       UserSite[]
-  equipments  Equipment[]
-  workOrders  WorkOrder[]
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subcontracts  Subcontract[]
+  users         UserContract[]
+  equipments    Equipment[]
+  maintenanceKits MaintenanceKit[]
+  warehouses      Warehouse[]
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
 
   @@unique([tenantId, code])
-  @@map("sites")
+  @@map("contracts")
 }
 
-// Tabla intermedia para asignar usuarios a múltiples faenas (si es necesario)
-model UserSite {
-  userId      String @map("user_id") @db.Uuid
-  siteId      String @map("site_id") @db.Uuid
+model Subcontract {
+  id            String          @id @default(uuid()) @db.Uuid
+  contractId    String          @map("contract_id") @db.Uuid
+  code          String          @db.VarChar(50)
+  name          String          @db.VarChar(100)
+  isActive      Boolean         @default(true) @map("is_active")
 
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  site        Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  contract      Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  equipments    Equipment[]
+  workOrders    WorkOrder[]
+  maintenanceKits MaintenanceKit[]
+  warehouses      Warehouse[]
 
-  @@id([userId, siteId])
-  @@map("user_sites")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@unique([contractId, code])
+  @@map("subcontracts")
+}
+
+model UserContract {
+  userId        String          @map("user_id") @db.Uuid
+  contractId    String          @map("contract_id") @db.Uuid
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contract      Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@id([userId, contractId])
+  @@map("user_contracts")
+}
+
+// ==========================================
+// 8. MÓDULO DE INVENTARIO Y BODEGA (FASE C)
+// ==========================================
+
+model Warehouse {
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  contractId      String       @map("contract_id") @db.Uuid 
+  subcontractId   String?      @map("subcontract_id") @db.Uuid // NUEVO: Bodega asignable a Subcontrato
+
+  code            String       @db.VarChar(50)
+  name            String       @db.VarChar(100)
+  location        String?      @db.VarChar(255)
+  isActive        Boolean      @default(true) @map("is_active")
+
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract        Contract     @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract     Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict) // Relación
+  
+  stocks          ItemStock[]
+  transactions    InventoryTransaction[]
+  workOrders      WorkOrder[]
+  stockReservations StockReservation[]
+
+  @@unique([tenantId, code])
+  @@map("warehouses")
+}
+
+model InventoryItem {
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  
+  partNumber      String       @map("part_number") @db.VarChar(50)
+  name            String       @db.VarChar(150)
+  description     String?      @db.Text
+  category        String       @db.VarChar(50) // NUEVO: String libre para crear las que quieras
+  unitOfMeasure   String       @map("unit_of_measure") @db.VarChar(20) 
+  brand           String?      @db.VarChar(50)
+  
+  isSerialized    Boolean      @default(false) @map("is_serialized") // NUEVO: Bandera para Componentes Mayores
+
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stocks          ItemStock[]
+  transactions    InventoryTransaction[]
+  workOrderParts  WorkOrderPart[]
+  stockReservations StockReservation[]
+
+  @@unique([tenantId, partNumber])
+  @@map("inventory_items")
+}
+
+model ItemStock {
+  id              String        @id @default(uuid()) @db.Uuid
+  warehouseId     String        @map("warehouse_id") @db.Uuid
+  itemId          String        @map("item_id") @db.Uuid
+  
+  quantity        Float         @default(0) 
+  unitCost        Float?        @map("unit_cost") // NUEVO: El precio ahora vive en la bodega de la faena
+  minStock        Float         @default(0) @map("min_stock")
+  maxStock        Float         @default(0) @map("max_stock")
+  shelfLocation   String?       @map("shelf_location") @db.VarChar(50) 
+
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  item            InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, itemId]) 
+  @@map("item_stocks")
+}
+
+model InventoryTransaction {
+  id              String          @id @default(uuid()) @db.Uuid
+  warehouseId     String          @map("warehouse_id") @db.Uuid
+  itemId          String          @map("item_id") @db.Uuid
+  userId          String          @map("user_id") @db.Uuid 
+  
+  type            TransactionType
+  quantity        Float           
+  previousStock   Float           @map("previous_stock") 
+  newStock        Float           @map("new_stock")      
+  
+  referenceId     String?         @map("reference_id") @db.Uuid 
+  referenceType   String?         @map("reference_type") @db.VarChar(50) 
+  notes           String?         @db.Text
+  isPendingRegularization Boolean @default(false) @map("is_pending_regularization")
+  
+  date            DateTime        @default(now())
+
+  warehouse       Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  item            InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("inventory_transactions")
+}
+
+enum TransactionType {
+  IN      
+  OUT     
+  ADJUST  
+  RETURN  
+}
+
+// ==========================================
+// 9. AJUSTES DE MEDIDOR (HORÓMETRO/ODÓMETRO)
+// ==========================================
+model MeterAdjustment {
+  id            String    @id @default(uuid()) @db.Uuid
+  equipmentId   String    @map("equipment_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  oldValue      Int       @map("old_value")
+  newValue      Int       @map("new_value")
+  date          DateTime  @default(now())
+  reason        String?   @db.Text
+
+  equipment     Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("meter_adjustments")
+}
+
+// ==========================================
+// 10. RESERVAS DE STOCK (OTs ABIERTAS)
+// ==========================================
+model StockReservation {
+  id            String        @id @default(uuid()) @db.Uuid
+  workOrderId   String        @map("work_order_id") @db.Uuid
+  itemId        String        @map("item_id") @db.Uuid
+  warehouseId   String        @map("warehouse_id") @db.Uuid
+  quantity      Float
+
+  workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([workOrderId, itemId, warehouseId])
+  @@map("stock_reservations")
 }

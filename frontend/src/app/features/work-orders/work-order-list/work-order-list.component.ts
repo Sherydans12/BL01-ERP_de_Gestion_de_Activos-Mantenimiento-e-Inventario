@@ -47,7 +47,8 @@ export class WorkOrderListComponent implements OnInit {
   constructor() {
     effect(
       () => {
-        const siteId = this.authService.currentSiteId();
+        // Al cambiar el contrato global, recarga la lista
+        const contractId = this.authService.currentContractId();
         this.currentPage.set(1);
         this.loadWorkOrders();
         this.loadStats();
@@ -83,7 +84,7 @@ export class WorkOrderListComponent implements OnInit {
 
     this.workOrdersService.getWorkOrdersFiltered(params).subscribe({
       next: (res: any) => {
-        this.workOrders.set(res.data || res); // Manejo por si trae formato {data, total} o el array directo (viejo backend fallback)
+        this.workOrders.set(res.data || res);
         if (res.total !== undefined) {
           this.totalItems.set(res.total);
           this.totalPages.set(Math.ceil(res.total / this.pageSize()));
@@ -163,7 +164,7 @@ export class WorkOrderListComponent implements OnInit {
 
   changeStatus(id: string, newStatus: string) {
     this.workOrdersService.updateStatus(id, newStatus).subscribe({
-      next: (res) => {
+      next: () => {
         this.notificationService.success(`Estado actualizado a ${newStatus}.`);
         this.loadWorkOrders();
         this.loadStats();
@@ -180,6 +181,7 @@ export class WorkOrderListComponent implements OnInit {
       error: (err) => console.error('Error al generar PDF:', err),
     });
   }
+
   exportToExcel() {
     const data = this.workOrders();
     if (data.length === 0) {
@@ -188,19 +190,29 @@ export class WorkOrderListComponent implements OnInit {
     }
 
     const headersMap = {
-      id: 'N° OT',
+      correlative: 'N° OT',
       status: 'Estado',
       type: 'Tipo',
       category: 'Categoría',
       maintenanceType: 'Tipo Mantenimiento',
-      initialHorometer: 'Horómetro Inicial',
-      finalHorometer: 'Horómetro Final',
+      initialMeter: 'Medidor Inicial', // <-- CAMBIADO
+      finalMeter: 'Medidor Final', // <-- CAMBIADO
       description: 'Descripción',
       createdAt: 'Fecha Creación',
       closedAt: 'Fecha Cierre',
       equipment: 'Equipo (N° Interno)',
     };
 
-    this.exportService.exportToExcel(data, 'Ordenes_de_Trabajo', headersMap);
+    // Preprocesar data para aplanar objetos como equipment.internalId antes de exportar
+    const flatData = data.map((ot) => ({
+      ...ot,
+      equipment: ot.equipment?.internalId || 'N/A',
+    }));
+
+    this.exportService.exportToExcel(
+      flatData,
+      'Ordenes_de_Trabajo',
+      headersMap,
+    );
   }
 }

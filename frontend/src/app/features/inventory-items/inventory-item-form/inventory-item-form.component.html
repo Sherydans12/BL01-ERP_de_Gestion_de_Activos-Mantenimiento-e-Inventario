@@ -1,0 +1,157 @@
+<div class="max-w-3xl mx-auto space-y-6 pb-10">
+  <div class="flex items-center gap-4">
+    <a
+      routerLink="/app/articulos"
+      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-muted hover:text-primary"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        ></path>
+      </svg>
+    </a>
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        {{
+          mode === "CREATING" ? "Nuevo Artículo de Catálogo" : "Editar Artículo"
+        }}
+      </h2>
+      <p class="text-sm text-muted mt-1">
+        Este artículo estará disponible de forma global en todos los contratos.
+      </p>
+    </div>
+  </div>
+
+  <form
+    [formGroup]="itemForm"
+    (ngSubmit)="onSubmit()"
+    class="bg-surface border border-border rounded-xl shadow-lg p-6 space-y-6"
+  >
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >N° de Parte (Part Number) <span class="text-error">*</span></label
+        >
+        <input
+          type="text"
+          formControlName="partNumber"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase font-mono"
+          placeholder="Ej: 1R-0716"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Nombre del Artículo <span class="text-error">*</span></label
+        >
+        <input
+          type="text"
+          formControlName="name"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase"
+          placeholder="Ej: FILTRO DE ACEITE MOTOR"
+        />
+      </div>
+    </div>
+
+    <div
+      class="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-border pt-6"
+    >
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Categoría <span class="text-error">*</span></label
+        >
+        <input
+          type="text"
+          formControlName="category"
+          list="categoryOptions"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase"
+          placeholder="REPUESTO"
+        />
+        <datalist id="categoryOptions">
+          @for (cat of commonCategories; track cat) {
+            <option [value]="cat"></option>
+          }
+        </datalist>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Unidad de Medida <span class="text-error">*</span></label
+        >
+        <input
+          type="text"
+          formControlName="unitOfMeasure"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase font-mono"
+          placeholder="UN, LTS, KGS..."
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Marca (Fabricante)</label
+        >
+        <input
+          type="text"
+          formControlName="brand"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase"
+          placeholder="Ej: CATERPILLAR"
+        />
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-muted mb-1"
+        >Descripción / Notas</label
+      >
+      <textarea
+        formControlName="description"
+        rows="2"
+        class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary resize-none"
+      ></textarea>
+    </div>
+
+    <div class="border-t border-border pt-6">
+      <div
+        class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border"
+      >
+        <input
+          type="checkbox"
+          formControlName="isSerialized"
+          id="isSerialized"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        />
+        <div>
+          <label
+            for="isSerialized"
+            class="text-sm font-bold text-main cursor-pointer block"
+            >Componente Seriado / Mayor</label
+          >
+          <p class="text-xs text-muted font-mono mt-0.5">
+            Marcar solo si requiere trazabilidad única por número de serie (Ej:
+            Motores, Transmisiones).
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 pt-4">
+      <a
+        routerLink="/app/articulos"
+        class="px-6 py-2 font-medium text-muted hover:text-main transition-colors"
+        >Cancelar</a
+      >
+      <button
+        type="submit"
+        [disabled]="itemForm.invalid"
+        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-2 px-8 rounded shadow-lg disabled:opacity-50"
+      >
+        GUARDAR ARTÍCULO
+      </button>
+    </div>
+  </form>
+</div>

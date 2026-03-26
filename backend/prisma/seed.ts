@@ -1,5 +1,10 @@
 import 'dotenv/config';
-import { PrismaClient, CatalogCategory, UserRole } from '@prisma/client';
+import {
+  PrismaClient,
+  CatalogCategory,
+  UserRole,
+  MeterType,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -168,30 +173,128 @@ async function main() {
     });
   }
 
-  // 3. SITES
-  const siteNorte = await prisma.site.upsert({
-    where: { tenantId_code: { tenantId: tpmTenant.id, code: 'FAE-NORTE' } },
+  // 3. CONTRATOS Y SUBCONTRATOS
+  console.log('🏗️ Creando Contratos y Subcontratos...');
+  const contractCaserones = await prisma.contract.upsert({
+    where: { tenantId_code: { tenantId: tpmTenant.id, code: 'CTR-CASERONES' } },
     update: {},
     create: {
       tenantId: tpmTenant.id,
-      code: 'FAE-NORTE',
-      name: 'Faena Norte - Mina Escondida',
+      code: 'CTR-CASERONES',
+      name: 'Faena Caserones',
+      subcontracts: {
+        create: [
+          { code: '448', name: 'Movimiento de Tierra 448' },
+          { code: '448-16', name: 'Mantenimiento Vial 448-16' },
+        ],
+      },
+    },
+    include: { subcontracts: true },
+  });
+
+  const contractCoronel = await prisma.contract.upsert({
+    where: { tenantId_code: { tenantId: tpmTenant.id, code: 'CTR-CORONEL' } },
+    update: {},
+    create: {
+      tenantId: tpmTenant.id,
+      code: 'CTR-CORONEL',
+      name: 'Puerto Coronel',
+      subcontracts: {
+        create: [{ code: 'LOG-01', name: 'Logística Interna' }],
+      },
+    },
+    include: { subcontracts: true },
+  });
+
+  // 3.5. KITS DE MANTENIMIENTO (PM KITS)
+  console.log('📦 Creando Kits de Mantenimiento (PM)...');
+
+  await prisma.maintenanceKit.upsert({
+    where: { tenantId_code: { tenantId: tpmTenant.id, code: 'KIT-PM-250' } },
+    update: {},
+    create: {
+      tenantId: tpmTenant.id,
+      contractId: contractCaserones.id, // <--- CORRECCIÓN: Contrato Obligatorio
+      code: 'KIT-PM-250',
+      name: 'Mantención Preventiva 250 Hrs',
+      description:
+        'Inspección general, lubricación y cambio de filtros básicos.',
+      equipmentBrand: 'CATERPILLAR', // <--- Aprovechamos de probar los filtros
+      equipmentModel: '320 NEXT GEN',
+      parts: {
+        create: [
+          {
+            partNumber: '577-1440',
+            description: 'FILTRO ACEITE MOTOR',
+            quantity: 1,
+          },
+          {
+            partNumber: '545-8339',
+            description: 'FILTRO COMBUSTIBLE',
+            quantity: 2,
+          },
+          {
+            partNumber: '111-5718',
+            description: 'FILTRO SEPARADOR AGUA',
+            quantity: 1,
+          },
+        ],
+      },
     },
   });
 
-  const siteSur = await prisma.site.upsert({
-    where: { tenantId_code: { tenantId: tpmTenant.id, code: 'FAE-SUR' } },
+  await prisma.maintenanceKit.upsert({
+    where: { tenantId_code: { tenantId: tpmTenant.id, code: 'KIT-PM-500' } },
     update: {},
     create: {
       tenantId: tpmTenant.id,
-      code: 'FAE-SUR',
-      name: 'Faena Sur - Puerto Coronel',
+      contractId: contractCoronel.id, // <--- CORRECCIÓN: Contrato Obligatorio
+      code: 'KIT-PM-500',
+      name: 'Mantención Preventiva 500 Hrs',
+      description:
+        'PM 250 + Cambio de aceite de transmisión y filtros de aire.',
+      equipmentBrand: 'SCANIA',
+      equipmentModel: 'G440',
+      parts: {
+        create: [
+          {
+            partNumber: '577-1440',
+            description: 'FILTRO ACEITE MOTOR',
+            quantity: 1,
+          },
+          {
+            partNumber: '545-8339',
+            description: 'FILTRO COMBUSTIBLE',
+            quantity: 2,
+          },
+          {
+            partNumber: '111-5718',
+            description: 'FILTRO SEPARADOR AGUA',
+            quantity: 1,
+          },
+          {
+            partNumber: '299-8229',
+            description: 'FILTRO AIRE PRIMARIO',
+            quantity: 1,
+          },
+          {
+            partNumber: '299-8230',
+            description: 'FILTRO AIRE SECUNDARIO',
+            quantity: 1,
+          },
+          {
+            partNumber: '322-3155',
+            description: 'FILTRO TRANSMISIÓN',
+            quantity: 1,
+          },
+        ],
+      },
     },
   });
 
   // 4. USUARIOS
   const hashedPassword = await bcrypt.hash('admin123', 10);
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'admin@tpm.cl' },
     update: {},
     create: {
@@ -202,14 +305,32 @@ async function main() {
       isActive: true,
       tenantId: tpmTenant.id,
       rut: '12.345.678-9',
+      // Dar acceso a ambos contratos
+      contractAccess: {
+        create: [
+          { contractId: contractCaserones.id },
+          { contractId: contractCoronel.id },
+        ],
+      },
     },
   });
 
-  // 5. FLOTA DE EQUIPOS (10 Activos con data completa)
+  // 5. FLOTA DE EQUIPOS EVOLUCIONADA
   console.log('🚜 Creando flota diversificada...');
+
+  // Extraemos IDs de subcontratos para usarlos
+  const subCaserones448 = contractCaserones.subcontracts.find(
+    (s) => s.code === '448',
+  )!.id;
+  const subCaserones448_16 = contractCaserones.subcontracts.find(
+    (s) => s.code === '448-16',
+  )!.id;
+  const subCoronel = contractCoronel.subcontracts[0].id;
+
   const assets = [
     {
       internalId: 'CAM-001',
+      mineInternalId: 'CM-01-CAS',
       plate: 'VCJW-21',
       type: 'CAMIONETA',
       brand: 'TOYOTA',
@@ -221,14 +342,22 @@ async function main() {
       driveType: '4x4',
       ownership: 'PROPIO',
       maintenanceFrequency: 10000,
-      initialHorometer: 0,
-      currentHorometer: 15400,
+      meterType: MeterType.KILOMETERS,
+      initialMeter: 0,
+      currentMeter: 15400,
+      lastMaintenanceDate: new Date('2025-10-01'),
+      lastMaintenanceMeter: 10000,
+      lastMaintenanceType: 'Mantenimiento Preventivo 10K',
       techReviewExp: new Date('2026-10-15'),
       circPermitExp: new Date('2026-03-31'),
-      siteId: siteNorte.id,
+      soapExp: new Date('2026-03-31'),
+      mechanicalCertExp: new Date('2026-10-15'),
+      liabilityPolicyExp: new Date('2026-10-15'),
+      subcontractId: subCaserones448_16,
     },
     {
       internalId: 'EXC-055',
+      mineInternalId: 'EX-99',
       plate: null,
       type: 'EXCAVADORA',
       brand: 'CATERPILLAR',
@@ -240,147 +369,45 @@ async function main() {
       driveType: 'ORUGA (CADENAS)',
       ownership: 'LEASING',
       maintenanceFrequency: 500,
-      initialHorometer: 0,
-      currentHorometer: 3210,
-      siteId: siteNorte.id,
+      meterType: MeterType.HOURS,
+      initialMeter: 0,
+      currentMeter: 3210,
+      lastMaintenanceDate: new Date('2026-02-15'),
+      lastMaintenanceMeter: 3000,
+      lastMaintenanceType: 'PM3 - 1000H',
+      techReviewExp: new Date('2027-02-15'), // Agregado para cumplir campos opcionales
+      circPermitExp: new Date('2027-02-15'),
+      soapExp: new Date('2027-02-15'),
+      mechanicalCertExp: new Date('2027-02-15'),
+      liabilityPolicyExp: new Date('2027-02-15'),
+      subcontractId: subCaserones448,
     },
     {
       internalId: 'TOL-010',
+      mineInternalId: 'CT-10-COR',
       plate: 'KKB-992',
       type: 'CAMIÓN TOLVA',
       brand: 'SCANIA',
       model: 'G440',
-      vin: 'SCAN-G440-1010',
-      engineNumber: 'DC13-102',
+      vin: 'SCA440-998877',
+      engineNumber: 'DC13-112',
       year: 2021,
       fuelType: 'DIESEL',
       driveType: '6x4',
       ownership: 'PROPIO',
-      maintenanceFrequency: 15000,
-      initialHorometer: 0,
-      currentHorometer: 85000,
+      maintenanceFrequency: 20000,
+      meterType: MeterType.KILOMETERS,
+      initialMeter: 0,
+      currentMeter: 85000,
+      lastMaintenanceDate: new Date('2025-11-20'),
+      lastMaintenanceMeter: 80000,
+      lastMaintenanceType: 'Mantenimiento Preventivo 80K',
       techReviewExp: new Date('2026-08-20'),
       circPermitExp: new Date('2026-03-31'),
-      siteId: siteSur.id,
-    },
-    {
-      internalId: 'BULL-03',
-      plate: null,
-      type: 'BULLDOZER',
-      brand: 'KOMATSU',
-      model: 'D155AX-8',
-      vin: 'KOM-D155-003',
-      engineNumber: 'SAA6D140E-7',
-      year: 2020,
-      fuelType: 'DIESEL',
-      driveType: 'ORUGA (CADENAS)',
-      ownership: 'PROPIO',
-      maintenanceFrequency: 500,
-      initialHorometer: 0,
-      currentHorometer: 6700,
-      siteId: siteNorte.id,
-    },
-    {
-      internalId: 'ALJ-01',
-      plate: 'PX-8812',
-      type: 'CAMIÓN ALJIBE',
-      brand: 'MERCEDES-BENZ',
-      model: 'ACTROS 3344',
-      vin: 'MB-ACT-ALJ-01',
-      engineNumber: 'OM501LA',
-      year: 2019,
-      fuelType: 'DIESEL',
-      driveType: '6x4',
-      ownership: 'ARRENDADO (EXTERNO)',
-      maintenanceFrequency: 10000,
-      initialHorometer: 0,
-      currentHorometer: 45000,
-      siteId: siteSur.id,
-    },
-    {
-      internalId: 'GEN-15',
-      plate: null,
-      type: 'GENERADOR ELÉCTRICO',
-      brand: 'VOLVO',
-      model: 'TWD1643GE',
-      vin: 'V-GEN-15',
-      engineNumber: 'VOL-TWD-99',
-      year: 2024,
-      fuelType: 'DIESEL',
-      driveType: 'N/A',
-      ownership: 'PROPIO',
-      maintenanceFrequency: 250,
-      initialHorometer: 0,
-      currentHorometer: 450,
-      siteId: siteNorte.id,
-    },
-    {
-      internalId: 'GRUA-02',
-      plate: 'LL-1250',
-      type: 'GRÚA HORQUILLA',
-      brand: 'MITSUBISHI',
-      model: 'FG25N',
-      vin: 'MIT-FG25-02',
-      engineNumber: 'K25-001',
-      year: 2022,
-      fuelType: 'GASOLINA 93',
-      driveType: '4x2',
-      ownership: 'LEASING',
-      maintenanceFrequency: 500,
-      initialHorometer: 0,
-      currentHorometer: 1200,
-      siteId: siteSur.id,
-    },
-    {
-      internalId: 'MINI-05',
-      plate: null,
-      type: 'MINICARGADOR',
-      brand: 'CATERPILLAR',
-      model: '262D3',
-      vin: 'CAT-262D-05',
-      engineNumber: 'C3.3B',
-      year: 2023,
-      fuelType: 'DIESEL',
-      driveType: '4x4',
-      ownership: 'PROPIO',
-      maintenanceFrequency: 500,
-      initialHorometer: 0,
-      currentHorometer: 890,
-      siteId: siteNorte.id,
-    },
-    {
-      internalId: 'MOTO-01',
-      plate: 'LKB-22',
-      type: 'MOTONIVELADORA',
-      brand: 'LIEBHERR',
-      model: 'L 550',
-      vin: 'LIE-MOTO-01',
-      engineNumber: 'D936-L',
-      year: 2021,
-      fuelType: 'DIESEL',
-      driveType: '6x4',
-      ownership: 'PROPIO',
-      maintenanceFrequency: 1000,
-      initialHorometer: 0,
-      currentHorometer: 5400,
-      siteId: siteSur.id,
-    },
-    {
-      internalId: 'CARG-04',
-      plate: null,
-      type: 'CARGADOR FRONTAL',
-      brand: 'HYUNDAI',
-      model: 'HL960',
-      vin: 'HYU-HL960-04',
-      engineNumber: 'QSB6.7',
-      year: 2022,
-      fuelType: 'DIESEL',
-      driveType: '4x4',
-      ownership: 'LEASING',
-      maintenanceFrequency: 500,
-      initialHorometer: 0,
-      currentHorometer: 2800,
-      siteId: siteNorte.id,
+      soapExp: new Date('2026-03-31'),
+      mechanicalCertExp: new Date('2026-08-20'),
+      liabilityPolicyExp: new Date('2026-08-20'),
+      subcontractId: subCoronel,
     },
   ];
 
@@ -397,7 +424,7 @@ async function main() {
     });
   }
 
-  console.log('✅ Seed completado con 10 activos y diccionarios completos.');
+  console.log('✅ Seed completado con éxito.');
 }
 
 main()

@@ -59,7 +59,6 @@
     </div>
   </div>
 
-  <!-- KPI DASHBOARD -->
   @if (stats()) {
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in">
       <div class="bg-surface border border-border rounded-xl p-4 shadow-sm">
@@ -94,7 +93,7 @@
       </div>
     </div>
   }
-  <!-- PANEL DE FILTROS -->
+
   @if (showFilters()) {
     <div
       class="bg-surface border border-border rounded-xl p-5 space-y-4 animate-in"
@@ -198,13 +197,18 @@
               N° OT / Fecha
             </th>
             <th class="py-3 px-6 border-b border-border font-medium">Equipo</th>
-            @if (authService.currentSiteId() === "ALL") {
+
+            @if (authService.currentContractId() === "ALL") {
               <th
                 class="py-3 px-6 border-b border-border font-medium text-left"
               >
-                Faena
+                Contrato
               </th>
             }
+            <th class="py-3 px-6 border-b border-border font-medium text-left">
+              Subcontrato / C.C.
+            </th>
+
             <th class="py-3 px-6 border-b border-border font-medium">
               Tipo / Sistemas
             </th>
@@ -231,21 +235,35 @@
               </td>
 
               <td class="py-4 px-6">
-                <div class="font-mono text-main">
+                <div class="font-mono text-main font-bold text-base">
                   {{ ot.equipment?.internalId }}
                 </div>
-                <div class="text-xs text-muted uppercase">
-                  {{ ot.equipment?.type }}
+                <div
+                  class="text-[10px] text-muted uppercase tracking-wider mt-1"
+                >
+                  {{ ot.equipment?.brand }} {{ ot.equipment?.model }}
                 </div>
               </td>
 
-              @if (authService.currentSiteId() === "ALL") {
+              @if (authService.currentContractId() === "ALL") {
                 <td class="py-4 px-6 text-left">
                   <div class="font-mono text-muted text-xs">
-                    {{ ot.site?.name || "N/A" }}
+                    {{ ot.equipment?.contract?.name || "N/A" }}
                   </div>
                 </td>
               }
+
+              <td class="py-4 px-6 text-left">
+                <div class="font-mono text-main text-xs">
+                  @if (ot.subcontract) {
+                    {{ ot.subcontract.name }}
+                  } @else {
+                    <span class="text-primary opacity-80"
+                      >Asignación Directa</span
+                    >
+                  }
+                </div>
+              </td>
 
               <td class="py-4 px-6">
                 <div class="font-medium text-muted">{{ ot.category }}</div>
@@ -332,7 +350,9 @@
           } @empty {
             <tr>
               <td
-                [attr.colspan]="authService.currentSiteId() === 'ALL' ? 6 : 5"
+                [attr.colspan]="
+                  authService.currentContractId() === 'ALL' ? 7 : 6
+                "
                 class="py-12 text-center text-muted font-mono text-sm"
               >
                 No se encontraron órdenes de trabajo.
@@ -343,7 +363,6 @@
       </table>
     </div>
 
-    <!-- Paginación -->
     @if (totalPages() > 1 || totalItems() > 0) {
       <div
         class="px-6 py-4 border-t border-border bg-dark/50 flex items-center justify-between"
@@ -380,7 +399,7 @@
 @if (selectedOtForClose()) {
   <app-confirm-modal
     title="Cerrar Orden de Trabajo"
-    message="Al cerrar esta OT, el Horómetro Final registrado actualizará automáticamente el contador del equipo en la Flota de forma irreversible. El formulario pasará a Solo Lectura. ¿Deseas firmar y cerrar esta OT?"
+    message="Al cerrar esta OT, el Medidor Final registrado actualizará automáticamente el contador del equipo en la Flota de forma irreversible. El formulario pasará a Solo Lectura. ¿Deseas firmar y cerrar esta OT?"
     confirmText="CERRAR OT"
     cancelText="Cancelar"
     (confirm)="executeCloseOt()"

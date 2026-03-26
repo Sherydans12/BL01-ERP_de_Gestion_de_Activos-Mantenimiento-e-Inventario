@@ -5,13 +5,8 @@ import { UsersService, User } from '../../../core/services/users/users.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { finalize } from 'rxjs';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
-import { SitesService } from '../../../core/services/sites/sites.service';
-
-export interface Site {
-  id: string;
-  name: string;
-  code: string;
-}
+import { ContractsService } from '../../../core/services/contracts/contracts.service';
+import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
 
 @Component({
   selector: 'app-user-management',
@@ -20,7 +15,7 @@ export interface Site {
   template: `
     <div class="space-y-6 animate-fade-in pb-10">
       <header
-        class="flex justify-between items-center bg-surface p-6 rounded-2xl shadow-lg border border-border"
+        class="flex justify-between items-center bg-surface p-6 rounded-2xl shadow-lg border border-border backdrop-blur-xl"
       >
         <div>
           <h1
@@ -41,13 +36,13 @@ export interface Site {
             </svg>
             Gestión de Usuarios
           </h1>
-          <p class="text-muted mt-1">
+          <p class="text-muted mt-1 font-mono text-sm">
             Invita y administra a los miembros del equipo.
           </p>
         </div>
         <button
           (click)="openInviteModal()"
-          class="btn-primary flex items-center gap-2"
+          class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-sm transition-all flex items-center gap-2"
         >
           <svg
             class="w-5 h-5"
@@ -67,107 +62,91 @@ export interface Site {
       </header>
 
       <div
-        class="bg-surface rounded-xl shadow-lg border border-border overflow-hidden"
+        class="bg-surface rounded-xl shadow-sm border border-border overflow-hidden backdrop-blur-xl"
       >
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-700">
+          <table class="w-full text-left border-collapse">
             <thead class="bg-dark/50">
-              <tr>
-                <th
-                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
-                >
-                  Nombre
-                </th>
-                <th
-                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
-                >
-                  Email
-                </th>
-                <th
-                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
-                >
-                  Rol
-                </th>
-                <th
-                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
-                >
-                  RUT
-                </th>
-                <th
-                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
-                >
-                  Cargo
-                </th>
-                <th
-                  class="px-6 py-4 text-left text-xs font-medium text-muted uppercase"
-                >
-                  Estado
-                </th>
-                <th
-                  class="px-6 py-4 text-right text-xs font-medium text-muted uppercase"
-                >
-                  Acciones
-                </th>
+              <tr
+                class="text-xs uppercase tracking-wider text-muted font-mono border-b border-border"
+              >
+                <th class="px-6 py-4 font-medium">Nombre</th>
+                <th class="px-6 py-4 font-medium">Email</th>
+                <th class="px-6 py-4 font-medium">Rol</th>
+                <th class="px-6 py-4 font-medium">RUT</th>
+                <th class="px-6 py-4 font-medium">Cargo</th>
+                <th class="px-6 py-4 font-medium text-center">Estado</th>
+                <th class="px-6 py-4 font-medium text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-700 bg-surface">
+            <tbody class="divide-y divide-border/50 text-sm">
               @for (user of paginatedUsers(); track user.id) {
-                <tr class="hover:bg-gray-750 transition-colors duration-200">
-                  <td class="px-6 py-4 whitespace-nowrap">
+                <tr class="hover:bg-dark/40 transition-colors duration-200">
+                  <td class="px-6 py-4">
                     <div class="flex items-center gap-3">
                       <div
-                        class="h-8 w-8 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-sm font-bold text-main uppercase"
+                        class="h-8 w-8 rounded bg-dark border border-border flex items-center justify-center text-xs font-bold text-main uppercase"
                       >
                         {{ user.name.charAt(0) }}
                       </div>
-                      <div class="text-sm font-medium text-main">
+                      <div class="font-medium text-main">
                         {{ user.name }}
                       </div>
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-sm text-muted">
+                  <td class="px-6 py-4 text-muted">
                     {{ user.email }}
                   </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
+                  <td class="px-6 py-4">
                     <span
-                      class="px-3 py-1 text-xs font-semibold rounded-full border"
+                      class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border"
                       [ngClass]="{
-                        'bg-primary/20 text-primary border-primary/30':
+                        'bg-primary/10 text-primary border-primary/20':
                           user.role === 'ADMIN',
-                        'bg-blue-900/40 text-blue-400 border-blue-500/30':
+                        'bg-blue-900/20 text-blue-400 border-blue-500/20':
                           user.role === 'SUPERVISOR',
-                        'bg-gray-700 text-muted border-gray-600':
+                        'bg-dark text-muted border-border':
                           user.role === 'MECHANIC',
                       }"
                     >
                       {{ user.role }}
                     </span>
                   </td>
-                  <td class="px-6 py-4 text-sm text-muted font-mono">
+                  <td class="px-6 py-4 text-muted font-mono">
                     {{ user.rut || '-' }}
                   </td>
-                  <td class="px-6 py-4 text-sm text-muted">
+                  <td class="px-6 py-4 text-muted">
                     {{ user.position || '-' }}
                   </td>
-                  <td class="px-6 py-4">
-                    <div class="flex items-center gap-2">
+                  <td class="px-6 py-4 text-center">
+                    <div class="flex items-center justify-center gap-2">
                       <span
-                        class="px-3 py-1 text-xs font-semibold rounded-full border"
+                        class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border inline-flex items-center gap-1.5"
                         [ngClass]="
                           user.isActive
-                            ? 'bg-success/20 text-success border-success/30'
-                            : 'bg-warning/20 text-warning border-warning/30'
+                            ? 'bg-success/10 text-success border-success/20'
+                            : 'bg-warning/10 text-warning border-warning/20'
                         "
                       >
+                        <span
+                          class="w-1.5 h-1.5 rounded-full"
+                          [ngClass]="
+                            user.isActive ? 'bg-success' : 'bg-warning'
+                          "
+                        ></span>
                         {{ user.isActive ? 'Activo' : 'Inactivo' }}
                       </span>
                       <button
                         (click)="toggleUserStatus(user)"
                         [disabled]="isUpdatingStatus() === user.id"
-                        class="p-1 rounded-lg hover:bg-dark text-muted transition-all disabled:opacity-30"
+                        class="p-1 rounded hover:bg-dark text-muted transition-all disabled:opacity-30"
+                        title="Cambiar Estado"
                       >
                         @if (isUpdatingStatus() === user.id) {
-                          <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <svg
+                            class="animate-spin h-3.5 w-3.5"
+                            viewBox="0 0 24 24"
+                          >
                             <circle
                               class="opacity-25"
                               cx="12"
@@ -185,7 +164,7 @@ export interface Site {
                           </svg>
                         } @else {
                           <svg
-                            class="w-4 h-4"
+                            class="w-3.5 h-3.5"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -201,47 +180,50 @@ export interface Site {
                       </button>
                     </div>
                   </td>
-                  <td
-                    class="px-6 py-4 text-right text-sm font-medium flex justify-end items-center gap-2"
-                  >
-                    @if (!user.isActive) {
-                      <button
-                        (click)="resendInvitation(user)"
-                        class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                        title="Reenviar invitación"
-                      >
-                        <svg
-                          class="w-5 h-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                  <td class="px-6 py-4 text-right">
+                    <div class="flex justify-end items-center gap-2">
+                      @if (!user.isActive) {
+                        <button
+                          (click)="resendInvitation(user)"
+                          class="text-primary hover:text-primary/80 font-mono text-xs transition-colors p-1"
+                          title="Reenviar invitación"
                         >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                          />
-                        </svg>
+                          <svg
+                            class="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </button>
+                      }
+                      <button
+                        (click)="openEditModal(user)"
+                        class="text-muted hover:text-primary transition-colors font-mono text-xs p-1"
+                      >
+                        EDITAR
                       </button>
-                    }
-                    <button
-                      (click)="openEditModal(user)"
-                      class="text-blue-400 hover:text-blue-300 p-2"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      (click)="confirmDelete(user)"
-                      class="text-red-400 hover:text-red-300 p-2"
-                    >
-                      Eliminar
-                    </button>
+                      <button
+                        (click)="confirmDelete(user)"
+                        class="text-muted hover:text-error transition-colors font-mono text-xs p-1"
+                      >
+                        ELIMINAR
+                      </button>
+                    </div>
                   </td>
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="7" class="px-6 py-12 text-center text-muted">
+                  <td
+                    colspan="7"
+                    class="px-6 py-12 text-center text-muted font-mono"
+                  >
                     No hay usuarios registrados
                   </td>
                 </tr>
@@ -252,34 +234,34 @@ export interface Site {
 
         @if (totalItems() > 0) {
           <div
-            class="px-6 py-4 border-t border-border bg-dark/50 flex items-center justify-between"
+            class="px-6 py-4 flex items-center justify-between border-t border-border bg-dark/20 text-sm"
           >
-            <div class="text-sm text-muted">
+            <div class="text-muted font-mono">
               Mostrando
-              <span class="text-main">{{
+              <span class="font-bold text-main">{{
                 (currentPage() - 1) * pageSize() + 1
               }}</span>
               a
-              <span class="text-main">{{
+              <span class="font-bold text-main">{{
                 mathMin(currentPage() * pageSize(), totalItems())
               }}</span>
               de
-              <span class="text-main">{{ totalItems() }}</span>
+              <span class="font-bold text-main">{{ totalItems() }}</span>
             </div>
             <div class="flex gap-2">
               <button
                 (click)="changePage(currentPage() - 1)"
                 [disabled]="currentPage() === 1"
-                class="px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-muted hover:bg-dark disabled:opacity-50"
+                class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Anterior
+                ANTERIOR
               </button>
               <button
                 (click)="changePage(currentPage() + 1)"
                 [disabled]="currentPage() >= totalPages()"
-                class="px-4 py-2 border border-gray-600 rounded-lg text-sm font-medium text-muted hover:bg-dark disabled:opacity-50"
+                class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Siguiente
+                SIGUIENTE
               </button>
             </div>
           </div>
@@ -288,30 +270,48 @@ export interface Site {
 
       @if (formModalOpen()) {
         <div
-          class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto"
         >
           <div
-            class="fixed inset-0 bg-black/75"
-            (click)="closeFormModal()"
-          ></div>
-          <div
-            class="bg-surface rounded-xl shadow-2xl border border-border w-full max-w-lg z-10 overflow-hidden"
+            class="bg-surface rounded-xl shadow-2xl border border-border w-full max-w-lg z-10 overflow-hidden my-8 backdrop-blur-xl"
           >
             <div class="p-6">
-              <h3 class="text-lg font-bold text-main mb-4">
-                {{ isEditing() ? 'Editar Usuario' : 'Invitar Usuario' }}
+              <h3
+                class="text-xl font-bold text-main mb-6 tracking-tight flex justify-between items-center"
+              >
+                <span>{{
+                  isEditing() ? 'Editar Usuario' : 'Invitar Usuario'
+                }}</span>
+                <button
+                  (click)="closeFormModal()"
+                  class="text-muted hover:text-main"
+                >
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    ></path>
+                  </svg>
+                </button>
               </h3>
               <form [formGroup]="userForm" class="space-y-4">
                 <input
                   type="text"
                   formControlName="name"
-                  class="input-field w-full"
+                  class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
                   placeholder="Nombre Completo"
                 />
                 <input
                   type="email"
                   formControlName="email"
-                  class="input-field w-full"
+                  class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
                   placeholder="Email"
                 />
                 <div class="grid grid-cols-2 gap-4">
@@ -319,14 +319,14 @@ export interface Site {
                     type="text"
                     formControlName="rut"
                     (input)="formatRut($event)"
-                    class="input-field w-full"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono uppercase focus:outline-none focus:border-primary placeholder:text-muted/50"
                     placeholder="RUT"
                     maxlength="12"
                   />
                   <input
                     type="text"
                     formControlName="phone"
-                    class="input-field w-full"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono focus:outline-none focus:border-primary placeholder:text-muted/50"
                     placeholder="Teléfono"
                   />
                 </div>
@@ -334,101 +334,74 @@ export interface Site {
                   <input
                     type="date"
                     formControlName="birthDate"
-                    class="input-field w-full"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono focus:outline-none focus:border-primary [color-scheme:dark]"
                   />
                   <input
                     type="text"
                     formControlName="position"
-                    class="input-field w-full"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
                     placeholder="Cargo"
                   />
                 </div>
                 @if (isEditing()) {
-                  <select formControlName="isActive" class="input-field w-full">
+                  <select
+                    formControlName="isActive"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
+                  >
                     <option [value]="true">Activo</option>
                     <option [value]="false">Inactivo</option>
                   </select>
                 }
-                <select formControlName="role" class="input-field w-full">
+                <select
+                  formControlName="role"
+                  class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono uppercase focus:outline-none focus:border-primary"
+                >
                   <option value="MECHANIC">Mecánico</option>
                   <option value="SUPERVISOR">Supervisor</option>
                   <option value="ADMIN">Administrador</option>
                 </select>
 
-                <!-- Selector de Faenas -->
                 @if (
                   userForm.get('role')?.value === 'SUPERVISOR' ||
                   userForm.get('role')?.value === 'MECHANIC'
                 ) {
-                  <div class="mt-5 pt-5 border-t border-border">
+                  <div class="mt-6 pt-5 border-t border-border">
                     <label
                       class="block text-xs font-mono text-muted mb-3 uppercase tracking-wider"
                     >
-                      Faenas Permitidas
+                      Contratos Permitidos
                     </label>
                     <div
-                      class="bg-black/40 border border-white/5 rounded-xl p-4 max-h-52 overflow-y-auto space-y-2 relative shadow-inner"
+                      class="bg-dark/50 border border-border rounded-lg p-2 max-h-48 overflow-y-auto space-y-1"
                     >
-                      @for (site of availableSites(); track site.id) {
+                      @for (
+                        contract of availableContracts();
+                        track contract.id
+                      ) {
                         <label
-                          class="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-all border border-transparent hover:border-border"
+                          class="flex items-center gap-3 p-2 rounded hover:bg-surface cursor-pointer transition-all border border-transparent hover:border-border"
                         >
-                          <div
-                            class="relative flex items-center justify-center"
-                          >
-                            <input
-                              type="checkbox"
-                              class="peer appearance-none w-5 h-5 border-2 border-border rounded shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)] bg-black/50 checked:bg-primary checked:border-primary transition-all duration-300 cursor-pointer"
-                              [checked]="isSiteSelected(site.id)"
-                              (change)="toggleSiteSelection(site.id)"
-                            />
-                            <svg
-                              class="absolute w-3.5 h-3.5 text-dark opacity-0 peer-checked:opacity-100 transition-opacity duration-300 pointer-events-none scale-50 peer-checked:scale-100"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="3"
-                                d="M5 13l4 4L19 7"
-                              ></path>
-                            </svg>
-                          </div>
+                          <input
+                            type="checkbox"
+                            class="appearance-none w-4 h-4 border border-border rounded bg-dark checked:bg-primary checked:border-primary transition-all cursor-pointer flex-shrink-0"
+                            [checked]="isContractSelected(contract.id)"
+                            (change)="toggleContractSelection(contract.id)"
+                          />
                           <div class="flex flex-col">
-                            <span
-                              class="text-sm text-main font-medium tracking-wide"
-                              >{{ site.name }}</span
-                            >
-                            <span
-                              class="text-xs text-primary font-mono bg-primary/10 px-1.5 py-0.5 mt-1 rounded inline-block w-fit border border-primary/20"
-                              >{{ site.code }}</span
-                            >
+                            <span class="text-sm text-main font-medium">{{
+                              contract.name
+                            }}</span>
+                            <span class="text-[10px] text-primary font-mono">{{
+                              contract.code
+                            }}</span>
                           </div>
                         </label>
                       }
-                      @if (availableSites().length === 0) {
+                      @if (availableContracts().length === 0) {
                         <div
-                          class="flex flex-col items-center justify-center py-6 text-muted gap-2"
+                          class="py-4 text-center text-muted font-mono text-xs"
                         >
-                          <svg
-                            class="w-8 h-8 opacity-50 mb-2"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="1.5"
-                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                            ></path>
-                          </svg>
-                          <span
-                            class="text-xs font-mono tracking-wider uppercase text-center"
-                            >No hay faenas creadas<br />en el sistema.</span
-                          >
+                          No hay contratos creados en el sistema.
                         </div>
                       }
                     </div>
@@ -436,17 +409,19 @@ export interface Site {
                 }
               </form>
             </div>
-            <div class="bg-surface p-4 flex justify-end gap-3">
+            <div
+              class="bg-dark/50 border-t border-border p-4 flex justify-end gap-3"
+            >
               <button
                 (click)="closeFormModal()"
-                class="px-4 py-2 text-muted hover:text-main"
+                class="px-4 py-2 text-sm font-medium text-muted hover:text-main transition-colors"
               >
                 Cancelar
               </button>
               <button
                 (click)="submitForm()"
                 [disabled]="userForm.invalid || isSubmitting()"
-                class="btn-primary px-6 py-2"
+                class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-6 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
               >
                 {{
                   isSubmitting()
@@ -463,36 +438,34 @@ export interface Site {
 
       @if (deleteModalOpen()) {
         <div
-          class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
         >
           <div
-            class="fixed inset-0 bg-black/75"
-            (click)="closeDeleteModal()"
-          ></div>
-          <div
-            class="bg-surface rounded-xl border border-border w-full max-w-md z-10 overflow-hidden"
+            class="bg-surface rounded-xl border border-border w-full max-w-md z-10 overflow-hidden backdrop-blur-xl"
           >
             <div class="p-6">
-              <h3 class="text-lg font-bold text-main mb-2 text-red-500">
+              <h3 class="text-lg font-bold text-error mb-2 tracking-tight">
                 Eliminar Usuario
               </h3>
-              <p class="text-muted">
+              <p class="text-sm text-muted">
                 ¿Estás seguro de eliminar a
-                <strong>{{ userToDelete()?.name }}</strong
-                >?
+                <strong class="text-main">{{ userToDelete()?.name }}</strong
+                >? Esta acción no se puede deshacer.
               </p>
             </div>
-            <div class="bg-surface p-4 flex justify-end gap-3">
+            <div
+              class="bg-dark/50 border-t border-border p-4 flex justify-end gap-3"
+            >
               <button
                 (click)="closeDeleteModal()"
-                class="px-4 py-2 text-muted"
+                class="px-4 py-2 text-sm font-medium text-muted hover:text-main"
               >
                 Cancelar
               </button>
               <button
                 (click)="deleteUser()"
                 [disabled]="isDeleting()"
-                class="bg-red-600 hover:bg-red-700 text-main px-6 py-2 rounded-lg"
+                class="bg-error hover:bg-error/90 text-white font-bold font-mono text-sm px-6 py-2 rounded disabled:opacity-50 transition-colors uppercase"
               >
                 {{ isDeleting() ? 'Eliminando...' : 'Confirmar' }}
               </button>
@@ -512,7 +485,14 @@ export interface Site {
       ></app-confirm-modal>
     </div>
   `,
-  styles: [],
+  styles: [
+    `
+      /* Simplificado el CSS del checkbox para adaptarlo al Glassmorphism */
+      input[type='checkbox']:checked {
+        background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+      }
+    `,
+  ],
 })
 export class UserManagementComponent implements OnInit {
   // Signals para el Modal de Confirmación
@@ -530,19 +510,19 @@ export class UserManagementComponent implements OnInit {
   });
 
   private usersService = inject(UsersService);
-  private sitesService = inject(SitesService);
+  private contractsService = inject(ContractsService);
   private fb = inject(FormBuilder);
   private notification = inject(NotificationService);
 
   users = signal<User[]>([]);
-  availableSites = signal<Site[]>([]);
+  availableContracts = signal<Contract[]>([]);
 
   // Paginación
   currentPage = signal(1);
   pageSize = signal(10);
 
   paginatedUsers = computed(() => this.users());
-
+  totalItems = signal(0);
   totalPages = computed(() => Math.ceil(this.totalItems() / this.pageSize()));
   mathMin = Math.min;
 
@@ -567,22 +547,20 @@ export class UserManagementComponent implements OnInit {
     birthDate: [''],
     position: [''],
     isActive: [true],
-    siteIds: [[] as string[]],
+    contractIds: [[] as string[]], // Cambiado de siteIds
   });
 
   ngOnInit() {
     this.loadUsers();
-    this.loadSites();
+    this.loadContracts();
   }
 
-  loadSites() {
-    this.sitesService.findAll().subscribe({
-      next: (sites) => this.availableSites.set(sites),
-      error: () => console.error('Error cargando faenas'),
+  loadContracts() {
+    this.contractsService.findAll().subscribe({
+      next: (contracts) => this.availableContracts.set(contracts),
+      error: (err) => console.error(err),
     });
   }
-
-  totalItems = signal(0);
 
   /**
    * Prepara el popup elegante de confirmación
@@ -611,7 +589,7 @@ export class UserManagementComponent implements OnInit {
 
     const user = config.user;
     this.isUpdatingStatus.set(user.id);
-    this.confirmModalOpen.set(false); // Cerramos el modal antes de la petición para UX fluida
+    this.confirmModalOpen.set(false);
 
     this.usersService
       .updateUser(user.id, { isActive: !user.isActive })
@@ -638,7 +616,6 @@ export class UserManagementComponent implements OnInit {
   loadUsers() {
     this.usersService.getUsers(this.currentPage(), this.pageSize()).subscribe({
       next: (res) => {
-        // res es de tipo PaginatedUsers
         this.users.set(res.items);
         this.totalItems.set(res.meta.total);
 
@@ -660,7 +637,7 @@ export class UserManagementComponent implements OnInit {
   openInviteModal() {
     this.isEditing.set(false);
     this.selectedUser.set(null);
-    this.userForm.reset({ role: 'MECHANIC', isActive: true, siteIds: [] });
+    this.userForm.reset({ role: 'MECHANIC', isActive: true, contractIds: [] });
     this.formModalOpen.set(true);
   }
 
@@ -682,23 +659,28 @@ export class UserManagementComponent implements OnInit {
       birthDate: formattedDate,
       position: user.position || '',
       isActive: user.isActive,
-      siteIds: user.siteAccess ? user.siteAccess.map((sa) => sa.siteId) : [],
+      // Mapea contractAccess a array de IDs
+      contractIds: user.contractAccess
+        ? user.contractAccess.map((ca: any) => ca.contractId)
+        : [],
     });
 
     this.formModalOpen.set(true);
   }
 
-  isSiteSelected(id: string): boolean {
-    const current = (this.userForm.get('siteIds')?.value as string[]) || [];
+  isContractSelected(id: string): boolean {
+    const current = (this.userForm.get('contractIds')?.value as string[]) || [];
     return current.includes(id);
   }
 
-  toggleSiteSelection(id: string) {
-    const current = (this.userForm.get('siteIds')?.value as string[]) || [];
+  toggleContractSelection(id: string) {
+    const current = (this.userForm.get('contractIds')?.value as string[]) || [];
     if (current.includes(id)) {
-      this.userForm.patchValue({ siteIds: current.filter((s) => s !== id) });
+      this.userForm.patchValue({
+        contractIds: current.filter((c) => c !== id),
+      });
     } else {
-      this.userForm.patchValue({ siteIds: [...current, id] });
+      this.userForm.patchValue({ contractIds: [...current, id] });
     }
   }
 
@@ -710,12 +692,11 @@ export class UserManagementComponent implements OnInit {
     if (this.userForm.valid) {
       const formData = this.userForm.getRawValue();
 
-      // 1. Validación de RUT (Módulo 11) antes de enviar
       if (formData.rut && !this.validateRut(formData.rut)) {
         this.notification.error(
           'El RUT ingresado no es válido (Dígito verificador incorrecto)',
         );
-        return; // Detenemos la ejecución
+        return;
       }
 
       this.isSubmitting.set(true);
@@ -757,11 +738,9 @@ export class UserManagementComponent implements OnInit {
     }
   }
 
-  // Validador de RUT Chileno
   validateRut(rut: string): boolean {
     if (!rut || rut.length < 8) return false;
 
-    // Limpiar puntos y guion
     const cleanRut = rut.replace(/\./g, '').replace(/-/g, '');
     const body = cleanRut.slice(0, -1);
     const dv = cleanRut.slice(-1).toUpperCase();
@@ -811,13 +790,12 @@ export class UserManagementComponent implements OnInit {
 
   formatRut(event: Event): void {
     const input = event.target as HTMLInputElement;
-    let value = input.value.replace(/[^0-9kK]/g, ''); // Limpiar caracteres no válidos
+    let value = input.value.replace(/[^0-9kK]/g, '');
 
     if (value.length > 1) {
       const dv = value.slice(-1).toUpperCase();
       const cuerpo = value.slice(0, -1);
 
-      // Formatear con puntos (opcional, pero recomendado para el diseño industrial)
       let cuerpoFormateado = '';
       for (let i = cuerpo.length - 1, j = 1; i >= 0; i--, j++) {
         cuerpoFormateado = cuerpo.charAt(i) + cuerpoFormateado;
@@ -828,7 +806,6 @@ export class UserManagementComponent implements OnInit {
       value = `${cuerpoFormateado}-${dv}`;
     }
 
-    // Actualizar el valor en el control y en el input visual
     this.userForm.get('rut')?.setValue(value, { emitEvent: false });
     input.value = value;
   }

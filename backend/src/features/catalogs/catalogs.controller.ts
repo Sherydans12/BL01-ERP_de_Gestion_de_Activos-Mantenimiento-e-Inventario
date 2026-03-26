@@ -8,11 +8,14 @@ import {
   Delete,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { CatalogsService } from './catalogs.service';
 import { Prisma } from '@prisma/client';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('catalogs')
+@UseGuards(JwtAuthGuard) // Aseguramos que req.user exista
 export class CatalogsController {
   constructor(private readonly catalogsService: CatalogsService) {}
 
@@ -21,9 +24,9 @@ export class CatalogsController {
     return this.catalogsService.create(createCatalogDto);
   }
 
-  @Get('sites')
-  findAllSites(@Req() req: any) {
-    return this.catalogsService.findAllSites(req.user?.tenantId);
+  @Get('contracts') // <--- CAMBIO: de 'sites' a 'contracts'
+  findAllContracts(@Req() req: any) {
+    return this.catalogsService.findAllContracts(req.user?.tenantId);
   }
 
   @Get()

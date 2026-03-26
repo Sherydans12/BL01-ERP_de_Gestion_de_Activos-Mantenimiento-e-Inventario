@@ -67,10 +67,10 @@ export class WorkOrdersController {
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
-    @Body('status') status: string,
+    @Body() body: { status: string; warehouseId?: string },
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
   ) {
-    return this.workOrdersService.updateStatus(req.user, id, status, siteId);
+    return this.workOrdersService.updateStatus(req.user, id, body, siteId);
   }
 }

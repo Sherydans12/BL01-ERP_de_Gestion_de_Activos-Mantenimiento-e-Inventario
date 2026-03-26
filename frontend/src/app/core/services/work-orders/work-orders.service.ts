@@ -59,7 +59,13 @@ export class WorkOrdersService {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
   }
 
-  updateStatus(id: string, status: string): Observable<any> {
-    return this.http.patch(`${this.apiUrl}/${id}/status`, { status });
+  updateStatus(
+    id: string,
+    status: string,
+    warehouseId?: string,
+  ): Observable<any> {
+    const body: any = { status };
+    if (warehouseId) body.warehouseId = warehouseId;
+    return this.http.patch(`${this.apiUrl}/${id}/status`, body);
   }
 }

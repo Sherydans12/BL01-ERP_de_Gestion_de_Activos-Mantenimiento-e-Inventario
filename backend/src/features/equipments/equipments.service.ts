@@ -14,19 +14,32 @@ export class EquipmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // POST: Crear un nuevo equipo
-  async create(user: any, data: any, siteHeader?: string) {
+  async create(user: any, data: any, activeContract?: string) {
     const tenantId = user.tenantId;
-    let siteId = data.siteId;
 
-    if (!siteId && siteHeader && siteHeader !== 'ALL') {
-      if (user.role === 'ADMIN' || user.allowedSites?.includes(siteHeader)) {
-        siteId = siteHeader;
+    // Si viene el activeContract del Header (ej. porque el selector está en "Caserones")
+    // y el frontend no mandó un contractId explícito, lo forzamos.
+    if (!data.contractId && activeContract && activeContract !== 'ALL') {
+      if (
+        user.role === 'ADMIN' ||
+        user.role === 'SUPER_ADMIN' ||
+        user.allowedContracts?.includes(activeContract)
+      ) {
+        data.contractId = activeContract;
       }
+    }
+
+    // Aseguramos que si no hay subcontrato, pase null (no un string vacío)
+    if (!data.subcontractId) {
+      data.subcontractId = null;
     }
 
     try {
       return await this.prisma.equipment.create({
-        data: { ...data, tenantId, ...(siteId && { siteId }) },
+        data: {
+          ...data,
+          tenantId,
+        },
       });
     } catch (error: any) {
       if (
@@ -63,29 +76,43 @@ export class EquipmentsService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.EquipmentWhereInput = { tenantId };
+    const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role === 'ADMIN') {
-      if (
-        siteHeader &&
-        siteHeader !== 'ALL' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          siteHeader,
-        )
-      ) {
-        where.siteId = siteHeader;
+    // Lógica de Seguridad y Filtro por Contrato/Subcontrato
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (siteHeader && siteHeader !== 'ALL') {
+        andConditions.push({
+          OR: [
+            { contractId: siteHeader },
+            { subcontract: { contractId: siteHeader } },
+          ],
+        });
       }
     } else {
-      where.siteId = { in: user.allowedSites || [] };
+      andConditions.push({
+        OR: [
+          { contractId: { in: user.allowedContracts || [] } },
+          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
+        ],
+      });
     }
 
-    if (query?.type) where.type = query.type;
-    if (query?.brand) where.brand = query.brand;
+    if (query?.type) andConditions.push({ type: query.type });
+    if (query?.brand) andConditions.push({ brand: query.brand });
 
+    // Lógica de Búsqueda
     if (query?.search) {
-      where.OR = [
-        { internalId: { contains: query.search, mode: 'insensitive' } },
-        { plate: { contains: query.search, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { internalId: { contains: query.search, mode: 'insensitive' } },
+          { plate: { contains: query.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    // Inyectar conditions al where si existen
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const [data, total] = await this.prisma.$transaction([
@@ -94,7 +121,21 @@ export class EquipmentsService {
         skip,
         take: limit,
         orderBy: { internalId: 'asc' },
-        include: { site: { select: { name: true, code: true } } },
+        include: {
+          contract: {
+            select: {
+              name: true,
+              code: true,
+            },
+          },
+          subcontract: {
+            select: {
+              name: true,
+              code: true,
+              contract: { select: { name: true } },
+            },
+          },
+        },
       }),
       this.prisma.equipment.count({ where }),
     ]);
@@ -105,16 +146,34 @@ export class EquipmentsService {
   // GET: Traer un solo equipo por su UUID
   async findOne(user: any, id: string, siteHeader?: string) {
     const where: Prisma.EquipmentWhereInput = { id, tenantId: user.tenantId };
+    const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role !== 'ADMIN') {
-      where.siteId = { in: user.allowedSites || [] };
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      andConditions.push({
+        OR: [
+          { contractId: { in: user.allowedContracts || [] } },
+          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
+        ],
+      });
     } else if (siteHeader && siteHeader !== 'ALL') {
-      // Optional: verify it falls under the requested siteHeader for ADMIN
-      where.siteId = siteHeader;
+      andConditions.push({
+        OR: [
+          { contractId: siteHeader },
+          { subcontract: { contractId: siteHeader } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     return this.prisma.equipment.findFirst({
       where,
+      include: {
+        contract: true,
+        subcontract: true,
+      },
     });
   }
 
@@ -123,15 +182,34 @@ export class EquipmentsService {
     const tenantId = user.tenantId;
     try {
       const where: Prisma.EquipmentWhereInput = { id, tenantId };
-      if (user.role !== 'ADMIN') {
-        where.siteId = { in: user.allowedSites || [] };
+      const andConditions: Prisma.EquipmentWhereInput[] = [];
+
+      if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+        andConditions.push({
+          OR: [
+            { contractId: { in: user.allowedContracts || [] } },
+            {
+              subcontract: { contractId: { in: user.allowedContracts || [] } },
+            },
+          ],
+        });
       }
 
-      // Verificamos propiedad del tenant y sitios
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
+      }
+
+      // Verificamos propiedad del tenant y seguridad
       const existing = await this.prisma.equipment.findFirst({
         where,
       });
-      if (!existing) throw new BadRequestException('Equipo no encontrado');
+      if (!existing)
+        throw new BadRequestException('Equipo no encontrado o sin permisos');
+
+      // Limpiamos subcontractId si el frontend manda un string vacío
+      if (data.subcontractId === '') {
+        data.subcontractId = null;
+      }
 
       return await this.prisma.equipment.update({
         where: { id },
@@ -161,14 +239,28 @@ export class EquipmentsService {
     const tenantId = user.tenantId;
     try {
       const where: Prisma.EquipmentWhereInput = { id, tenantId };
-      if (user.role !== 'ADMIN') {
-        where.siteId = { in: user.allowedSites || [] };
+      const andConditions: Prisma.EquipmentWhereInput[] = [];
+
+      if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+        andConditions.push({
+          OR: [
+            { contractId: { in: user.allowedContracts || [] } },
+            {
+              subcontract: { contractId: { in: user.allowedContracts || [] } },
+            },
+          ],
+        });
+      }
+
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
       }
 
       const existing = await this.prisma.equipment.findFirst({
         where,
       });
-      if (!existing) throw new BadRequestException('Equipo no encontrado');
+      if (!existing)
+        throw new BadRequestException('Equipo no encontrado o sin permisos');
 
       return await this.prisma.equipment.delete({
         where: { id },

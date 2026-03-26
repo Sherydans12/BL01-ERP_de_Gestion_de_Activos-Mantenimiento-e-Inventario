@@ -1,9 +1,11 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { TenantService, Site } from '../services/tenant/tenant.service';
+import { TenantService } from '../services/tenant/tenant.service';
 import { CatalogService } from '../services/catalog/catalog.service';
 import { AuthService } from '../services/auth/auth.service';
 import { ThemeService } from '../services/theme/theme.service';
+import { ContractsService } from '../services/contracts/contracts.service'; // Ajusta la ruta si es necesario
+import { Contract } from '../models/types';
 
 @Component({
   selector: 'app-layout',
@@ -16,13 +18,14 @@ export class LayoutComponent implements OnInit {
   catalogService = inject(CatalogService);
   authService = inject(AuthService);
   themeService = inject(ThemeService);
+  contractsService = inject(ContractsService);
 
   currentTenant = this.tenantService.currentTenant;
   currentUser = this.authService.currentUser;
-  currentSiteId = this.authService.currentSiteId;
+  currentContractId = this.authService.currentContractId;
 
-  availableSites = signal<Site[]>([]);
-  isSiteDropdownOpen = signal(false);
+  availableContracts = signal<Contract[]>([]);
+  isContractDropdownOpen = signal(false);
 
   logout() {
     this.authService.logout();
@@ -40,67 +43,69 @@ export class LayoutComponent implements OnInit {
       error: (err) => console.error('Error cargando catálogos:', err),
     });
 
-    this.loadSites();
+    this.loadContracts();
   }
 
-  loadSites() {
+  loadContracts() {
     const user = this.currentUser();
     console.log('Layout - Diagnóstico Usuario:', {
       role: user?.role,
-      allowedSites: user?.allowedSites,
+      allowedContracts: user?.allowedContracts,
     });
     if (!user) return;
 
-    this.tenantService.getSites().subscribe({
-      next: (sites) => {
-        console.log('Layout - Sites obtenidos:', sites);
-        let finalSites = sites;
+    this.contractsService.findAll().subscribe({
+      next: (contracts) => {
+        console.log('Layout - Contratos obtenidos:', contracts);
+        let finalContracts = contracts;
 
-        if (sites.length === 0) {
-          finalSites = [
+        if (contracts.length === 0) {
+          finalContracts = [
             {
               id: 'none',
-              name: 'Sin Faenas Creadas',
+              name: 'Sin Contratos Creados',
               code: 'WARN',
+              isActive: false, // Requerido por la interfaz
             },
           ];
         }
 
-        if (user.role === 'ADMIN' || user.allowedSites?.includes('ALL')) {
-          this.availableSites.set(finalSites);
+        if (user.role === 'ADMIN' || user.allowedContracts?.includes('ALL')) {
+          this.availableContracts.set(finalContracts);
         } else {
-          const filtered = finalSites.filter((s) =>
-            user.allowedSites?.includes(s.id),
+          const filtered = finalContracts.filter((c) =>
+            user.allowedContracts?.includes(c.id),
           );
-          this.availableSites.set(filtered);
+          this.availableContracts.set(filtered);
         }
       },
       error: (err) => {
-        console.error('Error obteniendo faenas:', err);
-        this.availableSites.set([
+        console.error('Error obteniendo contratos:', err);
+        this.availableContracts.set([
           {
             id: 'err',
-            name: 'Error al cargar faenas',
+            name: 'Error al cargar contratos',
             code: 'ERR',
+            isActive: false,
           },
         ]);
       },
     });
   }
 
-  toggleSiteDropdown() {
-    this.isSiteDropdownOpen.update((v) => !v);
+  toggleContractDropdown() {
+    this.isContractDropdownOpen.update((v) => !v);
   }
 
-  selectSite(siteId: string) {
-    this.authService.setCurrentSite(siteId);
-    this.isSiteDropdownOpen.set(false);
+  selectContract(contractId: string) {
+    this.authService.setCurrentContract(contractId);
+    this.isContractDropdownOpen.set(false);
   }
 
-  getCurrentSiteName(): string {
-    const siteId = this.currentSiteId();
-    if (siteId === 'ALL') return 'Todas las Faenas';
-    const site = this.availableSites().find((s) => s.id === siteId);
-    return site ? site.name : 'Configurando...';
+  getCurrentContractName(): string {
+    const contractId = this.currentContractId();
+    if (contractId === 'ALL') return 'Todos los Contratos';
+    const contract = this.availableContracts().find((c) => c.id === contractId);
+    return contract ? contract.name : 'Configurando...';
   }
 }

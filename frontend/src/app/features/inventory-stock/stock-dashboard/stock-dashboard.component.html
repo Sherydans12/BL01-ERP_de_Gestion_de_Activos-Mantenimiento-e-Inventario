@@ -1,0 +1,302 @@
+<div class="space-y-6">
+  <div class="flex justify-between items-end">
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        Control de Stock e Inventario
+      </h2>
+      <p class="text-sm text-muted mt-1">
+        Consulte saldos y registre movimientos de entrada/salida.
+      </p>
+    </div>
+
+    <div class="flex items-center gap-4">
+      @if (pendingRegularizationCount() > 0) {
+        <div
+          class="flex items-center gap-2 px-3 py-2 bg-error/10 border border-error/30 rounded-lg animate-pulse"
+        >
+          <svg
+            class="w-4 h-4 text-error"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.27 16.5c-.77.833.192 2.5 1.732 2.5z"
+            ></path>
+          </svg>
+          <span class="text-xs font-mono font-bold text-error">
+            {{ pendingRegularizationCount() }} REGULARIZACIÓN{{
+              pendingRegularizationCount() > 1 ? "ES" : ""
+            }}
+            PENDIENTE{{ pendingRegularizationCount() > 1 ? "S" : "" }}
+          </span>
+        </div>
+      }
+
+      <div class="w-72">
+        <label class="block text-xs font-mono text-muted mb-1"
+          >Bodega Activa:</label
+        >
+        <select
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+          (change)="onWarehouseSelect($event)"
+        >
+          <option value="">-- Seleccione Bodega --</option>
+          @for (w of warehouses(); track w.id) {
+            <option [value]="w.id">{{ w.code }} - {{ w.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    @if (selectedWarehouseId()) {
+      <div
+        class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden flex flex-col"
+      >
+        <div
+          class="p-4 border-b border-border flex justify-between items-center bg-dark/50"
+        >
+          <h3 class="text-sm font-mono text-primary font-bold">
+            INVENTARIO ACTUAL
+          </h3>
+          <button
+            (click)="openTransactionModal()"
+            class="text-xs bg-primary text-dark font-bold font-mono py-1.5 px-4 rounded hover:bg-primary/90 transition-colors"
+          >
+            + REGISTRAR MOVIMIENTO
+          </button>
+        </div>
+
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr
+              class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
+            >
+              <th class="py-3 px-6 border-b border-border">N° Parte / Ítem</th>
+              <th class="py-3 px-6 border-b border-border">Categoría</th>
+              <th class="py-3 px-6 border-b border-border text-center">
+                Stock Actual
+              </th>
+              <th class="py-3 px-6 border-b border-border text-right">
+                Costo Unit. (CPP)
+              </th>
+              <th class="py-3 px-6 border-b border-border text-right">
+                Valor Total
+              </th>
+            </tr>
+          </thead>
+          <tbody class="text-sm text-muted divide-y divide-border/50">
+            @for (s of stockItems(); track s.id) {
+              <tr class="hover:bg-dark/40 transition-colors">
+                <td class="py-4 px-6">
+                  <div class="font-mono text-primary font-bold">
+                    {{ s.item.partNumber }}
+                  </div>
+                  <div class="text-main truncate max-w-xs">
+                    {{ s.item.name }}
+                  </div>
+                </td>
+                <td class="py-4 px-6 text-xs uppercase">
+                  {{ s.item.category }}
+                </td>
+                <td class="py-4 px-6 text-center">
+                  <span
+                    class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border"
+                  >
+                    {{ s.quantity }} {{ s.item.unitOfMeasure }}
+                  </span>
+                </td>
+                <td class="py-4 px-6 text-right font-mono">
+                  ${{ s.unitCost || 0 | number: "1.0-0" }}
+                </td>
+                <td class="py-4 px-6 text-right font-mono text-primary">
+                  ${{ s.quantity * (s.unitCost || 0) | number: "1.0-0" }}
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td
+                  colspan="5"
+                  class="py-12 text-center text-muted font-mono text-sm"
+                >
+                  No hay stock registrado en esta bodega. Registre una entrada.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div
+        class="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-xl bg-dark/20"
+      >
+        <svg
+          class="w-12 h-12 text-muted mb-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.5"
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          ></path>
+        </svg>
+        <p class="text-muted font-mono text-sm">
+          Seleccione una Bodega en el menú superior para ver su stock.
+        </p>
+      </div>
+    }
+  </div>
+
+  @if (showTransactionModal()) {
+    <div
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
+    >
+      <div
+        class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
+      >
+        <div
+          class="p-4 border-b border-border flex justify-between items-center bg-dark"
+        >
+          <h3 class="font-bold text-main font-mono">
+            Movimiento de Inventario
+          </h3>
+          <button
+            (click)="closeTransactionModal()"
+            class="text-muted hover:text-error transition-colors"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              ></path>
+            </svg>
+          </button>
+        </div>
+
+        <form
+          [formGroup]="transactionForm"
+          (ngSubmit)="submitTransaction()"
+          class="p-6 space-y-4"
+        >
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1"
+              >Tipo de Movimiento</label
+            >
+            <div class="flex gap-2">
+              <label class="flex-1 cursor-pointer">
+                <input
+                  type="radio"
+                  formControlName="type"
+                  value="IN"
+                  class="peer sr-only"
+                />
+                <div
+                  class="text-center py-2 text-xs font-mono rounded border border-border peer-checked:bg-primary/20 peer-checked:text-primary peer-checked:border-primary transition-all"
+                >
+                  ENTRADA (IN)
+                </div>
+              </label>
+              <label class="flex-1 cursor-pointer">
+                <input
+                  type="radio"
+                  formControlName="type"
+                  value="OUT"
+                  class="peer sr-only"
+                />
+                <div
+                  class="text-center py-2 text-xs font-mono rounded border border-border peer-checked:bg-error/20 peer-checked:text-error peer-checked:border-error transition-all"
+                >
+                  SALIDA (OUT)
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1"
+              >Artículo del Catálogo</label
+            >
+            <select
+              formControlName="itemId"
+              class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
+            >
+              <option value="" disabled>Seleccionar artículo...</option>
+              @for (item of catalogItems(); track item.id) {
+                <option [value]="item.id">
+                  {{ item.partNumber }} - {{ item.name }}
+                </option>
+              }
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1"
+                >Cantidad</label
+              >
+              <input
+                type="number"
+                formControlName="quantity"
+                class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+              />
+            </div>
+            @if (transactionForm.get("type")?.value === "IN") {
+              <div>
+                <label class="block text-xs font-medium text-muted mb-1"
+                  >Costo Unitario ($)</label
+                >
+                <input
+                  type="number"
+                  formControlName="unitCost"
+                  class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                />
+              </div>
+            }
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1"
+              >Notas / Referencia</label
+            >
+            <input
+              type="text"
+              formControlName="notes"
+              class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
+              placeholder="Ej: Factura #1234, Ingreso inicial..."
+            />
+          </div>
+
+          <div class="pt-4 flex justify-end gap-3">
+            <button
+              type="button"
+              (click)="closeTransactionModal()"
+              class="px-4 py-2 text-sm text-muted hover:text-main"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              [disabled]="transactionForm.invalid"
+              class="bg-primary text-dark px-6 py-2 text-sm font-bold font-mono rounded disabled:opacity-50"
+            >
+              PROCESAR
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

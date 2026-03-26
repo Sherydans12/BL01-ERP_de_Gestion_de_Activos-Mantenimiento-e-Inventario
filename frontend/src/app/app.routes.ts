@@ -81,12 +81,12 @@ export const routes: Routes = [
           ),
       },
       {
-        path: 'configuracion/faenas',
+        path: 'configuracion/contratos',
         canActivate: [authGuard],
         data: { roles: ['ADMIN'] },
         loadComponent: () =>
-          import('./features/settings/site-master/site-master.component').then(
-            (m) => m.SiteMasterComponent,
+          import('./features/settings/contract-master/contract-master.component').then(
+            (m) => m.ContractMasterComponent,
           ),
       },
       {
@@ -105,6 +105,79 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/users/user-management/user-management.component').then(
             (m) => m.UserManagementComponent,
+          ),
+      },
+      // Mantenimiento - Pautas y Kits
+      {
+        path: 'kits',
+        loadComponent: () =>
+          import('./features/maintenance-kits/kit-list/kit-list.component').then(
+            (m) => m.KitListComponent,
+          ),
+      },
+      {
+        path: 'kits/nuevo',
+        loadComponent: () =>
+          import('./features/maintenance-kits/kit-form/kit-form.component').then(
+            (m) => m.KitFormComponent,
+          ),
+      },
+      {
+        path: 'kits/:id',
+        loadComponent: () =>
+          import('./features/maintenance-kits/kit-form/kit-form.component').then(
+            (m) => m.KitFormComponent,
+          ),
+      },
+      // Módulo de Inventario (Fase C)
+      {
+        path: 'articulos',
+        loadComponent: () =>
+          import('./features/inventory-items/inventory-item-list/inventory-item-list.component').then(
+            (m) => m.InventoryItemListComponent,
+          ),
+      },
+      {
+        path: 'articulos/nuevo',
+        loadComponent: () =>
+          import('./features/inventory-items/inventory-item-form/inventory-item-form.component').then(
+            (m) => m.InventoryItemFormComponent,
+          ),
+      },
+      {
+        path: 'articulos/:id',
+        loadComponent: () =>
+          import('./features/inventory-items/inventory-item-form/inventory-item-form.component').then(
+            (m) => m.InventoryItemFormComponent,
+          ),
+      },
+      // Módulo de Bodegas
+      {
+        path: 'bodegas',
+        loadComponent: () =>
+          import('./features/warehouses/warehouse-list/warehouse-list.component').then(
+            (m) => m.WarehouseListComponent,
+          ),
+      },
+      {
+        path: 'bodegas/nueva',
+        loadComponent: () =>
+          import('./features/warehouses/warehouse-form/warehouse-form.component').then(
+            (m) => m.WarehouseFormComponent,
+          ),
+      },
+      {
+        path: 'bodegas/:id',
+        loadComponent: () =>
+          import('./features/warehouses/warehouse-form/warehouse-form.component').then(
+            (m) => m.WarehouseFormComponent,
+          ),
+      },
+      {
+        path: 'stock',
+        loadComponent: () =>
+          import('./features/inventory-stock/stock-dashboard/stock-dashboard.component').then(
+            (m) => m.StockDashboardComponent,
           ),
       },
     ],

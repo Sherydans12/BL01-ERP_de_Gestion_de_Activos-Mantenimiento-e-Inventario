@@ -1,0 +1,88 @@
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        Kits de Mantenimiento (Pautas)
+      </h2>
+      <p class="text-sm text-muted mt-1">
+        Administre los repuestos asociados a cada pauta de mantenimiento.
+      </p>
+    </div>
+    <a
+      routerLink="/app/kits/nuevo"
+      class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
+    >
+      + NUEVO KIT
+    </a>
+  </div>
+
+  <div
+    class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden"
+  >
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr
+            class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
+          >
+            <th class="py-3 px-6 border-b border-border font-medium">Código</th>
+            <th class="py-3 px-6 border-b border-border font-medium">
+              Nombre de la Pauta
+            </th>
+            <th
+              class="py-3 px-6 border-b border-border font-medium text-center"
+            >
+              Cant. Repuestos
+            </th>
+            <th class="py-3 px-6 border-b border-border font-medium text-right">
+              Acciones
+            </th>
+          </tr>
+        </thead>
+        <tbody class="text-sm text-muted divide-y divide-border/50">
+          @for (kit of kits(); track kit.id) {
+            <tr class="hover:bg-dark/40 transition-colors">
+              <td class="py-4 px-6 font-mono text-primary font-bold">
+                {{ kit.code }}
+              </td>
+              <td class="py-4 px-6">
+                <div class="text-main">{{ kit.name }}</div>
+                <div class="text-[10px] text-muted mt-1 truncate max-w-md">
+                  {{ kit.description || "Sin descripción" }}
+                </div>
+              </td>
+              <td class="py-4 px-6 text-center font-mono text-main">
+                <span class="bg-dark border border-border px-2 py-1 rounded">{{
+                  kit.parts?.length || 0
+                }}</span>
+              </td>
+              <td class="py-4 px-6 text-right space-x-2">
+                <a
+                  [routerLink]="['/app/kits', kit.id]"
+                  class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs border border-transparent hover:border-border px-2 py-1 rounded"
+                >
+                  EDITAR
+                </a>
+                <button
+                  (click)="deleteKit(kit.id, kit.code)"
+                  class="text-error hover:text-red-400 transition-colors font-mono text-xs border border-transparent hover:border-border px-2 py-1 rounded"
+                >
+                  ELIMINAR
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td
+                colspan="4"
+                class="py-12 text-center text-muted font-mono text-sm"
+              >
+                No hay Kits de Mantenimiento configurados.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

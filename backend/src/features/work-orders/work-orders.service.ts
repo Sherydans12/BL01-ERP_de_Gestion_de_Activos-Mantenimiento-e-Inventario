@@ -2,61 +2,115 @@ import {
   InternalServerErrorException,
   BadRequestException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 interface CreateWorkOrderDto {
   equipmentId: string;
+  warehouseId?: string;
   type: 'NUEVA' | 'CONTINUIDAD';
-  category: 'PROGRAMADA' | 'NO_PROGRAMADA' | 'ACCIDENTE';
+  category:
+    | 'PROGRAMADA'
+    | 'NO_PROGRAMADA_CORRECTIVA'
+    | 'NO_PROGRAMADA_REACTIVA';
   maintenanceType: 'PREVENTIVO' | 'CORRECTIVO';
-  initialHorometer: number;
-  finalHorometer: number;
+  initialMeter: number;
+  finalMeter: number;
   description: string;
-  systems: string[]; // UUIDs de CatalogItem (category=SYSTEM)
+  responsible?: string;
+  systems: string[];
   fluids: { fluidId: string; liters: number; action: 'RELLENO' | 'CAMBIO' }[];
+  tasks?: {
+    description: string;
+    isCompleted: boolean;
+    observation?: string;
+    measurement?: number;
+  }[];
+  parts?: {
+    partNumber: string;
+    description: string;
+    quantity: number;
+    inventoryItemId?: string;
+  }[];
+  fluidSamples?: { systemId: string; bottleCode: string }[];
 }
 
 @Injectable()
 export class WorkOrdersService {
+  private readonly logger = new Logger(WorkOrdersService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(user: any, dto: CreateWorkOrderDto, siteHeader?: string) {
+  async create(user: any, dto: CreateWorkOrderDto, activeContract?: string) {
     const tenantId = user.tenantId;
-    let siteId = (dto as any).siteId;
 
-    if (!siteId && siteHeader && siteHeader !== 'ALL') {
-      if (user.role === 'ADMIN' || user.allowedSites?.includes(siteHeader)) {
-        siteId = siteHeader;
-      }
-    }
     try {
-      // 1. Generar correlativo: OT-{AÑO}-{NNN}
+      // 0. Validar equipo
+      const equipment = await this.prisma.equipment.findFirst({
+        where: { id: dto.equipmentId, tenantId },
+      });
+
+      if (!equipment) {
+        throw new BadRequestException(
+          'El equipo especificado no existe o no tienes acceso a él.',
+        );
+      }
+
+      // 0b. Validar bodega pertenece al contrato del equipo
+      if (dto.warehouseId) {
+        const equipContractId =
+          equipment.contractId ||
+          (equipment.subcontractId
+            ? (
+                await this.prisma.subcontract.findUnique({
+                  where: { id: equipment.subcontractId },
+                })
+              )?.contractId
+            : null);
+
+        const warehouse = await this.prisma.warehouse.findFirst({
+          where: {
+            id: dto.warehouseId,
+            tenantId,
+            ...(equipContractId ? { contractId: equipContractId } : {}),
+          },
+        });
+
+        if (!warehouse) {
+          throw new BadRequestException(
+            'La bodega seleccionada no es válida o no pertenece al contrato del equipo.',
+          );
+        }
+      }
+
+      // 1. Generar correlativo
       const year = new Date().getFullYear();
       const count = await this.prisma.workOrder.count({ where: { tenantId } });
       const correlative = `OT-${year}-${String(count + 1).padStart(3, '0')}`;
 
       // 2. Transacción atómica
       return await this.prisma.$transaction(async (tx: any) => {
-        // 2a. Crear la OT principal
         const workOrder = await tx.workOrder.create({
           data: {
             tenantId,
-            ...(siteId && { siteId }),
+            subcontractId: equipment.subcontractId,
+            warehouseId: dto.warehouseId || null,
             correlative,
             equipmentId: dto.equipmentId,
             type: dto.type,
             category: dto.category,
             maintenanceType: dto.maintenanceType,
             status: 'OPEN',
-            initialHorometer: dto.initialHorometer,
-            finalHorometer: dto.finalHorometer,
+            initialMeter: dto.initialMeter,
+            finalMeter: dto.finalMeter,
             description: dto.description,
+            responsible: dto.responsible,
           },
         });
 
-        // 2b. Crear registros M:N de sistemas intervenidos
-        if (dto.systems.length > 0) {
+        if (dto.systems && dto.systems.length > 0) {
           await tx.workOrderSystem.createMany({
             data: dto.systems.map((systemId) => ({
               workOrderId: workOrder.id,
@@ -65,8 +119,7 @@ export class WorkOrdersService {
           });
         }
 
-        // 2c. Crear registros de consumo de fluidos
-        if (dto.fluids.length > 0) {
+        if (dto.fluids && dto.fluids.length > 0) {
           await tx.workOrderFluid.createMany({
             data: dto.fluids.map((f) => ({
               workOrderId: workOrder.id,
@@ -77,18 +130,72 @@ export class WorkOrdersService {
           });
         }
 
-        // 3. Retornar la OT completa con relaciones
+        if (dto.tasks && dto.tasks.length > 0) {
+          await tx.workOrderTask.createMany({
+            data: dto.tasks.map((t: any) => ({
+              workOrderId: workOrder.id,
+              description: t.description,
+              isCompleted: t.isCompleted,
+              observation: t.observation || null,
+              measurement: t.measurement ? Number(t.measurement) : null,
+            })),
+          });
+        }
+
+        if (dto.parts && dto.parts.length > 0) {
+          await tx.workOrderPart.createMany({
+            data: dto.parts.map((p: any) => ({
+              workOrderId: workOrder.id,
+              partNumber: p.partNumber,
+              description: p.description,
+              quantity: Number(p.quantity),
+              inventoryItemId: p.inventoryItemId || null,
+            })),
+          });
+
+          // --- RESERVAS: Crear reservas iniciales si hay bodega y parts vinculados ---
+          if (dto.warehouseId) {
+            const linkedParts = dto.parts.filter((p) => p.inventoryItemId);
+            if (linkedParts.length > 0) {
+              await tx.stockReservation.createMany({
+                data: linkedParts.map((p) => ({
+                  workOrderId: workOrder.id,
+                  itemId: p.inventoryItemId!,
+                  warehouseId: dto.warehouseId!,
+                  quantity: Number(p.quantity),
+                })),
+              });
+            }
+          }
+        }
+
+        if (dto.fluidSamples && dto.fluidSamples.length > 0) {
+          await tx.fluidSample.createMany({
+            data: dto.fluidSamples.map((fs: any) => ({
+              workOrderId: workOrder.id,
+              systemId: fs.systemId,
+              bottleCode: fs.bottleCode,
+              status: 'SENT_TO_LAB',
+            })),
+          });
+        }
+
         return tx.workOrder.findUnique({
           where: { id: workOrder.id },
           include: {
             equipment: true,
+            warehouse: true,
             systems: { include: { catalogItem: true } },
             fluids: { include: { catalogItem: true } },
+            tasks: true,
+            parts: { include: { inventoryItem: true } },
+            fluidSamples: true,
           },
         });
       });
     } catch (error) {
-      console.error('Error at WorkOrdersService.create:', error);
+      this.logger.error('Error at WorkOrdersService.create:', error);
+      if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException(
         'Error al crear la Orden de Trabajo',
       );
@@ -97,7 +204,7 @@ export class WorkOrdersService {
 
   async findAll(
     user: any,
-    siteHeader: string | undefined,
+    activeContract: string | undefined,
     query?: {
       page?: number;
       limit?: number;
@@ -109,47 +216,60 @@ export class WorkOrdersService {
     },
   ) {
     const tenantId = user.tenantId;
-    const where: any = { tenantId };
+    const where: Prisma.WorkOrderWhereInput = { tenantId };
+    const andConditions: Prisma.WorkOrderWhereInput[] = [];
 
-    if (user.role === 'ADMIN') {
-      if (
-        siteHeader &&
-        siteHeader !== 'ALL' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          siteHeader,
-        )
-      ) {
-        where.siteId = siteHeader;
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (activeContract && activeContract !== 'ALL') {
+        andConditions.push({
+          equipment: {
+            OR: [
+              { contractId: activeContract },
+              { subcontract: { contractId: activeContract } },
+            ],
+          },
+        });
       }
     } else {
-      where.siteId = { in: user.allowedSites || [] };
+      andConditions.push({
+        equipment: {
+          OR: [
+            { contractId: { in: user.allowedContracts || [] } },
+            {
+              subcontract: { contractId: { in: user.allowedContracts || [] } },
+            },
+          ],
+        },
+      });
     }
 
-    if (query?.equipmentId) {
-      where.equipmentId = query.equipmentId;
-    }
-
-    if (query?.status) {
-      where.status = query.status;
-    }
+    if (query?.equipmentId)
+      andConditions.push({ equipmentId: query.equipmentId });
+    if (query?.status) andConditions.push({ status: query.status as any });
 
     if (query?.search) {
-      where.OR = [
-        { correlative: { contains: query.search, mode: 'insensitive' } },
-        { description: { contains: query.search, mode: 'insensitive' } },
-        {
-          equipment: {
-            internalId: { contains: query.search, mode: 'insensitive' },
+      andConditions.push({
+        OR: [
+          { correlative: { contains: query.search, mode: 'insensitive' } },
+          { description: { contains: query.search, mode: 'insensitive' } },
+          {
+            equipment: {
+              internalId: { contains: query.search, mode: 'insensitive' },
+            },
           },
-        },
-      ];
+        ],
+      });
     }
 
     if (query?.dateFrom || query?.dateTo) {
-      where.createdAt = {};
-      if (query?.dateFrom) where.createdAt.gte = new Date(query.dateFrom);
-      if (query?.dateTo)
-        where.createdAt.lte = new Date(query.dateTo + 'T23:59:59');
+      const dateFilter: any = {};
+      if (query?.dateFrom) dateFilter.gte = new Date(query.dateFrom);
+      if (query?.dateTo) dateFilter.lte = new Date(query.dateTo + 'T23:59:59');
+      andConditions.push({ createdAt: dateFilter });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const page = query?.page || 1;
@@ -163,10 +283,20 @@ export class WorkOrdersService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          equipment: { select: { internalId: true, type: true } },
+          equipment: {
+            select: {
+              internalId: true,
+              type: true,
+              brand: true,
+              model: true,
+              contract: { select: { name: true, code: true } },
+              subcontract: { select: { name: true, code: true } },
+            },
+          },
+          warehouse: { select: { code: true, name: true } },
           systems: { include: { catalogItem: { select: { name: true } } } },
           fluids: { include: { catalogItem: { select: { name: true } } } },
-          site: { select: { name: true, code: true } },
+          subcontract: { select: { name: true, code: true } },
         },
       }),
       this.prisma.workOrder.count({ where }),
@@ -175,29 +305,44 @@ export class WorkOrdersService {
     return { data, total };
   }
 
-  async getStats(user: any, siteHeader?: string) {
+  async getStats(user: any, activeContract?: string) {
     const now = new Date();
     const tenantId = user.tenantId;
 
-    const siteWhere: any = {};
-    if (user.role === 'ADMIN') {
-      if (
-        siteHeader &&
-        siteHeader !== 'ALL' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          siteHeader,
-        )
-      ) {
-        siteWhere.siteId = siteHeader;
+    const filterEqConditions: Prisma.EquipmentWhereInput[] = [];
+    const filterWoConditions: Prisma.WorkOrderWhereInput[] = [];
+
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (activeContract && activeContract !== 'ALL') {
+        const cFilter = {
+          OR: [
+            { contractId: activeContract },
+            { subcontract: { contractId: activeContract } },
+          ],
+        };
+        filterEqConditions.push(cFilter);
+        filterWoConditions.push({ equipment: cFilter });
       }
     } else {
-      siteWhere.siteId = { in: user.allowedSites || [] };
+      const authFilter = {
+        OR: [
+          { contractId: { in: user.allowedContracts || [] } },
+          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
+        ],
+      };
+      filterEqConditions.push(authFilter);
+      filterWoConditions.push({ equipment: authFilter });
     }
 
-    const whereBaseWO = { tenantId, ...siteWhere };
-    const whereBaseEq = { tenantId, ...siteWhere };
+    const whereBaseWO: Prisma.WorkOrderWhereInput = {
+      tenantId,
+      AND: filterWoConditions,
+    };
+    const whereBaseEq: Prisma.EquipmentWhereInput = {
+      tenantId,
+      AND: filterEqConditions,
+    };
 
-    // Conteo por estado
     const [open, inProgress, onHold, closed] = await Promise.all([
       this.prisma.workOrder.count({
         where: { ...whereBaseWO, status: 'OPEN' },
@@ -213,7 +358,6 @@ export class WorkOrdersService {
       }),
     ]);
 
-    // 2. Equipos con documentación vencida (Conteo)
     const expiredDocs = await this.prisma.equipment.count({
       where: {
         ...whereBaseEq,
@@ -221,12 +365,10 @@ export class WorkOrdersService {
       },
     });
 
-    // 3. Total de equipos
     const totalEquipments = await this.prisma.equipment.count({
       where: whereBaseEq,
     });
 
-    // 4. Equipos en mantenimiento (Conteo de IDs únicos con OTs activas)
     const activeOts = await this.prisma.workOrder.groupBy({
       by: ['equipmentId'],
       where: {
@@ -236,7 +378,6 @@ export class WorkOrdersService {
     });
     const equiposEnMantenimientoCount = activeOts.length;
 
-    // 5. Últimas 5 OTs cerradas
     const lastClosed = await this.prisma.workOrder.findMany({
       where: { ...whereBaseWO, status: 'CLOSED' },
       orderBy: { closedAt: 'desc' },
@@ -246,7 +387,6 @@ export class WorkOrdersService {
       },
     });
 
-    // 6. Alertas Documentales (Top 5 próximos a vencer o vencidos recientes)
     const topAlertsData = await this.prisma.equipment.findMany({
       where: {
         ...whereBaseEq,
@@ -308,22 +448,60 @@ export class WorkOrdersService {
     };
   }
 
-  async findOne(user: any, id: string, siteHeader?: string) {
+  async findOne(user: any, id: string, activeContract?: string) {
     const tenantId = user.tenantId;
-    const where: any = { id, tenantId };
+    const where: Prisma.WorkOrderWhereInput = { id, tenantId };
+    const andConditions: Prisma.WorkOrderWhereInput[] = [];
 
-    if (user.role !== 'ADMIN') {
-      where.siteId = { in: user.allowedSites || [] };
-    } else if (siteHeader && siteHeader !== 'ALL') {
-      where.siteId = siteHeader;
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      andConditions.push({
+        equipment: {
+          OR: [
+            { contractId: { in: user.allowedContracts || [] } },
+            {
+              subcontract: { contractId: { in: user.allowedContracts || [] } },
+            },
+          ],
+        },
+      });
+    } else if (activeContract && activeContract !== 'ALL') {
+      andConditions.push({
+        equipment: {
+          OR: [
+            { contractId: activeContract },
+            { subcontract: { contractId: activeContract } },
+          ],
+        },
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     return this.prisma.workOrder.findFirst({
       where,
       include: {
-        equipment: true,
+        equipment: {
+          include: {
+            contract: { select: { id: true, name: true, code: true } },
+            subcontract: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                contractId: true,
+              },
+            },
+          },
+        },
+        warehouse: true,
         systems: { include: { catalogItem: true } },
         fluids: { include: { catalogItem: true } },
+        tasks: true,
+        parts: { include: { inventoryItem: true } },
+        fluidSamples: true,
+        stockReservations: true,
       },
     });
   }
@@ -331,65 +509,159 @@ export class WorkOrdersService {
   async updateStatus(
     user: any,
     id: string,
-    status: string,
-    siteHeader?: string,
+    body: { status: string; warehouseId?: string },
+    activeContract?: string,
   ) {
     const tenantId = user.tenantId;
-    const where: any = { id, tenantId };
+    const { status, warehouseId } = body;
+    const where: Prisma.WorkOrderWhereInput = { id, tenantId };
+    const andConditions: Prisma.WorkOrderWhereInput[] = [];
 
-    if (user.role !== 'ADMIN') {
-      where.siteId = { in: user.allowedSites || [] };
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      andConditions.push({
+        equipment: {
+          OR: [
+            { contractId: { in: user.allowedContracts || [] } },
+            {
+              subcontract: { contractId: { in: user.allowedContracts || [] } },
+            },
+          ],
+        },
+      });
     }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    const userId = user.id || user.sub;
 
     try {
       if (status === 'CLOSED') {
         return await this.prisma.$transaction(async (tx: any) => {
-          // 1. Obtener la OT actual
           const workOrder = await tx.workOrder.findFirst({
             where,
-            include: { equipment: true },
+            include: {
+              equipment: true,
+              parts: true,
+            },
           });
 
-          if (!workOrder) {
+          if (!workOrder)
             throw new BadRequestException('Orden de Trabajo no encontrada');
-          }
-
-          if (workOrder.status === 'CLOSED') {
+          if (workOrder.status === 'CLOSED')
             throw new BadRequestException(
               'La Orden de Trabajo ya se encuentra CERRADA',
             );
+
+          // --- VALIDACIÓN DE MEDIDOR CON SOPORTE DE MeterAdjustment ---
+          if (workOrder.finalMeter < workOrder.initialMeter) {
+            // Verificar si hay un ajuste de medidor reciente que justifique el reinicio
+            const recentAdj = await tx.meterAdjustment.findFirst({
+              where: { equipmentId: workOrder.equipmentId },
+              orderBy: { date: 'desc' },
+            });
+
+            if (!recentAdj || recentAdj.newValue > workOrder.finalMeter) {
+              throw new BadRequestException(
+                `El medidor final (${workOrder.finalMeter}) es menor al inicial (${workOrder.initialMeter}). Registre un Ajuste de Medidor para justificar el reinicio del contador.`,
+              );
+            }
           }
 
-          // 2. Validar horómetro
-          if (workOrder.finalHorometer < workOrder.equipment.currentHorometer) {
+          // --- CONSUMO DE INVENTARIO CON STOCK NEGATIVO PERMITIDO ---
+          const linkedParts = workOrder.parts.filter(
+            (p: any) => p.inventoryItemId,
+          );
+
+          const effectiveWarehouseId = warehouseId || workOrder.warehouseId;
+
+          if (linkedParts.length > 0 && !effectiveWarehouseId) {
             throw new BadRequestException(
-              `El horómetro final de la OT (${workOrder.finalHorometer}) no puede ser menor al horómetro actual del equipo (${workOrder.equipment.currentHorometer})`,
+              'Debe seleccionar una bodega de origen para descontar los repuestos vinculados al catálogo.',
             );
           }
 
-          // 3. Actualizar la OT
+          const updateData: any = {
+            status: 'CLOSED',
+            closedAt: new Date(),
+          };
+          if (effectiveWarehouseId && !workOrder.warehouseId) {
+            updateData.warehouseId = effectiveWarehouseId;
+          }
+
           const updatedOt = await tx.workOrder.update({
             where: { id },
-            data: {
-              status: 'CLOSED',
-              closedAt: new Date(),
-            },
+            data: updateData,
           });
 
-          // 4. Actualizar el Equipo
           await tx.equipment.update({
             where: { id: workOrder.equipmentId },
-            data: {
-              currentHorometer: workOrder.finalHorometer,
-            },
+            data: { currentMeter: workOrder.finalMeter },
+          });
+
+          // Procesar consumo — stock negativo PERMITIDO
+          if (linkedParts.length > 0 && effectiveWarehouseId) {
+            for (const part of linkedParts) {
+              // Buscar o crear stock
+              let currentStock = await tx.itemStock.findUnique({
+                where: {
+                  warehouseId_itemId: {
+                    warehouseId: effectiveWarehouseId,
+                    itemId: part.inventoryItemId,
+                  },
+                },
+              });
+
+              const previousQty = currentStock?.quantity || 0;
+              const newQty = previousQty - part.quantity;
+              const isPendingRegularization = newQty < 0;
+
+              // Upsert stock (permite negativo)
+              await tx.itemStock.upsert({
+                where: {
+                  warehouseId_itemId: {
+                    warehouseId: effectiveWarehouseId,
+                    itemId: part.inventoryItemId,
+                  },
+                },
+                update: { quantity: newQty },
+                create: {
+                  warehouseId: effectiveWarehouseId,
+                  itemId: part.inventoryItemId,
+                  quantity: newQty,
+                  unitCost: 0,
+                },
+              });
+
+              // Generar registro OUT en el Kárdex
+              await tx.inventoryTransaction.create({
+                data: {
+                  type: 'OUT',
+                  quantity: part.quantity,
+                  previousStock: previousQty,
+                  newStock: newQty,
+                  isPendingRegularization,
+                  referenceId: workOrder.id,
+                  referenceType: 'WORK_ORDER',
+                  notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
+                  warehouse: { connect: { id: effectiveWarehouseId } },
+                  item: { connect: { id: part.inventoryItemId } },
+                  user: { connect: { id: userId } },
+                },
+              });
+            }
+          }
+
+          // --- LIMPIEZA DE RESERVAS ---
+          await tx.stockReservation.deleteMany({
+            where: { workOrderId: workOrder.id },
           });
 
           return updatedOt;
         });
       } else {
-        const existing = await this.prisma.workOrder.findFirst({
-          where,
-        });
+        const existing = await this.prisma.workOrder.findFirst({ where });
         if (!existing) throw new BadRequestException('Orden no encontrada');
 
         return await this.prisma.workOrder.update({
@@ -398,10 +670,8 @@ export class WorkOrdersService {
         });
       }
     } catch (error) {
-      console.error('Error at WorkOrdersService.updateStatus:', error);
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
+      this.logger.error('Error at WorkOrdersService.updateStatus:', error);
+      if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException(
         'Error al actualizar estado de la OT',
       );

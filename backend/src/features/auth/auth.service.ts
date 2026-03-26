@@ -25,7 +25,7 @@ export class AuthService {
       where: { email },
       include: {
         tenant: true,
-        siteAccess: true,
+        contractAccess: true, // Corregido: antes decía siteAccess
       },
     });
 
@@ -61,12 +61,12 @@ export class AuthService {
       );
     }
 
-    // 4. Extracción de Faenas Permitidas (Site Access)
-    let allowedSites: string[] = [];
+    // 4. Extracción de Contratos Permitidos
+    let allowedContracts: string[] = [];
     if (user.role === 'ADMIN' || user.role === ('SUPER_ADMIN' as any)) {
-      allowedSites = ['ALL'];
+      allowedContracts = ['ALL']; // Corregido: unificada la variable
     } else {
-      allowedSites = user.siteAccess.map((access) => access.siteId);
+      allowedContracts = user.contractAccess.map((access) => access.contractId);
     }
 
     // 5. Generación de Payload y Token
@@ -75,7 +75,7 @@ export class AuthService {
       sub: user.id,
       role: user.role,
       tenantId: user.tenantId,
-      allowedSites,
+      allowedContracts, // Corregido
     };
 
     return {
@@ -92,7 +92,7 @@ export class AuthService {
               logoUrl: user.tenant.logoUrl,
             }
           : null,
-        allowedSites,
+        allowedContracts, // Corregido
       },
     };
   }
@@ -100,7 +100,7 @@ export class AuthService {
   async activateAccount(token: string, newPassword: string) {
     const user = await this.prisma.user.findFirst({
       where: { activationToken: token },
-      include: { tenant: true, siteAccess: true },
+      include: { tenant: true, contractAccess: true },
     });
 
     if (!user) {
@@ -118,14 +118,15 @@ export class AuthService {
       },
     });
 
-    let allowedSites: string[] = [];
+    // 4. Extracción de Contratos Permitidos para el payload post-activación
+    let allowedContracts: string[] = [];
     if (
       updatedUser.role === 'ADMIN' ||
       updatedUser.role === ('SUPER_ADMIN' as any)
     ) {
-      allowedSites = ['ALL'];
+      allowedContracts = ['ALL']; // Corregido
     } else {
-      allowedSites = user.siteAccess.map((access) => access.siteId);
+      allowedContracts = user.contractAccess.map((access) => access.contractId);
     }
 
     const payload = {
@@ -133,8 +134,9 @@ export class AuthService {
       sub: updatedUser.id,
       role: updatedUser.role,
       tenantId: updatedUser.tenantId,
-      allowedSites,
+      allowedContracts, // Corregido
     };
+
     return {
       message: 'Cuenta activada exitosamente',
       access_token: this.jwtService.sign(payload),
@@ -150,7 +152,7 @@ export class AuthService {
               logoUrl: user.tenant.logoUrl,
             }
           : null,
-        allowedSites,
+        allowedContracts, // Corregido
       },
     };
   }
@@ -212,6 +214,7 @@ export class AuthService {
         resetPasswordToken: token,
         resetPasswordExpires: { gt: new Date() },
       },
+      include: { tenant: true, contractAccess: true },
     });
 
     if (!user) {

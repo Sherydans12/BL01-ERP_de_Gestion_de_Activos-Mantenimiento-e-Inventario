@@ -1,0 +1,98 @@
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <div>
+      <h2
+        class="text-2xl font-bold text-main tracking-tight flex items-center gap-2"
+      >
+        Catálogo Maestro de Artículos
+      </h2>
+      <p class="text-sm text-muted mt-1">
+        Defina los repuestos, fluidos y componentes válidos para toda la empresa
+        (Tenant).
+      </p>
+    </div>
+    <a
+      routerLink="/app/articulos/nuevo"
+      class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
+    >
+      + NUEVO ARTÍCULO
+    </a>
+  </div>
+
+  <div
+    class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden"
+  >
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr
+          class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
+        >
+          <th class="py-3 px-6 border-b border-border font-medium">N° Parte</th>
+          <th class="py-3 px-6 border-b border-border font-medium">
+            Descripción
+          </th>
+          <th class="py-3 px-6 border-b border-border font-medium">
+            Categoría
+          </th>
+          <th class="py-3 px-6 border-b border-border font-medium text-center">
+            Tipo
+          </th>
+          <th class="py-3 px-6 border-b border-border font-medium text-right">
+            Acciones
+          </th>
+        </tr>
+      </thead>
+      <tbody class="text-sm text-muted divide-y divide-border/50">
+        @for (item of items(); track item.id) {
+          <tr class="hover:bg-dark/40 transition-colors">
+            <td class="py-4 px-6 font-mono text-primary font-bold">
+              {{ item.partNumber }}
+            </td>
+            <td class="py-4 px-6">
+              <div class="text-main font-semibold">{{ item.name }}</div>
+              <div class="text-[10px] text-muted">
+                {{ item.brand || "Sin marca" }}
+              </div>
+            </td>
+            <td class="py-4 px-6 uppercase text-xs">{{ item.category }}</td>
+            <td class="py-4 px-6 text-center">
+              @if (item.isSerialized) {
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30"
+                  >SERIADO</span
+                >
+              } @else {
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono bg-dark border border-border"
+                  >GRANEL ({{ item.unitOfMeasure }})</span
+                >
+              }
+            </td>
+            <td class="py-4 px-6 text-right space-x-2">
+              <a
+                [routerLink]="['/app/articulos', item.id]"
+                class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs px-2 py-1"
+                >EDITAR</a
+              >
+              <button
+                (click)="deleteItem(item.id, item.partNumber)"
+                class="text-error hover:text-red-400 transition-colors font-mono text-xs px-2 py-1"
+              >
+                ELIMINAR
+              </button>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td
+              colspan="5"
+              class="py-12 text-center text-muted font-mono text-sm"
+            >
+              El Catálogo Maestro está vacío.
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

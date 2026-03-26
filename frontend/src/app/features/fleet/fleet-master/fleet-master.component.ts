@@ -5,7 +5,7 @@ import {
   signal,
   computed,
   effect,
-} from '@angular/core'; // <-- Agregar OnInit y signal
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -24,26 +24,10 @@ import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
 import { PdfService } from '../../../core/services/pdf/pdf.service';
 import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import { ContractsService } from '../../../core/services/contracts/contracts.service';
 
-export interface Equipment {
-  id: string;
-  internalId: string;
-  plate: string | null;
-  type: string;
-  brand: string;
-  model: string;
-  vin: string | null;
-  engineNumber: string | null;
-  year: number | null;
-  fuelType: string | null;
-  driveType: string | null;
-  ownership: string | null;
-  maintenanceFrequency: number | null;
-  currentHorometer: number;
-  techReviewExp: string | null;
-  circPermitExp: string | null;
-  site?: { name: string; code: string };
-}
+// IMPORTAMOS LAS INTERFACES GLOBALES (Mirroring del Schema)
+import { Equipment, MeterType, Contract } from '../../../core/models/types';
 
 @Component({
   selector: 'app-fleet-master',
@@ -60,19 +44,26 @@ export class FleetMasterComponent implements OnInit {
   private fb = inject(FormBuilder);
   private catalogService = inject(CatalogService);
   private fleetService = inject(FleetService);
+  private contractsService = inject(ContractsService);
   private notificationService = inject(NotificationService);
   private exportService = inject(ExportService);
   private pdfService = inject(PdfService);
   private workOrdersService = inject(WorkOrdersService);
   authService = inject(AuthService);
 
+  // Catálogos
   equipmentTypes = this.catalogService.equipmentTypes;
   brands = this.catalogService.brands;
   fuelTypes = this.catalogService.fuelTypes;
   driveTypes = this.catalogService.driveTypes;
   ownerships = this.catalogService.ownerships;
 
+  // Exponemos el enum a la vista
+  MeterType = MeterType;
+  meterTypesArray = Object.values(MeterType);
+
   fleet = signal<Equipment[]>([]);
+  contracts = signal<Contract[]>([]); // Para el select de Subcontratos
 
   // States Pagination & Filters
   currentPage = signal(1);
@@ -91,6 +82,14 @@ export class FleetMasterComponent implements OnInit {
   showConfirmModal = signal(false);
   pendingDeleteId = signal<string | null>(null);
 
+  // Señal derivada para filtrar subcontratos dinámicamente según el contrato seleccionado
+  selectedContractId = signal<string>('');
+  filteredSubcontracts = computed(() => {
+    const cId = this.selectedContractId();
+    const contract = this.contracts().find((c) => c.id === cId);
+    return contract?.subcontracts || [];
+  });
+
   // Subjects for debounce
   private searchSubject = new Subject<string>();
 
@@ -99,12 +98,21 @@ export class FleetMasterComponent implements OnInit {
   currentEditId: string | null = null;
 
   equipmentForm: FormGroup = this.fb.group({
+    // Asignación Contractual Dinámica
+    contractId: ['', [Validators.required]],
+    subcontractId: [null], // Es opcional, si es null pertenece directo al contrato
+
     // Identificación Base
+    mineInternalId: [''],
     internalId: ['', [Validators.required]],
     plate: [''],
     type: ['', [Validators.required]],
     brand: ['', [Validators.required]],
     model: ['', [Validators.required]],
+
+    // Lógica de Medición
+    meterType: [MeterType.HOURS, [Validators.required]],
+    currentMeter: [0, [Validators.required, Validators.min(0)]],
 
     // Identificación Extendida
     vin: [''],
@@ -116,11 +124,18 @@ export class FleetMasterComponent implements OnInit {
     driveType: [null],
     ownership: [null],
     maintenanceFrequency: [null],
-    currentHorometer: [0, [Validators.required, Validators.min(0)]],
 
-    // Documentación
+    // Último Mantenimiento
+    lastMaintenanceDate: [''],
+    lastMaintenanceMeter: [null],
+    lastMaintenanceType: [''],
+
+    // Documentación Legal
     techReviewExp: [''],
     circPermitExp: [''],
+    soapExp: [''],
+    mechanicalCertExp: [''],
+    liabilityPolicyExp: [''],
   });
 
   constructor() {
@@ -128,13 +143,13 @@ export class FleetMasterComponent implements OnInit {
       .pipe(debounceTime(300), distinctUntilChanged())
       .subscribe((query) => {
         this.searchQuery.set(query);
-        this.currentPage.set(1); // Reset a primera página al buscar
+        this.currentPage.set(1);
         this.loadFleet();
       });
 
     effect(
       () => {
-        const siteId = this.authService.currentSiteId();
+        const contractId = this.authService.currentContractId();
         this.currentPage.set(1);
         this.loadFleet();
       },
@@ -143,7 +158,23 @@ export class FleetMasterComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Initial fetch handled by effect
+    this.loadContracts();
+
+    // Escuchar cambios en el selector de Contrato para limpiar el Subcontrato
+    this.equipmentForm.get('contractId')?.valueChanges.subscribe((val) => {
+      this.selectedContractId.set(val || '');
+      // Si cambia el contrato y no estamos en modo edición inicializando datos, reseteamos el subcontrato
+      if (!this.isEditMode) {
+        this.equipmentForm.get('subcontractId')?.setValue(null);
+      }
+    });
+  }
+
+  loadContracts() {
+    this.contractsService.findAll().subscribe({
+      next: (res) => this.contracts.set(res),
+      error: (err) => console.error('Error al cargar contratos', err),
+    });
   }
 
   onSearch(event: Event) {
@@ -188,7 +219,7 @@ export class FleetMasterComponent implements OnInit {
     }
   }
 
-  getDocStatus(expirationDate: string | null): {
+  getDocStatus(expirationDate: string | null | undefined): {
     label: string;
     cssClass: string;
   } {
@@ -218,26 +249,49 @@ export class FleetMasterComponent implements OnInit {
   openModal() {
     this.isEditMode = false;
     this.currentEditId = null;
+
+    const globalContractId = this.authService.currentContractId();
+
     this.equipmentForm.reset({
-      initialHorometer: 0,
+      meterType: MeterType.HOURS,
+      currentMeter: 0,
+      contractId: globalContractId !== 'ALL' ? globalContractId : '',
+      subcontractId: null,
     });
+
+    // Si hay un contrato global, bloqueamos el campo para que no pueda cambiarlo
+    if (globalContractId !== 'ALL') {
+      this.equipmentForm.get('contractId')?.disable();
+      this.selectedContractId.set(globalContractId!);
+    } else {
+      this.equipmentForm.get('contractId')?.enable();
+      this.selectedContractId.set('');
+    }
+
     this.showModal = true;
   }
 
-  editEquipment(eq: Equipment) {
+  editEquipment(eq: any) {
     this.isEditMode = true;
     this.currentEditId = eq.id;
 
-    // Format dates to YYYY-MM-DD for input[type="date"]
-    const formatDt = (isoStr: string | null) =>
+    // Helper de fechas
+    const formatDt = (isoStr: string | null | undefined) =>
       isoStr ? new Date(isoStr).toISOString().split('T')[0] : '';
 
+    this.selectedContractId.set(eq.contractId || ''); // Trigger manual para cargar los subcontratos
+
     this.equipmentForm.patchValue({
+      contractId: eq.contractId || '',
+      subcontractId: eq.subcontractId || null,
+      mineInternalId: eq.mineInternalId,
       internalId: eq.internalId,
       plate: eq.plate,
       type: eq.type,
       brand: eq.brand,
       model: eq.model,
+      meterType: eq.meterType,
+      currentMeter: eq.currentMeter,
       vin: eq.vin,
       engineNumber: eq.engineNumber,
       year: eq.year,
@@ -245,10 +299,25 @@ export class FleetMasterComponent implements OnInit {
       driveType: eq.driveType,
       ownership: eq.ownership,
       maintenanceFrequency: eq.maintenanceFrequency,
-      currentHorometer: eq.currentHorometer,
+
+      lastMaintenanceDate: formatDt(eq.lastMaintenanceDate),
+      lastMaintenanceMeter: eq.lastMaintenanceMeter,
+      lastMaintenanceType: eq.lastMaintenanceType,
+
       techReviewExp: formatDt(eq.techReviewExp),
       circPermitExp: formatDt(eq.circPermitExp),
+      soapExp: formatDt(eq.soapExp),
+      mechanicalCertExp: formatDt(eq.mechanicalCertExp),
+      liabilityPolicyExp: formatDt(eq.liabilityPolicyExp),
     });
+
+    // En edición, dependiendo de la regla de negocio, usualmente permitimos cambiar el contrato
+    // a menos que el usuario esté limitado por el selector global
+    if (this.authService.currentContractId() !== 'ALL') {
+      this.equipmentForm.get('contractId')?.disable();
+    } else {
+      this.equipmentForm.get('contractId')?.enable();
+    }
 
     this.showModal = true;
   }
@@ -269,8 +338,10 @@ export class FleetMasterComponent implements OnInit {
         this.cancelDelete();
       },
       error: (err) => {
-        // El interceptor ya mostrará el toast de error.
         console.error('Error al eliminar equipo', err);
+        this.notificationService.error(
+          err.error?.message || 'Error al eliminar el equipo',
+        );
         this.cancelDelete();
       },
     });
@@ -289,10 +360,10 @@ export class FleetMasterComponent implements OnInit {
 
   onSubmit() {
     this.hasDuplicateError.set(false);
-
     if (this.equipmentForm.invalid) return;
 
-    const formValue = this.equipmentForm.value;
+    // Al estar deshabilitado contractId (cuando hay contexto global), getRawValue() obtiene todos los campos, incluso los disabled
+    const formValue = this.equipmentForm.getRawValue();
 
     const payload: any = {
       ...formValue,
@@ -300,23 +371,37 @@ export class FleetMasterComponent implements OnInit {
       maintenanceFrequency: formValue.maintenanceFrequency
         ? Number(formValue.maintenanceFrequency)
         : null,
-      currentHorometer: formValue.currentHorometer
-        ? Number(formValue.currentHorometer)
-        : 0,
+      currentMeter: formValue.currentMeter ? Number(formValue.currentMeter) : 0,
+      lastMaintenanceMeter: formValue.lastMaintenanceMeter
+        ? Number(formValue.lastMaintenanceMeter)
+        : null,
+
+      // Fechas a formato ISO
+      lastMaintenanceDate: formValue.lastMaintenanceDate
+        ? new Date(formValue.lastMaintenanceDate).toISOString()
+        : null,
       techReviewExp: formValue.techReviewExp
         ? new Date(formValue.techReviewExp).toISOString()
         : null,
       circPermitExp: formValue.circPermitExp
         ? new Date(formValue.circPermitExp).toISOString()
         : null,
+      soapExp: formValue.soapExp
+        ? new Date(formValue.soapExp).toISOString()
+        : null,
+      mechanicalCertExp: formValue.mechanicalCertExp
+        ? new Date(formValue.mechanicalCertExp).toISOString()
+        : null,
+      liabilityPolicyExp: formValue.liabilityPolicyExp
+        ? new Date(formValue.liabilityPolicyExp).toISOString()
+        : null,
     };
 
     if (!this.isEditMode) {
-      payload.initialHorometer = payload.currentHorometer;
+      payload.initialMeter = payload.currentMeter; // Set initial meter on creation
     }
 
     if (this.isEditMode && this.currentEditId) {
-      // PUT request
       this.fleetService.updateEquipment(this.currentEditId, payload).subscribe({
         next: () => {
           this.loadFleet();
@@ -328,7 +413,6 @@ export class FleetMasterComponent implements OnInit {
         },
       });
     } else {
-      // POST request
       this.fleetService.createEquipment(payload).subscribe({
         next: () => {
           this.loadFleet();
@@ -341,7 +425,7 @@ export class FleetMasterComponent implements OnInit {
       });
     }
   }
-  // --- EXPORTACIÓN ---
+
   exportToExcel() {
     const data = this.fleet();
     if (data.length === 0) {
@@ -350,21 +434,21 @@ export class FleetMasterComponent implements OnInit {
     }
 
     const headersMap = {
+      mineInternalId: 'ID Mina',
       internalId: 'N° Interno',
       plate: 'Patente',
       type: 'Tipo',
       brand: 'Marca',
       model: 'Modelo',
+      meterType: 'Medición',
+      currentMeter: 'Medidor Actual',
       vin: 'VIN',
       engineNumber: 'N° Motor',
       year: 'Año',
-      fuelType: 'Combustible',
-      driveType: 'Tracción',
-      ownership: 'Propiedad',
-      maintenanceFrequency: 'Frec. Mantenimiento',
-      currentHorometer: 'Horómetro Actual',
       techReviewExp: 'Vence RT',
-      circPermitExp: 'Vence P. Circulación',
+      circPermitExp: 'Vence P. Circ',
+      soapExp: 'Vence SOAP',
+      mechanicalCertExp: 'Vence Cert. Mec',
     };
 
     this.exportService.exportToExcel(data, 'Maestro_Flota', headersMap);
@@ -374,7 +458,6 @@ export class FleetMasterComponent implements OnInit {
     this.isDownloadingPdf.set(eq.id);
     this.notificationService.info('Generando Hoja de Vida...');
 
-    // Fetch last 10 closed OTs for this equipment
     this.workOrdersService
       .getWorkOrdersFiltered({
         equipmentId: eq.id,

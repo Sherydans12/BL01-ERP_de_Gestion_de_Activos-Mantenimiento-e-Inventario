@@ -1,0 +1,273 @@
+<div class="max-w-4xl mx-auto space-y-6 pb-10">
+  <div class="flex items-center gap-4">
+    <a
+      routerLink="/app/kits"
+      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-muted hover:text-primary"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        ></path>
+      </svg>
+    </a>
+    <div>
+      <h2
+        class="text-2xl font-bold text-main tracking-tight flex items-center gap-2"
+      >
+        <span class="text-primary font-mono">&lt;KIT&gt;</span>
+        {{ mode === "CREATING" ? "Configurar Nuevo Kit" : "Editar Kit PM" }}
+      </h2>
+
+      <div class="mt-2 flex items-center gap-2">
+        <span class="text-xs font-mono text-muted">Alcance de la Pauta:</span>
+        @if (authService.currentContractId() === "ALL") {
+          <span
+            class="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30 font-bold uppercase tracking-wider"
+          >
+            ADMINISTRADOR CENTRAL (CREACIÓN MÚLTIPLE)
+          </span>
+        } @else {
+          <span
+            class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/30 font-bold uppercase tracking-wider"
+          >
+            SOLO CONTRATO ACTUAL
+          </span>
+        }
+      </div>
+    </div>
+  </div>
+
+  <form [formGroup]="kitForm" (ngSubmit)="onSubmit()" class="space-y-6">
+    <div
+      class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-4 border-t border-border"
+    >
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Contrato (Faena) <span class="text-error">*</span></label
+        >
+        <select
+          formControlName="contractId"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <option value="" disabled selected>
+            -- Seleccione un Contrato --
+          </option>
+          @for (contract of contractsWithSubs(); track contract.id) {
+            <option [value]="contract.id">
+              {{ contract.code }} - {{ contract.name }}
+            </option>
+          }
+        </select>
+        @if (kitForm.get("contractId")?.disabled) {
+          <p class="text-[10px] text-primary font-mono mt-1">
+            Bloqueado por el contexto seleccionado arriba.
+          </p>
+        }
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Subcontrato (Área) - Opcional</label
+        >
+        <select
+          formControlName="subcontractId"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+          [disabled]="!kitForm.get('contractId')?.value"
+        >
+          <option value="">
+            -- Sin Subcontrato (Aplica a todo el Contrato) --
+          </option>
+          @for (sub of availableSubcontracts(); track sub.id) {
+            <option [value]="sub.id">{{ sub.code }} - {{ sub.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
+    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
+      <h3
+        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
+      >
+        1. Información del Kit
+      </h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1"
+            >Código del Kit <span class="text-error">*</span></label
+          >
+          <input
+            type="text"
+            formControlName="code"
+            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary uppercase font-mono"
+            placeholder="Ej: KIT-PM-1000-CAT"
+          />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-muted mb-1"
+            >Nombre Descriptivo <span class="text-error">*</span></label
+          >
+          <input
+            type="text"
+            formControlName="name"
+            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+            placeholder="Ej: Mantención 1000 Hrs - Serie CAT 320"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1"
+          >Descripción / Notas Adicionales</label
+        >
+        <textarea
+          formControlName="description"
+          rows="2"
+          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+          placeholder="Especificaciones o comentarios de aplicación de esta pauta..."
+        ></textarea>
+      </div>
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-4 border-t border-border items-end"
+      >
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1"
+            >Marca Compatible</label
+          >
+          <select
+            formControlName="equipmentBrand"
+            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
+          >
+            <option value="">-- Universal (Cualquier Marca) --</option>
+            @for (brand of uniqueBrands(); track brand) {
+              <option [value]="brand">{{ brand }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1"
+            >Modelo Compatible</label
+          >
+          <select
+            formControlName="equipmentModel"
+            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+            [disabled]="!kitForm.get('equipmentBrand')?.value"
+          >
+            <option value="">-- Todos los modelos --</option>
+            @for (model of uniqueModels(); track model) {
+              <option [value]="model">{{ model }}</option>
+            }
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
+      <div
+        class="flex justify-between items-center border-b border-border pb-2 mb-4"
+      >
+        <h3 class="text-sm font-mono text-primary uppercase tracking-wider">
+          2. Repuestos e Insumos Incluidos
+        </h3>
+        <button
+          type="button"
+          (click)="addPartRow()"
+          class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1.5 px-3 rounded transition-colors"
+        >
+          + AGREGAR REPUESTO
+        </button>
+      </div>
+
+      <div formArrayName="parts" class="space-y-3">
+        @for (partCtrl of partsArray.controls; track $index) {
+          <div
+            [formGroupName]="$index"
+            class="flex items-center gap-4 bg-dark/50 p-3 rounded-lg border border-border"
+          >
+            <div class="w-20">
+              <label class="block text-[10px] text-muted mb-1">Cant.</label>
+              <input
+                type="number"
+                formControlName="quantity"
+                class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary font-mono"
+                placeholder="1"
+              />
+            </div>
+            <div class="w-48">
+              <label class="block text-[10px] text-muted mb-1"
+                >N° Parte (CAT/Fleetguard)</label
+              >
+              <input
+                type="text"
+                formControlName="partNumber"
+                class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary uppercase font-mono"
+                placeholder="Ej: 577-1440"
+              />
+            </div>
+            <div class="flex-1">
+              <label class="block text-[10px] text-muted mb-1"
+                >Descripción</label
+              >
+              <input
+                type="text"
+                formControlName="description"
+                class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary uppercase"
+                placeholder="Ej: FILTRO DE ACEITE DE MOTOR"
+              />
+            </div>
+
+            <button
+              type="button"
+              (click)="removePartRow($index)"
+              class="mt-5 text-error hover:text-red-400 transition-colors"
+              title="Eliminar fila"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        }
+        @if (partsArray.length === 0) {
+          <div
+            class="text-center py-6 text-muted font-mono text-xs border border-dashed border-border rounded-lg"
+          >
+            La pauta actual no tiene repuestos. Haz click en "+ Agregar
+            Repuesto".
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 pt-4">
+      <a
+        routerLink="/app/kits"
+        class="px-6 py-3 font-medium text-muted hover:text-main transition-colors"
+        >Cancelar</a
+      >
+      <button
+        type="submit"
+        [disabled]="kitForm.invalid"
+        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-3 px-8 rounded shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        GUARDAR KIT PM
+      </button>
+    </div>
+  </form>
+</div>

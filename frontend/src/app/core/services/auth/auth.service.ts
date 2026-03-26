@@ -11,7 +11,7 @@ export interface UserPayload {
   email: string;
   name: string;
   role: 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
-  allowedSites: string[];
+  allowedContracts: string[]; // Modificado
 }
 
 @Injectable({
@@ -23,7 +23,7 @@ export class AuthService {
   // Signals for reactive state
   currentUser = signal<UserPayload | null>(null);
   isAuthenticated = signal<boolean>(false);
-  currentSiteId = signal<string | null>(null);
+  currentContractId = signal<string | null>(null); // Modificado
 
   constructor(
     private http: HttpClient,
@@ -52,7 +52,6 @@ export class AuthService {
             this.notification.success(`Bienvenido ${response.user.name}`);
           },
           error: (err) => {
-            // Mejora: Diferenciar si es error de credenciales o de cuenta inactiva
             if (err.status === 403) {
               this.notification.error(
                 'Tu cuenta está desactivada. Contacta al administrador.',
@@ -105,51 +104,51 @@ export class AuthService {
     if (isPlatformBrowser(this.platformId)) {
       localStorage.removeItem('tpm_token');
       localStorage.removeItem('tpm_user');
-      localStorage.removeItem('tpm_site_id');
+      localStorage.removeItem('tpm_contract_id'); // Modificado
     }
     this.currentUser.set(null);
     this.isAuthenticated.set(false);
-    this.currentSiteId.set(null);
+    this.currentContractId.set(null); // Modificado
     this.router.navigate(['/auth/login']);
   }
 
   private setSession(token: string, user: UserPayload) {
-    let initialSite = 'ALL';
+    let initialContract = 'ALL';
 
     if (isPlatformBrowser(this.platformId)) {
       localStorage.setItem('tpm_token', token);
-      if (user.role === 'ADMIN' && !user.allowedSites?.includes('ALL')) {
-        user.allowedSites = ['ALL', ...(user.allowedSites || [])];
+      if (user.role === 'ADMIN' && !user.allowedContracts?.includes('ALL')) {
+        user.allowedContracts = ['ALL', ...(user.allowedContracts || [])];
       }
       localStorage.setItem('tpm_user', JSON.stringify(user));
 
-      const savedSite = localStorage.getItem('tpm_site_id');
+      const savedContract = localStorage.getItem('tpm_contract_id');
       if (
-        savedSite &&
-        (user.allowedSites?.includes(savedSite) ||
-          user.allowedSites?.includes('ALL'))
+        savedContract &&
+        (user.allowedContracts?.includes(savedContract) ||
+          user.allowedContracts?.includes('ALL'))
       ) {
-        initialSite = savedSite;
+        initialContract = savedContract;
       } else if (
         user.role !== 'ADMIN' &&
-        user.allowedSites?.length > 0 &&
-        !user.allowedSites.includes('ALL')
+        user.allowedContracts?.length > 0 &&
+        !user.allowedContracts.includes('ALL')
       ) {
-        initialSite = user.allowedSites[0];
+        initialContract = user.allowedContracts[0];
       }
 
-      localStorage.setItem('tpm_site_id', initialSite);
+      localStorage.setItem('tpm_contract_id', initialContract); // Modificado
     } else {
       if (
         user.role !== 'ADMIN' &&
-        user.allowedSites?.length > 0 &&
-        !user.allowedSites.includes('ALL')
+        user.allowedContracts?.length > 0 &&
+        !user.allowedContracts.includes('ALL')
       ) {
-        initialSite = user.allowedSites[0];
+        initialContract = user.allowedContracts[0];
       }
     }
 
-    this.currentSiteId.set(initialSite);
+    this.currentContractId.set(initialContract); // Modificado
     this.currentUser.set(user);
     this.isAuthenticated.set(true);
   }
@@ -164,27 +163,30 @@ export class AuthService {
         this.currentUser.set(parsedUser);
         this.isAuthenticated.set(true);
 
-        const siteId = localStorage.getItem('tpm_site_id');
-        if (siteId) {
-          this.currentSiteId.set(siteId);
+        const contractId = localStorage.getItem('tpm_contract_id'); // Modificado
+        if (contractId) {
+          this.currentContractId.set(contractId); // Modificado
         } else {
           if (
             parsedUser.role !== 'ADMIN' &&
-            parsedUser.allowedSites?.length > 0 &&
-            !parsedUser.allowedSites.includes('ALL')
+            parsedUser.allowedContracts?.length > 0 &&
+            !parsedUser.allowedContracts.includes('ALL')
           ) {
-            this.currentSiteId.set(parsedUser.allowedSites[0]);
+            this.currentContractId.set(parsedUser.allowedContracts[0]); // Modificado
           } else {
-            this.currentSiteId.set('ALL');
+            this.currentContractId.set('ALL'); // Modificado
           }
         }
 
         // Fix up ADMIN missing ALL in memory
         if (
           parsedUser.role === 'ADMIN' &&
-          !parsedUser.allowedSites?.includes('ALL')
+          !parsedUser.allowedContracts?.includes('ALL')
         ) {
-          parsedUser.allowedSites = ['ALL', ...(parsedUser.allowedSites || [])];
+          parsedUser.allowedContracts = [
+            'ALL',
+            ...(parsedUser.allowedContracts || []),
+          ];
           this.currentUser.set({ ...parsedUser });
         }
       } catch (e) {
@@ -193,14 +195,15 @@ export class AuthService {
     } else {
       this.isAuthenticated.set(false);
       this.currentUser.set(null);
-      this.currentSiteId.set(null);
+      this.currentContractId.set(null); // Modificado
     }
   }
 
-  setCurrentSite(siteId: string) {
-    this.currentSiteId.set(siteId);
+  setCurrentContract(contractId: string) {
+    // Modificado
+    this.currentContractId.set(contractId); // Modificado
     if (isPlatformBrowser(this.platformId)) {
-      localStorage.setItem('tpm_site_id', siteId);
+      localStorage.setItem('tpm_contract_id', contractId); // Modificado
     }
   }
 

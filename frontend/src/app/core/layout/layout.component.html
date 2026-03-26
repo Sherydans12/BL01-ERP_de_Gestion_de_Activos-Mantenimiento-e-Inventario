@@ -56,6 +56,16 @@
         <span class="font-mono mr-3 text-muted">{{ "{}" }}</span>
         Órdenes de Trabajo
       </a>
+
+      <a
+        routerLink="/app/kits"
+        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
+      >
+        <span class="font-mono mr-3 text-muted">[]</span>
+        Config. Pautas (PM)
+      </a>
+
       <p
         class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
       >
@@ -71,15 +81,40 @@
         Catálogos Maestros
       </a>
 
+      <a
+        routerLink="/app/articulos"
+        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
+      >
+        <span class="font-mono mr-3 text-muted">[]</span>
+        Catálogo de Repuestos
+      </a>
+      <a
+        routerLink="/app/bodegas"
+        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
+      >
+        <span class="font-mono mr-3 text-muted">[]</span>
+        Gestión de Bodegas
+      </a>
+      <a
+        routerLink="/app/stock"
+        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
+        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
+      >
+        <span class="font-mono mr-3 text-muted">[]</span>
+        Control de Stock
+      </a>
+
       @if (currentUser()?.role === "ADMIN") {
         <a
-          routerLink="/app/configuracion/faenas"
+          routerLink="/app/configuracion/contratos"
           routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
           [routerLinkActiveOptions]="{ exact: true }"
           class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
         >
           <span class="font-mono mr-3 text-muted">/site</span>
-          Maestro de Faenas
+          Maestro de Contratos
         </a>
 
         <a
@@ -115,7 +150,7 @@
         <div
           class="w-8 h-8 rounded bg-dark border border-border flex items-center justify-center text-primary font-bold"
         >
-          N
+          {{ currentUser()?.name?.charAt(0) || "U" }}
         </div>
         <div class="ml-3">
           <p class="text-sm font-medium text-main">
@@ -136,14 +171,13 @@
       <div class="flex items-center gap-6">
         <h1 class="text-lg font-semibold text-main">Panel de Control</h1>
 
-        <!-- Contenedor del Selector de Faena -->
         @if (
           currentUser()?.role === "ADMIN" ||
-          (currentUser()?.allowedSites?.length ?? 0) > 0
+          (currentUser()?.allowedContracts?.length ?? 0) > 0
         ) {
           <div class="relative z-50">
             <button
-              (click)="toggleSiteDropdown()"
+              (click)="toggleContractDropdown()"
               class="flex items-center gap-2 px-4 py-1.5 bg-dark border border-border rounded-full backdrop-blur-md text-sm text-main hover:text-main hover:bg-dark transition-all shadow-lg"
             >
               <svg
@@ -160,14 +194,14 @@
                 />
               </svg>
               <span class="font-medium font-mono truncate max-w-[150px]">{{
-                getCurrentSiteName()
+                getCurrentContractName()
               }}</span>
               <svg
                 class="w-4 h-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
-                [class.rotate-180]="isSiteDropdownOpen()"
+                [class.rotate-180]="isContractDropdownOpen()"
               >
                 <path
                   stroke-linecap="round"
@@ -178,49 +212,47 @@
               </svg>
             </button>
 
-            <!-- Menú Desplegable Glassmorphism -->
-            @if (isSiteDropdownOpen()) {
+            @if (isContractDropdownOpen()) {
               <div
                 class="absolute top-12 left-0 w-64 rounded-xl bg-surface border border-border backdrop-blur-xl shadow-2xl py-2 z-[60] animate-fade-in divide-y divide-border"
               >
                 @if (currentUser()?.role === "ADMIN") {
                   <button
-                    (click)="selectSite('ALL')"
+                    (click)="selectContract('ALL')"
                     class="w-full text-left px-4 py-2 text-sm transition-colors {{
-                      currentSiteId() === 'ALL'
+                      currentContractId() === 'ALL'
                         ? 'bg-primary/20 text-primary'
                         : 'text-muted hover:bg-dark hover:text-main'
                     }}"
                   >
-                    <span class="font-semibold">Todas las Faenas</span>
+                    <span class="font-semibold">Todos los Contratos</span>
                   </button>
                 }
 
                 <div class="py-1 max-h-60 overflow-y-auto">
-                  @for (site of availableSites(); track site.id) {
+                  @for (contract of availableContracts(); track contract.id) {
                     <button
-                      (click)="selectSite(site.id)"
+                      (click)="selectContract(contract.id)"
                       class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between group {{
-                        currentSiteId() === site.id
+                        currentContractId() === contract.id
                           ? 'bg-primary/20 text-primary'
                           : 'text-muted hover:bg-dark hover:text-main'
                       }}"
                     >
-                      <span class="truncate pr-2">{{ site.name }}</span>
+                      <span class="truncate pr-2">{{ contract.name }}</span>
                       <span
                         class="text-xs font-mono opacity-50 group-hover:opacity-100 transition-opacity bg-dark/40 px-1.5 py-0.5 rounded border border-white/5"
                       >
-                        {{ site.code }}
+                        {{ contract.code }}
                       </span>
                     </button>
                   }
                 </div>
               </div>
 
-              <!-- Clickaway listener (fondo invisible) -->
               <div
                 class="fixed inset-0 z-40"
-                (click)="isSiteDropdownOpen.set(false)"
+                (click)="isContractDropdownOpen.set(false)"
               ></div>
             }
           </div>
@@ -240,4 +272,3 @@
     </div>
   </main>
 </div>
-

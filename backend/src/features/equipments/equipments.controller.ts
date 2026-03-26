@@ -25,21 +25,29 @@ export class EquipmentsController {
     @Body() createEquipmentDto: any,
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
   ) {
-    return this.equipmentsService.create(req.user, createEquipmentDto, siteId);
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.create(
+      req.user,
+      createEquipmentDto,
+      activeContract,
+    );
   }
 
   @Get()
   findAll(
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('type') type?: string,
     @Query('brand') brand?: string,
     @Query('search') search?: string,
   ) {
-    return this.equipmentsService.findAll(req.user, siteId, {
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.findAll(req.user, activeContract, {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       type,
@@ -53,8 +61,10 @@ export class EquipmentsController {
     @Param('id') id: string,
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
   ) {
-    return this.equipmentsService.findOne(req.user, id, siteId);
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.findOne(req.user, id, activeContract);
   }
 
   @Put(':id')
@@ -63,12 +73,14 @@ export class EquipmentsController {
     @Body() updateEquipmentDto: any,
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
   ) {
+    const activeContract = contractId || siteId;
     return this.equipmentsService.update(
       req.user,
       id,
       updateEquipmentDto,
-      siteId,
+      activeContract,
     );
   }
 
@@ -77,7 +89,9 @@ export class EquipmentsController {
     @Param('id') id: string,
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
   ) {
-    return this.equipmentsService.remove(req.user, id, siteId);
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.remove(req.user, id, activeContract);
   }
 }

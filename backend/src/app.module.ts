@@ -10,6 +10,11 @@ import { AuthModule } from './features/auth/auth.module';
 import { UsersModule } from './features/users/users.module';
 import { SitesModule } from './features/sites/sites.module';
 import { TenantConfigModule } from './features/tenant-config/tenant-config.module';
+import { MaintenanceKitsModule } from './features/maintenance-kits/maintenance-kits.module';
+import { InventoryItemsModule } from './features/inventory-items/inventory-items.module';
+import { WarehousesModule } from './features/warehouses/warehouses.module';
+import { InventoryStockModule } from './features/inventory-stock/inventory-stock.module';
+import { MeterAdjustmentsModule } from './features/meter-adjustments/meter-adjustments.module';
 
 @Module({
   imports: [
@@ -22,6 +27,11 @@ import { TenantConfigModule } from './features/tenant-config/tenant-config.modul
     UsersModule,
     SitesModule,
     TenantConfigModule,
+    MaintenanceKitsModule,
+    InventoryItemsModule,
+    WarehousesModule,
+    InventoryStockModule,
+    MeterAdjustmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

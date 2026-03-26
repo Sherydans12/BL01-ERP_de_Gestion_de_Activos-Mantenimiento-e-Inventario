@@ -14,7 +14,7 @@ export interface User {
   phone?: string;
   birthDate?: string;
   position?: string;
-  siteAccess?: { siteId: string }[];
+  contractAccess?: { contractId: string }[];
 }
 
 export interface PaginatedUsers {

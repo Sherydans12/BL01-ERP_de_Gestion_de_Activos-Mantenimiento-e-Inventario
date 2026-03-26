@@ -26,7 +26,7 @@ export class UsersService {
       phone?: string;
       birthDate?: string | Date;
       position?: string;
-      siteIds?: string[];
+      contractIds?: string[]; // CAMBIO: de siteIds a contractIds
     },
     tenantId?: string,
   ) {
@@ -64,16 +64,19 @@ export class UsersService {
         });
 
         if (
-          data.siteIds &&
-          data.siteIds.length > 0 &&
+          data.contractIds &&
+          data.contractIds.length > 0 &&
           user.role !== 'SUPER_ADMIN' &&
           user.role !== 'ADMIN'
         ) {
-          const siteConnections = data.siteIds.map((siteId: string) => ({
-            userId: user.id,
-            siteId: siteId,
-          }));
-          await tx.userSite.createMany({ data: siteConnections });
+          // CAMBIO: corrección de nombres de variables para Contracts
+          const contractConnections = data.contractIds.map(
+            (contractId: string) => ({
+              userId: user.id,
+              contractId: contractId,
+            }),
+          );
+          await tx.userContract.createMany({ data: contractConnections });
         }
 
         return user;
@@ -150,7 +153,7 @@ export class UsersService {
           phone: true,
           birthDate: true,
           position: true,
-          siteAccess: { select: { siteId: true } },
+          contractAccess: { select: { contractId: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -201,17 +204,24 @@ export class UsersService {
           },
         });
 
-        if (data.siteIds !== undefined) {
+        // CAMBIO: Se valida data.contractIds en lugar de data.siteIds
+        if (data.contractIds !== undefined) {
           if (data.role === 'ADMIN' || data.role === 'SUPER_ADMIN') {
-            await tx.userSite.deleteMany({ where: { userId: updatedUser.id } });
+            await tx.userContract.deleteMany({
+              where: { userId: updatedUser.id },
+            });
           } else {
-            await tx.userSite.deleteMany({ where: { userId: updatedUser.id } });
-            if (data.siteIds.length > 0) {
-              const siteConnections = data.siteIds.map((siteId: string) => ({
-                userId: updatedUser.id,
-                siteId: siteId,
-              }));
-              await tx.userSite.createMany({ data: siteConnections });
+            await tx.userContract.deleteMany({
+              where: { userId: updatedUser.id },
+            });
+            if (data.contractIds.length > 0) {
+              const contractConnections = data.contractIds.map(
+                (contractId: string) => ({
+                  userId: updatedUser.id,
+                  contractId: contractId,
+                }),
+              );
+              await tx.userContract.createMany({ data: contractConnections });
             }
           }
         }
@@ -230,7 +240,7 @@ export class UsersService {
             phone: true,
             birthDate: true,
             position: true,
-            siteAccess: { select: { siteId: true } },
+            contractAccess: { select: { contractId: true } },
           },
         });
       });

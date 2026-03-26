@@ -20,10 +20,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      include: { contractAccess: true }, // Extraemos los accesos del usuario
     });
+
     if (!user || (!user.isActive && payload.context !== 'activation')) {
       throw new UnauthorizedException('Usuario no válido o inactivo.');
     }
-    return user;
+
+    // Retornamos el usuario inyectando el array plano de allowedContracts
+    return {
+      ...user,
+      allowedContracts: user.contractAccess.map((access) => access.contractId),
+    };
   }
 }
