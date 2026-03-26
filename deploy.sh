@@ -12,7 +12,8 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 # 3. Aplicar migraciones de base de datos
 echo "🔄 Sincronizando esquema de base de datos (Prisma)..."
-docker exec erp-backend-prod npx prisma migrate deploy
+# Pasamos la variable explícitamente al comando docker exec
+docker exec erp-backend-prod sh -c "npx prisma migrate deploy"
 
 # 4. Limpieza (Opcional)
 echo "🧹 Limpiando imágenes antiguas..."

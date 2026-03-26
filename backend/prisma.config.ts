@@ -1,17 +1,9 @@
-import 'dotenv/config';
-import { defineConfig, env } from '@prisma/config';
-
-// Definimos un fallback para evitar errores en tiempo de build (Docker)
-const dbUrl =
-  process.env.DATABASE_URL || 'postgresql://dummy:dummy@localhost:5432/dummy';
+import { defineConfig } from '@prisma/config';
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
-  migrations: {
-    path: 'prisma/migrations',
-    seed: 'ts-node prisma/seed.ts',
-  },
   datasource: {
-    url: dbUrl,
+    // Usamos process.env directamente para asegurar la lectura en Docker
+    url: process.env.DATABASE_URL,
   },
 });

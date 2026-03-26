@@ -10,14 +10,15 @@ RUN npm run build -- --configuration=production
 
 # Nginx
 FROM nginx:stable-alpine
-# Eliminamos el contenido por defecto de nginx para evitar el "Welcome to nginx"
+# Limpieza profunda
 RUN rm -rf /usr/share/nginx/html/*
 
-# Copiamos desde la ruta exacta que define angular.json + /browser
+# Copiamos los archivos
 COPY --from=builder /app/dist/frontend/browser /usr/share/nginx/html
 
-# Copiamos tu configuración de Nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Ajustamos permisos para que el usuario nginx pueda leer todo
+RUN chmod -R 755 /usr/share/nginx/html
 
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
