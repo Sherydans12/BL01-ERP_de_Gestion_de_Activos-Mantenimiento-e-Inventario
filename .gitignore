@@ -1,2 +1,17 @@
+# Dependencias
 node_modules/
+
+# Entorno y Secretos (CRÍTICO)
+.env
+.env.local
+
+# Backups de Base de Datos
+backups/
+*.sql
+
+# Sistema
 .DS_Store
+Thumbs.db
+
+# Logs de despliegue
+*.log
