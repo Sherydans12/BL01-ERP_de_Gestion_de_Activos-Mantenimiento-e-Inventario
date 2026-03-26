@@ -21,13 +21,11 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Solo copiamos lo estrictamente necesario para correr la app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./
 
 EXPOSE 3000
-
-# Usamos node directamente para mejor manejo de señales en Docker
 CMD ["node", "dist/src/main.js"]
