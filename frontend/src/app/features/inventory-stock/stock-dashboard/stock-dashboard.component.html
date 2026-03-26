@@ -1,140 +1,12 @@
 <div class="space-y-6">
-  <div class="flex justify-between items-end">
-    <div>
-      <h2 class="text-2xl font-bold text-main tracking-tight">
-        Control de Stock e Inventario
-      </h2>
-      <p class="text-sm text-muted mt-1">
-        Consulte saldos y registre movimientos de entrada/salida.
-      </p>
-    </div>
-
+  <!-- Cabecera Industrial -->
+  <div
+    class="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-border/50"
+  >
     <div class="flex items-center gap-4">
-      @if (pendingRegularizationCount() > 0) {
-        <div
-          class="flex items-center gap-2 px-3 py-2 bg-error/10 border border-error/30 rounded-lg animate-pulse"
-        >
-          <svg
-            class="w-4 h-4 text-error"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.27 16.5c-.77.833.192 2.5 1.732 2.5z"
-            ></path>
-          </svg>
-          <span class="text-xs font-mono font-bold text-error">
-            {{ pendingRegularizationCount() }} REGULARIZACIÓN{{
-              pendingRegularizationCount() > 1 ? "ES" : ""
-            }}
-            PENDIENTE{{ pendingRegularizationCount() > 1 ? "S" : "" }}
-          </span>
-        </div>
-      }
-
-      <div class="w-72">
-        <label class="block text-xs font-mono text-muted mb-1"
-          >Bodega Activa:</label
-        >
-        <select
-          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary"
-          (change)="onWarehouseSelect($event)"
-        >
-          <option value="">-- Seleccione Bodega --</option>
-          @for (w of warehouses(); track w.id) {
-            <option [value]="w.id">{{ w.code }} - {{ w.name }}</option>
-          }
-        </select>
-      </div>
-    </div>
-
-    @if (selectedWarehouseId()) {
-      <div
-        class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden flex flex-col"
-      >
-        <div
-          class="p-4 border-b border-border flex justify-between items-center bg-dark/50"
-        >
-          <h3 class="text-sm font-mono text-primary font-bold">
-            INVENTARIO ACTUAL
-          </h3>
-          <button
-            (click)="openTransactionModal()"
-            class="text-xs bg-primary text-dark font-bold font-mono py-1.5 px-4 rounded hover:bg-primary/90 transition-colors"
-          >
-            + REGISTRAR MOVIMIENTO
-          </button>
-        </div>
-
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr
-              class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
-            >
-              <th class="py-3 px-6 border-b border-border">N° Parte / Ítem</th>
-              <th class="py-3 px-6 border-b border-border">Categoría</th>
-              <th class="py-3 px-6 border-b border-border text-center">
-                Stock Actual
-              </th>
-              <th class="py-3 px-6 border-b border-border text-right">
-                Costo Unit. (CPP)
-              </th>
-              <th class="py-3 px-6 border-b border-border text-right">
-                Valor Total
-              </th>
-            </tr>
-          </thead>
-          <tbody class="text-sm text-muted divide-y divide-border/50">
-            @for (s of stockItems(); track s.id) {
-              <tr class="hover:bg-dark/40 transition-colors">
-                <td class="py-4 px-6">
-                  <div class="font-mono text-primary font-bold">
-                    {{ s.item.partNumber }}
-                  </div>
-                  <div class="text-main truncate max-w-xs">
-                    {{ s.item.name }}
-                  </div>
-                </td>
-                <td class="py-4 px-6 text-xs uppercase">
-                  {{ s.item.category }}
-                </td>
-                <td class="py-4 px-6 text-center">
-                  <span
-                    class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border"
-                  >
-                    {{ s.quantity }} {{ s.item.unitOfMeasure }}
-                  </span>
-                </td>
-                <td class="py-4 px-6 text-right font-mono">
-                  ${{ s.unitCost || 0 | number: "1.0-0" }}
-                </td>
-                <td class="py-4 px-6 text-right font-mono text-primary">
-                  ${{ s.quantity * (s.unitCost || 0) | number: "1.0-0" }}
-                </td>
-              </tr>
-            } @empty {
-              <tr>
-                <td
-                  colspan="5"
-                  class="py-12 text-center text-muted font-mono text-sm"
-                >
-                  No hay stock registrado en esta bodega. Registre una entrada.
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    } @else {
-      <div
-        class="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-xl bg-dark/20"
-      >
+      <div class="p-3 bg-primary/10 rounded-xl border border-primary/20">
         <svg
-          class="w-12 h-12 text-muted mb-4"
+          class="w-6 h-6 text-primary"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -142,16 +14,170 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            stroke-width="1.5"
+            stroke-width="2"
             d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
           ></path>
         </svg>
-        <p class="text-muted font-mono text-sm">
-          Seleccione una Bodega en el menú superior para ver su stock.
+      </div>
+      <div>
+        <h2
+          class="text-2xl font-bold text-main tracking-tight flex items-center gap-3"
+        >
+          Control de Inventario
+          @if (pendingRegularizationCount() > 0) {
+            <span
+              class="flex items-center gap-1.5 px-2.5 py-1 bg-error/10 border border-error/20 rounded-full animate-pulse text-[10px] font-mono font-bold text-error uppercase tracking-tighter"
+            >
+              <span class="w-1.5 h-1.5 bg-error rounded-full"></span>
+              {{ pendingRegularizationCount() }} Pendiente{{
+                pendingRegularizationCount() > 1 ? "s" : ""
+              }}
+            </span>
+          }
+        </h2>
+        <p class="text-sm text-muted font-medium">
+          Control de saldos y movimientos de almacén.
         </p>
       </div>
-    }
+    </div>
+
+    <div class="flex items-center gap-4">
+      <div class="w-72">
+        <label
+          class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5 ml-1"
+          >Bodega Activa</label
+        >
+        <div class="relative group">
+          <select
+            (change)="onWarehouseSelect($event)"
+            class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm"
+          >
+            <option value="">-- Seleccionar Almacén --</option>
+            @for (w of warehouses(); track w.id) {
+              <option [value]="w.id">{{ w.code }} - {{ w.name }}</option>
+            }
+          </select>
+          <div
+            class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+              ></path>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+
+  @if (selectedWarehouseId()) {
+    <div
+      class="bg-surface backdrop-blur-xl border border-border rounded-xl shadow-lg overflow-hidden flex flex-col"
+    >
+      <div
+        class="p-4 border-b border-border flex justify-between items-center bg-dark/50"
+      >
+        <h3 class="text-sm font-mono text-primary font-bold">
+          INVENTARIO ACTUAL
+        </h3>
+        <button
+          (click)="openTransactionModal()"
+          class="text-xs bg-primary text-dark font-bold font-mono py-1.5 px-4 rounded hover:bg-primary/90 transition-colors"
+        >
+          + REGISTRAR MOVIMIENTO
+        </button>
+      </div>
+
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr
+            class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
+          >
+            <th class="py-3 px-6 border-b border-border">N° Parte / Ítem</th>
+            <th class="py-3 px-6 border-b border-border">Categoría</th>
+            <th class="py-3 px-6 border-b border-border text-center">
+              Stock Actual
+            </th>
+            <th class="py-3 px-6 border-b border-border text-right">
+              Costo Unit. (CPP)
+            </th>
+            <th class="py-3 px-6 border-b border-border text-right">
+              Valor Total
+            </th>
+          </tr>
+        </thead>
+        <tbody class="text-sm text-muted divide-y divide-border/50">
+          @for (s of stockItems(); track s.id) {
+            <tr class="hover:bg-dark/40 transition-colors">
+              <td class="py-4 px-6">
+                <div class="font-mono text-primary font-bold">
+                  {{ s.item.partNumber }}
+                </div>
+                <div class="text-main truncate max-w-xs">
+                  {{ s.item.name }}
+                </div>
+              </td>
+              <td class="py-4 px-6 text-xs uppercase">
+                {{ s.item.category }}
+              </td>
+              <td class="py-4 px-6 text-center">
+                <span
+                  class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border"
+                >
+                  {{ s.quantity }} {{ s.item.unitOfMeasure }}
+                </span>
+              </td>
+              <td class="py-4 px-6 text-right font-mono">
+                ${{ s.unitCost || 0 | number: "1.0-0" }}
+              </td>
+              <td class="py-4 px-6 text-right font-mono text-primary">
+                ${{ s.quantity * (s.unitCost || 0) | number: "1.0-0" }}
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td
+                colspan="5"
+                class="py-12 text-center text-muted font-mono text-sm"
+              >
+                No hay stock registrado en esta bodega. Registre una entrada.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <div
+      class="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-xl bg-dark/20"
+    >
+      <svg
+        class="w-12 h-12 text-muted mb-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.5"
+          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+        ></path>
+      </svg>
+      <p class="text-muted font-mono text-sm">
+        Seleccione una Bodega en el menú superior para ver su stock.
+      </p>
+    </div>
+  }
 
   @if (showTransactionModal()) {
     <div
