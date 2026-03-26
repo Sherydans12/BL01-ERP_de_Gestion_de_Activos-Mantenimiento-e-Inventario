@@ -1,77 +1,91 @@
-# 🚛 TPM - Sistema de Gestión de Activos y Mantenimiento
+# 🚛 TPM - Asset Management & EAM Enterprise Suite
 
-Bienvenido al repositorio de **TPM**. Este software está diseñado para digitalizar el control de flota, gestionar Órdenes de Trabajo (OT) y generar reportes automáticos de mantenimiento.
+Sistema de gestión de activos de clase industrial diseñado para el control de flota, mantenimiento preventivo/correctivo e inventario valorizado (CPP).
 
----
+## 🚀 Estado del Proyecto: Fase D - Hardening & EAM Logic
+
+El sistema cuenta actualmente con:
+
+- **Maestro de Flota:** Control de activos con trazabilidad de horómetros y ajustes físicos (Offsets).
+- **Mantenimiento (Fase B):** Gestión de OTs, Kits de mantenimiento y pautas dinámicas.
+- **Inventario & Bodega (Fase C):** Catálogo global, multibodega por contrato, Kárdex inmutable y valorización por Costo Promedio Ponderado.
+- **Hardening (Fase D):** Consumo atómico de stock, reservas de materiales y soporte de stock negativo para continuidad operacional.
 
 ## 🛠️ Requisitos Previos
 
-Para que el sistema funcione correctamente en tu entorno local, es necesario instalar:
+- Node.js (v20+ LTS)
+- Docker Desktop (Para base de datos PostgreSQL)
+- Angular CLI (v18+)
 
-1. **Node.js** (Versión LTS): [Descargar](https://nodejs.org/) - Entorno de ejecución para JavaScript.
-2. **Docker Desktop**: [Descargar](https://www.docker.com/products/docker-desktop/) - Para la orquestación automatizada de la base de datos.
-3. **Git**: [Descargar](https://git-scm.com/) - Control de versiones para clonar el proyecto.
+## 📦 Instalación y Desarrollo Local
 
----
+1. **Clonar y Preparar:**
+   ```bash
+   git clone [https://github.com/Sherydans12/BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario.git](https://github.com/Sherydans12/BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario.git)
+   cd BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario
+   Infraestructura (Docker):
+   ```
 
-## 🚀 Pasos para ejecutar el proyecto
-
-Ejecuta los siguientes comandos en tu terminal (PowerShell, CMD o Bash) siguiendo este orden estricto:
-
-### 1. Clonar el repositorio
-```bash
-git clone https://github.com/Sherydans12/BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario.git
-cd BL01-ERP_de_Gestion_de_Activos-Mantenimiento-e-Inventario
-```
-
-### 2. Levantar la infraestructura (Docker)
-Asegúrate de tener Docker Desktop abierto y ejecuta:
-```bash
+Bash
 docker-compose up -d
-```
-*Esto desplegará la base de datos de forma automática.*
+Backend:
 
-### 3. Configurar el Backend (Servidor)
-Accede a la carpeta del servidor para instalar dependencias y sincronizar la base de datos:
-```bash
+Bash
 cd backend
 npm install
-npx prisma migrate dev --name init
+npx prisma migrate dev
 npm run start:dev
-```
-*El servidor estará activo cuando visualices el mensaje "Application is running".*
+Frontend:
 
-### 4. Configurar el Frontend (Interfaz)
-En una **nueva terminal**, accede a la carpeta de la interfaz:
-```bash
+Bash
 cd frontend
 npm install
 npm start
+🏗️ Arquitectura de Datos (Pilares)
+Multi-tenancy: Aislamiento total por empresa (tenantId).
+
+Seguridad Operacional: Segregación por Contratos (Faenas) y Subcontratos.
+
+Consumo Atómico: Los repuestos se descuentan al cerrar la OT mediante transacciones de base de datos ($transaction).
+
+🗺️ Próximos Pasos
+Fase E: Dashboard de Costos de Mantenimiento y Analítica de Disponibilidad.
+
+Fase F: Despliegue en Producción (VPS Ubuntu) con Nginx y SSL.
+
+---
+
+### 3. Prompt para el Agente: Preparación para Despliegue (VPS)
+
+Copia este prompt y pásaselo a tu agente en Antigravity. Está optimizado para tu servidor **Ubuntu en Hostinger KVM 4**.
+
+---
+
+```text
+### MISIÓN: Preparación de Código para Despliegue en Producción (VPS Ubuntu)
+
+El sistema ha superado la Fase D y es estable. Ahora necesitamos preparar el repositorio para ser desplegado en un VPS Hostinger (Ubuntu, KVM 4). El objetivo es mantener la capacidad de desarrollo local pero permitir una configuración robusta para producción.
+
+**Tareas Requeridas:**
+
+1. **Configuración de Variables de Entorno:**
+   - Estandariza el uso de archivos `.env` en el backend. Asegúrate de que la URL de la base de datos, el JWT_SECRET y los puertos sean configurables.
+   - Crea un archivo `frontend/src/environments/environment.prod.ts` que apunte a la IP/Dominio del VPS.
+
+2. **Dockerización para Producción:**
+   - Crea un archivo `docker-compose.prod.yml` que levante:
+     - El contenedor de PostgreSQL.
+     - El contenedor del Backend (NestJS) usando un Dockerfile multietapa (build -> production).
+     - Un contenedor Nginx que sirva el Frontend (Angular build) y actúe como Reverse Proxy para el API del Backend.
+
+3. **Scripts de Deployment:**
+   - Crea un script simple `deploy.sh` en la raíz que ejecute el pull de git, levante los contenedores y corra las migraciones de Prisma automáticamente.
+
+4. **Optimización de NestJS:**
+   - Configura el `main.ts` para habilitar CORS de forma segura y manejar el prefijo `/api` de forma consistente para el proxy de Nginx.
+
+5. **PM2 Config (Opcional pero recomendado):**
+   - Si no usamos Docker para el proceso de Node, prepara un archivo `ecosystem.config.js` para gestionar el proceso con PM2 en el VPS.
+
+**Restricción:** El sistema debe seguir funcionando en local con el comando `npm run start:dev` y el `docker-compose.yml` estándar de desarrollo. No rompas el flujo actual.
 ```
-*El sistema se abrirá automáticamente en: http://localhost:4200*
-
----
-
-## 📖 Guía de Uso Rápido
-
-1. **Configuración**: Ve al módulo de Configuración y define los "Diccionarios" (Tipos de equipo, Marcas, etc.).
-2. **Flota**: En el Maestro de Flota, registra las unidades (camiones, camionetas).
-3. **Mantención**: Crea una Orden de Trabajo vinculada a un equipo registrado.
-4. **Reportes**: Utiliza las funciones de "Exportar a Excel" y "Descargar Hoja de Vida" (PDF).
-
----
-
-## ⚠️ Notas para el colaborador
-
-* **Persistencia de procesos**: No cierres las terminales donde se ejecutan el Backend y el Frontend, de lo contrario el sistema se detendrá.
-* **Base de Datos**: Docker debe estar iniciado **antes** de arrancar el Backend.
-* **Depuración**: Si encuentras errores (texto en rojo), captura la pantalla y envíamela.
-
----
-
-## 🗺️ Próximos Pasos (Fase 9)
-
-El siguiente hito del proyecto se centrará en la **Gestión de Usuarios**:
-* Implementación de roles y permisos (RBAC).
-* Creación de perfiles de usuario individuales.
-* Control de acceso por colaborador.
