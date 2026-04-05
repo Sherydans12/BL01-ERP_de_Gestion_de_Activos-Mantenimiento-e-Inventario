@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - pgdata-prod:/var/lib/postgresql/data
+      - pgdata-prod-v2:/var/lib/postgresql/data
     networks:
       - erp-network-prod
     # La DB NO se expone a Traefik, solo a la red interna
@@ -57,7 +57,7 @@ services:
       - "traefik.docker.network=coolify"
 
 volumes:
-  pgdata-prod:
+  pgdata-prod-v2:
     # Descomenta y ajusta si ya tienes un volumen existente que no quieres perder:
     # external: true
     # name: nombre_exacto_del_volumen_anterior
