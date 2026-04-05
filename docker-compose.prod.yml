@@ -25,7 +25,6 @@ services:
       PORT: 3000
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
-      # Variables para el Mailer que pusiste en el .env
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
@@ -41,13 +40,10 @@ services:
       dockerfile: Dockerfile
     container_name: erp-frontend-prod
     restart: always
-    ports:
-      - "80:80"
-      - "443:443" # <--- Habilitamos el puerto seguro
+    # ELIMINADOS los ports 80 y 443 (Evita el conflicto con Traefik)
+    # ELIMINADOS los volúmenes de certs de Let's Encrypt (Coolify hace SSL Offloading)
     volumes:
-      # Mapeamos la config de Nginx y los certificados del Host al Contenedor
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
     networks:
@@ -55,6 +51,9 @@ services:
 
 volumes:
   pgdata-prod:
+    # Opcional: Si quieres forzar a Coolify a usar el volumen antiguo y no perder datos
+    # external: true 
+    # name: erp_pgdata-prod (o el nombre exacto que tenía tu volumen anterior)
 
 networks:
   erp-network-prod:
