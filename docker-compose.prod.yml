@@ -32,9 +32,13 @@ services:
       SMTP_PASS: ${SMTP_PASS}
     depends_on:
       - db
+    expose:
+      - "3000"
     networks:
       - erp-network-prod
       - coolify
+    labels:
+      - "traefik.docker.network=coolify"
 
   frontend:
     build:
@@ -44,9 +48,13 @@ services:
     restart: always
     depends_on:
       - backend
+    expose:
+      - "80"
     networks:
       - erp-network-prod
       - coolify
+    labels:
+      - "traefik.docker.network=coolify"
 
 volumes:
   pgdata-prod:
