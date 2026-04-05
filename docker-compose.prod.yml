@@ -34,20 +34,7 @@ services:
       - db
     networks:
       - erp-network-prod
-      - coolify         # Red de Traefik gestionada por Coolify
-    labels:
-      - "traefik.enable=true"
-      # Router HTTPS
-      - "traefik.http.routers.erp-backend.rule=Host(`api.baselogic.cl`)"
-      - "traefik.http.routers.erp-backend.entrypoints=https"
-      - "traefik.http.routers.erp-backend.tls=true"
-      - "traefik.http.routers.erp-backend.tls.certresolver=letsencrypt"
-      # Servicio interno: el contenedor escucha en puerto 3000
-      - "traefik.http.services.erp-backend.loadbalancer.server.port=3000"
-      # Redirigir HTTP → HTTPS
-      - "traefik.http.routers.erp-backend-http.rule=Host(`api.baselogic.cl`)"
-      - "traefik.http.routers.erp-backend-http.entrypoints=http"
-      - "traefik.http.routers.erp-backend-http.middlewares=redirect-to-https@docker"
+      - coolify
 
   frontend:
     build:
@@ -59,20 +46,7 @@ services:
       - backend
     networks:
       - erp-network-prod
-      - coolify         # Red de Traefik gestionada por Coolify
-    labels:
-      - "traefik.enable=true"
-      # Router HTTPS
-      - "traefik.http.routers.erp-frontend.rule=Host(`app.baselogic.cl`)"
-      - "traefik.http.routers.erp-frontend.entrypoints=https"
-      - "traefik.http.routers.erp-frontend.tls=true"
-      - "traefik.http.routers.erp-frontend.tls.certresolver=letsencrypt"
-      # Servicio interno: Nginx escucha en puerto 80
-      - "traefik.http.services.erp-frontend.loadbalancer.server.port=80"
-      # Redirigir HTTP → HTTPS
-      - "traefik.http.routers.erp-frontend-http.rule=Host(`app.baselogic.cl`)"
-      - "traefik.http.routers.erp-frontend-http.entrypoints=http"
-      - "traefik.http.routers.erp-frontend-http.middlewares=redirect-to-https@docker"
+      - coolify
 
 volumes:
   pgdata-prod:
