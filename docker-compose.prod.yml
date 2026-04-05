@@ -13,6 +13,7 @@ services:
       - pgdata-prod:/var/lib/postgresql/data
     networks:
       - erp-network-prod
+    # La DB NO se expone a Traefik, solo a la red interna
 
   backend:
     build:
@@ -33,6 +34,20 @@ services:
       - db
     networks:
       - erp-network-prod
+      - coolify         # Red de Traefik gestionada por Coolify
+    labels:
+      - "traefik.enable=true"
+      # Router HTTPS
+      - "traefik.http.routers.erp-backend.rule=Host(`api.baselogic.cl`)"
+      - "traefik.http.routers.erp-backend.entrypoints=https"
+      - "traefik.http.routers.erp-backend.tls=true"
+      - "traefik.http.routers.erp-backend.tls.certresolver=letsencrypt"
+      # Servicio interno: el contenedor escucha en puerto 3000
+      - "traefik.http.services.erp-backend.loadbalancer.server.port=3000"
+      # Redirigir HTTP → HTTPS
+      - "traefik.http.routers.erp-backend-http.rule=Host(`api.baselogic.cl`)"
+      - "traefik.http.routers.erp-backend-http.entrypoints=http"
+      - "traefik.http.routers.erp-backend-http.middlewares=redirect-to-https@docker"
 
   frontend:
     build:
@@ -40,21 +55,37 @@ services:
       dockerfile: Dockerfile
     container_name: erp-frontend-prod
     restart: always
-    # ELIMINADOS los ports 80 y 443 (Evita el conflicto con Traefik)
-    # ELIMINADOS los volúmenes de certs de Let's Encrypt (Coolify hace SSL Offloading)
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
     networks:
       - erp-network-prod
+      - coolify         # Red de Traefik gestionada por Coolify
+    labels:
+      - "traefik.enable=true"
+      # Router HTTPS
+      - "traefik.http.routers.erp-frontend.rule=Host(`app.baselogic.cl`)"
+      - "traefik.http.routers.erp-frontend.entrypoints=https"
+      - "traefik.http.routers.erp-frontend.tls=true"
+      - "traefik.http.routers.erp-frontend.tls.certresolver=letsencrypt"
+      # Servicio interno: Nginx escucha en puerto 80
+      - "traefik.http.services.erp-frontend.loadbalancer.server.port=80"
+      # Redirigir HTTP → HTTPS
+      - "traefik.http.routers.erp-frontend-http.rule=Host(`app.baselogic.cl`)"
+      - "traefik.http.routers.erp-frontend-http.entrypoints=http"
+      - "traefik.http.routers.erp-frontend-http.middlewares=redirect-to-https@docker"
 
 volumes:
   pgdata-prod:
-    # Opcional: Si quieres forzar a Coolify a usar el volumen antiguo y no perder datos
-    # external: true 
-    # name: erp_pgdata-prod (o el nombre exacto que tenía tu volumen anterior)
+    # Descomenta y ajusta si ya tienes un volumen existente que no quieres perder:
+    # external: true
+    # name: nombre_exacto_del_volumen_anterior
 
 networks:
   erp-network-prod:
     driver: bridge
+  coolify:
+    # Red externa gestionada por Coolify/Traefik.
+    # Verifica el nombre exacto en tu instancia: docker network ls | grep coolify
+    external: true
