@@ -100,7 +100,7 @@ export class FleetMasterComponent implements OnInit {
   equipmentForm: FormGroup = this.fb.group({
     // Asignación Contractual Dinámica
     contractId: ['', [Validators.required]],
-    subcontractId: [null], // Es opcional, si es null pertenece directo al contrato
+    subcontractId: [''], // Vacío o UUID; sin subcontratos en contrato → null en API
 
     // Identificación Base
     mineInternalId: [''],
@@ -165,7 +165,7 @@ export class FleetMasterComponent implements OnInit {
       this.selectedContractId.set(val || '');
       // Si cambia el contrato y no estamos en modo edición inicializando datos, reseteamos el subcontrato
       if (!this.isEditMode) {
-        this.equipmentForm.get('subcontractId')?.setValue(null);
+        this.equipmentForm.get('subcontractId')?.setValue('');
       }
     });
   }
@@ -256,8 +256,13 @@ export class FleetMasterComponent implements OnInit {
       meterType: MeterType.HOURS,
       currentMeter: 0,
       contractId: globalContractId !== 'ALL' ? globalContractId : '',
-      subcontractId: null,
+      subcontractId: '',
     });
+
+    this.equipmentForm
+      .get('soapExp')
+      ?.setValidators([Validators.required]);
+    this.equipmentForm.get('soapExp')?.updateValueAndValidity();
 
     // Si hay un contrato global, bloqueamos el campo para que no pueda cambiarlo
     if (globalContractId !== 'ALL') {
@@ -275,6 +280,9 @@ export class FleetMasterComponent implements OnInit {
     this.isEditMode = true;
     this.currentEditId = eq.id;
 
+    this.equipmentForm.get('soapExp')?.clearValidators();
+    this.equipmentForm.get('soapExp')?.updateValueAndValidity();
+
     // Helper de fechas
     const formatDt = (isoStr: string | null | undefined) =>
       isoStr ? new Date(isoStr).toISOString().split('T')[0] : '';
@@ -283,7 +291,7 @@ export class FleetMasterComponent implements OnInit {
 
     this.equipmentForm.patchValue({
       contractId: eq.contractId || '',
-      subcontractId: eq.subcontractId || null,
+      subcontractId: eq.subcontractId || '',
       mineInternalId: eq.mineInternalId,
       internalId: eq.internalId,
       plate: eq.plate,
@@ -365,8 +373,17 @@ export class FleetMasterComponent implements OnInit {
     // Al estar deshabilitado contractId (cuando hay contexto global), getRawValue() obtiene todos los campos, incluso los disabled
     const formValue = this.equipmentForm.getRawValue();
 
+    const subs = this.filteredSubcontracts();
+    if (subs.length > 0 && !formValue.subcontractId) {
+      this.notificationService.error(
+        'Este contrato tiene subcontratos: debe seleccionar el subcontrato al que pertenece el equipo.',
+      );
+      return;
+    }
+
     const payload: any = {
       ...formValue,
+      subcontractId: formValue.subcontractId || null,
       year: formValue.year ? Number(formValue.year) : null,
       maintenanceFrequency: formValue.maintenanceFrequency
         ? Number(formValue.maintenanceFrequency)
@@ -434,7 +451,7 @@ export class FleetMasterComponent implements OnInit {
     }
 
     const headersMap = {
-      mineInternalId: 'ID Mina',
+      mineInternalId: 'N° int. mina',
       internalId: 'N° Interno',
       plate: 'Patente',
       type: 'Tipo',
@@ -449,6 +466,7 @@ export class FleetMasterComponent implements OnInit {
       circPermitExp: 'Vence P. Circ',
       soapExp: 'Vence SOAP',
       mechanicalCertExp: 'Vence Cert. Mec',
+      liabilityPolicyExp: 'Vence Póliza RC',
     };
 
     this.exportService.exportToExcel(data, 'Maestro_Flota', headersMap);

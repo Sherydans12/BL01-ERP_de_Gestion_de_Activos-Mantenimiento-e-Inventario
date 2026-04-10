@@ -10,7 +10,11 @@ import { MeterType } from '@prisma/client';
 
 export class CreateEquipmentDto {
   @IsUUID()
-  subcontractId: string;
+  contractId: string;
+
+  @IsUUID()
+  @IsOptional()
+  subcontractId?: string;
 
   @IsString()
   @IsOptional()

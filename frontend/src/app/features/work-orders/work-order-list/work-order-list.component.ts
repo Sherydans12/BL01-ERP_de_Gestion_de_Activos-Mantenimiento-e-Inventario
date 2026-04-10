@@ -118,6 +118,19 @@ export class WorkOrderListComponent implements OnInit {
     }
   }
 
+  otCategoryLabel(category: string): string {
+    switch (category) {
+      case 'PROGRAMADA':
+        return 'Programadas';
+      case 'NO_PROGRAMADA_CORRECTIVA':
+        return 'No programadas Correctiva';
+      case 'NO_PROGRAMADA_REACTIVA':
+        return 'No programada Reactiva';
+      default:
+        return category;
+    }
+  }
+
   getStatusConfig(status: string): { label: string; css: string } {
     switch (status) {
       case 'OPEN':
@@ -199,7 +212,10 @@ export class WorkOrderListComponent implements OnInit {
     // Preprocesar data para aplanar objetos como equipment.internalId antes de exportar
     const flatData = data.map((ot) => ({
       ...ot,
-      equipment: ot.equipment?.internalId || 'N/A',
+      category: this.otCategoryLabel(ot.category),
+      equipment: ot.equipment
+        ? `${ot.equipment.internalId} — ${ot.equipment.brand} ${ot.equipment.model}`
+        : 'N/A',
     }));
 
     this.exportService.exportToExcel(

@@ -29,9 +29,39 @@ export class EquipmentsService {
       }
     }
 
+    if (!data.contractId) {
+      throw new BadRequestException('Debe indicar el contrato principal.');
+    }
+
     // Aseguramos que si no hay subcontrato, pase null (no un string vacío)
     if (!data.subcontractId) {
       data.subcontractId = null;
+    }
+
+    const subsCount = await this.prisma.subcontract.count({
+      where: { contractId: data.contractId },
+    });
+    if (subsCount > 0 && !data.subcontractId) {
+      throw new BadRequestException(
+        'Este contrato tiene subcontratos: debe asignar el equipo a un subcontrato.',
+      );
+    }
+
+    if (data.subcontractId) {
+      const sub = await this.prisma.subcontract.findFirst({
+        where: { id: data.subcontractId, contractId: data.contractId },
+      });
+      if (!sub) {
+        throw new BadRequestException(
+          'El subcontrato no pertenece al contrato seleccionado.',
+        );
+      }
+    }
+
+    if (!data.soapExp) {
+      throw new BadRequestException(
+        'La fecha de vencimiento del seguro obligatorio es obligatoria.',
+      );
     }
 
     try {
@@ -209,6 +239,35 @@ export class EquipmentsService {
       // Limpiamos subcontractId si el frontend manda un string vacío
       if (data.subcontractId === '') {
         data.subcontractId = null;
+      }
+
+      const nextContractId =
+        data.contractId !== undefined ? data.contractId : existing.contractId;
+      let nextSubId =
+        data.subcontractId !== undefined
+          ? data.subcontractId
+          : existing.subcontractId;
+      if (nextSubId === '') nextSubId = null;
+
+      if (nextContractId) {
+        const subsCount = await this.prisma.subcontract.count({
+          where: { contractId: nextContractId },
+        });
+        if (subsCount > 0 && !nextSubId) {
+          throw new BadRequestException(
+            'Este contrato tiene subcontratos: debe asignar el equipo a un subcontrato.',
+          );
+        }
+        if (nextSubId) {
+          const sub = await this.prisma.subcontract.findFirst({
+            where: { id: nextSubId, contractId: nextContractId },
+          });
+          if (!sub) {
+            throw new BadRequestException(
+              'El subcontrato no pertenece al contrato seleccionado.',
+            );
+          }
+        }
       }
 
       return await this.prisma.equipment.update({

@@ -48,7 +48,7 @@ import { AuthService } from '../../../core/services/auth/auth.service';
             <label
               for="tenantCode"
               class="block text-sm font-medium text-muted mb-1"
-              >ID de Empresa / Faena</label
+              >ID de Empresa / Contrato</label
             >
             <div class="relative">
               <span

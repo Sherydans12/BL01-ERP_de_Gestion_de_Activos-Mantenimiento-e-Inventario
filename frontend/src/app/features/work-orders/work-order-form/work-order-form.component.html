@@ -61,7 +61,7 @@
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div class="md:col-span-2">
           <label class="block text-sm font-medium text-muted mb-1"
-            >Equipo a Intervenir <span class="text-error">*</span></label
+            >Equipo a intervenir <span class="text-error">*</span></label
           >
           <select
             formControlName="equipmentId"
@@ -70,10 +70,17 @@
             <option value="" disabled selected>Seleccione...</option>
             @for (eq of fleet(); track eq.id) {
               <option [value]="eq.id">
-                {{ eq.internalId }} ({{ eq.type }})
+                {{ eq.internalId }}
               </option>
             }
           </select>
+          @if (selectedEquipmentForOt(); as eq) {
+            <div
+              class="mt-1.5 text-xs text-muted uppercase tracking-wide font-mono"
+            >
+              {{ eq.brand }} {{ eq.model }}
+            </div>
+          }
         </div>
         <div>
           <label class="block text-sm font-medium text-muted mb-1"
@@ -83,12 +90,12 @@
             formControlName="category"
             class="w-full bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
           >
-            <option value="PROGRAMADA">Programada</option>
+            <option value="PROGRAMADA">Programadas</option>
             <option value="NO_PROGRAMADA_CORRECTIVA">
-              No Programada Correctiva
+              No programadas Correctiva
             </option>
             <option value="NO_PROGRAMADA_REACTIVA">
-              No Programada Reactiva
+              No programada Reactiva
             </option>
           </select>
         </div>

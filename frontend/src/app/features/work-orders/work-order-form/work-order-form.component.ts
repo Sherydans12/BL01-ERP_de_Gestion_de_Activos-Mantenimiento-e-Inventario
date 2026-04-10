@@ -1,11 +1,4 @@
-import {
-  Component,
-  inject,
-  signal,
-  OnInit,
-  computed,
-  effect,
-} from '@angular/core';
+import { Component, inject, signal, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -148,7 +141,10 @@ export class WorkOrderFormComponent implements OnInit {
 
   ngOnInit() {
     this.fleetService.getEquipments({ limit: 1000 }).subscribe({
-      next: (res) => this.fleet.set(res.data),
+      next: (res) => {
+        this.fleet.set(res.data);
+        this.applySelectedEquipmentMeters();
+      },
       error: (err) => console.error('Error al cargar flota:', err),
     });
     // Cargar Kits de Mantenimiento
@@ -239,17 +235,10 @@ export class WorkOrderFormComponent implements OnInit {
         }
 
         if (this.mode === 'CREATING') {
+          this.applyFinalMeterValidators(selectedEq.currentMeter);
           this.otForm.patchValue({
             initialMeter: selectedEq.currentMeter,
           });
-
-          this.otForm
-            .get('finalMeter')
-            ?.setValidators([
-              Validators.required,
-              Validators.min(selectedEq.currentMeter),
-            ]);
-          this.otForm.get('finalMeter')?.updateValueAndValidity();
         }
       }
     });
@@ -703,5 +692,38 @@ export class WorkOrderFormComponent implements OnInit {
     const itemId = partGroup.get('inventoryItemId')?.value;
     if (!itemId) return false;
     return this.getAvailableStock(itemId) >= reqQty;
+  }
+
+  /** Equipo elegido (código + marca/modelo en plantilla). */
+  selectedEquipmentForOt(): Equipment | null {
+    const id = this.otForm.get('equipmentId')?.value;
+    if (!id) return null;
+    return this.fleet().find((e) => e.id === id) ?? null;
+  }
+
+  /**
+   * Si la flota llega después de elegir equipo, completa horómetro/km inicial
+   * y validación del final según el medidor actual.
+   */
+  private applySelectedEquipmentMeters() {
+    if (this.mode !== 'CREATING') return;
+    const eqId = this.otForm.get('equipmentId')?.value;
+    if (!eqId) return;
+    const selectedEq = this.fleet().find((eq) => eq.id === eqId);
+    if (!selectedEq) return;
+    this.selectedEquipmentMeterType.set(selectedEq.meterType);
+    this.otForm.patchValue(
+      { initialMeter: selectedEq.currentMeter },
+      { emitEvent: false },
+    );
+    this.applyFinalMeterValidators(selectedEq.currentMeter);
+  }
+
+  private applyFinalMeterValidators(currentMeter: number) {
+    this.otForm.get('finalMeter')?.setValidators([
+      Validators.required,
+      Validators.min(currentMeter),
+    ]);
+    this.otForm.get('finalMeter')?.updateValueAndValidity({ emitEvent: false });
   }
 }

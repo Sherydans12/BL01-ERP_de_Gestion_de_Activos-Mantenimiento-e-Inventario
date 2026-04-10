@@ -114,6 +114,9 @@
           >
             <th class="py-3 px-4 border-b border-border font-medium">Equipo</th>
             <th class="py-3 px-4 border-b border-border font-medium">
+              N° int. mina
+            </th>
+            <th class="py-3 px-4 border-b border-border font-medium">
               Patente
             </th>
             <th class="py-3 px-4 border-b border-border font-medium">
@@ -152,11 +155,9 @@
                 <div class="text-xs text-muted uppercase">
                   {{ eq.brand }} {{ eq.model }}
                 </div>
-                @if (eq.mineInternalId) {
-                  <div class="text-[10px] text-muted mt-1 font-mono">
-                    Mina: {{ eq.mineInternalId }}
-                  </div>
-                }
+              </td>
+              <td class="py-3 px-4 font-mono text-xs text-muted">
+                {{ eq.mineInternalId || "—" }}
               </td>
               <td class="py-3 px-4 font-mono text-main">
                 {{ eq.plate || "N/A" }}
@@ -185,9 +186,9 @@
                 <span
                   class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border mt-1"
                   [ngClass]="soapStatus.cssClass"
-                  title="SOAP: {{ eq.soapExp || 'N/A' }}"
+                  title="Seguro obligatorio: {{ eq.soapExp || 'N/A' }}"
                 >
-                  SOAP: {{ soapStatus.label }}
+                  SEGURO: {{ soapStatus.label }}
                 </span>
               </td>
 
@@ -286,7 +287,7 @@
             <tr>
               <td
                 [attr.colspan]="
-                  authService.currentContractId() === 'ALL' ? 7 : 6
+                  authService.currentContractId() === 'ALL' ? 8 : 7
                 "
                 class="py-8 text-center text-muted font-mono"
               >
@@ -401,7 +402,12 @@
 
               <div>
                 <label for="subcontractId" class="block text-sm text-muted mb-1"
-                  >Subcontrato / C.C. (Opcional)</label
+                  >Subcontrato / C.C.
+                  @if (filteredSubcontracts().length > 0) {
+                    <span class="text-primary">*</span>
+                  } @else {
+                    <span class="text-muted text-xs">(opcional)</span>
+                  }</label
                 >
                 <select
                   id="subcontractId"
@@ -411,9 +417,15 @@
                     !selectedContractId() || filteredSubcontracts().length === 0
                   "
                 >
-                  <option [ngValue]="null">
-                    Ninguno (Asignación directa al contrato)
-                  </option>
+                  @if (filteredSubcontracts().length === 0) {
+                    <option value="">
+                      Sin subcontratos — asignación al contrato
+                    </option>
+                  } @else {
+                    <option value="" disabled selected>
+                      Seleccione subcontrato…
+                    </option>
+                  }
                   @for (sub of filteredSubcontracts(); track sub.id) {
                     <option [value]="sub.id">
                       {{ sub.code }} - {{ sub.name }}
@@ -459,7 +471,7 @@
                 <label
                   for="mineInternalId"
                   class="block text-sm text-muted mb-1"
-                  >ID Mina (Opcional)</label
+                  >N° interno de mina (opcional)</label
                 >
                 <input
                   type="text"
@@ -530,12 +542,12 @@
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
-              Operación y Medición
+              Operación y mantenimiento
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label for="meterType" class="block text-sm text-muted mb-1"
-                  >Tipo de Medidor <span class="text-primary">*</span></label
+                  >Tipo de medición <span class="text-primary">*</span></label
                 >
                 <select
                   id="meterType"
@@ -544,15 +556,19 @@
                 >
                   @for (type of meterTypesArray; track type) {
                     <option [value]="type">
-                      {{ type === MeterType.HOURS ? "Horas" : "Kilómetros" }}
+                      {{ type === MeterType.HOURS ? "Horómetro (horas)" : "Kilometraje" }}
                     </option>
                   }
                 </select>
               </div>
               <div>
                 <label for="currentMeter" class="block text-sm text-muted mb-1"
-                  >Medidor Inicial / Actual
-                  <span class="text-primary">*</span></label
+                  >{{
+                    equipmentForm.get("meterType")?.value === MeterType.HOURS
+                      ? "Horómetro"
+                      : "Kilometraje"
+                  }}
+                  actual <span class="text-primary">*</span></label
                 >
                 <input
                   type="number"
@@ -565,31 +581,42 @@
                 <label
                   for="maintenanceFrequency"
                   class="block text-sm text-muted mb-1"
-                  >Frec. Mantención</label
+                  >Frecuencia de mantención preventiva (cada cuántas
+                  {{
+                    equipmentForm.get("meterType")?.value === MeterType.HOURS
+                      ? "horas"
+                      : "kilómetros"
+                  }})</label
                 >
                 <input
                   type="number"
                   id="maintenanceFrequency"
                   formControlName="maintenanceFrequency"
                   class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
-                  placeholder="Ej: 250"
+                  [placeholder]="
+                    equipmentForm.get('meterType')?.value === MeterType.HOURS
+                      ? 'Ej: 250, 500'
+                      : 'Ej: 1000, 15000'
+                  "
                 />
               </div>
             </div>
-          </div>
 
-          <div>
-            <h4
-              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
+            <h5
+              class="text-xs font-mono text-primary uppercase tracking-wider mt-8 mb-3"
             >
-              Histórico de Mantenimiento
-            </h4>
+              Última mantención realizada
+            </h5>
+            <p class="text-[11px] text-muted mb-3">
+              Registre la fecha, el valor del medidor en esa intervención y el
+              tipo o intervalo (ej.: PM a los 1000 km, servicio 500 hrs).
+            </p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label
                   for="lastMaintenanceDate"
                   class="block text-sm text-muted mb-1"
-                  >Fecha Últ. Mant.</label
+                  >Fecha</label
                 >
                 <input
                   type="date"
@@ -602,7 +629,12 @@
                 <label
                   for="lastMaintenanceMeter"
                   class="block text-sm text-muted mb-1"
-                  >Medidor en Últ. Mant.</label
+                  >{{
+                    equipmentForm.get("meterType")?.value === MeterType.HOURS
+                      ? "Horómetro"
+                      : "Kilometraje"
+                  }}
+                  en esa mantención</label
                 >
                 <input
                   type="number"
@@ -615,14 +647,14 @@
                 <label
                   for="lastMaintenanceType"
                   class="block text-sm text-muted mb-1"
-                  >Tipo de Intervención</label
+                  >Tipo / intervalo de mantención</label
                 >
                 <input
                   type="text"
                   id="lastMaintenanceType"
                   formControlName="lastMaintenanceType"
                   class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
-                  placeholder="Ej: PM3 - 1000H"
+                  placeholder="Ej: 1000 km, 1500 km, PM 500 hrs"
                 />
               </div>
             </div>
@@ -659,7 +691,10 @@
               </div>
               <div>
                 <label for="soapExp" class="block text-sm text-muted mb-1"
-                  >Vto. SOAP</label
+                  >Vencimiento seguro obligatorio
+                  @if (!isEditMode) {
+                    <span class="text-primary">*</span>
+                  }</label
                 >
                 <input
                   type="date"
@@ -672,7 +707,7 @@
                 <label
                   for="mechanicalCertExp"
                   class="block text-sm text-muted mb-1"
-                  >Cert. Mecánico</label
+                  >Certificado mecánico</label
                 >
                 <input
                   type="date"
@@ -685,7 +720,7 @@
                 <label
                   for="liabilityPolicyExp"
                   class="block text-sm text-muted mb-1"
-                  >Póliza RC</label
+                  >Póliza responsabilidad civil (RC)</label
                 >
                 <input
                   type="date"
