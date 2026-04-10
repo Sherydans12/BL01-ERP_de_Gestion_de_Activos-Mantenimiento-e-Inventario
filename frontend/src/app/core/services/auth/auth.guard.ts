@@ -8,14 +8,15 @@ export const authGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
   const platformId = inject(PLATFORM_ID);
 
-  if (!isPlatformBrowser(platformId)) {
-    return true;
-  }
-
+  // hasValidSession() ya devuelve false en SSR (sin localStorage). Antes se
+  // devolvía true aquí y el servidor renderizaba /app/* sin token → 401 en
+  // tenant-config, catálogos, OTs, etc.
   if (!authService.hasValidSession()) {
-    router.navigate(['/auth/login'], {
-      queryParams: { returnUrl: state.url },
-    });
+    if (isPlatformBrowser(platformId)) {
+      router.navigate(['/auth/login'], {
+        queryParams: { returnUrl: state.url },
+      });
+    }
     return false;
   }
 

@@ -1,4 +1,5 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, PLATFORM_ID, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { TenantService } from '../services/tenant/tenant.service';
 import { CatalogService } from '../services/catalog/catalog.service';
@@ -14,6 +15,8 @@ import { Contract } from '../models/types';
   templateUrl: './layout.component.html',
 })
 export class LayoutComponent implements OnInit {
+  private platformId = inject(PLATFORM_ID);
+
   tenantService = inject(TenantService);
   catalogService = inject(CatalogService);
   authService = inject(AuthService);
@@ -32,13 +35,17 @@ export class LayoutComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Inicializar Tema y Config de Tenant
+    // En SSR no hay token ni localStorage: no llamar APIs protegidas (el guard
+    // ya bloquea la ruta, pero esto evita fugas si el layout se reutiliza).
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
     this.tenantService.getTenantConfig().subscribe({
       next: (config) => this.tenantService.setTenant(config),
       error: (err) => console.error('Error cargando la config del Tenant', err),
     });
 
-    // Descargar catálogos maestros al entrar a la aplicación
     this.catalogService.loadCatalogs().subscribe({
       error: (err) => console.error('Error cargando catálogos:', err),
     });
@@ -48,15 +55,10 @@ export class LayoutComponent implements OnInit {
 
   loadContracts() {
     const user = this.currentUser();
-    console.log('Layout - Diagnóstico Usuario:', {
-      role: user?.role,
-      allowedContracts: user?.allowedContracts,
-    });
     if (!user) return;
 
     this.contractsService.findAll().subscribe({
       next: (contracts) => {
-        console.log('Layout - Contratos obtenidos:', contracts);
         let finalContracts = contracts;
 
         if (contracts.length === 0) {
