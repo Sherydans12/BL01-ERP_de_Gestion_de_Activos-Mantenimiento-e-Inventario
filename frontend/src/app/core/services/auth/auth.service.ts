@@ -14,11 +14,45 @@ export interface UserPayload {
   allowedContracts: string[]; // Modificado
 }
 
+/** Payload mínimo del JWT de acceso (Nest/jwt exp en segundos). */
+interface JwtPayload {
+  exp?: number;
+  iat?: number;
+}
+
+function decodeJwtPayload(token: string): JwtPayload | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
+    const json = atob(base64);
+    return JSON.parse(json) as JwtPayload;
+  } catch {
+    return null;
+  }
+}
+
+/** Margen ante desfase de reloj (segundos). */
+const JWT_EXP_SKEW_SEC = 60;
+
+export function isAccessTokenExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return true;
+  const now = Math.floor(Date.now() / 1000);
+  return now >= payload.exp - JWT_EXP_SKEW_SEC;
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class AuthService {
   private apiUrl = `${environment.apiUrl}/auth`;
+
+  /** Evita varios avisos si varias peticiones devuelven 401 a la vez. */
+  private forceLogoutInProgress = false;
 
   // Signals for reactive state
   currentUser = signal<UserPayload | null>(null);
@@ -47,8 +81,9 @@ export class AuthService {
       .pipe(
         tap({
           next: (response) => {
+            this.forceLogoutInProgress = false;
             this.setSession(response.access_token, response.user);
-            this.router.navigate(['/']);
+            // La navegación post-login la maneja LoginComponent (lee returnUrl del query param)
             this.notification.success(`Bienvenido ${response.user.name}`);
           },
           error: (err) => {
@@ -73,6 +108,7 @@ export class AuthService {
       .pipe(
         tap({
           next: (response) => {
+            this.forceLogoutInProgress = false;
             this.setSession(response.access_token, response.user);
             this.router.navigate(['/']);
             this.notification.success(
@@ -101,14 +137,7 @@ export class AuthService {
   }
 
   logout() {
-    if (isPlatformBrowser(this.platformId)) {
-      localStorage.removeItem('tpm_token');
-      localStorage.removeItem('tpm_user');
-      localStorage.removeItem('tpm_contract_id'); // Modificado
-    }
-    this.currentUser.set(null);
-    this.isAuthenticated.set(false);
-    this.currentContractId.set(null); // Modificado
+    this.clearStoredSession();
     this.router.navigate(['/auth/login']);
   }
 
@@ -158,6 +187,10 @@ export class AuthService {
     const user = localStorage.getItem('tpm_user');
 
     if (token && user) {
+      if (isAccessTokenExpired(token)) {
+        this.clearStoredSession();
+        return;
+      }
       try {
         const parsedUser = JSON.parse(user);
         this.currentUser.set(parsedUser);
@@ -199,6 +232,30 @@ export class AuthService {
     }
   }
 
+  /**
+   * Sesión usable para rutas protegidas: token presente, no expirado y usuario en storage.
+   */
+  hasValidSession(): boolean {
+    if (!isPlatformBrowser(this.platformId)) return false;
+    const token = localStorage.getItem('tpm_token');
+    const user = localStorage.getItem('tpm_user');
+    if (!token || !user) return false;
+    if (isAccessTokenExpired(token)) return false;
+    return true;
+  }
+
+  /** Limpia storage y estado sin navegar (p. ej. antes de redirigir desde el guard). */
+  clearStoredSession(): void {
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.removeItem('tpm_token');
+      localStorage.removeItem('tpm_user');
+      localStorage.removeItem('tpm_contract_id');
+    }
+    this.currentUser.set(null);
+    this.isAuthenticated.set(false);
+    this.currentContractId.set(null);
+  }
+
   setCurrentContract(contractId: string) {
     // Modificado
     this.currentContractId.set(contractId); // Modificado
@@ -220,7 +277,12 @@ export class AuthService {
   }
 
   forceLogout() {
-    this.logout();
+    if (this.forceLogoutInProgress) return;
+    this.forceLogoutInProgress = true;
+    this.clearStoredSession();
     this.notification.warning('Sesión expirada o cuenta inactiva.');
+    this.router.navigate(['/auth/login']).finally(() => {
+      this.forceLogoutInProgress = false;
+    });
   }
 }

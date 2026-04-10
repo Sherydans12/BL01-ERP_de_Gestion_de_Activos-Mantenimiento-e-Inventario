@@ -1,7 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../../core/services/auth/auth.service';
 
 @Component({
@@ -137,9 +137,13 @@ import { AuthService } from '../../../core/services/auth/auth.service';
   `,
   styles: [],
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+
+  private returnUrl = '/app/dashboard';
 
   loginForm = this.fb.nonNullable.group({
     tenantCode: ['TPM', [Validators.required]],
@@ -149,6 +153,19 @@ export class LoginComponent {
 
   isLoading = signal(false);
 
+  ngOnInit() {
+    // Si ya hay sesión válida, no tiene sentido ver el login: redirigir al dashboard.
+    if (this.authService.hasValidSession()) {
+      this.router.navigateByUrl('/app/dashboard');
+      return;
+    }
+
+    // Leer returnUrl del query param que inyecta authGuard.
+    // Solo se acepta si empieza con '/' para evitar open redirect a dominios externos.
+    const raw = this.route.snapshot.queryParamMap.get('returnUrl') ?? '';
+    this.returnUrl = raw.startsWith('/') ? raw : '/app/dashboard';
+  }
+
   onSubmit() {
     if (this.loginForm.valid) {
       this.isLoading.set(true);
@@ -157,6 +174,7 @@ export class LoginComponent {
       this.authService.login({ tenantCode, email, password }).subscribe({
         next: () => {
           this.isLoading.set(false);
+          this.router.navigateByUrl(this.returnUrl);
         },
         error: () => {
           this.isLoading.set(false);

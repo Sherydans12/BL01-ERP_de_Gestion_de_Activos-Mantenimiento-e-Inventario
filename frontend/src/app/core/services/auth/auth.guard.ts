@@ -1,22 +1,29 @@
-import { inject } from '@angular/core';
+import { inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { Router, CanActivateFn } from '@angular/router';
 import { AuthService } from './auth.service';
 
 export const authGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
+  const platformId = inject(PLATFORM_ID);
 
-  if (authService.isAuthenticated()) {
-    // Check role if required
-    const expectedRoles = route.data['roles'] as Array<string>;
-    if (expectedRoles && !authService.hasRole(expectedRoles)) {
-      router.navigate(['/']); // Redirect to home if no permissions
-      return false;
-    }
+  if (!isPlatformBrowser(platformId)) {
     return true;
   }
 
-  // Not logged in
-  router.navigate(['/auth/login']);
-  return false;
+  if (!authService.hasValidSession()) {
+    router.navigate(['/auth/login'], {
+      queryParams: { returnUrl: state.url },
+    });
+    return false;
+  }
+
+  const expectedRoles = route.data['roles'] as Array<string> | undefined;
+  if (expectedRoles?.length && !authService.hasRole(expectedRoles)) {
+    router.navigate(['/app/dashboard']);
+    return false;
+  }
+
+  return true;
 };
