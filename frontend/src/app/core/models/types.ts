@@ -96,12 +96,32 @@ export interface WorkOrder {
   finalMeter: number;
   description: string;
   createdAt: string;
+  closedAt?: string;
   equipment?: Equipment;
   responsible?: string;
   tasks?: WorkOrderTask[];
   parts?: WorkOrderPart[];
   fluids?: any[];
   systems?: any[];
+}
+
+// Ajustes de Medidor (Horómetro/Odómetro)
+export interface MeterAdjustment {
+  id: string;
+  equipmentId: string;
+  userId: string;
+  oldValue: number;
+  newValue: number;
+  date: string;
+  reason?: string;
+  user?: { name: string; email: string };
+}
+
+// Respuesta analítica para el modal de detalle
+export interface EquipmentAnalytics {
+  equipment: Equipment;
+  workOrders: WorkOrder[];
+  meterAdjustments: MeterAdjustment[];
 }
 
 // Usuario (Payload Auth)

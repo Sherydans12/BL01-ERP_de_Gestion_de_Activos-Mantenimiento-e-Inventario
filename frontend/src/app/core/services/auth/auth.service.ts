@@ -10,8 +10,12 @@ export interface UserPayload {
   id: string;
   email: string;
   name: string;
-  role: 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
-  allowedContracts: string[]; // Modificado
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+  allowedContracts: string[];
+  /** ID del rol custom asignado al usuario (si tiene uno). */
+  customRoleId?: string | null;
+  /** Nombre del rol custom (informativo). */
+  customRoleName?: string | null;
 }
 
 /** Payload mínimo del JWT de acceso (Nest/jwt exp en segundos). */
@@ -70,14 +74,34 @@ export class AuthService {
     }
   }
 
-  login(credentials: { tenantCode: string; email: string; password: string }) {
+  getCaptchaChallenge() {
+    return this.http.get<{ challengeId: string; question: string }>(
+      `${this.apiUrl}/captcha`,
+    );
+  }
+
+  login(credentials: {
+    tenantCode: string;
+    email: string;
+    password: string;
+    challengeId: string;
+    challengeAnswer: string;
+    honeypot?: string;
+  }) {
     return this.http
       .post<{
         access_token: string;
         user: UserPayload & {
           tenant?: { id: string; name: string; logoUrl: string };
         };
-      }>(`${this.apiUrl}/login`, credentials)
+      }>(`${this.apiUrl}/login`, {
+        tenantCode: credentials.tenantCode,
+        email: credentials.email,
+        password: credentials.password,
+        challengeId: credentials.challengeId,
+        challengeAnswer: credentials.challengeAnswer,
+        honeypot: credentials.honeypot ?? '',
+      })
       .pipe(
         tap({
           next: (response) => {
@@ -87,7 +111,11 @@ export class AuthService {
             this.notification.success(`Bienvenido ${response.user.name}`);
           },
           error: (err) => {
-            if (err.status === 403) {
+            if (err.status === 429) {
+              this.notification.error(
+                'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
+              );
+            } else if (err.status === 403) {
               this.notification.error(
                 'Tu cuenta está desactivada. Contacta al administrador.',
               );
@@ -122,10 +150,20 @@ export class AuthService {
       );
   }
 
-  forgotPassword(email: string) {
+  forgotPassword(payload: {
+    email: string;
+    challengeId: string;
+    challengeAnswer: string;
+    honeypot?: string;
+  }) {
     return this.http.post<{ success: boolean; message: string }>(
       `${this.apiUrl}/forgot-password`,
-      { email },
+      {
+        email: payload.email,
+        challengeId: payload.challengeId,
+        challengeAnswer: payload.challengeAnswer,
+        honeypot: payload.honeypot ?? '',
+      },
     );
   }
 
@@ -273,7 +311,10 @@ export class AuthService {
 
   hasRole(roles: string[]): boolean {
     const user = this.currentUser();
-    return user ? roles.includes(user.role) : false;
+    if (!user) return false;
+    // SUPER_ADMIN siempre tiene acceso a cualquier recurso protegido por rol.
+    if (user.role === 'SUPER_ADMIN') return true;
+    return roles.includes(user.role);
   }
 
   forceLogout() {

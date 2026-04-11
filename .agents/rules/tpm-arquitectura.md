@@ -32,27 +32,60 @@ trigger: always_on
 - **Inyección de Dependencias:** Usa `inject(ServiceName)` en lugar del constructor clásico.
 - **Manejo de Estado (Signals):** Usa `signal()`, `computed()` y `effect()` para el estado local y global. Evita `RxJS` (BehaviorSubjects) y `.subscribe()` manuales si existe una alternativa nativa con Signals o `toSignal`.
 - **Control de Flujo:** Usa exclusivamente la nueva sintaxis `@if`, `@for` y `@switch` en el HTML. Prohibido usar `*ngIf` o `*ngFor`.
+- **Tema (claro / oscuro):** El modo se persiste en `localStorage` y se refleja en `document.documentElement` con `data-theme="dark" | "light"` (véase `ThemeService`, `app.component.ts`). Las variables CSS viven en `frontend/src/styles.scss` (`:root` y `[data-theme='light']`).
 
-## 5. REGLAS DE DISEÑO UI (Bitematic Industrial Glassmorphism)
+## 5. REGLAS DE DISEÑO UI (Industrial / BaseLogic — tokens + shell estable)
 
-- **Tokens Semánticos Obligatorios:** Prohibido usar clases de colores estáticos (ej. `text-white`, `bg-gray-900`, `border-white/10`). Usa exclusivamente:
-  - `text-main`: Para títulos y textos principales (Contraste alto).
-  - `text-muted`: Para descripciones y textos secundarios (Contraste medio).
-  - `bg-surface`: Para tarjetas, modales y contenedores (Glassmorphism).
-  - `bg-dark`: Para el fondo base de la aplicación.
-  - `border-border` / `divide-border`: Para bordes y separadores.
-  - `primary`: Solo para botones de acción, estados activos y acentos de marca.
+Estética general: **industrial oscura** con acentos cyan (`primary`), tipografía Inter + Fira Code, alineada con pantallas de auth (zinc/slate, logo BaseLogic donde aplique). El **área autenticada** usa layout con sidebar y barra superior; no todo el UI es “glass” puro: donde haya overlays o selectores críticos se prioriza **fondo opaco** y **z-index** claros.
 
-- **REGLA DE LINTING SEMÁNTICO:** Si detectas una clase de color de Tailwind que no sea semántica (ej. `text-gray-400`, `bg-slate-800`, `border-white/5`), **DETENTE inmediatamente** y solicita permiso al usuario para refactorizarla a su equivalente semántico antes de continuar.
+### 5.1 Tokens semánticos (Tailwind mapeados a CSS variables)
 
-- **Adaptabilidad de Tema:**
-  - El sistema debe ser 100% funcional en `data-theme='dark'` y `data-theme='light'`.
-  - En modo claro, usa `shadow-sm` y `bg-white/80` para mantener la legibilidad.
-  - Asegúrate de que los iconos SVG usen `text-muted` o `text-main` para no perderse en el cambio de fondo.
+Definidos en `frontend/tailwind.config.js` y `frontend/src/styles.scss`. **Preferir siempre** estos tokens antes que grises sueltos de Tailwind:
 
-- **Estética Industrial:**
-  - Mantén `backdrop-blur-xl` en todos los elementos `bg-surface`.
-  - Bordes redondeados estándar: `rounded-xl` para tarjetas y `rounded-lg` para botones/inputs.
+| Token | Uso |
+|-------|-----|
+| `text-main` | Títulos y texto principal |
+| `text-muted` | Secundario, labels, meta |
+| `bg-dark` | Fondo de página / canvas principal (`--bg-dark`) |
+| `bg-surface` | Tarjetas, paneles de contenido, modales (puede ir con blur suave en claro vía estilos globales) |
+| `bg-sidebar` | Sidebar del layout |
+| `border-border` / `divide-border` | Bordes y separadores |
+| `primary` / `text-primary` | CTAs, activo, acentos (también `--primary-rgb` desde tenant) |
+
+- **Excepciones de shell (fijos en SCSS, no sustituir por `bg-surface` genérico en esos nodos):**
+  - **Barra superior del layout:** clase `.app-shell-header` — fondo **opaco** (oscuro `#0f1419` / claro `#ffffff`), **sin** `backdrop-blur`, para que no se mezcle con overlays ni se vea “gris” al abrir desplegables.
+  - **Popover del selector de contratos:** `.header-contract-popover` — fondo **opaco** (`#0a0f14` en oscuro, blanco en claro), definido en `styles.scss`.
+  - **Overlay de contratos:** `.contract-dropdown-backdrop` — solo cubre el área **debajo** de la barra (`top-14` / `lg:top-16`), no tapa el header.
+
+### 5.2 Glassmorphism (cuándo sí / cuándo no)
+
+- **Sí:** tarjetas y bloques de contenido con `bg-surface` en vistas internas; en modo claro el proyecto puede aplicar `backdrop-filter` vía reglas globales sobre `.bg-surface`.
+- **No:** barra superior del app shell, ni popovers anclados al header que deban leerse sobre overlays — ahí usar las clases anteriores u opacidad 100% definida en SCSS.
+- Evitar `backdrop-blur` en cadena con `bg-surface` semitransparente **justo debajo** de un overlay de pantalla completa (provoca artefactos y color “lavado” en móvil / WebKit).
+
+### 5.3 Modo claro y modo oscuro
+
+- Debe funcionar todo el flujo autenticado en `data-theme='dark'` y `data-theme='light'`.
+- En **claro**, `--bg-surface` puede ser semitransparente; las **superficies críticas** (header, dropdown de contratos) siguen siendo **opacas** como arriba.
+- Iconos SVG: `currentColor` con `text-muted`, `text-main` o `text-primary` según jerarquía; evitar grises fijos sin contraste en ambos temas.
+
+### 5.4 Forma y densidad
+
+- Tarjetas / secciones: `rounded-xl` o `rounded-2xl` cuando sea contenedor principal.
+- Botones e inputs: `rounded-lg` alineado con `styles.scss` global.
+- Sidebar: navegación por `nav.config.ts` (iconos Heroicons como paths en config), estados activos con `primary`, sin recolocar lógica de roles en el HTML suelto.
+
+### 5.5 Colores “sueltos” de Tailwind (linting semántico)
+
+- **Prefiere** tokens de la tabla anterior.
+- Si hace falta estado (éxito / error / advertencia) y no existe token, usa una vez utilidades coherentes (`text-green-400`, `text-red-400`, etc.) de forma local; no propagar un gris arbitrario (`text-gray-400`) como base de texto.
+- Si detectas un refactor grande de clases no semánticas, **pide confirmación** antes de tocar fuera del archivo solicitado.
+
+### 5.6 Referencias de código
+
+- Variables y tema: `frontend/src/styles.scss`
+- Layout y dropdown de contratos: `frontend/src/app/core/layout/layout.component.html`
+- Navegación y roles: `frontend/src/app/core/navigation/nav.config.ts`, `layout.component.ts` (`filteredNav`)
 
 ## 6. WORKFLOWS Y SKILLS OBLIGATORIOS
 

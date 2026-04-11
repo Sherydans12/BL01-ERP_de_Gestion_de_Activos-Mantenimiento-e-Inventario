@@ -1,0 +1,3 @@
+# Ajustar si el sitio es solo intranet (Disallow: / o noindex en meta).
+User-agent: *
+Allow: /

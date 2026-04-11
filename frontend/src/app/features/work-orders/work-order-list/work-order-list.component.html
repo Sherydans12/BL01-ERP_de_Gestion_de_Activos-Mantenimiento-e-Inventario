@@ -235,14 +235,58 @@
               </td>
 
               <td class="py-4 px-6">
-                <div class="font-mono text-main font-bold text-base">
-                  {{ ot.equipment?.internalId }}
-                </div>
-                <div
-                  class="text-[10px] text-muted uppercase tracking-wider mt-1"
-                >
-                  {{ ot.equipment?.brand }} {{ ot.equipment?.model }}
-                </div>
+                @if (ot.equipmentId || ot.equipment?.id) {
+                  <button
+                    type="button"
+                    (click)="openEquipmentDetailFromOt(ot)"
+                    class="text-left w-full max-w-xs rounded-lg -m-1 p-1 hover:bg-dark/60 transition-colors group"
+                    title="Ver ficha y analítica del activo"
+                  >
+                    <div
+                      class="font-mono text-main font-bold text-base group-hover:text-primary transition-colors"
+                    >
+                      {{ ot.equipment?.internalId || "—" }}
+                    </div>
+                    <div
+                      class="text-[10px] text-muted uppercase tracking-wider mt-1"
+                    >
+                      {{ ot.equipment?.brand }} {{ ot.equipment?.model }}
+                    </div>
+                    <span
+                      class="inline-flex items-center gap-1 mt-1 text-[10px] font-mono text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <svg
+                        class="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                        />
+                      </svg>
+                      Ver activo
+                    </span>
+                  </button>
+                } @else {
+                  <div class="font-mono text-main font-bold text-base">
+                    {{ ot.equipment?.internalId || "—" }}
+                  </div>
+                  <div
+                    class="text-[10px] text-muted uppercase tracking-wider mt-1"
+                  >
+                    {{ ot.equipment?.brand }} {{ ot.equipment?.model }}
+                  </div>
+                }
               </td>
 
               @if (authService.currentContractId() === "ALL") {
@@ -397,3 +441,9 @@
     }
   </div>
 </div>
+
+<app-equipment-detail-modal
+  [equipmentId]="selectedEquipmentIdForDetail()"
+  [isOpen]="showEquipmentDetailModal()"
+  (close)="showEquipmentDetailModal.set(false)"
+></app-equipment-detail-modal>

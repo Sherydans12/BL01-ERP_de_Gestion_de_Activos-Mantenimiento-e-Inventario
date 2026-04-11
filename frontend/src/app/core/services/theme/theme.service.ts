@@ -1,4 +1,4 @@
-import { Injectable, inject, effect, PLATFORM_ID } from '@angular/core';
+import { Injectable, inject, effect, PLATFORM_ID, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { TenantService } from '../tenant/tenant.service';
 
@@ -9,6 +9,8 @@ function hexToRgb(hex: string): string {
     : '0 229 255';
 }
 
+const THEME_STORAGE_KEY = 'tpm-theme';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -16,29 +18,41 @@ export class ThemeService {
   private tenantService = inject(TenantService);
   private platformId = inject(PLATFORM_ID);
 
+  isDark = signal(true);
+
   constructor() {
+    if (isPlatformBrowser(this.platformId)) {
+      try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        if (stored) {
+          this.isDark.set(stored === 'dark');
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     effect(() => {
       const tenant = this.tenantService.currentTenant();
+      if (!isPlatformBrowser(this.platformId)) return;
 
-      if (isPlatformBrowser(this.platformId)) {
-        if (tenant?.primaryColor) {
-          document.documentElement.style.setProperty(
-            '--primary-rgb',
-            hexToRgb(tenant.primaryColor),
-          );
-        } else {
-          document.documentElement.style.setProperty(
-            '--primary-rgb',
-            '0 229 255',
-          );
-        }
+      document.documentElement.style.setProperty(
+        '--primary-rgb',
+        tenant?.primaryColor ? hexToRgb(tenant.primaryColor) : '0 229 255',
+      );
 
-        if (tenant?.backgroundPreference === 'LIGHT') {
-          document.documentElement.setAttribute('data-theme', 'light');
-        } else {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
-      }
+      /* backgroundPreference is no longer used — theme is a per-user preference
+         managed via the toggle in the topbar and persisted in localStorage. */
     });
+  }
+
+  toggleTheme() {
+    this.isDark.update((v) => !v);
+    if (!isPlatformBrowser(this.platformId)) return;
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, this.isDark() ? 'dark' : 'light');
+    } catch {
+      /* ignore */
+    }
   }
 }

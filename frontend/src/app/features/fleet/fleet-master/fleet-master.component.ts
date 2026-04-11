@@ -1,10 +1,14 @@
 import {
   Component,
-  inject,
+  ElementRef,
+  Injector,
   OnInit,
-  signal,
+  afterNextRender,
   computed,
   effect,
+  inject,
+  signal,
+  viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -19,6 +23,7 @@ import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { EquipmentDetailModalComponent } from '../equipment-detail-modal/equipment-detail-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
@@ -37,10 +42,24 @@ import { Equipment, MeterType, Contract } from '../../../core/models/types';
     ReactiveFormsModule,
     FormsModule,
     ConfirmModalComponent,
+    EquipmentDetailModalComponent,
   ],
   templateUrl: './fleet-master.component.html',
+  styles: [
+    `
+      :host dialog.equipment-register-dialog {
+        box-sizing: border-box;
+        width: 100vw;
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        margin: 0;
+      }
+    `,
+  ],
 })
 export class FleetMasterComponent implements OnInit {
+  private injector = inject(Injector);
   private fb = inject(FormBuilder);
   private catalogService = inject(CatalogService);
   private fleetService = inject(FleetService);
@@ -82,6 +101,10 @@ export class FleetMasterComponent implements OnInit {
   showConfirmModal = signal(false);
   pendingDeleteId = signal<string | null>(null);
 
+  // Modal Detalle del Activo
+  showDetailModal = signal(false);
+  selectedEquipmentId = signal<string | null>(null);
+
   // Señal derivada para filtrar subcontratos dinámicamente según el contrato seleccionado
   selectedContractId = signal<string>('');
   filteredSubcontracts = computed(() => {
@@ -96,6 +119,8 @@ export class FleetMasterComponent implements OnInit {
   showModal = false;
   isEditMode = false;
   currentEditId: string | null = null;
+
+  equipmentDialog = viewChild<ElementRef<HTMLDialogElement>>('equipmentDialog');
 
   equipmentForm: FormGroup = this.fb.group({
     // Asignación Contractual Dinámica
@@ -246,6 +271,11 @@ export class FleetMasterComponent implements OnInit {
     };
   }
 
+  openDetail(eq: Equipment) {
+    this.selectedEquipmentId.set(eq.id);
+    this.showDetailModal.set(true);
+  }
+
   openModal() {
     this.isEditMode = false;
     this.currentEditId = null;
@@ -273,7 +303,7 @@ export class FleetMasterComponent implements OnInit {
       this.selectedContractId.set('');
     }
 
-    this.showModal = true;
+    this.openEquipmentDialogNative();
   }
 
   editEquipment(eq: any) {
@@ -327,7 +357,20 @@ export class FleetMasterComponent implements OnInit {
       this.equipmentForm.get('contractId')?.enable();
     }
 
+    this.openEquipmentDialogNative();
+  }
+
+  private openEquipmentDialogNative(): void {
     this.showModal = true;
+    afterNextRender(
+      () => {
+        const el = this.equipmentDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   deleteEquipment(id: string) {
@@ -361,6 +404,19 @@ export class FleetMasterComponent implements OnInit {
   }
 
   closeModal() {
+    const el = this.equipmentDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.resetEquipmentModalState();
+    }
+  }
+
+  onEquipmentDialogClose() {
+    this.resetEquipmentModalState();
+  }
+
+  private resetEquipmentModalState() {
     this.showModal = false;
     this.isEditMode = false;
     this.currentEditId = null;

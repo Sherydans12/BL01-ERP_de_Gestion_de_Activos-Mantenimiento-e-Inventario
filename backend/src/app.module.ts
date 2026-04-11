@@ -15,6 +15,7 @@ import { InventoryItemsModule } from './features/inventory-items/inventory-items
 import { WarehousesModule } from './features/warehouses/warehouses.module';
 import { InventoryStockModule } from './features/inventory-stock/inventory-stock.module';
 import { MeterAdjustmentsModule } from './features/meter-adjustments/meter-adjustments.module';
+import { TenantRolesModule } from './features/tenant-roles/tenant-roles.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { MeterAdjustmentsModule } from './features/meter-adjustments/meter-adjus
     UsersModule,
     SitesModule,
     TenantConfigModule,
+    TenantRolesModule,
     MaintenanceKitsModule,
     InventoryItemsModule,
     WarehousesModule,

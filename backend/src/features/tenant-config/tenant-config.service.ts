@@ -19,6 +19,17 @@ export class TenantConfigService {
         logoUrl: true,
         primaryColor: true,
         backgroundPreference: true,
+        sidebarPermissions: true,
+        tenantRoles: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            baseRole: true,
+            routes: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -51,6 +62,7 @@ export class TenantConfigService {
         logoUrl: true,
         primaryColor: true,
         backgroundPreference: true,
+        sidebarPermissions: true,
       },
     });
 

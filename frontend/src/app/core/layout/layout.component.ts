@@ -1,17 +1,18 @@
-import { Component, inject, OnInit, PLATFORM_ID, signal } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { Component, inject, OnInit, PLATFORM_ID, signal, computed } from '@angular/core';
+import { isPlatformBrowser, NgClass } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { TenantService } from '../services/tenant/tenant.service';
 import { CatalogService } from '../services/catalog/catalog.service';
 import { AuthService } from '../services/auth/auth.service';
 import { ThemeService } from '../services/theme/theme.service';
-import { ContractsService } from '../services/contracts/contracts.service'; // Ajusta la ruta si es necesario
+import { ContractsService } from '../services/contracts/contracts.service';
 import { Contract } from '../models/types';
+import { NAV_SECTIONS, AppRole } from '../navigation/nav.config';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgClass],
   templateUrl: './layout.component.html',
 })
 export class LayoutComponent implements OnInit {
@@ -29,14 +30,59 @@ export class LayoutComponent implements OnInit {
 
   availableContracts = signal<Contract[]>([]);
   isContractDropdownOpen = signal(false);
+  isMobileMenuOpen = signal(false);
+
+  filteredNav = computed(() => {
+    const user = this.currentUser();
+    const role = user?.role as AppRole | undefined;
+
+    // SUPER_ADMIN siempre ve todo.
+    if (role === 'SUPER_ADMIN') {
+      return NAV_SECTIONS.map((s) => ({ ...s, visibleItems: s.items }));
+    }
+
+    // 1. Rol custom asignado al usuario → usa sus rutas específicas.
+    if (user?.customRoleId) {
+      const customRole = this.currentTenant()?.tenantRoles?.find(
+        (r) => r.id === user.customRoleId,
+      );
+      if (customRole) {
+        const allowed = new Set(customRole.routes as string[]);
+        return NAV_SECTIONS.map((section) => ({
+          ...section,
+          visibleItems: section.items.filter((item) => allowed.has(item.route)),
+        })).filter((s) => s.visibleItems.length > 0);
+      }
+    }
+
+    // 2. Permisos configurados por rol base (sidebarPermissions del tenant).
+    const customPerms = this.currentTenant()?.sidebarPermissions;
+    if (customPerms && role && customPerms[role]) {
+      const allowed = new Set(customPerms[role]);
+      return NAV_SECTIONS.map((section) => ({
+        ...section,
+        visibleItems: section.items.filter((item) => allowed.has(item.route)),
+      })).filter((s) => s.visibleItems.length > 0);
+    }
+
+    // 3. Fallback: defaults de nav.config.ts.
+    return NAV_SECTIONS.map((section) => ({
+      ...section,
+      visibleItems: section.items.filter(
+        (item) => !item.roles || !role || item.roles.includes(role),
+      ),
+    })).filter(
+      (section) =>
+        section.visibleItems.length > 0 &&
+        (!section.roles || !role || section.roles.includes(role)),
+    );
+  });
 
   logout() {
     this.authService.logout();
   }
 
   ngOnInit() {
-    // En SSR no hay token ni localStorage: no llamar APIs protegidas (el guard
-    // ya bloquea la ruta, pero esto evita fugas si el layout se reutiliza).
     if (!isPlatformBrowser(this.platformId)) {
       return;
     }
@@ -67,7 +113,7 @@ export class LayoutComponent implements OnInit {
               id: 'none',
               name: 'Sin Contratos Creados',
               code: 'WARN',
-              isActive: false, // Requerido por la interfaz
+              isActive: false,
             },
           ];
         }

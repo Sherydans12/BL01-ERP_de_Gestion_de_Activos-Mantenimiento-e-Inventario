@@ -56,6 +56,17 @@ export class EquipmentsController {
     });
   }
 
+  @Get(':id/analytics')
+  getAnalytics(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ) {
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.getAnalytics(req.user, id, activeContract);
+  }
+
   @Get(':id')
   findOne(
     @Param('id') id: string,

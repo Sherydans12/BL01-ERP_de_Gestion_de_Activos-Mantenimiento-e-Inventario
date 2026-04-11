@@ -1,111 +1,615 @@
-<div class="min-h-screen flex items-center justify-center p-4">
-  <div
-    class="w-full max-w-md bg-surface border border-border rounded-xl shadow-2xl overflow-hidden"
+<div
+  class="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-dark text-main lg:flex-row"
+>
+  <!-- Panel branding (desktop) -->
+  <aside
+    class="relative hidden min-h-0 lg:flex lg:w-[52%] xl:w-1/2 flex-col overflow-y-auto overscroll-contain border-r border-border p-8 xl:p-10"
   >
-    <div class="p-8 border-b border-border text-center">
-      <div
-        class="inline-flex items-center justify-center w-12 h-12 bg-dark border border-primary/30 rounded-lg mb-4 shadow-[0_0_15px_rgba(0,229,255,0.15)]"
-      >
-        <span class="text-primary font-mono text-xl font-bold">&lt;B_&gt;</span>
+    <!-- Capas de fondo: mesh + glow industrial -->
+    <div class="absolute inset-0 bg-dark"></div>
+    <div
+      class="absolute inset-0 bg-gradient-to-br from-primary/10 via-dark to-dark"
+    ></div>
+    <div
+      class="absolute -top-20 -left-20 w-[28rem] h-[28rem] rounded-full bg-primary/15 blur-[100px] pointer-events-none"
+    ></div>
+    <div
+      class="absolute bottom-0 right-0 w-[22rem] h-[22rem] rounded-full bg-primary/10 blur-[90px] pointer-events-none"
+    ></div>
+    <div
+      class="absolute inset-0 opacity-[0.07] pointer-events-none"
+      style="
+        background-image: linear-gradient(
+            rgba(var(--primary-rgb), 0.4) 1px,
+            transparent 1px
+          ),
+          linear-gradient(90deg, rgba(var(--primary-rgb), 0.35) 1px, transparent 1px);
+        background-size: 48px 48px;
+      "
+    ></div>
+    <div
+      class="absolute inset-0 bg-gradient-to-t from-dark via-dark/40 to-transparent pointer-events-none"
+    ></div>
+
+    <!-- Hero + lista agrupados y centrados en el panel (sin separarlos a los extremos) -->
+    <div
+      class="relative z-10 flex w-full max-w-lg flex-1 flex-col justify-center gap-5 xl:gap-6 [@media(max-height:720px)]:gap-3"
+    >
+      <div class="space-y-1.5 [@media(max-height:720px)]:space-y-1">
+        <p
+          class="text-xs font-mono uppercase tracking-[0.25em] text-primary/90"
+        >
+          BaseLogic
+        </p>
+        <h1
+          class="max-w-lg text-2xl font-bold leading-tight tracking-tight text-main xl:text-3xl [@media(max-height:720px)]:text-xl"
+        >
+          Inteligencia operacional para industria pesada.
+        </h1>
+        <p
+          class="mt-2 max-w-md text-sm leading-relaxed text-muted [@media(max-height:720px)]:mt-1 [@media(max-height:720px)]:text-xs [@media(max-height:720px)]:leading-snug"
+        >
+          EAM / ERP multicontrato: flota, mantenimiento correctivo y preventivo,
+          inventario valorizado y trazabilidad en tiempo real — pensado para
+          minería, flotas y talleres de alto rendimiento.
+        </p>
       </div>
-      <h2 class="text-2xl font-bold text-main tracking-tight">
-        Acceso Operativo
-      </h2>
-      <p class="text-sm text-muted mt-2">
-        ERP Gestión de Activos y Mantenimiento
-      </p>
+
+      <ul class="max-w-lg space-y-2.5 [@media(max-height:720px)]:space-y-1.5">
+      @for (item of featureItems; track item.title) {
+        <li class="flex gap-4 group">
+          <span
+            class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-dark/80 text-primary shadow-lg shadow-black/40 transition-colors group-hover:border-primary/30 [@media(max-height:720px)]:h-8 [@media(max-height:720px)]:w-8"
+          >
+            @switch (item.icon) {
+              @case ("fleet") {
+                <svg
+                  class="h-4 w-4 [@media(max-height:720px)]:h-3.5 [@media(max-height:720px)]:w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M8 17h.01M16 17h.01M4 11h16v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6zm3-7l1.5-3h9l1.5 3m-12 0h12M6 11V9a2 2 0 012-2h8a2 2 0 012 2v2"
+                  />
+                </svg>
+              }
+              @case ("ot") {
+                <svg
+                  class="h-4 w-4 [@media(max-height:720px)]:h-3.5 [@media(max-height:720px)]:w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M12 16h.01"
+                  />
+                </svg>
+              }
+              @case ("inventory") {
+                <svg
+                  class="h-4 w-4 [@media(max-height:720px)]:h-3.5 [@media(max-height:720px)]:w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                  />
+                </svg>
+              }
+              @case ("contracts") {
+                <svg
+                  class="h-4 w-4 [@media(max-height:720px)]:h-3.5 [@media(max-height:720px)]:w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                  />
+                </svg>
+              }
+              @case ("security") {
+                <svg
+                  class="h-4 w-4 [@media(max-height:720px)]:h-3.5 [@media(max-height:720px)]:w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+              }
+            }
+          </span>
+          <div>
+            <p class="text-sm font-semibold text-main [@media(max-height:720px)]:text-xs">
+              {{ item.title }}
+            </p>
+            <p
+              class="mt-0.5 text-xs leading-snug text-muted [@media(max-height:720px)]:line-clamp-2 [@media(max-height:720px)]:text-[11px]"
+            >
+              {{ item.blurb }}
+            </p>
+          </div>
+        </li>
+      }
+      </ul>
     </div>
 
-    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="p-8 space-y-6">
-      <div>
-        <label
-          for="tenantCode"
-          class="block text-sm font-medium text-muted mb-1"
-          >ID de Empresa / Contrato</label
-        >
-        <div class="relative">
-          <span
-            class="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-mono text-sm"
-          >
-            &#64;
-          </span>
-          <input
-            type="text"
-            id="tenantCode"
-            formControlName="tenantCode"
-            class="w-full pl-8 font-mono uppercase tracking-wider text-primary bg-dark border border-border rounded-md focus:border-primary outline-none transition-all"
-            placeholder="TPM"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label for="email" class="block text-sm font-medium text-muted mb-1"
-          >Correo Electrónico</label
-        >
-        <input
-          type="email"
-          id="email"
-          formControlName="email"
-          class="w-full bg-dark border border-border rounded-md p-2.5 text-main focus:border-primary outline-none transition-all"
-          placeholder="mecanico@tpm.cl"
-        />
-      </div>
-
-      <div>
-        <div class="flex justify-between items-center mb-1">
-          <label for="password" class="mb-0 text-sm font-medium text-muted"
-            >Contraseña</label
-          >
-          <a
-            routerLink="/auth/forgot-password"
-            class="text-xs text-primary hover:text-main transition-colors"
-            >¿Olvidaste tu clave?</a
-          >
-        </div>
-        <input
-          type="password"
-          id="password"
-          formControlName="password"
-          class="w-full bg-dark border border-border rounded-md p-2.5 text-main focus:border-primary outline-none transition-all"
-          placeholder="••••••••"
-        />
-      </div>
-
-      <button
-        type="submit"
-        [disabled]="loginForm.invalid || isSubmitting"
-        class="w-full bg-primary hover:bg-primary/90 text-dark font-bold py-3 px-4 rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+    <div
+      class="relative z-10 mt-3 flex shrink-0 flex-col gap-3 border-t border-border/60 pt-4 [@media(max-height:720px)]:mt-2 [@media(max-height:720px)]:gap-2 [@media(max-height:720px)]:pt-3"
+    >
+      <a
+        href="https://baselogic.cl/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="group inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-border bg-dark/50 px-3 py-2 text-sm text-muted shadow-sm transition hover:border-primary/35 hover:text-main"
       >
-        @if (!isSubmitting) {
-          <span>Iniciar Sesión</span>
-        } @else {
-          <span class="flex items-center gap-2">
-            <svg
-              class="animate-spin h-5 w-5 text-dark"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-            Autenticando...
-          </span>
-        }
-      </button>
-    </form>
-  </div>
-</div>
+        <span class="font-medium text-primary group-hover:text-primary/80"
+          >baselogic.cl</span
+        >
+        <span class="hidden text-xs text-muted sm:inline"
+          >Ingeniería de software B2B</span
+        >
+        <svg
+          class="h-3.5 w-3.5 shrink-0 text-muted transition group-hover:text-primary"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+          />
+        </svg>
+      </a>
+      <div
+        class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted sm:text-[11px]"
+      >
+        <p class="font-mono uppercase tracking-wider">
+          Enterprise Asset Management · Seguridad multi-tenant
+        </p>
+        <span>© BaseLogic</span>
+      </div>
+    </div>
+  </aside>
 
+  <!-- Formulario -->
+  <main
+    class="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overscroll-contain bg-dark px-4 py-5 sm:px-6 sm:py-6 lg:min-h-0 lg:overflow-hidden lg:py-4 [@media(max-height:720px)]:py-3"
+  >
+    <!-- Luz ambiental (eco del panel izquierdo, más suave) -->
+    <div
+      class="pointer-events-none absolute inset-0 overflow-hidden"
+      aria-hidden="true"
+    >
+      <div
+        class="absolute -top-24 right-[-15%] w-[min(100%,28rem)] h-[28rem] rounded-full bg-primary/[0.14] blur-[110px]"
+      ></div>
+      <div
+        class="absolute top-[40%] right-[-5%] w-72 h-72 rounded-full bg-primary/10 blur-[95px]"
+      ></div>
+      <div
+        class="absolute bottom-[-10%] left-[10%] w-[26rem] h-[26rem] rounded-full bg-primary/[0.08] blur-[100px]"
+      ></div>
+      <div
+        class="absolute inset-0 bg-gradient-to-bl from-primary/[0.05] via-transparent to-dark"
+      ></div>
+      <div
+        class="absolute inset-0 opacity-[0.04]"
+        style="
+          background-image: linear-gradient(
+              rgba(var(--primary-rgb), 0.5) 1px,
+              transparent 1px
+            ),
+            linear-gradient(
+              90deg,
+              rgba(var(--primary-rgb), 0.45) 1px,
+              transparent 1px
+            );
+          background-size: 56px 56px;
+        "
+      ></div>
+    </div>
+
+    <div
+      class="relative z-10 my-auto w-full max-w-[420px] space-y-3 sm:space-y-4 [@media(max-height:720px)]:space-y-2"
+    >
+      <!-- Marca compacta en móvil (panel izquierdo oculto) -->
+      <div
+        class="border-b border-border pb-2 text-center lg:hidden [@media(max-height:720px)]:pb-1.5"
+      >
+        <p
+          class="text-[11px] font-mono uppercase tracking-[0.2em] text-primary"
+        >
+          BaseLogic
+        </p>
+        <p class="text-xs text-muted">EAM · ERP industrial</p>
+        <a
+          href="https://baselogic.cl/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-2 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-primary transition hover:text-primary/80"
+        >
+          baselogic.cl
+          <span class="text-muted font-normal">· sitio corporativo</span>
+          <svg
+            class="h-3 w-3 text-muted"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+            />
+          </svg>
+        </a>
+      </div>
+
+      <div
+        class="rounded-2xl border border-border bg-surface p-5 shadow-2xl shadow-black/50 ring-1 ring-border/20 backdrop-blur-xl sm:p-6 [@media(max-height:720px)]:p-4"
+      >
+        <!-- Cabecera compacta: logo + título (una sola tarjeta) -->
+        <div
+          class="mb-5 flex items-center gap-3 border-b border-border pb-4 [@media(max-height:720px)]:mb-3 [@media(max-height:720px)]:pb-3"
+        >
+          @if (!logoFailed()) {
+            <div
+              class="shrink-0 rounded-lg border border-border bg-dark p-1 shadow-inner shadow-black/60"
+            >
+              <div
+                class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-md bg-dark/30 sm:h-14 sm:w-14"
+              >
+                <img
+                  [src]="logoSrc"
+                  alt="BaseLogic"
+                  width="56"
+                  height="56"
+                  class="h-[3.15rem] w-full max-w-none object-contain object-top drop-shadow-[0_0_14px_rgb(var(--primary-rgb)/0.22)] sm:h-[3.35rem]"
+                  (error)="onLogoError()"
+                />
+              </div>
+            </div>
+          } @else {
+            <div
+              class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-gradient-to-br from-primary/30 to-dark text-main shadow-inner shadow-black/70 sm:h-14 sm:w-14"
+              aria-hidden="true"
+            >
+              <span class="-translate-y-0.5 text-xl font-bold leading-none sm:text-2xl"
+                >B</span
+              >
+            </div>
+          }
+          <div class="min-w-0 flex-1 text-left">
+            <p class="text-lg font-bold tracking-tight text-main sm:text-xl">
+              BaseLogic
+            </p>
+            <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
+              Acceso al sistema
+            </p>
+            <p class="mt-1 text-xs leading-snug text-muted">
+              Inicie sesión para continuar.
+            </p>
+          </div>
+        </div>
+
+        <form
+          [formGroup]="loginForm"
+          (ngSubmit)="onSubmit()"
+          class="relative space-y-3 sm:space-y-4 [@media(max-height:720px)]:space-y-2.5"
+        >
+          <!-- Honeypot (oculto; no rellenar) -->
+          <div
+            class="absolute -left-[10000px] top-0 w-px h-px overflow-hidden"
+            aria-hidden="true"
+          >
+            <label for="login-honeypot">Sitio web</label>
+            <input
+              type="text"
+              id="login-honeypot"
+              formControlName="honeypot"
+              tabindex="-1"
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- Tenant -->
+          <div class="space-y-2">
+            <label
+              for="tenantCode"
+              class="block text-xs font-medium uppercase tracking-wide text-muted"
+              >ID de empresa / contrato</label
+            >
+            <div class="relative">
+              <span
+                class="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                aria-hidden="true"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                  />
+                </svg>
+              </span>
+              <input
+                type="text"
+                id="tenantCode"
+                formControlName="tenantCode"
+                autocomplete="organization"
+                class="w-full rounded-xl border border-border bg-dark py-2.5 pl-10 pr-3 text-sm font-mono uppercase tracking-wider text-main placeholder:text-muted/60 outline-none transition-all min-h-[44px] focus:border-primary focus:ring-2 focus:ring-primary/40 sm:py-3"
+                placeholder="CÓDIGO"
+              />
+            </div>
+          </div>
+
+          <!-- Email -->
+          <div class="space-y-2">
+            <label
+              for="email"
+              class="block text-xs font-medium uppercase tracking-wide text-muted"
+              >Correo electrónico</label
+            >
+            <div class="relative">
+              <span
+                class="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                aria-hidden="true"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+              </span>
+              <input
+                type="email"
+                id="email"
+                formControlName="email"
+                autocomplete="email"
+                class="w-full rounded-xl border border-border bg-dark py-2.5 pl-10 pr-3 text-sm text-main placeholder:text-muted/60 outline-none transition-all min-h-[44px] focus:border-primary focus:ring-2 focus:ring-primary/40 sm:py-3"
+                placeholder="nombre@empresa.cl"
+              />
+            </div>
+          </div>
+
+          <!-- Password -->
+          <div class="space-y-2">
+            <div class="flex justify-between items-center gap-2">
+              <label
+                for="password"
+                class="block text-xs font-medium uppercase tracking-wide text-muted"
+                >Contraseña</label
+              >
+              <a
+                routerLink="/auth/forgot-password"
+                class="text-xs text-primary hover:text-primary/80 transition-colors"
+                >¿Olvidaste tu contraseña?</a
+              >
+            </div>
+            <div class="relative">
+              <span
+                class="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                aria-hidden="true"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+              </span>
+              <input
+                [type]="showPassword() ? 'text' : 'password'"
+                id="password"
+                formControlName="password"
+                autocomplete="current-password"
+                class="w-full rounded-xl border border-border bg-dark py-2.5 pl-10 pr-12 text-sm text-main placeholder:text-muted/60 outline-none transition-all min-h-[44px] focus:border-primary focus:ring-2 focus:ring-primary/40 sm:py-3"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                (click)="togglePasswordVisibility()"
+                class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-muted hover:text-main hover:bg-surface transition-colors"
+                [attr.aria-label]="
+                  showPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                "
+              >
+                @if (showPassword()) {
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                    />
+                  </svg>
+                } @else {
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                }
+              </button>
+            </div>
+          </div>
+
+          <!-- Verificación anti-bots (sin servicios externos) -->
+          <div class="space-y-1.5 [@media(max-height:720px)]:space-y-1">
+            <div class="flex items-center justify-between gap-2">
+              <label
+                for="challengeAnswer"
+                class="block text-xs font-medium uppercase tracking-wide text-muted"
+                >Verificación</label
+              >
+              <button
+                type="button"
+                (click)="refreshCaptcha()"
+                class="text-xs text-primary transition-colors hover:text-primary/80"
+              >
+                Otro reto
+              </button>
+            </div>
+            <div
+              class="flex flex-col gap-2 sm:flex-row sm:items-center [@media(max-height:720px)]:gap-1.5"
+            >
+              <p
+                class="shrink-0 font-mono text-sm text-main sm:min-w-[7.5rem] [@media(max-height:720px)]:text-xs"
+              >
+                {{ captchaQuestion() || 'Cargando…' }}
+              </p>
+              <input
+                type="text"
+                id="challengeAnswer"
+                formControlName="challengeAnswer"
+                inputmode="numeric"
+                autocomplete="off"
+                class="min-w-0 flex-1 rounded-xl border border-border bg-dark px-3 py-2 text-sm text-main placeholder:text-muted/60 outline-none transition-all min-h-[44px] focus:border-primary focus:ring-2 focus:ring-primary/40 sm:py-2.5"
+                placeholder="Resultado"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            [disabled]="
+              loginForm.invalid || isLoading() || !captchaId()
+            "
+            class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-zinc-950 shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none min-h-[44px] [@media(max-height:720px)]:py-2.5"
+          >
+            @if (!isLoading()) {
+              <span>Iniciar sesión</span>
+            } @else {
+              <svg
+                class="animate-spin h-5 w-5 text-zinc-950"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              <span>Autenticando…</span>
+            }
+          </button>
+        </form>
+      </div>
+
+      <p class="text-center lg:hidden">
+        <a
+          href="https://baselogic.cl/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center justify-center gap-1.5 text-xs text-primary transition hover:text-primary/80"
+        >
+          <span class="hidden sm:inline">Conoce BaseLogic —</span>
+          baselogic.cl
+          <svg
+            class="h-3 w-3 text-muted"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+            />
+          </svg>
+        </a>
+      </p>
+
+      <p
+        class="text-center text-[10px] leading-tight text-muted sm:text-[11px] [@media(max-height:720px)]:hidden"
+      >
+        Acceso restringido. Toda actividad queda auditada según políticas del
+        tenant.
+      </p>
+    </div>
+  </main>
+</div>

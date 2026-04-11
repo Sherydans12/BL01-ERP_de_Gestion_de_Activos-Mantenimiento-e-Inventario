@@ -9,7 +9,7 @@ module.exports = {
       colors: {
         primary: 'rgb(var(--primary-rgb) / <alpha-value>)',    // Electric Cyan mapped to rgb variable
         secondary: '#0066FF',  // Core Blue
-        dark: 'var(--bg-dark)',       // Deep Dark (Background)
+        dark: 'rgb(var(--bg-dark-rgb) / <alpha-value>)',  // Deep Dark — supports opacity modifiers
         surface: 'var(--bg-surface)', // Card/UI
         sidebar: 'var(--bg-sidebar)', // Sidebar background
         border: 'var(--border)',      // Separadores

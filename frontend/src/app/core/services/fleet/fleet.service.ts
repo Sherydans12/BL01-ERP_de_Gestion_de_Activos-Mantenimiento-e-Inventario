@@ -2,9 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { Equipment, EquipmentAnalytics } from '../../models/types';
 
 export interface PaginatedEquipments {
-  data: any[];
+  data: Equipment[];
   total: number;
   page: number;
   limit: number;
@@ -15,10 +16,8 @@ export interface PaginatedEquipments {
 })
 export class FleetService {
   private http = inject(HttpClient);
-  // URL de tu backend
   private apiUrl = `${environment.apiUrl}/equipments`;
 
-  // GET: Traer toda la flota desde PostgreSQL (Paginada y filtrada)
   getEquipments(params?: any): Observable<PaginatedEquipments> {
     let httpParams = new HttpParams();
 
@@ -35,17 +34,24 @@ export class FleetService {
     });
   }
 
-  // POST: Crear un nuevo equipo en la BD
+  getEquipmentById(id: string): Observable<Equipment> {
+    return this.http.get<Equipment>(`${this.apiUrl}/${id}`);
+  }
+
+  getEquipmentAnalytics(id: string): Observable<EquipmentAnalytics> {
+    return this.http.get<EquipmentAnalytics>(
+      `${this.apiUrl}/${id}/analytics`,
+    );
+  }
+
   createEquipment(equipmentData: any): Observable<any> {
     return this.http.post<any>(this.apiUrl, equipmentData);
   }
 
-  // PUT: Editar un equipo
   updateEquipment(id: string, equipmentData: any): Observable<any> {
     return this.http.put<any>(`${this.apiUrl}/${id}`, equipmentData);
   }
 
-  // DELETE: Eliminar un equipo
   deleteEquipment(id: string): Observable<any> {
     return this.http.delete<any>(`${this.apiUrl}/${id}`);
   }

@@ -149,12 +149,16 @@
           @for (eq of fleet(); track eq.id) {
             <tr class="hover:bg-dark/40 transition-colors">
               <td class="py-3 px-4">
-                <div class="font-bold text-main text-base">
-                  {{ eq.internalId }}
-                </div>
-                <div class="text-xs text-muted uppercase">
-                  {{ eq.brand }} {{ eq.model }}
-                </div>
+                <button
+                  (click)="openDetail(eq)"
+                  class="text-left group">
+                  <div class="font-bold text-main text-base group-hover:text-primary transition-colors">
+                    {{ eq.internalId }}
+                  </div>
+                  <div class="text-xs text-muted uppercase">
+                    {{ eq.brand }} {{ eq.model }}
+                  </div>
+                </button>
               </td>
               <td class="py-3 px-4 font-mono text-xs text-muted">
                 {{ eq.mineInternalId || "—" }}
@@ -213,6 +217,15 @@
               </td>
 
               <td class="py-3 px-4 text-right space-x-3">
+                <button
+                  (click)="openDetail(eq)"
+                  class="text-muted hover:text-primary transition-colors font-mono text-xs inline-flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                  </svg>
+                  VER
+                </button>
                 <button
                   (click)="downloadResume(eq)"
                   [disabled]="isDownloadingPdf() === eq.id"
@@ -329,12 +342,19 @@
 </div>
 
 @if (showModal) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+  <dialog
+    #equipmentDialog
+    class="equipment-register-dialog m-0 max-h-[100dvh] w-full max-w-none border-0 bg-transparent p-0 shadow-none [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+    (close)="onEquipmentDialogClose()"
   >
     <div
-      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl flex flex-col my-8 backdrop-blur-xl"
+      class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+      (click)="closeModal()"
     >
+      <div
+        class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl flex flex-col my-8 backdrop-blur-xl"
+        (click)="$event.stopPropagation()"
+      >
       <div
         class="flex justify-between items-center p-6 border-b border-border bg-dark/50 rounded-t-xl"
       >
@@ -754,7 +774,8 @@
         </button>
       </div>
     </div>
-  </div>
+    </div>
+  </dialog>
 }
 
 <app-confirm-modal
@@ -766,3 +787,9 @@
   (confirm)="confirmDelete()"
   (cancel)="cancelDelete()"
 ></app-confirm-modal>
+
+<app-equipment-detail-modal
+  [equipmentId]="selectedEquipmentId()"
+  [isOpen]="showDetailModal()"
+  (close)="showDetailModal.set(false)"
+></app-equipment-detail-modal>

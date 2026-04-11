@@ -1,4 +1,16 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  EventEmitter,
+  Injector,
+  Input,
+  OnChanges,
+  Output,
+  SimpleChanges,
+  afterNextRender,
+  inject,
+  viewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -7,12 +19,19 @@ import { CommonModule } from '@angular/common';
   imports: [CommonModule],
   template: `
     @if (isOpen) {
-      <div
-        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"
+      <dialog
+        #confirmDialog
+        class="confirm-dialog m-0 max-h-[100dvh] w-full max-w-none border-0 bg-transparent p-0 shadow-none [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm animate-fade-in"
+        (cancel)="onEscapeCancel()"
       >
         <div
-          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md flex flex-col scale-in"
+          class="flex min-h-full w-full items-center justify-center p-4"
+          (click)="onCancelClick()"
         >
+          <div
+            class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md flex flex-col scale-in"
+            (click)="$event.stopPropagation()"
+          >
           <div
             class="flex items-center gap-3 p-5 border-b border-border bg-dark/50"
           >
@@ -48,13 +67,15 @@ import { CommonModule } from '@angular/common';
             class="p-5 border-t border-border bg-dark/30 flex justify-end gap-3"
           >
             <button
-              (click)="onCancel()"
+              type="button"
+              (click)="onCancelClick()"
               class="px-5 py-2 rounded-lg bg-dark border border-border text-white hover:bg-surface transition-colors font-medium text-sm"
             >
               {{ cancelText }}
             </button>
 
             <button
+              type="button"
               (click)="onConfirm()"
               [class]="
                 isDanger
@@ -66,11 +87,20 @@ import { CommonModule } from '@angular/common';
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </dialog>
     }
   `,
   styles: [
     `
+      :host dialog.confirm-dialog {
+        box-sizing: border-box;
+        width: 100vw;
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        margin: 0;
+      }
       .animate-fade-in {
         animation: fadeIn 0.2s ease-out forwards;
       }
@@ -98,7 +128,10 @@ import { CommonModule } from '@angular/common';
     `,
   ],
 })
-export class ConfirmModalComponent {
+export class ConfirmModalComponent implements OnChanges {
+  private injector = inject(Injector);
+  confirmDialog = viewChild<ElementRef<HTMLDialogElement>>('confirmDialog');
+
   @Input() isOpen = false;
   @Input() title = 'Confirmar Acción';
   @Input() message = '¿Estás seguro de que deseas realizar esta acción?';
@@ -109,11 +142,31 @@ export class ConfirmModalComponent {
   @Output() confirm = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['isOpen'] && this.isOpen) {
+      afterNextRender(
+        () => {
+          const el = this.confirmDialog()?.nativeElement;
+          if (el && !el.open) {
+            el.showModal();
+          }
+        },
+        { injector: this.injector },
+      );
+    }
+  }
+
   onConfirm() {
     this.confirm.emit();
   }
 
-  onCancel() {
+  /** Clic en Cancelar o fuera del panel: el padre baja `isOpen`. */
+  onCancelClick() {
+    this.cancel.emit();
+  }
+
+  /** Escape: el navegador cierra el diálogo; notificamos al padre. */
+  onEscapeCancel() {
     this.cancel.emit();
   }
 }

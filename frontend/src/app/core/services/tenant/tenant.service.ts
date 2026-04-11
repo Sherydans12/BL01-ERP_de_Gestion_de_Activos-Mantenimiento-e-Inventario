@@ -10,6 +10,16 @@ export interface Tenant {
   logoUrl?: string | null;
   primaryColor?: string;
   backgroundPreference?: 'DARK' | 'LIGHT';
+  /** Permisos de sidebar configurados por el ADMIN del tenant. Clave = rol, valor = lista de rutas permitidas. */
+  sidebarPermissions?: Record<string, string[]> | null;
+  /** Roles custom creados por el ADMIN del tenant. */
+  tenantRoles?: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    baseRole: string;
+    routes: string[];
+  }> | null;
 }
 
 export interface Site {

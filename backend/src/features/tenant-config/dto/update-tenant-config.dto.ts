@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, Matches } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, Matches } from 'class-validator';
 import { BackgroundPreference } from '@prisma/client';
 
 export class UpdateTenantConfigDto {
@@ -32,4 +32,8 @@ export class UpdateTenantConfigDto {
   @IsEnum(BackgroundPreference)
   @IsOptional()
   backgroundPreference?: BackgroundPreference;
+
+  @IsObject()
+  @IsOptional()
+  sidebarPermissions?: Record<string, string[]>;
 }

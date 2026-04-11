@@ -323,7 +323,10 @@ model User {
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
   tenantId            String?         @map("tenant_id") @db.Uuid
+  customRoleId        String?         @map("custom_role_id") @db.Uuid
+
   tenant              Tenant?         @relation(fields: [tenantId], references: [id])
+  customRole          TenantRole?     @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   contractAccess      UserContract[]  
   inventoryTransactions InventoryTransaction[]
   meterAdjustments    MeterAdjustment[]
@@ -344,6 +347,7 @@ model Tenant {
   logoUrl               String?               @map("logo_url") @db.VarChar(255)
   primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)
   backgroundPreference  BackgroundPreference  @default(DARK) @map("background_preference")
+  sidebarPermissions    Json?                 @map("sidebar_permissions")
 
   isActive              Boolean               @default(true) @map("is_active")
   
@@ -354,11 +358,29 @@ model Tenant {
   catalogs              CatalogItem[]
   warehouses            Warehouse[]
   inventoryItems        InventoryItem[]
+  tenantRoles           TenantRole[]
   
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
 
   @@map("tenants")
+}
+
+model TenantRole {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  baseRole    UserRole @default(MECHANIC) @map("base_role")
+  routes      Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users       User[]
+
+  @@unique([tenantId, name])
+  @@map("tenant_roles")
 }
 
 enum UserRole {

@@ -1,0 +1,480 @@
+@if (isOpen()) {
+<dialog
+  #detailDialog
+  class="equipment-detail-dialog m-0 max-h-[100dvh] w-full max-w-none border-0 bg-transparent p-0 shadow-none animate-fade-in [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+  (cancel)="close.emit()"
+>
+  <div
+    class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+    (click)="onBackdropClick($event)"
+  >
+  <div
+    class="equipment-detail-modal-panel bg-surface backdrop-blur-xl border border-border rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col scale-in overflow-hidden"
+    (click)="$event.stopPropagation()"
+  >
+
+    <!-- ========== LOADING STATE ========== -->
+    @if (loading()) {
+      <div class="flex items-center justify-center py-32">
+        <div class="flex flex-col items-center gap-4">
+          <div class="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-muted text-sm">Cargando analítica del activo...</span>
+        </div>
+      </div>
+    } @else {
+      @if (equipment(); as eq) {
+
+    <!-- ========== HEADER ========== -->
+    <div
+      class="equipment-detail-header flex items-center justify-between p-5 border-b border-border bg-dark/50"
+    >
+      <div class="flex items-center gap-4 min-w-0">
+        <!-- Meter type icon -->
+        <div class="flex-shrink-0 w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">
+          @if (meterIcon() === 'clock') {
+            <svg class="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+            </svg>
+          } @else {
+            <svg class="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h5m-1 5.5a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z"/>
+            </svg>
+          }
+        </div>
+
+        <div class="min-w-0">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="text-lg font-bold text-main truncate">{{ eq.internalId }}</h2>
+            @if (eq.subcontract?.name) {
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20">
+                {{ eq.subcontract?.name }}
+              </span>
+            } @else if (eq.contract?.name) {
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-secondary/10 text-secondary border border-secondary/20">
+                {{ eq.contract?.name }}
+              </span>
+            }
+          </div>
+          <p class="text-sm text-muted mt-0.5 truncate">{{ eq.brand }} {{ eq.model }} · {{ eq.type }}</p>
+        </div>
+      </div>
+
+      <!-- Close button -->
+      <button
+        (click)="close.emit()"
+        class="flex-shrink-0 p-2 rounded-lg text-muted hover:text-main hover:bg-dark transition-colors">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ========== STATS SECTION ========== -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 p-5 border-b border-border">
+
+      <!-- Stat 1: Contador Actual -->
+      <div
+        class="equipment-detail-stat bg-surface backdrop-blur rounded-xl border border-border p-4"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          @if (meterIcon() === 'clock') {
+            <svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+            </svg>
+          } @else {
+            <svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h5m-1 5.5a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z"/>
+            </svg>
+          }
+          <span class="text-[11px] uppercase tracking-wider font-medium text-muted">Contador Actual</span>
+        </div>
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-2xl font-bold text-primary font-mono">{{ formatNumber(eq.currentMeter) }}</span>
+          <span class="text-xs text-muted font-medium">{{ meterUnit() }}</span>
+        </div>
+        @if (historicalAccumulated() > 0) {
+          <p class="text-[10px] text-muted mt-1.5">Acum. Hist.: {{ formatNumber(historicalAccumulated()) }} {{ meterUnit() }}</p>
+        }
+      </div>
+
+      <!-- Stat 2: Próximo Servicio -->
+      <div
+        class="equipment-detail-stat bg-surface backdrop-blur rounded-xl border border-border p-4"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.049.58.025 1.193-.14 1.743"/>
+          </svg>
+          <span class="text-[11px] uppercase tracking-wider font-medium text-muted">Próximo Servicio</span>
+        </div>
+        @if (nextServiceAt(); as nsa) {
+          <div class="flex items-baseline gap-1.5">
+            <span class="text-2xl font-bold text-main font-mono">{{ formatNumber(nsa) }}</span>
+            <span class="text-xs text-muted font-medium">{{ meterUnit() }}</span>
+          </div>
+          @if (nextServiceRemaining(); as remaining) {
+            <p class="text-[10px] mt-1.5" [class]="remaining <= 50 ? 'text-warning' : 'text-muted'">
+              Faltan {{ formatNumber(remaining) }} {{ meterUnit() }}
+            </p>
+          }
+        } @else {
+          <span class="text-sm text-muted">No configurado</span>
+        }
+      </div>
+
+      <!-- Stat 3: Estado Legal -->
+      <div
+        class="equipment-detail-stat bg-surface backdrop-blur rounded-xl border border-border p-4"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
+          </svg>
+          <span class="text-[11px] uppercase tracking-wider font-medium text-muted">Estado Legal</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold border"
+                [class]="legalStatus().label === 'VENCIDO' ? 'text-error bg-error/10 border-error/20'
+                        : legalStatus().label === 'PRÓXIMO' ? 'text-warning bg-warning/10 border-warning/20'
+                        : legalStatus().label === 'AL DÍA' ? 'text-success bg-success/10 border-success/20'
+                        : 'text-muted bg-dark border-border'">
+            {{ legalStatus().label }}
+          </span>
+        </div>
+        @if (legalStatus().nearestDoc) {
+          <p class="text-[10px] text-muted mt-1.5">{{ legalStatus().nearestDoc }}: {{ legalStatus().daysLeft }}d</p>
+        }
+      </div>
+
+      <!-- Stat 4: Disponibilidad -->
+      <div
+        class="equipment-detail-stat bg-surface backdrop-blur rounded-xl border border-border p-4"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+          </svg>
+          <span class="text-[11px] uppercase tracking-wider font-medium text-muted">Disponibilidad</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                  [class]="operationalStatus().color === 'text-success' ? 'bg-success' : 'bg-error'"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5"
+                  [class]="operationalStatus().color === 'text-success' ? 'bg-success' : 'bg-error'"></span>
+          </span>
+          <span class="text-sm font-bold" [class]="operationalStatus().color">
+            {{ operationalStatus().label }}
+          </span>
+        </div>
+        @if (eq.ownership) {
+          <p class="text-[10px] text-muted mt-1.5">{{ eq.ownership }}</p>
+        }
+      </div>
+    </div>
+
+    <!-- ========== TABS NAVIGATION ========== -->
+    <div class="flex items-center gap-1 px-5 pt-3 border-b border-border">
+      @for (tab of tabs; track tab.id) {
+        <button
+          (click)="selectTab(tab.id)"
+          class="relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors rounded-t-lg -mb-px"
+          [class]="activeTab() === tab.id
+            ? 'text-primary border-b-2 border-primary bg-primary/5'
+            : 'text-muted hover:text-main hover:bg-dark/50'">
+          @switch (tab.icon) {
+            @case ('cpu') {
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25Z"/>
+              </svg>
+            }
+            @case ('file-text') {
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
+              </svg>
+            }
+            @case ('activity') {
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
+              </svg>
+            }
+          }
+          {{ tab.label }}
+        </button>
+      }
+    </div>
+
+    <!-- ========== TAB CONTENT ========== -->
+    <div class="flex-1 overflow-y-auto p-5">
+
+      <!-- TAB: FICHA TÉCNICA -->
+      @if (activeTab() === 'ficha') {
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
+
+          <!-- Identificación -->
+          <div class="md:col-span-3 mb-1">
+            <h3 class="text-xs uppercase tracking-wider font-semibold text-muted border-b border-border pb-2">Identificación</h3>
+          </div>
+
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">N° Interno</span>
+            <span class="text-sm font-semibold text-main">{{ eq.internalId }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">N° Interno Mina</span>
+            <span class="text-sm text-main">{{ eq.mineInternalId || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Patente</span>
+            <span class="text-sm text-main">{{ eq.plate || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">VIN</span>
+            <span class="text-sm font-mono text-main">{{ eq.vin || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">N° Motor</span>
+            <span class="text-sm font-mono text-main">{{ eq.engineNumber || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Año</span>
+            <span class="text-sm text-main">{{ eq.year || '—' }}</span>
+          </div>
+
+          <!-- Operación -->
+          <div class="md:col-span-3 mt-3 mb-1">
+            <h3 class="text-xs uppercase tracking-wider font-semibold text-muted border-b border-border pb-2">Operación</h3>
+          </div>
+
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Tipo</span>
+            <span class="text-sm text-main">{{ eq.type }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Marca</span>
+            <span class="text-sm text-main">{{ eq.brand }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Modelo</span>
+            <span class="text-sm text-main">{{ eq.model }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Combustible</span>
+            <span class="text-sm text-main">{{ eq.fuelType || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Tracción</span>
+            <span class="text-sm text-main">{{ eq.driveType || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Propiedad</span>
+            <span class="text-sm text-main">{{ eq.ownership || '—' }}</span>
+          </div>
+
+          <!-- Mantenimiento -->
+          <div class="md:col-span-3 mt-3 mb-1">
+            <h3 class="text-xs uppercase tracking-wider font-semibold text-muted border-b border-border pb-2">Mantenimiento</h3>
+          </div>
+
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Tipo de Medición</span>
+            <span class="text-sm text-main">{{ eq.meterType === 'HOURS' ? 'Horómetro' : 'Odómetro' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Medidor Inicial</span>
+            <span class="text-sm font-mono text-main">{{ formatNumber(eq.initialMeter) }} {{ meterUnit() }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Frecuencia PM</span>
+            <span class="text-sm font-mono text-main">{{ eq.maintenanceFrequency ? formatNumber(eq.maintenanceFrequency) + ' ' + meterUnit() : '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Último Mantenimiento</span>
+            <span class="text-sm text-main">{{ eq.lastMaintenanceDate ? (eq.lastMaintenanceDate | date:'dd/MM/yyyy') : '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Medidor Último Mant.</span>
+            <span class="text-sm font-mono text-main">{{ eq.lastMaintenanceMeter ? formatNumber(eq.lastMaintenanceMeter) + ' ' + meterUnit() : '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Tipo Último Mant.</span>
+            <span class="text-sm text-main">{{ eq.lastMaintenanceType || '—' }}</span>
+          </div>
+
+          <!-- Asignación Contractual -->
+          <div class="md:col-span-3 mt-3 mb-1">
+            <h3 class="text-xs uppercase tracking-wider font-semibold text-muted border-b border-border pb-2">Asignación Contractual</h3>
+          </div>
+
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Contrato</span>
+            <span class="text-sm text-main">{{ eq.contract?.name || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Subcontrato</span>
+            <span class="text-sm text-main">{{ eq.subcontract?.name || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Código Subcontrato</span>
+            <span class="text-sm font-mono text-main">{{ eq.subcontract?.code || '—' }}</span>
+          </div>
+        </div>
+      }
+
+      <!-- TAB: DOCUMENTACIÓN -->
+      @if (activeTab() === 'docs') {
+        <div class="space-y-3">
+          @for (doc of documentItems(); track doc.field) {
+            <div
+              class="equipment-detail-doc-row bg-surface border border-border rounded-xl p-4 flex items-center gap-4"
+            >
+              <!-- Icon -->
+              <div class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+                   [class]="doc.status === 'VENCIDO' ? 'bg-error/10 text-error'
+                           : doc.status === 'PRÓXIMO' ? 'bg-warning/10 text-warning'
+                           : doc.status === 'VIGENTE' ? 'bg-success/10 text-success'
+                           : 'bg-dark text-muted'">
+                @switch (doc.icon) {
+                  @case ('shield') {
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/>
+                    </svg>
+                  }
+                  @case ('clipboard-check') {
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15a2.25 2.25 0 0 1 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3 1.5 1.5 3-3.75"/>
+                    </svg>
+                  }
+                  @case ('file-text') {
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/>
+                    </svg>
+                  }
+                  @case ('wrench') {
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.049.58.025 1.193-.14 1.743"/>
+                    </svg>
+                  }
+                  @case ('briefcase') {
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0"/>
+                    </svg>
+                  }
+                }
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-3 mb-1">
+                  <span class="text-sm font-medium text-main truncate">{{ doc.label }}</span>
+                  <span class="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border"
+                        [class]="getDocStatusClass(doc.status)">
+                    {{ doc.status }}
+                  </span>
+                </div>
+                @if (doc.expDate) {
+                  <div class="flex items-center gap-3">
+                    <span class="text-xs text-muted">Vence: {{ doc.expDate | date:'dd/MM/yyyy' }}</span>
+                    <span class="text-xs" [class]="doc.daysLeft < 0 ? 'text-error' : doc.daysLeft <= 30 ? 'text-warning' : 'text-muted'">
+                      ({{ doc.daysLeft < 0 ? 'Hace ' + (doc.daysLeft * -1) + ' días' : doc.daysLeft + ' días restantes' }})
+                    </span>
+                  </div>
+                  <!-- Progress bar -->
+                  <div class="mt-2 h-1 rounded-full bg-dark overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500"
+                         [class]="getProgressBarColor(doc.status)"
+                         [style.width.%]="doc.progress"></div>
+                  </div>
+                } @else {
+                  <span class="text-xs text-muted">Sin fecha registrada</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- TAB: HISTORIAL DE ACTIVIDAD (TIMELINE) -->
+      @if (activeTab() === 'historial') {
+        @if (timeline().length === 0) {
+          <div class="flex flex-col items-center justify-center py-16 text-center">
+            <svg class="w-12 h-12 text-muted/30 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+            </svg>
+            <p class="text-muted text-sm">Sin registros de actividad</p>
+          </div>
+        } @else {
+          <div class="relative">
+            <!-- Vertical line -->
+            <div class="absolute left-5 top-0 bottom-0 w-px bg-border"></div>
+
+            <div class="space-y-1">
+              @for (event of timeline(); track event.id) {
+                <div
+                  class="equipment-detail-timeline-row relative flex items-start gap-4 pl-12 py-3 rounded-lg hover:bg-dark/30 transition-colors group"
+                >
+                  <!-- Timeline dot -->
+                  <div class="absolute left-3.5 top-4 w-3 h-3 rounded-full border-2 border-surface"
+                       [class]="event.type === 'OT'
+                         ? (event.color === 'text-primary' ? 'bg-primary' : 'bg-warning')
+                         : 'bg-secondary'"></div>
+
+                  <!-- Content -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                      <div class="flex items-center gap-2">
+                        @if (event.type === 'OT') {
+                          <svg class="w-4 h-4 flex-shrink-0" [class]="event.color" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.049.58.025 1.193-.14 1.743"/>
+                          </svg>
+                        } @else {
+                          @if (meterIcon() === 'clock') {
+                            <svg class="w-4 h-4 flex-shrink-0 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                            </svg>
+                          } @else {
+                            <svg class="w-4 h-4 flex-shrink-0 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8m-8 5h5m-1 5.5a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z"/>
+                            </svg>
+                          }
+                        }
+                        <span class="text-sm font-semibold text-main">{{ event.title }}</span>
+                      </div>
+                      <span class="text-[11px] text-muted font-mono">{{ event.date | date:'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                    <p class="text-xs text-muted mt-0.5">{{ event.subtitle }}</p>
+                    @if (event.meta) {
+                      <span class="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded bg-dark text-[11px] font-mono text-muted border border-border">
+                        {{ event.meta }}
+                      </span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      }
+
+    </div>
+
+      } @else {
+      <!-- No equipment data -->
+      <div class="flex items-center justify-center py-32">
+        <div class="flex flex-col items-center gap-3 text-center">
+          <svg class="w-12 h-12 text-muted/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+          </svg>
+          <p class="text-muted text-sm">No se encontró información del equipo</p>
+          <button (click)="close.emit()" class="mt-2 px-4 py-2 text-sm rounded-lg bg-dark border border-border text-muted hover:text-main transition-colors">
+            Cerrar
+          </button>
+        </div>
+      </div>
+      }
+    }
+
+  </div>
+  </div>
+</dialog>
+}

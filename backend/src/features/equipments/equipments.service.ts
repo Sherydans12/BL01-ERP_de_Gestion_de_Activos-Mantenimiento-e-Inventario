@@ -173,7 +173,62 @@ export class EquipmentsService {
     return { data, total, page, limit };
   }
 
-  // GET: Traer un solo equipo por su UUID
+  async getAnalytics(user: any, id: string, siteHeader?: string) {
+    const tenantId = user.tenantId;
+
+    const where: Prisma.EquipmentWhereInput = { id, tenantId };
+    const andConditions: Prisma.EquipmentWhereInput[] = [];
+
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+      andConditions.push({
+        OR: [
+          { contractId: { in: user.allowedContracts || [] } },
+          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
+        ],
+      });
+    } else if (siteHeader && siteHeader !== 'ALL') {
+      andConditions.push({
+        OR: [
+          { contractId: siteHeader },
+          { subcontract: { contractId: siteHeader } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    const [equipment, workOrders, meterAdjustments] =
+      await this.prisma.$transaction([
+        this.prisma.equipment.findFirst({
+          where,
+          include: {
+            contract: true,
+            subcontract: true,
+          },
+        }),
+        this.prisma.workOrder.findMany({
+          where: { equipmentId: id, tenantId, status: 'CLOSED' },
+          orderBy: { closedAt: 'desc' },
+          take: 50,
+        }),
+        this.prisma.meterAdjustment.findMany({
+          where: { equipmentId: id },
+          orderBy: { date: 'desc' },
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        }),
+      ]);
+
+    if (!equipment) {
+      throw new BadRequestException('Equipo no encontrado o sin permisos');
+    }
+
+    return { equipment, workOrders, meterAdjustments };
+  }
+
   async findOne(user: any, id: string, siteHeader?: string) {
     const where: Prisma.EquipmentWhereInput = { id, tenantId: user.tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];

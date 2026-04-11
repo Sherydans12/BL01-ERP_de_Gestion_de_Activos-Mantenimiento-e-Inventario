@@ -7,6 +7,11 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  if (configService.get<string>('TRUST_PROXY') === '1') {
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.set('trust proxy', 1);
+  }
+
   app.setGlobalPrefix('api');
 
   const frontendUrl =

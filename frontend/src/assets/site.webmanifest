@@ -1,0 +1,18 @@
+{
+  "name": "BaseLogic — EAM / ERP",
+  "short_name": "BaseLogic",
+  "description": "Gestión de activos, mantenimiento, inventario y contratos para industria pesada.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "BaseLogic_Logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

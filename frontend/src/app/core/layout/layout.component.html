@@ -1,247 +1,179 @@
 <div class="flex h-screen bg-dark overflow-hidden">
-  <aside class="w-64 bg-sidebar border-r border-border flex flex-col">
-    <div class="h-16 flex items-center px-6 border-b border-border">
+
+  <!-- Mobile sidebar backdrop -->
+  @if (isMobileMenuOpen()) {
+    <div
+      class="fixed inset-0 z-40 bg-dark/60 backdrop-blur-sm lg:hidden"
+      (click)="isMobileMenuOpen.set(false)"
+    ></div>
+  }
+
+  <!-- ─── SIDEBAR ─────────────────────────────────────────────────── -->
+  <aside
+    class="fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r border-border bg-sidebar
+           transition-transform duration-300 ease-in-out
+           lg:static lg:z-auto lg:translate-x-0"
+    [ngClass]="isMobileMenuOpen() ? 'translate-x-0' : '-translate-x-full'"
+  >
+
+    <!-- Logo area -->
+    <div class="h-14 lg:h-16 flex items-center gap-3 px-5 border-b border-border shrink-0">
       @if (currentTenant()?.logoUrl) {
-        <img
-          [src]="currentTenant()?.logoUrl"
-          alt="Logo"
-          class="max-h-10 max-w-[180px] object-contain"
-        />
+        <img [src]="currentTenant()?.logoUrl" alt="Logo"
+             class="max-h-9 max-w-[140px] object-contain" />
       } @else {
-        <span class="text-primary font-mono text-lg font-bold mr-2"
-          >&lt;B_&gt;</span
-        >
-        <span class="text-main font-semibold uppercase tracking-wider">
-          {{ currentTenant()?.name || "ERP SYSTEM" }}
-        </span>
+        <img src="assets/BaseLogic_Logo.png" alt="BaseLogic"
+             class="h-8 w-8 object-contain rounded" />
+        <div class="flex flex-col leading-tight">
+          <span class="text-xs font-bold text-main tracking-widest uppercase">
+            {{ currentTenant()?.name || 'ERP System' }}
+          </span>
+          <span class="text-[10px] font-mono text-muted tracking-wider">powered by BaseLogic</span>
+        </div>
       }
     </div>
 
-    <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-      <p
-        class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-4"
-      >
-        Principal
-      </p>
-
-      <a
-        routerLink="/app/dashboard"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">~/</span>
-        Dashboard
-      </a>
-
-      <p
-        class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
-      >
-        Módulos
-      </p>
-
-      <a
-        routerLink="/app/flota"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">[]</span>
-        Maestro de Flota
-      </a>
-
-      <a
-        routerLink="/app/ots"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">{{ "{}" }}</span>
-        Órdenes de Trabajo
-      </a>
-
-      <a
-        routerLink="/app/kits"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">[]</span>
-        Config. Pautas (PM)
-      </a>
-
-      <p
-        class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
-      >
-        Configuración
-      </p>
-
-      <a
-        routerLink="/app/catalogos"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">~/cfg</span>
-        Catálogos Maestros
-      </a>
-
-      <a
-        routerLink="/app/articulos"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">[]</span>
-        Catálogo de Repuestos
-      </a>
-      <a
-        routerLink="/app/bodegas"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">[]</span>
-        Gestión de Bodegas
-      </a>
-      <a
-        routerLink="/app/stock"
-        routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
-        class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-      >
-        <span class="font-mono mr-3 text-muted">[]</span>
-        Control de Stock
-      </a>
-
-      @if (currentUser()?.role === "ADMIN") {
-        <a
-          routerLink="/app/configuracion/contratos"
-          routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
-          [routerLinkActiveOptions]="{ exact: true }"
-          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-        >
-          <span class="font-mono mr-3 text-muted">/site</span>
-          Maestro de Contratos
-        </a>
-
-        <a
-          routerLink="/app/configuracion/empresa"
-          routerLinkActive="bg-dark text-primary border-r-2 border-primary border-r-[color:var(--primary)] text-[color:var(--primary)]"
-          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-        >
-          <span class="font-mono mr-3 text-muted">/org</span>
-          Configuración Empresa
-        </a>
-      }
-
-      @if (currentUser()?.role === "ADMIN") {
-        <p
-          class="px-3 text-xs font-mono text-muted uppercase tracking-wider mb-2 mt-6"
-        >
-          Administración
+    <!-- Navigation -->
+    <nav class="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin">
+      @for (section of filteredNav(); track section.label) {
+        <p class="px-3 pt-5 pb-1.5 text-[10px] font-mono font-semibold text-muted/60
+                  uppercase tracking-[0.12em] first:pt-3 select-none">
+          {{ section.label }}
         </p>
 
-        <a
-          routerLink="/app/usuarios"
-          routerLinkActive="bg-dark text-primary border-r-2 border-primary"
-          class="flex items-center px-3 py-2 text-sm font-medium rounded-md text-muted hover:bg-dark hover:text-main transition-colors"
-        >
-          <span class="font-mono mr-3 text-muted">[]</span>
-          Gestión de Usuarios
-        </a>
+        @for (item of section.visibleItems; track item.route) {
+          <a
+            [routerLink]="item.route"
+            routerLinkActive="!text-primary bg-primary/10 border-l-2 !border-primary"
+            [routerLinkActiveOptions]="item.exact ? { exact: true } : { exact: false }"
+            (click)="isMobileMenuOpen.set(false)"
+            class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                   text-muted hover:text-main hover:bg-primary/5 transition-all
+                   border-l-2 border-transparent group"
+          >
+            <svg class="w-4 h-4 shrink-0 transition-colors" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" [attr.d]="item.icon" />
+            </svg>
+            <span class="truncate">{{ item.label }}</span>
+          </a>
+        }
       }
     </nav>
 
-    <div class="p-4 border-t border-border">
-      <div class="flex items-center">
-        <div
-          class="w-8 h-8 rounded bg-dark border border-border flex items-center justify-center text-primary font-bold"
-        >
-          {{ currentUser()?.name?.charAt(0) || "U" }}
+    <!-- User card -->
+    <div class="p-3 border-t border-border shrink-0">
+      <div class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-primary/5 transition-colors cursor-default">
+        <div class="w-8 h-8 rounded-lg bg-primary/15 border border-primary/30
+                    flex items-center justify-center text-primary font-bold text-sm shrink-0">
+          {{ currentUser()?.name?.charAt(0)?.toUpperCase() || 'U' }}
         </div>
-        <div class="ml-3">
-          <p class="text-sm font-medium text-main">
-            {{ currentUser()?.name || "Usuario" }}
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-main truncate">
+            {{ currentUser()?.name || 'Usuario' }}
           </p>
-          <p class="text-xs text-muted font-mono">
-            {{ currentUser()?.role || "Invitado" }}
+          <p class="text-[10px] font-mono text-muted/70 uppercase tracking-wider truncate">
+            {{ currentUser()?.role || 'Invitado' }}
           </p>
         </div>
       </div>
     </div>
   </aside>
 
-  <main class="flex-1 flex flex-col h-screen overflow-hidden">
-    <header
-      class="h-16 bg-surface border-b border-border flex items-center justify-between px-8 relative"
-    >
-      <div class="flex items-center gap-6">
-        <h1 class="text-lg font-semibold text-main">Panel de Control</h1>
+  <!-- ─── MAIN CONTENT ─────────────────────────────────────────────── -->
+  <!-- z-10 en main + z-30 en header: el dropdown del contrato no queda bajo el área scroll -->
+  <main class="relative z-10 flex flex-col flex-1 h-screen min-w-0 overflow-hidden">
+
+    <!-- Top header (siempre por encima del contenido con scroll) -->
+    <header class="app-shell-header relative z-30 isolate h-14 lg:h-16 shrink-0 flex items-center justify-between px-4 lg:px-6">
+
+      <!-- Left: hamburger (mobile) + contract selector -->
+      <div class="flex items-center gap-3">
+        <!-- Hamburger — visible only on mobile -->
+        <button
+          (click)="isMobileMenuOpen.set(!isMobileMenuOpen())"
+          class="lg:hidden p-2 -ml-1 rounded-lg text-muted hover:text-main hover:bg-primary/5 transition-colors"
+          aria-label="Abrir menú"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
 
         @if (
-          currentUser()?.role === "ADMIN" ||
+          currentUser()?.role === 'ADMIN' ||
+          currentUser()?.role === 'SUPER_ADMIN' ||
           (currentUser()?.allowedContracts?.length ?? 0) > 0
         ) {
-          <div class="relative z-50">
+          <!-- z-[60]: por encima del backdrop y del contenido scroll -->
+          <div class="relative z-[60]">
             <button
+              type="button"
               (click)="toggleContractDropdown()"
-              class="flex items-center gap-2 px-4 py-1.5 bg-dark border border-border rounded-full backdrop-blur-md text-sm text-main hover:text-main hover:bg-dark transition-all shadow-lg"
+              [attr.aria-expanded]="isContractDropdownOpen()"
+              class="relative z-[65] flex items-center gap-2 px-3.5 py-1.5 bg-dark border border-border
+                     rounded-full text-sm text-muted hover:text-main hover:border-primary/40
+                     transition-all shadow-sm group"
             >
-              <svg
-                class="w-4 h-4 text-primary"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
+              <svg class="w-3.5 h-3.5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
-              <span class="font-medium font-mono truncate max-w-[150px]">{{
-                getCurrentContractName()
-              }}</span>
-              <svg
-                class="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                [class.rotate-180]="isContractDropdownOpen()"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
+              <span class="font-medium font-mono truncate max-w-[120px] sm:max-w-[150px] text-xs text-main">
+                {{ getCurrentContractName() }}
+              </span>
+              <svg class="w-3.5 h-3.5 transition-transform duration-200 shrink-0"
+                   [class.rotate-180]="isContractDropdownOpen()"
+                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             @if (isContractDropdownOpen()) {
+              <!-- Solo oscurece el área bajo la barra (no tapa el header → evita gris / mezcla en claro) -->
               <div
-                class="absolute top-12 left-0 w-64 rounded-xl bg-surface border border-border backdrop-blur-xl shadow-2xl py-2 z-[60] animate-fade-in divide-y divide-border"
+                class="contract-dropdown-backdrop fixed left-0 right-0 bottom-0 top-14 lg:top-16 z-[55]"
+                (click)="isContractDropdownOpen.set(false)"
+                aria-hidden="true"
+              ></div>
+
+              <div
+                class="absolute left-0 top-full z-[70] mt-1.5 w-64 max-w-[calc(100vw-2rem)] max-h-[min(24rem,70vh)]
+                       flex flex-col rounded-xl py-2
+                       header-contract-popover divide-y divide-border overflow-hidden shadow-2xl"
+                role="listbox"
               >
-                @if (currentUser()?.role === "ADMIN") {
+                @if (currentUser()?.role === 'ADMIN' || currentUser()?.role === 'SUPER_ADMIN') {
                   <button
+                    type="button"
                     (click)="selectContract('ALL')"
-                    class="w-full text-left px-4 py-2 text-sm transition-colors {{
-                      currentContractId() === 'ALL'
-                        ? 'bg-primary/20 text-primary'
-                        : 'text-muted hover:bg-dark hover:text-main'
-                    }}"
+                    class="w-full text-left px-4 py-2.5 text-sm transition-colors shrink-0"
+                    [class]="currentContractId() === 'ALL'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-main hover:bg-primary/10'"
                   >
                     <span class="font-semibold">Todos los Contratos</span>
                   </button>
                 }
 
-                <div class="py-1 max-h-60 overflow-y-auto">
+                <div class="py-1 max-h-60 overflow-y-auto overscroll-contain min-h-0">
                   @for (contract of availableContracts(); track contract.id) {
                     <button
+                      type="button"
                       (click)="selectContract(contract.id)"
-                      class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between group {{
-                        currentContractId() === contract.id
-                          ? 'bg-primary/20 text-primary'
-                          : 'text-muted hover:bg-dark hover:text-main'
-                      }}"
+                      class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2 group"
+                      [class]="currentContractId() === contract.id
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-main hover:bg-primary/10'"
                     >
-                      <span class="truncate pr-2">{{ contract.name }}</span>
+                      <span class="truncate min-w-0">{{ contract.name }}</span>
                       <span
-                        class="text-xs font-mono opacity-50 group-hover:opacity-100 transition-opacity bg-dark/40 px-1.5 py-0.5 rounded border border-white/5"
+                        class="text-[10px] font-mono shrink-0 opacity-70 group-hover:opacity-100 transition-opacity
+                               px-1.5 py-0.5 rounded border bg-dark/30 dark:bg-black/20"
+                        [ngClass]="currentContractId() === contract.id
+                          ? 'border-primary/40 text-primary'
+                          : 'border-border'"
                       >
                         {{ contract.code }}
                       </span>
@@ -249,25 +181,48 @@
                   }
                 </div>
               </div>
-
-              <div
-                class="fixed inset-0 z-40"
-                (click)="isContractDropdownOpen.set(false)"
-              ></div>
             }
           </div>
         }
       </div>
 
-      <button
-        (click)="logout()"
-        class="text-sm bg-dark border border-border hover:border-error text-muted hover:text-error py-1.5 px-4 rounded transition-colors font-mono"
-      >
-        LOGOUT
-      </button>
+      <!-- Right: theme toggle + logout -->
+      <div class="flex items-center gap-2">
+        <button
+          (click)="themeService.toggleTheme()"
+          class="p-2 rounded-lg text-muted hover:text-main hover:bg-primary/5 transition-colors"
+          [attr.aria-label]="themeService.isDark() ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+        >
+          @if (themeService.isDark()) {
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          } @else {
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          }
+        </button>
+
+        <button
+          (click)="logout()"
+          class="flex items-center gap-2 text-xs font-mono bg-dark border border-border
+                 hover:border-error/50 text-muted hover:text-error py-1.5 px-3.5 rounded-lg
+                 transition-all duration-200"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span class="hidden sm:inline">SALIR</span>
+        </button>
+      </div>
     </header>
 
-    <div class="flex-1 overflow-auto p-8 bg-dark">
+    <!-- Page content (z-0: por debajo del header z-30; el dropdown del header no queda tapado) -->
+    <div class="relative z-0 flex-1 min-h-0 overflow-auto p-4 lg:p-6 bg-dark">
       <router-outlet></router-outlet>
     </div>
   </main>

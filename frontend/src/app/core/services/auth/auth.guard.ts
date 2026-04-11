@@ -21,9 +21,12 @@ export const authGuard: CanActivateFn = (route, state) => {
   }
 
   const expectedRoles = route.data['roles'] as Array<string> | undefined;
-  if (expectedRoles?.length && !authService.hasRole(expectedRoles)) {
-    router.navigate(['/app/dashboard']);
-    return false;
+  if (expectedRoles?.length) {
+    // hasRole ya incluye bypass para SUPER_ADMIN
+    if (!authService.hasRole(expectedRoles)) {
+      router.navigate(['/app/dashboard']);
+      return false;
+    }
   }
 
   return true;

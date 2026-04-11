@@ -31,32 +31,22 @@
     class="bg-surface border border-border rounded-xl p-6 shadow-xl backdrop-blur-md"
   >
     <form [formGroup]="configForm" (ngSubmit)="onSubmit()" class="space-y-8">
+
       <!-- Sección Datos Legales -->
       <div class="space-y-4">
         <h3
           class="text-lg font-semibold text-main border-b border-border pb-2 flex items-center gap-2"
         >
-          <svg
-            class="w-5 h-5 text-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
+          <svg class="w-5 h-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Datos Legales
         </h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-2 md:col-span-2">
-            <label class="block text-sm font-medium text-muted"
-              >Nombre de la Empresa</label
-            >
+            <label class="block text-sm font-medium text-muted">Nombre de la Empresa</label>
             <input
               type="text"
               formControlName="name"
@@ -66,9 +56,7 @@
           </div>
 
           <div class="space-y-2">
-            <label class="block text-sm font-medium text-muted"
-              >RUT Empresa</label
-            >
+            <label class="block text-sm font-medium text-muted">RUT Empresa</label>
             <input
               type="text"
               formControlName="rut"
@@ -78,9 +66,7 @@
           </div>
 
           <div class="space-y-2">
-            <label class="block text-sm font-medium text-muted"
-              >Teléfono</label
-            >
+            <label class="block text-sm font-medium text-muted">Teléfono</label>
             <input
               type="text"
               formControlName="phone"
@@ -90,9 +76,7 @@
           </div>
 
           <div class="space-y-2 md:col-span-2">
-            <label class="block text-sm font-medium text-muted"
-              >Dirección</label
-            >
+            <label class="block text-sm font-medium text-muted">Dirección</label>
             <input
               type="text"
               formControlName="address"
@@ -108,27 +92,16 @@
         <h3
           class="text-lg font-semibold text-main border-b border-border pb-2 flex items-center gap-2"
         >
-          <svg
-            class="w-5 h-5 text-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
-            />
+          <svg class="w-5 h-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
           </svg>
           Identidad Visual
         </h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           <div class="space-y-2">
-            <label class="block text-sm font-medium text-muted"
-              >URL del Logo</label
-            >
+            <label class="block text-sm font-medium text-muted">URL del Logo</label>
             <input
               type="text"
               formControlName="logoUrl"
@@ -136,49 +109,151 @@
               placeholder="https://midominio.com/logo.png"
             />
           </div>
+        </div>
 
-          <div class="space-y-2">
-            <label class="block text-sm font-medium text-muted"
-              >Tema (Background)</label
-            >
-            <select
-              formControlName="backgroundPreference"
-              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors appearance-none"
-            >
-              <option value="DARK">Modo Oscuro (Dark)</option>
-              <option value="LIGHT">Modo Claro (Light)</option>
-            </select>
+        <!-- Color Primario — Selector de Paleta -->
+        <div class="space-y-4 pt-2">
+          <div>
+            <label class="block text-sm font-medium text-muted mb-0.5">Color Primario de Marca</label>
+            <p class="text-xs text-muted/70">
+              Este color se aplica a botones, íconos activos y acentos en toda la aplicación.
+              El modo claro/oscuro se configura individualmente desde la barra superior.
+            </p>
           </div>
 
-          <div class="space-y-2 md:col-span-2">
-            <label class="block text-sm font-medium text-muted"
-              >Color Primario (Hex)</label
-            >
-            <div class="flex items-center gap-3">
-              <!-- Color Picker estilitzado -->
-              <div
-                class="relative w-12 h-12 overflow-hidden rounded-lg border-2 border-border cursor-pointer shadow-lg"
+          <!-- Paleta curada -->
+          <div class="grid grid-cols-6 sm:grid-cols-12 gap-2">
+            @for (color of palette; track color.hex) {
+              <button
+                type="button"
+                (click)="selectColor(color.hex)"
+                [title]="color.name"
+                class="group relative aspect-square rounded-lg border-2 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface"
+                [class.border-main]="currentColor === color.hex"
+                [class.border-transparent]="currentColor !== color.hex"
+                [class.scale-110]="currentColor === color.hex"
+                [style.background-color]="color.hex"
+                [style.focus-ring-color]="color.hex"
               >
-                <input
-                  type="color"
-                  formControlName="primaryColor"
-                  class="absolute -top-2 -left-2 w-16 h-16 cursor-pointer"
-                />
-              </div>
+                @if (currentColor === color.hex) {
+                  <span class="absolute inset-0 flex items-center justify-center">
+                    <svg class="w-4 h-4 drop-shadow-md" fill="none" stroke="#0A0F14" stroke-width="3" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                }
+              </button>
+            }
+          </div>
+
+          <!-- Hex custom input -->
+          <div class="flex items-center gap-3">
+            <div
+              class="shrink-0 w-10 h-10 rounded-lg border-2 border-border shadow-inner overflow-hidden cursor-pointer relative"
+              [style.background-color]="currentColor"
+            >
               <input
-                type="text"
+                type="color"
                 formControlName="primaryColor"
-                class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main font-mono uppercase focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                placeholder="#00E5FF"
+                class="absolute -top-2 -left-2 w-14 h-14 cursor-pointer opacity-0"
               />
             </div>
-            @if (
-              configForm.get("primaryColor")?.invalid &&
-              configForm.get("primaryColor")?.touched
-            ) {
-              <p class="text-xs text-error mt-1">
-                El formato debe ser #Hexadec.
-              </p>
+            <input
+              type="text"
+              formControlName="primaryColor"
+              class="w-48 bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono uppercase text-sm focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+              placeholder="#00E5FF"
+              maxlength="7"
+            />
+            @if (configForm.get('primaryColor')?.invalid && configForm.get('primaryColor')?.touched) {
+              <p class="text-xs text-error">Formato: #RRGGBB</p>
+            }
+          </div>
+
+          <!-- Live preview dual-mode -->
+          <div class="space-y-2">
+            <p class="text-xs font-mono text-muted uppercase tracking-wider">Vista previa en ambos modos</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <!-- Dark mode preview -->
+              <div class="rounded-xl border border-border p-4 space-y-3" style="background: #161C24;">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-mono uppercase tracking-wider" style="color: #9CA3AF;">Modo Oscuro</span>
+                  @let darkRatio = contrastOnDark(currentColor);
+                  <span
+                    class="text-[10px] font-mono px-2 py-0.5 rounded-full border"
+                    [ngStyle]="badgeDarkStyle(darkRatio)"
+                  >
+                    {{ darkRatio }}:1 {{ passesAA(darkRatio) ? '✓ AA' : '✗ AA' }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono font-bold text-sm" [style.color]="currentColor">text-primary</span>
+                  <button
+                    type="button"
+                    class="px-3 py-1 rounded-lg text-xs font-bold text-[#0A0F14]"
+                    [style.background-color]="currentColor"
+                  >
+                    Botón
+                  </button>
+                  <span
+                    class="px-2 py-0.5 rounded text-xs font-mono border"
+                    [style.color]="currentColor"
+                    [style.border-color]="currentColor + '50'"
+                    [style.background-color]="currentColor + '1A'"
+                  >
+                    badge
+                  </span>
+                </div>
+              </div>
+
+              <!-- Light mode preview -->
+              <div class="rounded-xl border p-4 space-y-3" style="background: rgba(255,255,255,0.8); border-color: rgba(0,0,0,0.08);">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-mono uppercase tracking-wider" style="color: #64748B;">Modo Claro</span>
+                  @let lightRatio = contrastOnLight(currentColor);
+                  <span
+                    class="text-[10px] font-mono px-2 py-0.5 rounded-full border"
+                    [ngStyle]="badgeLightStyle(lightRatio)"
+                  >
+                    {{ lightRatio }}:1 {{ passesAA(lightRatio) ? '✓ AA' : '✗ AA' }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono font-bold text-sm" [style.color]="currentColor">text-primary</span>
+                  <button
+                    type="button"
+                    class="px-3 py-1 rounded-lg text-xs font-bold text-[#0A0F14]"
+                    [style.background-color]="currentColor"
+                  >
+                    Botón
+                  </button>
+                  <span
+                    class="px-2 py-0.5 rounded text-xs font-mono border"
+                    [style.color]="currentColor"
+                    [style.border-color]="currentColor + '80'"
+                    [style.background-color]="currentColor + '1A'"
+                  >
+                    badge
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Warning note when light fails AA -->
+            @if (!passesAA(contrastOnLight(currentColor))) {
+              <div class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5">
+                <svg class="w-4 h-4 text-warning shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <p class="text-xs text-warning leading-snug">
+                  Este color tiene bajo contraste en modo claro ({{ contrastOnLight(currentColor) }}:1, mínimo recomendado 4.5:1).
+                  Los textos y bordes en <code class="font-mono">text-primary</code> podrían ser difíciles de leer en pantallas muy iluminadas.
+                  Considera un color de la paleta marcado como compatible con modo claro, o pídele a tus usuarios que usen el modo oscuro.
+                </p>
+              </div>
             }
           </div>
         </div>
@@ -189,29 +264,19 @@
         <button
           type="submit"
           [disabled]="configForm.invalid || isSaving()"
-          class="bg-primary text-gray-900 font-bold px-8 py-2.5 rounded-lg transition-all duration-200 hover:bg-opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(var(--primary-rgb),0.3)] flex items-center justify-center min-w-[150px]"
-          [style.box-shadow]="
-            '0 0 15px ' + configForm.get('primaryColor')?.value + '40'
-          "
+          class="bg-primary text-zinc-950 font-bold px-8 py-2.5 rounded-lg transition-all duration-200
+                 hover:bg-opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+                 shadow-primary/20 shadow-lg flex items-center justify-center min-w-[150px]"
         >
           @if (isSaving()) {
             <svg
-              class="animate-spin h-5 w-5 text-gray-900"
+              class="animate-spin h-5 w-5 text-zinc-950"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
             >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor"
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
@@ -223,4 +288,3 @@
     </form>
   </div>
 </div>
-

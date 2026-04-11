@@ -8,20 +8,23 @@
 @layer base {
   :root {
     --primary-rgb: 0 229 255;
+    --bg-dark-rgb: 10 15 20;
     --bg-dark: #0A0F14;
     --bg-surface: #161C24;
+    --bg-sidebar: #0D1117;
     --border: #2A3441;
-    --text-main: #D1D5DB; /* text-gray-300 hex */
-    --text-muted: #9CA3AF; /* text-gray-400 hex */
+    --text-main: #D1D5DB;
+    --text-muted: #9CA3AF;
   }
 
   [data-theme='light'] {
-    --bg-dark: #F8FAFC;       /* Tailwind gray-50 */
-    --bg-surface: rgba(255, 255, 255, 0.8);    /* White transparent for BG */
-    --bg-sidebar: #F1F5F9;    /* Tailwind slate-100 */
-    --border: rgba(0, 0, 0, 0.08);        /* Subtle dark */
-    --text-main: #1E293B;     /* Tailwind slate-800 */
-    --text-muted: #64748B;    /* Tailwind slate-500 */
+    --bg-dark-rgb: 248 250 252;
+    --bg-dark: #F8FAFC;
+    --bg-surface: rgba(255, 255, 255, 0.8);
+    --bg-sidebar: #F1F5F9;
+    --border: rgba(0, 0, 0, 0.08);
+    --text-main: #1E293B;
+    --text-muted: #64748B;
   }
 
   [data-theme='light'] .bg-surface {
@@ -71,8 +74,86 @@
 }
 
 @layer components {
+  /**
+   * Barra superior del layout: fondo OPACO y sin backdrop-filter.
+   * Evita el “gris” en modo claro y compositing raro al abrir el selector de contratos.
+   */
+  .app-shell-header {
+    background-color: #0f1419;
+    border-bottom: 1px solid var(--border);
+    /* Sin backdrop-blur: el blur + surface semitransparente mezclaba mal con el overlay */
+  }
+
+  [data-theme='light'] .app-shell-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.06);
+  }
+
+  /**
+   * Popover del selector de contratos (barra superior).
+   * Mismo tono que el tema; sin transparencia para evitar parpadeos GPU (modo oscuro).
+   */
+  .header-contract-popover {
+    background-color: #0a0f14;
+    color: var(--text-main);
+    border: 1px solid #2a3441;
+    box-shadow:
+      0 25px 50px -12px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.04);
+    isolation: isolate;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header-contract-popover button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  [data-theme='light'] .header-contract-popover {
+    background-color: #ffffff;
+    color: var(--text-main);
+    border: 1px solid #e2e8f0;
+    box-shadow:
+      0 20px 25px -5px rgba(15, 23, 42, 0.12),
+      0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  }
+
+  /** Overlay bajo el header al abrir contratos (no cubre la barra superior). */
+  .contract-dropdown-backdrop {
+    background-color: rgba(15, 23, 42, 0.4);
+  }
+
+  [data-theme='light'] .contract-dropdown-backdrop {
+    background-color: rgba(15, 23, 42, 0.12);
+  }
+
+  /**
+   * Modal detalle de activo (fleet): en modo claro, surface semitransparente + backdrop
+   * oscuro del <dialog> dejaban poco contraste; bordes blanco/6% casi invisibles sobre blanco.
+   */
+  [data-theme='light'] .equipment-detail-modal-panel {
+    background-color: #ffffff !important;
+    color: var(--text-main);
+  }
+
+  [data-theme='light'] .equipment-detail-header {
+    background-color: #f1f5f9 !important;
+  }
+
+  [data-theme='light'] .equipment-detail-stat {
+    background-color: #f8fafc !important;
+  }
+
+  [data-theme='light'] .equipment-detail-doc-row {
+    background-color: #ffffff !important;
+  }
+
+  [data-theme='light'] .equipment-detail-timeline-row:hover {
+    background-color: #f1f5f9 !important;
+  }
+
   .btn-primary {
-    @apply bg-primary text-white font-bold px-6 py-2.5 rounded-lg transition-all duration-200 
+    @apply bg-primary text-zinc-950 font-bold px-6 py-2.5 rounded-lg transition-all duration-200 
            hover:bg-opacity-90 hover:scale-[1.02] active:scale-95 shadow-lg shadow-primary/20 
            flex items-center justify-center gap-2 uppercase tracking-wider text-xs;
   }

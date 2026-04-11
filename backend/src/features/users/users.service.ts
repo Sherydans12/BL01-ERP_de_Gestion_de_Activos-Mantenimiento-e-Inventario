@@ -153,6 +153,8 @@ export class UsersService {
           phone: true,
           birthDate: true,
           position: true,
+          customRoleId: true,
+          customRole: { select: { id: true, name: true, baseRole: true } },
           contractAccess: { select: { contractId: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -201,6 +203,7 @@ export class UsersService {
             birthDate: data.birthDate ? new Date(data.birthDate) : null,
             position: data.position,
             isActive: data.isActive,
+            customRoleId: data.customRoleId !== undefined ? data.customRoleId : undefined,
           },
         });
 
@@ -240,6 +243,8 @@ export class UsersService {
             phone: true,
             birthDate: true,
             position: true,
+            customRoleId: true,
+            customRole: { select: { id: true, name: true, baseRole: true } },
             contractAccess: { select: { contractId: true } },
           },
         });

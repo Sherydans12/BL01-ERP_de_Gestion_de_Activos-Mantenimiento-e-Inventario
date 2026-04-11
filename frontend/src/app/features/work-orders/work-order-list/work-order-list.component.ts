@@ -7,6 +7,7 @@ import { ReportService } from '../../../core/services/report/report.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-modal/equipment-detail-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { Router } from '@angular/router';
@@ -14,7 +15,13 @@ import { Router } from '@angular/router';
 @Component({
   selector: 'app-work-order-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, ConfirmModalComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    FormsModule,
+    ConfirmModalComponent,
+    EquipmentDetailModalComponent,
+  ],
   templateUrl: './work-order-list.component.html',
 })
 export class WorkOrderListComponent implements OnInit {
@@ -45,6 +52,9 @@ export class WorkOrderListComponent implements OnInit {
 
   // Modal State
   selectedOtForClose = signal<string | null>(null);
+
+  showEquipmentDetailModal = signal(false);
+  selectedEquipmentIdForDetail = signal<string | null>(null);
 
   constructor() {
     effect(
@@ -179,6 +189,16 @@ export class WorkOrderListComponent implements OnInit {
         console.error('Error al cambiar estado OT:', err);
       },
     });
+  }
+
+  openEquipmentDetailFromOt(ot: { equipmentId?: string; equipment?: { id?: string } }) {
+    const id = ot.equipmentId ?? ot.equipment?.id;
+    if (!id) {
+      this.notificationService.warning('Esta OT no tiene equipo asociado.');
+      return;
+    }
+    this.selectedEquipmentIdForDetail.set(id);
+    this.showEquipmentDetailModal.set(true);
   }
 
   viewPdf(id: string) {
