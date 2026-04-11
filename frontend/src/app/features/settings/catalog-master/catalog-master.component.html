@@ -135,14 +135,19 @@
 
 <!-- ═══════════ MODAL: Nuevo Registro ═══════════ -->
 @if (showModal()) {
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-    (click)="closeModal()"
+  <dialog
+    #catalogDialog
+    class="dialog-native-shell [&::backdrop]:bg-black/60 [&::backdrop]:backdrop-blur-sm"
+    (close)="onCatalogDialogClose()"
   >
     <div
-      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
-      (click)="$event.stopPropagation()"
+      class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+      (click)="closeModal()"
     >
+      <div
+        class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        (click)="$event.stopPropagation()"
+      >
       <!-- Header -->
       <div class="p-5 border-b border-border bg-dark/40">
         <h3 class="text-lg font-bold text-main tracking-tight">
@@ -235,7 +240,8 @@
         </div>
       </form>
     </div>
-  </div>
+    </div>
+  </dialog>
 }
 
 <app-confirm-modal

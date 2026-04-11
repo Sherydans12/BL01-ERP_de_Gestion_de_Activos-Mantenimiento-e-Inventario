@@ -152,6 +152,21 @@
     background-color: #f1f5f9 !important;
   }
 
+  /**
+   * Shell de <dialog> a pantalla completa: top layer del navegador por encima del header/sidebar.
+   */
+  dialog.dialog-native-shell {
+    box-sizing: border-box;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: none;
+    padding: 0;
+    background: transparent;
+  }
+
   .btn-primary {
     @apply bg-primary text-zinc-950 font-bold px-6 py-2.5 rounded-lg transition-all duration-200 
            hover:bg-opacity-90 hover:scale-[1.02] active:scale-95 shadow-lg shadow-primary/20 

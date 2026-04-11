@@ -1,4 +1,13 @@
-import { Component, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
@@ -16,6 +25,11 @@ import { NotificationService } from '../../../core/services/notification/notific
   styleUrls: ['./contract-master.component.scss'],
 })
 export class ContractMasterComponent implements OnInit {
+  private injector = inject(Injector);
+  contractDialog = viewChild<ElementRef<HTMLDialogElement>>('contractDialog');
+  subcontractDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('subcontractDialog');
+
   contracts = signal<Contract[]>([]);
 
   // Modales
@@ -69,9 +83,35 @@ export class ContractMasterComponent implements OnInit {
       this.contractFormData.set({ name: '', code: '', isActive: true });
     }
     this.isContractModalOpen.set(true);
+    this.scheduleContractDialogOpen();
+  }
+
+  private scheduleContractDialogOpen(): void {
+    afterNextRender(
+      () => {
+        const el = this.contractDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   closeContractModal() {
+    const el = this.contractDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.resetContractModalState();
+    }
+  }
+
+  onContractDialogClose() {
+    this.resetContractModalState();
+  }
+
+  private resetContractModalState() {
     this.isContractModalOpen.set(false);
     this.editingContract.set(null);
   }
@@ -127,9 +167,35 @@ export class ContractMasterComponent implements OnInit {
       this.subcontractFormData.set({ name: '', code: '', isActive: true });
     }
     this.isSubcontractModalOpen.set(true);
+    this.scheduleSubcontractDialogOpen();
+  }
+
+  private scheduleSubcontractDialogOpen(): void {
+    afterNextRender(
+      () => {
+        const el = this.subcontractDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   closeSubcontractModal() {
+    const el = this.subcontractDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.resetSubcontractModalState();
+    }
+  }
+
+  onSubcontractDialogClose() {
+    this.resetSubcontractModalState();
+  }
+
+  private resetSubcontractModalState() {
     this.isSubcontractModalOpen.set(false);
     this.editingSubcontract.set(null);
     this.selectedContractIdForSub.set(null);

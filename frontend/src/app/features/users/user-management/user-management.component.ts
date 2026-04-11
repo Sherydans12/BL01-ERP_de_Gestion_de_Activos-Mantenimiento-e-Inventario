@@ -1,4 +1,14 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  afterNextRender,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { UsersService, User } from '../../../core/services/users/users.service';
@@ -269,11 +279,18 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
       </div>
 
       @if (formModalOpen()) {
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto"
+        <dialog
+          #userFormDialog
+          class="dialog-native-shell [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+          (close)="onUserFormDialogClose()"
         >
           <div
-            class="bg-surface rounded-xl shadow-2xl border border-border w-full max-w-lg z-10 overflow-hidden my-8 backdrop-blur-xl"
+            class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+            (click)="closeFormModal()"
+          >
+          <div
+            class="bg-surface rounded-xl shadow-2xl border border-border w-full max-w-lg overflow-hidden my-8 backdrop-blur-xl"
+            (click)="$event.stopPropagation()"
           >
             <div class="p-6">
               <h3
@@ -433,15 +450,23 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </dialog>
       }
 
       @if (deleteModalOpen()) {
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        <dialog
+          #userDeleteDialog
+          class="dialog-native-shell [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+          (close)="onUserDeleteDialogClose()"
         >
           <div
-            class="bg-surface rounded-xl border border-border w-full max-w-md z-10 overflow-hidden backdrop-blur-xl"
+            class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+            (click)="closeDeleteModal()"
+          >
+          <div
+            class="bg-surface rounded-xl border border-border w-full max-w-md overflow-hidden backdrop-blur-xl"
+            (click)="$event.stopPropagation()"
           >
             <div class="p-6">
               <h3 class="text-lg font-bold text-error mb-2 tracking-tight">
@@ -471,7 +496,8 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </dialog>
       }
 
       <app-confirm-modal
@@ -509,10 +535,15 @@ export class UserManagementComponent implements OnInit {
     user: null,
   });
 
+  private injector = inject(Injector);
   private usersService = inject(UsersService);
   private contractsService = inject(ContractsService);
   private fb = inject(FormBuilder);
   private notification = inject(NotificationService);
+
+  userFormDialog = viewChild<ElementRef<HTMLDialogElement>>('userFormDialog');
+  userDeleteDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('userDeleteDialog');
 
   users = signal<User[]>([]);
   availableContracts = signal<Contract[]>([]);
@@ -639,6 +670,19 @@ export class UserManagementComponent implements OnInit {
     this.selectedUser.set(null);
     this.userForm.reset({ role: 'MECHANIC', isActive: true, contractIds: [] });
     this.formModalOpen.set(true);
+    this.scheduleUserFormDialogOpen();
+  }
+
+  private scheduleUserFormDialogOpen(): void {
+    afterNextRender(
+      () => {
+        const el = this.userFormDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   openEditModal(user: User) {
@@ -666,6 +710,7 @@ export class UserManagementComponent implements OnInit {
     });
 
     this.formModalOpen.set(true);
+    this.scheduleUserFormDialogOpen();
   }
 
   isContractSelected(id: string): boolean {
@@ -685,6 +730,15 @@ export class UserManagementComponent implements OnInit {
   }
 
   closeFormModal() {
+    const el = this.userFormDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.formModalOpen.set(false);
+    }
+  }
+
+  onUserFormDialogClose() {
     this.formModalOpen.set(false);
   }
 
@@ -763,9 +817,28 @@ export class UserManagementComponent implements OnInit {
   confirmDelete(user: User) {
     this.userToDelete.set(user);
     this.deleteModalOpen.set(true);
+    afterNextRender(
+      () => {
+        const el = this.userDeleteDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   closeDeleteModal() {
+    const el = this.userDeleteDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.deleteModalOpen.set(false);
+      this.userToDelete.set(null);
+    }
+  }
+
+  onUserDeleteDialogClose() {
     this.deleteModalOpen.set(false);
     this.userToDelete.set(null);
   }

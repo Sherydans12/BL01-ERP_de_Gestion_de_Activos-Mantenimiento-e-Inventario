@@ -1,4 +1,14 @@
-import { Component, inject, signal, effect, OnInit } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  afterNextRender,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -19,6 +29,7 @@ import { AuthService } from '../../../core/services/auth/auth.service';
   templateUrl: './stock-dashboard.component.html',
 })
 export class StockDashboardComponent implements OnInit {
+  private injector = inject(Injector);
   private stockService = inject(InventoryStockService);
   private warehousesService = inject(WarehousesService);
   private itemsService = inject(InventoryItemsService);
@@ -34,6 +45,8 @@ export class StockDashboardComponent implements OnInit {
   pendingRegularizationCount = signal<number>(0);
 
   showTransactionModal = signal(false);
+  transactionDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('transactionDialog');
   transactionForm: FormGroup;
 
   constructor() {
@@ -96,9 +109,27 @@ export class StockDashboardComponent implements OnInit {
     }
     this.transactionForm.reset({ type: 'IN', quantity: 1, unitCost: 0 });
     this.showTransactionModal.set(true);
+    afterNextRender(
+      () => {
+        const el = this.transactionDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   closeTransactionModal() {
+    const el = this.transactionDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.showTransactionModal.set(false);
+    }
+  }
+
+  onTransactionDialogClose() {
     this.showTransactionModal.set(false);
   }
 

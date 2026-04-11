@@ -1,9 +1,13 @@
 import {
   Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  afterNextRender,
+  computed,
   inject,
   signal,
-  computed,
-  OnInit,
+  viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
@@ -483,9 +487,11 @@ function buildDefaultRoutes(role: BaseRole): Set<string> {
     <!-- MODAL UNIFICADO                                                -->
     <!-- ══════════════════════════════════════════════════════════════ -->
     @if (modalOpen()) {
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
-           (click)="closeModal()">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+      <dialog #roleModalDialog
+              class="dialog-native-shell [&::backdrop]:bg-black/60 [&::backdrop]:backdrop-blur-sm"
+              (close)="onRoleModalDialogClose()">
+        <div class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+             (click)="closeModal()">
         <div class="relative bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl
                     max-h-[90vh] flex flex-col animate-fade-in"
              (click)="$event.stopPropagation()">
@@ -712,11 +718,14 @@ function buildDefaultRoutes(role: BaseRole): Set<string> {
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </dialog>
     }
   `,
 })
 export class RolesComponent implements OnInit {
+  private injector = inject(Injector);
+  roleModalDialog = viewChild<ElementRef<HTMLDialogElement>>('roleModalDialog');
   private usersService = inject(UsersService);
   private tenantService = inject(TenantService);
   private tenantRolesService = inject(TenantRolesService);
@@ -825,6 +834,19 @@ export class RolesComponent implements OnInit {
       this.activeTab.set('custom');
       this.loadCustomRoles();
     }
+    this.scheduleRoleModalDialogOpen();
+  }
+
+  private scheduleRoleModalDialogOpen(): void {
+    afterNextRender(
+      () => {
+        const el = this.roleModalDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   openEditCustomModal(role: TenantRole): void {
@@ -838,6 +860,7 @@ export class RolesComponent implements OnInit {
     });
     this.selectedRoutes.set(new Set(role.routes));
     this.modalOpen.set(true);
+    this.scheduleRoleModalDialogOpen();
   }
 
   openSystemRoleModal(role: BaseRole): void {
@@ -846,9 +869,23 @@ export class RolesComponent implements OnInit {
     this.modalMode.set('system-edit');
     this.selectedRoutes.set(new Set(this.getSystemRoleRoutes(role)));
     this.modalOpen.set(true);
+    this.scheduleRoleModalDialogOpen();
   }
 
   closeModal(): void {
+    const el = this.roleModalDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.resetRoleModalState();
+    }
+  }
+
+  onRoleModalDialogClose(): void {
+    this.resetRoleModalState();
+  }
+
+  private resetRoleModalState(): void {
     this.modalOpen.set(false);
     this.editingCustomRole.set(null);
     this.editingSystemRole.set(null);

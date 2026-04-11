@@ -1,4 +1,13 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import {
@@ -16,6 +25,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
   templateUrl: './catalog-master.component.html',
 })
 export class CatalogMasterComponent {
+  private injector = inject(Injector);
   private catalogService = inject(CatalogService);
   private fb = inject(FormBuilder);
   private notificationService = inject(NotificationService);
@@ -24,6 +34,7 @@ export class CatalogMasterComponent {
 
   // Modals state
   showModal = signal(false);
+  catalogDialog = viewChild<ElementRef<HTMLDialogElement>>('catalogDialog');
   isEditMode = signal(false);
   currentEditId = signal<string | null>(null);
 
@@ -109,6 +120,19 @@ export class CatalogMasterComponent {
       isActive: true,
     });
     this.showModal.set(true);
+    this.openCatalogDialogDom();
+  }
+
+  private openCatalogDialogDom(): void {
+    afterNextRender(
+      () => {
+        const el = this.catalogDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   editItem(item: CatalogItem) {
@@ -121,9 +145,23 @@ export class CatalogMasterComponent {
       isActive: item.isActive,
     });
     this.showModal.set(true);
+    this.openCatalogDialogDom();
   }
 
   closeModal() {
+    const el = this.catalogDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.resetCatalogModal();
+    }
+  }
+
+  onCatalogDialogClose() {
+    this.resetCatalogModal();
+  }
+
+  private resetCatalogModal() {
     this.showModal.set(false);
     this.isEditMode.set(false);
     this.currentEditId.set(null);
