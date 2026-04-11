@@ -5,9 +5,9 @@ node_modules/
 .env
 .env.local
 
-# Backups de Base de Datos
+# Backups de Base de Datos (volcados .sql van aquí; no uses *.sql global:
+# ignoraba también backend/prisma/migrations/*.sql y rompía el deploy)
 backups/
-*.sql
 
 # Sistema
 .DS_Store
