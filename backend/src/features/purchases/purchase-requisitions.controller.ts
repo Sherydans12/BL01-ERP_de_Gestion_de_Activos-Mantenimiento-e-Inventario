@@ -51,6 +51,12 @@ export class PurchaseRequisitionsController {
     return this.service.submit(id, req.user);
   }
 
+  @Post(':id/start-quoting')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  startQuoting(@Param('id') id: string, @Req() req: any) {
+    return this.service.startQuoting(id, req.user);
+  }
+
   @Post(':id/quotations')
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
   @UseInterceptors(FileInterceptor('attachment'))

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
-import { Observable } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
 
 export interface PurchaseSettings {
   id: string;
@@ -209,6 +209,21 @@ export class PurchasesService {
 
   submitRequisition(id: string): Observable<PurchaseRequisition> {
     return this.http.post<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}/submit`, {});
+  }
+
+  /**
+   * Transiciones de estado soportadas en el backend (p. ej. SUBMITTED → QUOTING vía start-quoting).
+   */
+  updateStatus(id: string, status: string): Observable<PurchaseRequisition> {
+    if (status === 'QUOTING') {
+      return this.http.post<PurchaseRequisition>(
+        `${this.base}/purchase-requisitions/${id}/start-quoting`,
+        {},
+      );
+    }
+    return throwError(
+      () => new Error(`Transición de estado no soportada: ${status}`),
+    );
   }
 
   addQuotation(requisitionId: string, data: any, file?: File): Observable<PurchaseQuotation> {

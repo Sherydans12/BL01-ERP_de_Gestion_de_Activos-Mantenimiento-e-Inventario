@@ -269,6 +269,34 @@ export class PurchaseRequisitionsService {
     return updated;
   }
 
+  async startQuoting(id: string, user: any) {
+    const requisition = await this.findById(id, user.tenantId);
+
+    if (requisition.status !== 'SUBMITTED') {
+      throw new BadRequestException(
+        'Solo se puede iniciar cotización cuando el requerimiento está enviado (Enviado)',
+      );
+    }
+
+    const prevStatus = requisition.status;
+    await this.prisma.purchaseRequisition.update({
+      where: { id },
+      data: { status: 'QUOTING' },
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'REQUISITION',
+      entityId: id,
+      action: 'STATUS_CHANGE',
+      oldValue: { status: prevStatus },
+      newValue: { status: 'QUOTING' },
+    });
+
+    return this.findById(id, user.tenantId);
+  }
+
   async addQuotation(
     requisitionId: string,
     data: {
