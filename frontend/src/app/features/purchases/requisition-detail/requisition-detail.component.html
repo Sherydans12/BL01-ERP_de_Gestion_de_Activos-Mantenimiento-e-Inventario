@@ -1,0 +1,130 @@
+<div class="p-6">
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else if (requisition()) {
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-main">{{ requisition()!.correlative }}</h1>
+        <p class="text-sm text-muted mt-1">{{ requisition()!.description }}</p>
+      </div>
+      <div class="flex gap-2">
+        @if (canSubmit()) {
+          <button (click)="submit()" [disabled]="isSubmitting()"
+                  class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
+            {{ isSubmitting() ? 'Enviando...' : 'Enviar Requerimiento' }}
+          </button>
+        }
+        @if (winnerQuotation() && requisition()!.status === 'PENDING_APPROVAL') {
+          <button (click)="createOrder()"
+                  class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+            Generar Orden de Compra
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Estado</p>
+        <p class="text-main font-semibold">{{ statusLabels[requisition()!.status] || requisition()!.status }}</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Solicitante</p>
+        <p class="text-main">{{ requisition()!.requestedBy?.name }}</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Contrato</p>
+        <p class="text-main">{{ requisition()!.contract?.name }}</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Subcontrato</p>
+        @if (requisition()!.subcontract) {
+          <p class="text-main">{{ requisition()!.subcontract!.code }} — {{ requisition()!.subcontract!.name }}</p>
+        } @else {
+          <p class="text-muted">—</p>
+        }
+      </div>
+    </div>
+
+    <div class="bg-surface rounded-xl border border-border overflow-hidden mb-6">
+      <div class="px-4 py-3 border-b border-border">
+        <h2 class="text-lg font-semibold text-main">Ítems Solicitados</h2>
+      </div>
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Descripción</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Cantidad</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">U.M.</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Costo Est.</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of requisition()!.items; track item.id) {
+            <tr class="border-b border-border/50">
+              <td class="px-4 py-3 text-sm text-main">{{ item.description }}</td>
+              <td class="px-4 py-3 text-sm text-main">{{ item.quantity }}</td>
+              <td class="px-4 py-3 text-sm text-muted">{{ item.unitOfMeasure }}</td>
+              <td class="px-4 py-3 text-sm font-mono text-main">{{ item.estimatedCost | clpCurrency }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (requisition()!.quotations && requisition()!.quotations!.length > 0) {
+      <div class="bg-surface rounded-xl border border-border overflow-hidden mb-6">
+        <div class="px-4 py-3 border-b border-border">
+          <h2 class="text-lg font-semibold text-main">Cuadro Comparativo de Cotizaciones</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-border">
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Proveedor</th>
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Monto Total</th>
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Plazo (días)</th>
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Estado</th>
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Adjunto</th>
+                <th class="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (q of requisition()!.quotations!; track q.id) {
+                <tr class="border-b border-border/50" [ngClass]="{'bg-green-500/5': q.isWinner}">
+                  <td class="px-4 py-3 text-sm text-main font-medium">{{ q.vendor?.name }}</td>
+                  <td class="px-4 py-3 text-sm text-main font-mono">{{ q.totalAmount | clpCurrency:q.currency }}</td>
+                  <td class="px-4 py-3 text-sm text-muted">{{ q.deliveryDays || '—' }}</td>
+                  <td class="px-4 py-3">
+                    @if (q.isWinner) {
+                      <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400">Ganadora</span>
+                    } @else if (q.status === 'REJECTED') {
+                      <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400">Rechazada</span>
+                    } @else {
+                      <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400">Recibida</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    @if (q.attachmentUrl) {
+                      <a [href]="q.attachmentUrl" target="_blank" class="text-primary hover:text-primary/80 inline-flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        PDF
+                      </a>
+                    } @else {
+                      <span class="text-muted">—</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-right">
+                    @if (canSelectWinner() && !q.isWinner && q.status !== 'REJECTED') {
+                      <button (click)="selectWinner(q.id)" class="text-sm text-primary hover:text-primary/80">Seleccionar</button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  }
+</div>

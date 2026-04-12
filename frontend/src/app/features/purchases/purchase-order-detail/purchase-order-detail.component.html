@@ -1,0 +1,268 @@
+<div class="p-6">
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else if (order()) {
+    <div [ngClass]="showPdfViewer() ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 items-start' : ''">
+      <div class="min-w-0">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <h1 class="text-2xl font-bold text-main">{{ order()!.correlative }}</h1>
+          <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
+                [ngClass]="{
+                  'bg-yellow-500/10 text-yellow-400': order()!.status === 'PENDING_APPROVAL' || order()!.status === 'PARTIALLY_APPROVED',
+                  'bg-green-500/10 text-green-400': order()!.status === 'APPROVED',
+                  'bg-red-500/10 text-red-400': order()!.status === 'REJECTED' || order()!.status === 'CANCELLED',
+                  'bg-blue-500/10 text-blue-400': order()!.status === 'SENT_TO_SUPPLIER' || order()!.status === 'PARTIALLY_RECEIVED',
+                  'bg-purple-500/10 text-purple-400': order()!.status === 'RECEIVED' || order()!.status === 'CLOSED',
+                  'bg-gray-500/10 text-gray-400': order()!.status === 'DRAFT'
+                }">
+            {{ order()!.status }}
+          </span>
+        </div>
+        <p class="text-sm text-muted mt-1">{{ order()!.quotation?.requisition?.description }}</p>
+      </div>
+      <div class="flex gap-2 flex-wrap items-center">
+        <button type="button"
+                (click)="togglePdf()"
+                [disabled]="!canPreviewPdf()"
+                [attr.aria-pressed]="showPdfViewer()"
+                [title]="showPdfViewer() ? 'Ocultar vista de PDF' : 'Vista dividida con PDF'"
+                class="inline-flex items-center justify-center p-2 rounded-lg border transition-colors"
+                [ngClass]="showPdfViewer()
+                  ? 'border-primary text-primary bg-primary/10'
+                  : 'border-border text-muted hover:text-main hover:bg-dark/40'"
+                [class.opacity-40]="!canPreviewPdf()"
+                [class.cursor-not-allowed]="!canPreviewPdf()">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+          </svg>
+        </button>
+        @if (canReset()) {
+          <button (click)="resetToDraft()"
+                  class="px-4 py-2 border border-yellow-500/30 text-yellow-400 font-medium rounded-lg hover:bg-yellow-500/10 transition-colors">
+            Reiniciar a Borrador
+          </button>
+        }
+        @if (canForceClose()) {
+          <button (click)="openCloseModal()"
+                  class="px-4 py-2 border border-purple-500/30 text-purple-400 font-medium rounded-lg hover:bg-purple-500/10 transition-colors">
+            Cerrar Orden
+          </button>
+        }
+        <a routerLink="/app/compras/ordenes"
+           class="px-4 py-2 border border-border text-muted rounded-lg hover:text-main transition-colors">
+          Volver
+        </a>
+      </div>
+    </div>
+
+    @if (order()!.status === 'REJECTED' && order()!.notes) {
+      <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+        <div class="flex items-center gap-2 mb-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span class="font-semibold text-red-400 text-sm">Motivo del Rechazo</span>
+        </div>
+        <p class="text-sm text-red-300">{{ order()!.notes }}</p>
+      </div>
+    }
+
+    @if (order()!.status === 'CLOSED' && order()!.notes) {
+      <div class="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-6">
+        <div class="flex items-center gap-2 mb-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span class="font-semibold text-purple-400 text-sm">Cierre Administrativo</span>
+        </div>
+        <p class="text-sm text-purple-300">{{ order()!.notes }}</p>
+      </div>
+    }
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Monto Total</p>
+        <p class="text-xl font-bold font-mono text-main">{{ order()!.totalAmount | clpCurrency }}</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Proveedor</p>
+        <p class="text-main">{{ order()!.quotation?.vendor?.name || '—' }}</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Contrato</p>
+        <p class="text-main">{{ order()!.contract?.name }}</p>
+        @if (order()!.subcontract) {
+          <p class="text-xs text-muted mt-0.5">{{ order()!.subcontract!.code }} — {{ order()!.subcontract!.name }}</p>
+        }
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Firmas Requeridas</p>
+        <p class="text-main">{{ order()!.approvals.length }} / {{ order()!.requiredSignatures }}</p>
+      </div>
+    </div>
+
+    <div class="bg-surface rounded-xl border border-border p-6 mb-6">
+      <h2 class="text-lg font-semibold text-main mb-4">Panel de Aprobaciones</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        @for (badge of approvalBadges(); track badge.level) {
+          <div class="border rounded-xl p-4"
+               [ngClass]="badge.status === 'approved' ? 'border-green-500/30 bg-green-500/5' : 'border-border bg-dark/30'">
+            <div class="flex items-center gap-2 mb-2">
+              @if (badge.status === 'approved') {
+                @if (badge.integrity === 'COMPROMISED') {
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Firma comprometida - datos alterados post-firma">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                  </svg>
+                } @else {
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                  </svg>
+                }
+              } @else {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              }
+              <span class="font-semibold text-sm" [ngClass]="badge.status === 'approved' ? 'text-green-400' : 'text-muted'">
+                {{ badge.label }}
+              </span>
+            </div>
+            @if (badge.status === 'approved') {
+              <p class="text-xs text-muted">{{ badge.approvedBy }}</p>
+              <p class="text-xs text-muted">{{ badge.approvedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+              @if (badge.integrity === 'COMPROMISED') {
+                <p class="text-xs text-red-500 font-medium mt-1">FIRMA COMPROMETIDA</p>
+              }
+            } @else {
+              <p class="text-xs text-muted">Pendiente</p>
+            }
+          </div>
+        }
+      </div>
+
+      @if (canApprove()) {
+        <div class="mt-6 pt-4 border-t border-border">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <input type="text" placeholder="Comentario de aprobación (opcional)"
+                   [ngModel]="approveComment()" (ngModelChange)="approveComment.set($event)"
+                   class="flex-1 px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+            <button (click)="approve()"
+                    class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+              Firmar
+            </button>
+            <button (click)="openRejectModal()"
+                    class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
+              Rechazar
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+      <div class="px-4 py-3 border-b border-border">
+        <h2 class="text-lg font-semibold text-main">Ítems de la Orden</h2>
+      </div>
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Descripción</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Cantidad</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Costo Unit.</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of order()!.items; track item.id) {
+            <tr class="border-b border-border/50">
+              <td class="px-4 py-3 text-sm text-main">{{ item.description }}</td>
+              <td class="px-4 py-3 text-sm text-main">{{ item.quantity }}</td>
+              <td class="px-4 py-3 text-sm font-mono text-main">{{ item.unitCost | clpCurrency }}</td>
+              <td class="px-4 py-3 text-sm font-mono text-main">{{ item.quantity * item.unitCost | clpCurrency }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <section class="bg-surface rounded-xl border border-border p-6 mt-6">
+      <h2 class="text-lg font-semibold text-main mb-4">Historial de Actividad</h2>
+      <app-activity-timeline
+        [logs]="activityLogs()"
+        [isLoading]="activityLogsLoading()" />
+    </section>
+      </div>
+
+      @if (showPdfViewer()) {
+        <aside class="border border-border bg-surface rounded-xl overflow-hidden w-full flex flex-col
+                      min-h-[400px] h-[calc(100vh-140px)]
+                      lg:sticky lg:top-20 lg:max-h-[calc(100vh-140px)]">
+          @if (pdfLoading()) {
+            <div class="flex flex-1 items-center justify-center py-16">
+              <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+            </div>
+          } @else if (pdfUrl()) {
+            <iframe [src]="pdfUrl()!"
+                    title="Vista previa PDF orden de compra"
+                    class="w-full flex-1 min-h-0 border-0 bg-surface"></iframe>
+          }
+        </aside>
+      }
+    </div>
+
+    <!-- Reject Modal -->
+    @if (showRejectModal()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" (click)="showRejectModal.set(false)"></div>
+        <div class="relative bg-white dark:bg-[#161C24] border border-border rounded-2xl shadow-xl w-full max-w-md p-6">
+          <h3 class="text-lg font-semibold text-main mb-4">Rechazar Orden de Compra</h3>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-muted mb-1">Motivo del rechazo</label>
+            <textarea [ngModel]="rejectReason()" (ngModelChange)="rejectReason.set($event)" rows="3"
+                      placeholder="Indique el motivo del rechazo..."
+                      class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none"></textarea>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button (click)="showRejectModal.set(false)"
+                    class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors">
+              Cancelar
+            </button>
+            <button (click)="confirmReject()"
+                    class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
+              Confirmar Rechazo
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Force Close Modal -->
+    @if (showCloseModal()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" (click)="showCloseModal.set(false)"></div>
+        <div class="relative bg-white dark:bg-[#161C24] border border-border rounded-2xl shadow-xl w-full max-w-md p-6">
+          <h3 class="text-lg font-semibold text-main mb-4">Cerrar Orden Administrativamente</h3>
+          <p class="text-sm text-muted mb-4">Esta acción cerrará la orden con recepción parcial. Ingrese la justificación:</p>
+          <div class="mb-4">
+            <textarea [ngModel]="closeReason()" (ngModelChange)="closeReason.set($event)" rows="3"
+                      placeholder="Justificación del cierre administrativo..."
+                      class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none"></textarea>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button (click)="showCloseModal.set(false)"
+                    class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors">
+              Cancelar
+            </button>
+            <button (click)="confirmForceClose()"
+                    class="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors">
+              Cerrar Orden
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+  }
+</div>

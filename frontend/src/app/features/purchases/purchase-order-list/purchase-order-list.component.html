@@ -1,0 +1,56 @@
+<div class="p-6">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <h1 class="text-2xl font-bold text-main">Órdenes de Compra</h1>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+    <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)"
+            class="px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
+      <option value="">Todos los estados</option>
+      <option value="PENDING_APPROVAL">Pendiente Aprobación</option>
+      <option value="PARTIALLY_APPROVED">Parcialmente Aprobada</option>
+      <option value="APPROVED">Aprobada</option>
+      <option value="SENT_TO_SUPPLIER">Enviada a Proveedor</option>
+      <option value="RECEIVED">Recibida</option>
+    </select>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else {
+    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Correlativo</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Proveedor</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Monto</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Firmas</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Estado</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (order of filteredOrders(); track order.id) {
+            <tr class="border-b border-border/50 hover:bg-dark/50 transition-colors">
+              <td class="px-4 py-3 text-sm font-mono text-primary">{{ order.correlative }}</td>
+              <td class="px-4 py-3 text-sm text-main">{{ order.quotation?.vendor?.name || '—' }}</td>
+              <td class="px-4 py-3 text-sm font-mono text-main">{{ order.totalAmount | clpCurrency }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ order._count?.approvals || 0 }}/{{ order.requiredSignatures }}</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" [class]="statusColors[order.status] || ''">
+                  {{ statusLabels[order.status] || order.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <a [routerLink]="['/app/compras/ordenes', order.id]" class="text-primary hover:text-primary/80 text-sm">Ver</a>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="px-4 py-8 text-center text-muted">No se encontraron órdenes de compra</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

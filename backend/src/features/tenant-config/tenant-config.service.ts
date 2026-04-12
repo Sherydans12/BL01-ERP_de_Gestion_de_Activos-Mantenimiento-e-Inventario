@@ -1,12 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateTenantConfigDto } from './dto/update-tenant-config.dto';
+import { ensureDefaultTenantRolesForTenant } from '../tenant-roles/tenant-role-defaults';
 
 @Injectable()
 export class TenantConfigService {
   constructor(private prisma: PrismaService) {}
 
   async getTenantConfig(tenantId: string) {
+    await ensureDefaultTenantRolesForTenant(this.prisma, tenantId);
+
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {

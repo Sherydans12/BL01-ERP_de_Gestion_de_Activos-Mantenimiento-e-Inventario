@@ -77,6 +77,24 @@
           </p>
         </div>
       </div>
+      @if (
+        pushNotificationsBlocked() &&
+        currentUser() &&
+        (currentUser()!.role === 'ADMIN' || currentUser()!.role === 'SUPER_ADMIN' || currentUser()!.role === 'SUPERVISOR')
+      ) {
+        <p class="mt-2 px-2 text-[10px] leading-snug text-amber-600/90 dark:text-amber-400/90 border border-amber-500/30 rounded-lg py-2 bg-amber-500/5">
+          Las notificaciones están bloqueadas en este navegador. Actívelas en la configuración del sitio para recibir alertas de firma.
+        </p>
+      }
+      @if (currentUser() && (currentUser()!.role === 'ADMIN' || currentUser()!.role === 'SUPER_ADMIN' || currentUser()!.role === 'SUPERVISOR')) {
+        <button
+          type="button"
+          (click)="debugTryPushSubscribe()"
+          class="mt-2 w-full text-left px-2 py-1.5 text-[10px] font-mono text-muted hover:text-primary border border-border/60 rounded-lg hover:border-primary/40 transition-colors"
+          title="Registrar de nuevo la suscripción push (depuración)">
+          Probar notificaciones push
+        </button>
+      }
     </div>
   </aside>
 

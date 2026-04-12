@@ -23,7 +23,7 @@ import { TenantService } from '../../core/services/tenant/tenant.service';
 import { TenantRolesService, TenantRole } from '../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../core/services/notification/notification.service';
 
-type BaseRole = 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
+type BaseRole = 'MECHANIC' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN';
 type ModalMode = 'custom-create' | 'custom-edit' | 'system-edit';
 
 const SYSTEM_ROLES: BaseRole[] = ['MECHANIC', 'SUPERVISOR', 'ADMIN'];
@@ -39,12 +39,14 @@ const ROLE_ACCENT: Record<BaseRole, string> = {
   ADMIN: 'border-primary/30 hover:border-primary/50',
   SUPERVISOR: 'border-blue-500/20 hover:border-blue-500/40',
   MECHANIC: 'border-zinc-500/20 hover:border-zinc-500/40',
+  SUPER_ADMIN: 'border-purple-500/20 hover:border-purple-500/40',
 };
 
 const BASE_ROLE_BADGE: Record<BaseRole, string> = {
   ADMIN: 'bg-primary/15 text-primary border-primary/30',
   SUPERVISOR: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
   MECHANIC: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+  SUPER_ADMIN: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
 };
 
 interface ApiPermGroup {
@@ -140,6 +142,19 @@ const BASE_ROLE_API: Record<BaseRole, { summary: string; groups: ApiPermGroup[] 
         items: [
           { text: 'Gestionar otros tenants', allowed: false },
           { text: 'Acceder al panel SUPER_ADMIN', allowed: false },
+        ],
+      },
+    ],
+  },
+  SUPER_ADMIN: {
+    summary:
+      'Rol espejo de plataforma. Alineado con el rol SUPER_ADMIN del usuario para matriz de firmas y permisos.',
+    groups: [
+      {
+        label: 'Alcance',
+        items: [
+          { text: 'Equivalente funcional al rol global SUPER_ADMIN del usuario', allowed: true },
+          { text: 'Uso típico: aprobaciones críticas y políticas transversales', allowed: true },
         ],
       },
     ],
@@ -738,7 +753,7 @@ export class RolesComponent implements OnInit {
   readonly systemRoles = SYSTEM_ROLES;
   readonly navRows: NavRow[] = buildNavRows();
   readonly navSections = NAV_SECTIONS;
-  readonly baseRoles: BaseRole[] = ['MECHANIC', 'SUPERVISOR', 'ADMIN'];
+  readonly baseRoles: BaseRole[] = ['MECHANIC', 'SUPERVISOR', 'ADMIN', 'SUPER_ADMIN'];
   readonly roleLabels = ROLE_LABELS;
   readonly roleDescriptions = ROLE_DESCRIPTIONS;
   readonly baseRoleApi = BASE_ROLE_API;

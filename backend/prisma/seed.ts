@@ -5,6 +5,7 @@ import {
   UserRole,
   MeterType,
 } from '@prisma/client';
+import { ensureDefaultTenantRolesForTenant } from '../src/features/tenant-roles/tenant-role-defaults';
 import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -157,6 +158,8 @@ async function main() {
     update: {},
     create: { code: 'TPM', name: 'Transportes Portuarios y Minería' },
   });
+
+  await ensureDefaultTenantRolesForTenant(prisma, tpmTenant.id);
 
   // 2. CATÁLOGOS
   console.log('🌱 Poblando diccionarios...');

@@ -61,6 +61,10 @@ npm install
 npm start
 ```
 
+### PWA y Service Worker (HTTPS en producción)
+
+El Service Worker de Angular (caché offline, notificaciones push) **requiere HTTPS** en producción. La excepción habitual es **`http://localhost`** durante el desarrollo local; sin un origen seguro, el navegador no activará el SW de forma fiable.
+
 ## Principios de diseño de datos
 
 - **Multi-tenancy:** Aislamiento por empresa (`tenantId`).

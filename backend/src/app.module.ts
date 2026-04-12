@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { SequenceModule } from './common/sequence/sequence.module';
+import { StorageModule } from './common/storage/storage.module';
 import { EquipmentsModule } from './features/equipments/equipments.module';
 import { CatalogsModule } from './features/catalogs/catalogs.module';
 import { WorkOrdersModule } from './features/work-orders/work-orders.module';
@@ -16,11 +18,15 @@ import { WarehousesModule } from './features/warehouses/warehouses.module';
 import { InventoryStockModule } from './features/inventory-stock/inventory-stock.module';
 import { MeterAdjustmentsModule } from './features/meter-adjustments/meter-adjustments.module';
 import { TenantRolesModule } from './features/tenant-roles/tenant-roles.module';
+import { VendorsModule } from './features/vendors/vendors.module';
+import { PurchasesModule } from './features/purchases/purchases.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    SequenceModule,
+    StorageModule,
     EquipmentsModule,
     CatalogsModule,
     WorkOrdersModule,
@@ -34,6 +40,8 @@ import { TenantRolesModule } from './features/tenant-roles/tenant-roles.module';
     WarehousesModule,
     InventoryStockModule,
     MeterAdjustmentsModule,
+    VendorsModule,
+    PurchasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

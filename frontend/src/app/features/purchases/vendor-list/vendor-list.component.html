@@ -1,0 +1,71 @@
+<div class="p-6">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <h1 class="text-2xl font-bold text-main">Proveedores</h1>
+    <a routerLink="/app/compras/proveedores/nuevo"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-primary/20 text-primary rounded-lg hover:bg-primary/30 transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Nuevo Proveedor
+    </a>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+      <input type="text" placeholder="Buscar por nombre o código..."
+             class="flex-1 px-4 py-2 bg-dark border border-border rounded-lg text-main placeholder:text-muted focus:border-primary focus:outline-none"
+             [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)">
+      <button type="button" (click)="showInactive.set(!showInactive())"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all duration-200 whitespace-nowrap cursor-pointer select-none"
+              [ngClass]="showInactive()
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border bg-transparent text-muted hover:text-main hover:border-border'">
+        <span class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200"
+              [ngClass]="showInactive() ? 'bg-primary' : 'bg-dark border border-border'">
+          <span class="inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-all duration-200"
+                [ngClass]="showInactive() ? 'translate-x-4' : 'translate-x-0.5'"></span>
+        </span>
+        Mostrar inactivos
+      </button>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else {
+    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Código</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Nombre</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">RUT</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden lg:table-cell">Contacto</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Estado</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (vendor of filteredVendors(); track vendor.id) {
+            <tr class="border-b border-border/50 hover:bg-dark/50 transition-colors">
+              <td class="px-4 py-3 text-sm font-mono text-primary">{{ vendor.code }}</td>
+              <td class="px-4 py-3 text-sm text-main">{{ vendor.name }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ vendor.rut || '—' }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden lg:table-cell">{{ vendor.contactName || '—' }}</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
+                      [class]="vendor.isActive ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'">
+                  {{ vendor.isActive ? 'Activo' : 'Inactivo' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <a [routerLink]="['/app/compras/proveedores', vendor.id]"
+                   class="text-primary hover:text-primary/80 text-sm">Editar</a>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="px-4 py-8 text-center text-muted">No se encontraron proveedores</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

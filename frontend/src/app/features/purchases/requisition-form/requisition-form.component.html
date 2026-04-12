@@ -1,0 +1,101 @@
+<div class="p-6 max-w-4xl mx-auto">
+  <h1 class="text-2xl font-bold text-main mb-6">Nuevo Requerimiento de Compra</h1>
+
+  @if (isLoadingContracts()) {
+    <div class="flex justify-center py-12">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
+  } @else {
+  <div class="bg-surface rounded-xl border border-border p-6 space-y-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">Contrato *</label>
+        <select [ngModel]="selectedContractId()" (ngModelChange)="onContractChange($event)"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
+          <option value="">— Seleccionar contrato —</option>
+          @for (c of contracts(); track c.id) {
+            <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">Subcontrato</label>
+        <select [ngModel]="selectedSubcontractId()" (ngModelChange)="selectedSubcontractId.set($event)"
+                [disabled]="availableSubcontracts().length === 0"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+          <option value="">— Sin subcontrato —</option>
+          @for (s of availableSubcontracts(); track s.id) {
+            <option [value]="s.id">{{ s.code }} — {{ s.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-muted mb-1">Descripción General *</label>
+      <textarea [ngModel]="description()" (ngModelChange)="description.set($event)" rows="3"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none resize-none"></textarea>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-muted mb-1">Justificación</label>
+      <textarea [ngModel]="justification()" (ngModelChange)="justification.set($event)" rows="2"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none resize-none"></textarea>
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-main">Ítems Solicitados</h2>
+        <button (click)="addItem()" class="text-sm text-primary hover:text-primary/80">+ Agregar ítem</button>
+      </div>
+
+      <div class="space-y-3">
+        @for (item of items(); track $index; let i = $index) {
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start p-3 bg-dark/50 rounded-lg border border-border/50">
+            <div class="sm:col-span-5">
+              <input type="text" placeholder="Descripción del ítem *"
+                     [ngModel]="item.description" (ngModelChange)="updateItem(i, 'description', $event)"
+                     class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+            </div>
+            <div class="sm:col-span-2">
+              <input type="number" placeholder="Cant." min="1"
+                     [ngModel]="item.quantity" (ngModelChange)="updateItem(i, 'quantity', $event)"
+                     class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+            </div>
+            <div class="sm:col-span-2">
+              <select [ngModel]="item.unitOfMeasure" (ngModelChange)="updateItem(i, 'unitOfMeasure', $event)"
+                      class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+                @for (u of UOM_PRESETS; track u.value) {
+                  <option [value]="u.value">{{ u.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <div class="flex">
+                <span class="inline-flex items-center px-2 bg-dark border border-r-0 border-border rounded-l-lg text-muted text-xs">CLP</span>
+                <input type="number" placeholder="Costo est." min="0"
+                       [ngModel]="item.estimatedCost" (ngModelChange)="updateItem(i, 'estimatedCost', $event)"
+                       class="w-full px-2 py-2 bg-dark border border-border rounded-r-lg text-main text-sm font-mono focus:border-primary focus:outline-none">
+              </div>
+            </div>
+            <div class="sm:col-span-1 flex justify-center">
+              @if (items().length > 1) {
+                <button (click)="removeItem(i)" class="p-2 text-red-400 hover:text-red-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-3 pt-4">
+      <button type="button" (click)="cancel()"
+              class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors">Cancelar</button>
+      <button (click)="save()" [disabled]="isSaving() || !selectedContractId()"
+              class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
+        {{ isSaving() ? 'Guardando...' : 'Crear Requerimiento' }}
+      </button>
+    </div>
+  </div>
+  }
+</div>

@@ -1,4 +1,12 @@
-import { Component, inject, OnInit, PLATFORM_ID, signal, computed } from '@angular/core';
+import {
+  Component,
+  inject,
+  OnInit,
+  PLATFORM_ID,
+  signal,
+  computed,
+  effect,
+} from '@angular/core';
 import { isPlatformBrowser, NgClass } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { TenantService } from '../services/tenant/tenant.service';
@@ -6,6 +14,7 @@ import { CatalogService } from '../services/catalog/catalog.service';
 import { AuthService } from '../services/auth/auth.service';
 import { ThemeService } from '../services/theme/theme.service';
 import { ContractsService } from '../services/contracts/contracts.service';
+import { PushNotificationsService } from '../services/push-notifications/push-notifications.service';
 import { Contract } from '../models/types';
 import { NAV_SECTIONS, AppRole } from '../navigation/nav.config';
 
@@ -23,6 +32,7 @@ export class LayoutComponent implements OnInit {
   authService = inject(AuthService);
   themeService = inject(ThemeService);
   contractsService = inject(ContractsService);
+  private pushNotifications = inject(PushNotificationsService);
 
   currentTenant = this.tenantService.currentTenant;
   currentUser = this.authService.currentUser;
@@ -31,6 +41,8 @@ export class LayoutComponent implements OnInit {
   availableContracts = signal<Contract[]>([]);
   isContractDropdownOpen = signal(false);
   isMobileMenuOpen = signal(false);
+  /** Notificación push bloqueada en el navegador (aviso en perfil lateral). */
+  pushNotificationsBlocked = signal(false);
 
   filteredNav = computed(() => {
     const user = this.currentUser();
@@ -82,10 +94,30 @@ export class LayoutComponent implements OnInit {
     this.authService.logout();
   }
 
+  /** Debug: reintenta registrar la suscripción push (mismo flujo que el auto-registro). */
+  debugTryPushSubscribe() {
+    this.pushNotifications.debugRetrySubscribe();
+  }
+
+  constructor() {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    effect(() => {
+      const user = this.authService.currentUser();
+      if (!user || !PushNotificationsService.isApproverRole(user.role)) {
+        return;
+      }
+      queueMicrotask(() => this.pushNotifications.maybeSubscribeOncePerSession());
+    });
+  }
+
   ngOnInit() {
     if (!isPlatformBrowser(this.platformId)) {
       return;
     }
+
+    this.pushNotificationsBlocked.set(PushNotificationsService.notificationsDenied());
 
     this.tenantService.getTenantConfig().subscribe({
       next: (config) => this.tenantService.setTenant(config),

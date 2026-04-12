@@ -1,0 +1,78 @@
+<div class="p-4 sm:p-6">
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else if (receipt()) {
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-main">{{ receipt()!.correlative }}</h1>
+        <p class="text-sm text-muted mt-1">OC: {{ receipt()!.purchaseOrder?.correlative }} | Bodega: {{ receipt()!.warehouse?.name }}</p>
+      </div>
+      <div class="flex gap-2">
+        @if (!isReadonly()) {
+          <button (click)="saveItems()" [disabled]="isSaving()"
+                  class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors disabled:opacity-50">
+            Guardar Cantidades
+          </button>
+          <button (click)="confirm()"
+                  class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+            Confirmar Recepción
+          </button>
+        }
+      </div>
+    </div>
+
+    @if (hasDiscrepancies() && !isReadonly()) {
+      <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6">
+        <p class="text-sm text-yellow-400 font-medium">Existen diferencias entre cantidades esperadas y recibidas. Registre observaciones.</p>
+      </div>
+    }
+
+    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Artículo</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">P/N</th>
+              <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Esperado</th>
+              <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Recibido</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of editableItems(); track item.id; let i = $index) {
+              <tr class="border-b border-border/50"
+                  [ngClass]="{'bg-yellow-500/5': item._quantityReceived !== item.quantityExpected && !isReadonly()}">
+                <td class="px-4 py-3 text-sm text-main">
+                  {{ item.orderItem?.inventoryItem?.name || item.orderItem?.description || '—' }}
+                </td>
+                <td class="px-4 py-3 text-sm font-mono text-muted">
+                  {{ item.orderItem?.inventoryItem?.partNumber || '—' }}
+                </td>
+                <td class="px-4 py-3 text-center text-sm text-main font-mono">{{ item.quantityExpected }}</td>
+                <td class="px-4 py-3 text-center">
+                  @if (isReadonly()) {
+                    <span class="text-sm font-mono text-main">{{ item._quantityReceived }}</span>
+                  } @else {
+                    <input type="number" min="0" [max]="item.quantityExpected"
+                           [ngModel]="item._quantityReceived" (ngModelChange)="updateItemQty(i, $event)"
+                           class="w-20 px-2 py-1.5 bg-dark border border-border rounded-lg text-main text-sm text-center font-mono focus:border-primary focus:outline-none">
+                  }
+                </td>
+                <td class="px-4 py-3">
+                  @if (isReadonly()) {
+                    <span class="text-sm text-muted">{{ item._observations || '—' }}</span>
+                  } @else {
+                    <textarea rows="1" placeholder="Observación..."
+                              [ngModel]="item._observations" (ngModelChange)="updateItemObs(i, $event)"
+                              class="w-full px-2 py-1.5 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none"></textarea>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</div>

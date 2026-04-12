@@ -26,6 +26,13 @@ export class TenantRolesController {
     return this.tenantRolesService.findAll(req.user.tenantId);
   }
 
+  /** Crea roles espejo (Sistema · …) si faltan; mismo resultado que GET tras asegurar. */
+  @Post('ensure-defaults')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  ensureDefaults(@Req() req: any) {
+    return this.tenantRolesService.ensureDefaultsAndList(req.user.tenantId);
+  }
+
   @Post()
   @Roles('ADMIN', 'SUPER_ADMIN')
   create(@Req() req: any, @Body() dto: CreateTenantRoleDto) {

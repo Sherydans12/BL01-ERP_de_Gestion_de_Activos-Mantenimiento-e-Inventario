@@ -331,6 +331,12 @@ model User {
   inventoryTransactions InventoryTransaction[]
   meterAdjustments    MeterAdjustment[]
 
+  purchaseRequisitions    PurchaseRequisition[]      @relation("RequisitionRequester")
+  purchaseOrderApprovals  PurchaseOrderApproval[]    @relation("POApprover")
+  warehouseReceipts       WarehouseReceipt[]         @relation("ReceiptReceiver")
+  activityLogs            ActivityLog[]
+  pushSubscriptions       PushSubscription[]
+
   @@unique([tenantId, rut])
   @@map("users")
 }
@@ -359,6 +365,16 @@ model Tenant {
   warehouses            Warehouse[]
   inventoryItems        InventoryItem[]
   tenantRoles           TenantRole[]
+
+  vendors               Vendor[]
+  purchaseSettings      PurchaseSettings?
+  purchaseRequisitions  PurchaseRequisition[]
+  purchaseQuotations    PurchaseQuotation[]
+  purchaseOrders        PurchaseOrder[]
+  warehouseReceipts     WarehouseReceipt[]
+  sequenceCounters      SequenceCounter[]
+  activityLogs          ActivityLog[]
+  pushSubscriptions     PushSubscription[]
   
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -377,7 +393,8 @@ model TenantRole {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  users       User[]
+  users              User[]
+  approvalPolicies   ApprovalPolicy[]
 
   @@unique([tenantId, name])
   @@map("tenant_roles")
@@ -412,6 +429,9 @@ model Contract {
   maintenanceKits MaintenanceKit[]
   warehouses      Warehouse[]
 
+  purchaseRequisitions PurchaseRequisition[]
+  purchaseOrders       PurchaseOrder[]
+
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
 
@@ -431,6 +451,8 @@ model Subcontract {
   workOrders    WorkOrder[]
   maintenanceKits MaintenanceKit[]
   warehouses      Warehouse[]
+  purchaseRequisitions PurchaseRequisition[]
+  purchaseOrders       PurchaseOrder[]
 
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
@@ -473,6 +495,7 @@ model Warehouse {
   transactions    InventoryTransaction[]
   workOrders      WorkOrder[]
   stockReservations StockReservation[]
+  warehouseReceipts WarehouseReceipt[]
 
   @@unique([tenantId, code])
   @@map("warehouses")
@@ -496,6 +519,8 @@ model InventoryItem {
   transactions    InventoryTransaction[]
   workOrderParts  WorkOrderPart[]
   stockReservations StockReservation[]
+  requisitionItems  RequisitionItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@unique([tenantId, partNumber])
   @@map("inventory_items")
@@ -585,4 +610,367 @@ model StockReservation {
 
   @@unique([workOrderId, itemId, warehouseId])
   @@map("stock_reservations")
+}
+
+// ==========================================
+// 11. CONTADOR DE SECUENCIAS (CORRELATIVOS)
+// ==========================================
+model SequenceCounter {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  documentType  String   @map("document_type") @db.VarChar(10)
+  prefix        String   @db.VarChar(10)
+  lastNumber    Int      @default(0) @map("last_number")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, documentType])
+  @@map("sequence_counters")
+}
+
+// ==========================================
+// 12. MAESTRO DE PROVEEDORES
+// ==========================================
+model Vendor {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  code          String    @db.VarChar(50)
+  name          String    @db.VarChar(200)
+  rut           String?   @db.VarChar(20)
+  contactName   String?   @map("contact_name") @db.VarChar(100)
+  contactEmail  String?   @map("contact_email") @db.VarChar(100)
+  contactPhone  String?   @map("contact_phone") @db.VarChar(20)
+  address       String?   @db.VarChar(255)
+  isActive      Boolean   @default(true) @map("is_active")
+
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quotations    PurchaseQuotation[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, rut])
+  @@map("vendors")
+}
+
+// ==========================================
+// 13. CONFIGURACIÓN DINÁMICA DE COMPRAS
+// ==========================================
+model PurchaseSettings {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @unique @map("tenant_id") @db.Uuid
+  approvalThreshold  Decimal  @default(0) @map("approval_threshold") @db.Decimal(18, 2)
+  currency           String   @default("CLP") @db.VarChar(10)
+
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  approvalPolicies   ApprovalPolicy[]
+
+  @@map("purchase_settings")
+}
+
+model ApprovalPolicy {
+  id                  String           @id @default(uuid()) @db.Uuid
+  purchaseSettingsId  String           @map("purchase_settings_id") @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  level               Int
+  description         String?          @db.VarChar(100)
+  roleId              String           @map("role_id") @db.Uuid
+  minAmount           Decimal          @default(0) @db.Decimal(18, 2) @map("min_amount")
+
+  purchaseSettings    PurchaseSettings @relation(fields: [purchaseSettingsId], references: [id], onDelete: Cascade)
+  role                TenantRole       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  approvals           PurchaseOrderApproval[]
+
+  @@unique([tenantId, level])
+  @@map("approval_policies")
+}
+
+// ==========================================
+// 14. MÓDULO DE COMPRAS (P2P)
+// ==========================================
+
+// -- Requerimientos de Compra --
+model PurchaseRequisition {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String              @map("tenant_id") @db.Uuid
+  contractId      String              @map("contract_id") @db.Uuid
+  subcontractId   String?             @map("subcontract_id") @db.Uuid
+  correlative     String              @db.VarChar(30)
+  requestedById   String              @map("requested_by_id") @db.Uuid
+  status          RequisitionStatus   @default(DRAFT)
+  description     String              @db.Text
+  justification   String?             @db.Text
+
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract        Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract     Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  requestedBy     User                @relation("RequisitionRequester", fields: [requestedById], references: [id])
+  items           RequisitionItem[]
+  quotations      PurchaseQuotation[]
+
+  @@unique([tenantId, correlative])
+  @@map("purchase_requisitions")
+}
+
+model RequisitionItem {
+  id              String              @id @default(uuid()) @db.Uuid
+  requisitionId   String              @map("requisition_id") @db.Uuid
+  inventoryItemId String?             @map("inventory_item_id") @db.Uuid
+  description     String              @db.VarChar(255)
+  quantity        Float
+  unitOfMeasure   String              @map("unit_of_measure") @db.VarChar(20)
+  estimatedCost   Decimal?            @map("estimated_cost") @db.Decimal(18, 2)
+
+  requisition     PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem?      @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  quotationItems  QuotationItem[]
+
+  @@map("requisition_items")
+}
+
+// -- Cotizaciones --
+model PurchaseQuotation {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String              @map("tenant_id") @db.Uuid
+  requisitionId   String              @map("requisition_id") @db.Uuid
+  vendorId        String              @map("vendor_id") @db.Uuid
+  totalAmount     Decimal             @map("total_amount") @db.Decimal(18, 2)
+  currency        String              @default("CLP") @db.VarChar(10)
+  deliveryDays    Int?                @map("delivery_days")
+  validUntil      DateTime?           @map("valid_until")
+  attachmentUrl   String?             @map("attachment_url") @db.VarChar(500)
+  status          QuotationStatus     @default(RECEIVED)
+  isWinner        Boolean             @default(false) @map("is_winner")
+
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requisition     PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  vendor          Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  items           QuotationItem[]
+  purchaseOrder   PurchaseOrder?
+
+  @@map("purchase_quotations")
+}
+
+model QuotationItem {
+  id                String            @id @default(uuid()) @db.Uuid
+  quotationId       String            @map("quotation_id") @db.Uuid
+  requisitionItemId String            @map("requisition_item_id") @db.Uuid
+  unitPrice         Decimal           @map("unit_price") @db.Decimal(18, 2)
+  brand             String?           @db.VarChar(100)
+  notes             String?           @db.VarChar(255)
+
+  quotation         PurchaseQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  requisitionItem   RequisitionItem   @relation(fields: [requisitionItemId], references: [id], onDelete: Restrict)
+
+  @@map("quotation_items")
+}
+
+// -- Órdenes de Compra --
+model PurchaseOrder {
+  id                 String              @id @default(uuid()) @db.Uuid
+  tenantId           String              @map("tenant_id") @db.Uuid
+  contractId         String              @map("contract_id") @db.Uuid
+  subcontractId      String?             @map("subcontract_id") @db.Uuid
+  quotationId        String?             @unique @map("quotation_id") @db.Uuid
+  correlative        String              @db.VarChar(30)
+  status             PurchaseOrderStatus @default(DRAFT)
+  totalAmount        Decimal             @map("total_amount") @db.Decimal(18, 2)
+  currency           String              @default("CLP") @db.VarChar(10)
+  requiredSignatures Int                 @default(2) @map("required_signatures")
+  notes              String?             @db.Text
+  pdfUrl             String?             @map("pdf_url") @db.Text
+
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract           Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract        Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  quotation          PurchaseQuotation?  @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  items              PurchaseOrderItem[]
+  approvals          PurchaseOrderApproval[]
+  receipts           WarehouseReceipt[]
+
+  @@unique([tenantId, correlative])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String         @id @default(uuid()) @db.Uuid
+  purchaseOrderId String         @map("purchase_order_id") @db.Uuid
+  inventoryItemId String?        @map("inventory_item_id") @db.Uuid
+  description     String         @db.VarChar(255)
+  quantity        Float
+  unitCost        Decimal        @map("unit_cost") @db.Decimal(18, 2)
+
+  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  receiptItems    ReceiptItem[]
+
+  @@map("purchase_order_items")
+}
+
+// -- Firmas de Aprobación --
+model PurchaseOrderApproval {
+  id              String              @id @default(uuid()) @db.Uuid
+  purchaseOrderId String              @map("purchase_order_id") @db.Uuid
+  policyId        String              @map("policy_id") @db.Uuid
+  approvedById    String              @map("approved_by_id") @db.Uuid
+  level           Int
+  comment         String?             @db.Text
+  signatureHash   String              @map("signature_hash") @db.VarChar(64)
+  /// Estado de la OC al momento de firmar; usado para verificar el hash sin depender del estado actual.
+  hashedStatus    String?             @map("hashed_status") @db.VarChar(40)
+  integrityStatus SignatureIntegrity  @default(VALID) @map("integrity_status")
+  approvedAt      DateTime            @default(now()) @map("approved_at")
+
+  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  policy          ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  approvedBy      User           @relation("POApprover", fields: [approvedById], references: [id])
+
+  @@unique([purchaseOrderId, level])
+  @@map("purchase_order_approvals")
+}
+
+// -- Recepciones de Bodega --
+model WarehouseReceipt {
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  purchaseOrderId String        @map("purchase_order_id") @db.Uuid
+  warehouseId     String        @map("warehouse_id") @db.Uuid
+  receivedById    String        @map("received_by_id") @db.Uuid
+  correlative     String        @db.VarChar(30)
+  status          ReceiptStatus @default(PENDING)
+  observations    String?       @db.Text
+  receivedAt      DateTime?     @map("received_at")
+
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedBy      User          @relation("ReceiptReceiver", fields: [receivedById], references: [id])
+  items           ReceiptItem[]
+
+  @@unique([tenantId, correlative])
+  @@map("warehouse_receipts")
+}
+
+model ReceiptItem {
+  id               String            @id @default(uuid()) @db.Uuid
+  receiptId        String            @map("receipt_id") @db.Uuid
+  orderItemId      String            @map("order_item_id") @db.Uuid
+  quantityExpected Float             @map("quantity_expected")
+  quantityReceived Float             @map("quantity_received")
+  observations     String?           @db.Text
+
+  receipt          WarehouseReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItem        PurchaseOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@map("receipt_items")
+}
+
+// ==========================================
+// ENUMS: MÓDULO DE COMPRAS
+// ==========================================
+enum RequisitionStatus {
+  DRAFT
+  SUBMITTED
+  QUOTING
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum QuotationStatus {
+  RECEIVED
+  SELECTED
+  REJECTED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PARTIALLY_APPROVED
+  APPROVED
+  REJECTED
+  SENT_TO_SUPPLIER
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+enum ReceiptStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+}
+
+enum SignatureIntegrity {
+  VALID
+  COMPROMISED
+}
+
+// ==========================================
+// AUDITORÍA DE COMPRAS (ActivityLog)
+// ==========================================
+model ActivityLog {
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  action      ActivityAction
+  entityType  String         @map("entity_type") @db.VarChar(40)
+  entityId    String         @map("entity_id") @db.VarChar(36)
+  details     Json
+  ipAddress   String?        @map("ip_address") @db.VarChar(64)
+  userAgent   String?        @map("user_agent") @db.Text
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@map("activity_logs")
+}
+
+// ==========================================
+// NOTIFICACIONES WEB PUSH
+// ==========================================
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique @db.Text
+  p256dh    String   @map("p256dh") @db.VarChar(512)
+  auth      String   @db.VarChar(256)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  SIGNATURE
 }

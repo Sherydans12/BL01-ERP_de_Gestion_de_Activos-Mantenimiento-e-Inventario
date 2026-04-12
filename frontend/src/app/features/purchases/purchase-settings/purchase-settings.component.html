@@ -1,0 +1,229 @@
+<div class="p-6 max-w-3xl mx-auto">
+  <h1 class="text-2xl font-bold text-main mb-6">Configuración de Compras</h1>
+
+  @if (pushNotificationsBlocked()) {
+    <div class="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-main" role="status">
+      Las notificaciones están bloqueadas en este navegador. Actívelas en la configuración del sitio para recibir alertas de firma.
+    </div>
+  }
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else {
+    <div class="space-y-8">
+    <!-- Threshold -->
+    <div class="bg-surface rounded-xl border border-border p-6">
+      <h2 class="text-lg font-semibold text-main mb-4">Regla de Monto Crítico</h2>
+      <p class="text-sm text-muted mb-4">Define desde qué monto una orden requiere la tercera firma (nivel crítico), además de las dos obligatorias.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1">Umbral de Aprobación</label>
+          <div class="flex">
+            <span class="inline-flex items-center px-3 bg-dark border border-r-0 border-border rounded-l-lg text-muted text-sm font-medium">CLP</span>
+            <input type="number" min="0" step="100000"
+                   [ngModel]="threshold()" (ngModelChange)="threshold.set($event)"
+                   class="w-full px-3 py-2 bg-dark border border-border rounded-r-lg text-main font-mono focus:border-primary focus:outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1">Moneda</label>
+          <select [ngModel]="currency()" (ngModelChange)="currency.set($event)"
+                  class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
+            <option value="CLP">CLP - Peso Chileno</option>
+            <option value="USD">USD - Dólar</option>
+            <option value="EUR">EUR - Euro</option>
+          </select>
+        </div>
+      </div>
+      <div class="rounded-r-lg border-l-4 border-primary/45 bg-primary/5 my-6 pl-6 pr-5 py-5 text-sm text-muted leading-relaxed">
+        Las compras inferiores a <span class="font-semibold text-main font-mono">{{ threshold() | clpCurrency:currency() }}</span>
+        requerirán solo los niveles 1 y 2. Montos superiores activarán el <span class="font-semibold text-main">Nivel 3</span>.
+      </div>
+    </div>
+
+    <!-- Approval Policies -->
+    <div class="bg-surface rounded-xl border border-border p-6">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-lg font-semibold text-main">Matriz de Firmas</h2>
+          <p class="text-sm text-muted mt-1">
+            Determine qué roles tienen permiso para autorizar cada etapa de la compra.
+          </p>
+        </div>
+        <button type="button"
+                (click)="addPolicy()"
+                [disabled]="policies().length >= maxLevels"
+                class="text-sm text-primary hover:text-primary/80 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
+          + Agregar Nivel
+        </button>
+      </div>
+
+      @if (isLoadingRoles()) {
+        <div class="flex justify-center py-6 text-muted text-sm">Cargando roles disponibles…</div>
+      } @else if (roles().length === 0) {
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4 space-y-3">
+          <p class="text-sm text-main font-medium">No se cargaron roles para la matriz</p>
+          <p class="text-sm text-muted">
+            Si la lista sigue vacía, puede generar los roles base ahora o crear roles en Roles y permisos.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button"
+                    (click)="loadDefaultRoles()"
+                    [disabled]="isSeedingDefaults()"
+                    class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/15 text-primary text-sm font-medium border border-primary/30 hover:bg-primary/25 disabled:opacity-50">
+              {{ isSeedingDefaults() ? 'Generando…' : 'Generar roles base' }}
+            </button>
+            <a routerLink="/app/roles"
+               class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm text-muted hover:text-main">
+              Roles y permisos
+            </a>
+          </div>
+        </div>
+      }
+
+      @if (!isLoadingRoles() && roles().length > 0) {
+        <p class="text-xs text-muted mb-3">
+          Los niveles <span class="text-main font-medium">1 y 2</span> son obligatorios en todo flujo.
+          El <span class="text-main font-medium">nivel 3</span> solo se exige cuando el monto alcanza o supera el umbral crítico.
+        </p>
+      }
+
+      @if (policyRowsBase().length > 0 || policyRowsCritical().length > 0) {
+      <div class="max-w-full min-w-0 overflow-x-auto">
+      <!-- Niveles base (1 y 2) -->
+      @if (policyRowsBase().length > 0) {
+        <div class="rounded-xl border border-border/80 bg-dark/20 p-4 space-y-4 mb-4 min-w-0">
+          <p class="text-xs font-medium text-muted uppercase tracking-wide">Flujo base (obligatorio)</p>
+          @for (row of policyRowsBase(); track row.policy.level) {
+            <div class="p-3 sm:p-4 bg-dark/50 rounded-lg border border-border/50 min-w-0 space-y-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center justify-center size-8 rounded-full bg-primary/20 text-primary text-sm font-bold shrink-0">
+                  {{ row.policy.level }}
+                </span>
+                <span class="text-xs px-2.5 py-0.5 rounded-full border border-blue-500/35 bg-blue-500/10 text-blue-300 font-medium whitespace-nowrap">
+                  Base / Obligatorio
+                </span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:gap-4 items-end min-w-0 pt-1 border-t border-border/40">
+                <div class="sm:col-span-3 min-w-0">
+                  <label class="block text-[11px] font-medium text-muted mb-1">Descripción del nivel</label>
+                  <input type="text" placeholder="Descripción del nivel"
+                         [ngModel]="row.policy.description" (ngModelChange)="updatePolicy(row.index, 'description', $event)"
+                         class="w-full min-w-0 px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+                </div>
+                <div class="sm:col-span-5 min-w-0">
+                  <label class="block text-[11px] font-medium text-muted mb-1">Rol</label>
+                  <select [ngModel]="row.policy.roleId" (ngModelChange)="updatePolicy(row.index, 'roleId', $event)"
+                          class="w-full min-w-0 px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+                    <option value="">Seleccionar Rol</option>
+                    @for (role of roles(); track role.id) {
+                      <option [value]="role.id">{{ role.name }} ({{ role.baseRole }})</option>
+                    }
+                  </select>
+                </div>
+                <div class="sm:col-span-3 min-w-0">
+                  <label class="block text-[11px] font-medium text-muted mb-1">Monto mínimo</label>
+                  <div class="flex min-w-0">
+                    <span class="inline-flex shrink-0 items-center px-2 bg-dark border border-r-0 border-border rounded-l-lg text-muted text-xs">CLP</span>
+                    <input type="number" placeholder="0" min="0"
+                           [ngModel]="row.policy.minAmount" (ngModelChange)="updatePolicy(row.index, 'minAmount', $event)"
+                           class="w-full min-w-0 px-2 py-2 bg-dark border border-border rounded-r-lg text-main text-sm font-mono focus:border-primary focus:outline-none">
+                  </div>
+                </div>
+                <div class="sm:col-span-1 flex justify-end sm:justify-center pb-0.5 min-w-0">
+                  <button type="button" (click)="removePolicy(row.index)" class="inline-flex size-9 items-center justify-center rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0" title="Quitar nivel">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Separador + Nivel crítico -->
+      @if (policyRowsCritical().length > 0) {
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 my-6 py-4 border-t border-dashed border-border">
+          <div class="flex items-center gap-2 text-purple-400 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+            </svg>
+            <span class="text-sm font-semibold text-main">Alta gerencia — solo si supera el umbral</span>
+          </div>
+          <p class="text-xs text-muted sm:ml-auto sm:max-w-md sm:text-right">
+            Este escalón es condicional: el backend solo lo exige cuando el monto de la OC es mayor o igual al monto crítico.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-purple-500/30 bg-purple-500/[0.06] p-4 space-y-4 min-w-0">
+          @for (row of policyRowsCritical(); track row.policy.level) {
+            <div class="p-3 sm:p-4 bg-dark/50 rounded-lg border border-purple-500/20 min-w-0 space-y-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center justify-center size-8 rounded-full bg-purple-500/25 text-purple-300 text-sm font-bold shrink-0">
+                  {{ row.policy.level }}
+                </span>
+                <span class="text-xs px-2.5 py-0.5 rounded-full border border-purple-500/45 bg-purple-500/15 text-purple-300 font-medium whitespace-nowrap">
+                  Crítico / Condicional
+                </span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:gap-4 items-end min-w-0 pt-1 border-t border-purple-500/25">
+                <div class="sm:col-span-3 min-w-0">
+                  <label class="block text-[11px] font-medium text-muted mb-1">Descripción del nivel</label>
+                  <input type="text" placeholder="Descripción del nivel"
+                         [ngModel]="row.policy.description" (ngModelChange)="updatePolicy(row.index, 'description', $event)"
+                         class="w-full min-w-0 px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+                </div>
+                <div class="sm:col-span-5 min-w-0">
+                  <label class="block text-[11px] font-medium text-muted mb-1">Rol</label>
+                  <select [ngModel]="row.policy.roleId" (ngModelChange)="updatePolicy(row.index, 'roleId', $event)"
+                          class="w-full min-w-0 px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+                    <option value="">Seleccionar Rol</option>
+                    @for (role of roles(); track role.id) {
+                      <option [value]="role.id">{{ role.name }} ({{ role.baseRole }})</option>
+                    }
+                  </select>
+                </div>
+                <div class="sm:col-span-3 min-w-0">
+                  <label class="block text-[11px] font-medium text-muted mb-1">Monto mínimo</label>
+                  <div class="flex min-w-0">
+                    <span class="inline-flex shrink-0 items-center px-2 bg-dark border border-r-0 border-border rounded-l-lg text-muted text-xs">CLP</span>
+                    <input type="number" placeholder="0" min="0"
+                           [ngModel]="row.policy.minAmount" (ngModelChange)="updatePolicy(row.index, 'minAmount', $event)"
+                           class="w-full min-w-0 px-2 py-2 bg-dark border border-border rounded-r-lg text-main text-sm font-mono focus:border-primary focus:outline-none">
+                  </div>
+                </div>
+                <div class="sm:col-span-1 flex justify-end sm:justify-center pb-0.5 min-w-0">
+                  <button type="button" (click)="removePolicy(row.index)" class="inline-flex size-9 items-center justify-center rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0" title="Quitar nivel">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+      </div>
+      }
+
+      @if (!isLoadingRoles() && policies().length === 0) {
+        <div class="text-center py-8 text-muted rounded-xl border border-dashed border-border">
+          <p>No hay políticas de aprobación configuradas.</p>
+          <p class="text-sm mt-1">Agregue al menos <strong class="text-main">2 niveles</strong> de firma (obligatorio).</p>
+          <button type="button" (click)="addPolicy()"
+                  class="mt-4 text-sm text-primary hover:text-primary/80">+ Agregar primer nivel</button>
+        </div>
+      }
+    </div>
+
+    <div class="flex flex-col items-end gap-2">
+      @if (!canSaveMatrix()) {
+        <p class="text-xs text-amber-500/90">Configure al menos 2 niveles para poder guardar.</p>
+      }
+      <button type="button" (click)="save()" [disabled]="isSaving() || !canSaveMatrix()"
+              class="px-6 py-2.5 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        {{ isSaving() ? 'Guardando...' : 'Guardar Configuración' }}
+      </button>
+    </div>
+    </div>
+  }
+</div>

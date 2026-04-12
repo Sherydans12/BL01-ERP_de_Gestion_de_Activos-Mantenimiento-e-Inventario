@@ -7,7 +7,7 @@ export interface TenantRole {
   id: string;
   name: string;
   description?: string | null;
-  baseRole: 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
+  baseRole: 'SUPER_ADMIN' | 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
   routes: string[];
   createdAt?: string;
   updatedAt?: string;
@@ -17,7 +17,7 @@ export interface TenantRole {
 export interface CreateTenantRolePayload {
   name: string;
   description?: string;
-  baseRole: 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
+  baseRole: 'SUPER_ADMIN' | 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
   routes: string[];
 }
 
@@ -31,6 +31,11 @@ export class TenantRolesService {
 
   getAll(): Observable<TenantRole[]> {
     return this.http.get<TenantRole[]>(this.url);
+  }
+
+  /** Crea roles espejo Sistema · … si faltan y devuelve el listado completo. */
+  ensureDefaultRoles(): Observable<TenantRole[]> {
+    return this.http.post<TenantRole[]>(`${this.url}/ensure-defaults`, {});
   }
 
   create(payload: CreateTenantRolePayload): Observable<TenantRole> {

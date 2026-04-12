@@ -1,0 +1,44 @@
+<div class="p-6">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <h1 class="text-2xl font-bold text-main">Recepciones de Bodega</h1>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else {
+    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Correlativo</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">OC</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Bodega</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Recibido por</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Estado</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (receipt of receipts(); track receipt.id) {
+            <tr class="border-b border-border/50 hover:bg-dark/50 transition-colors">
+              <td class="px-4 py-3 text-sm font-mono text-primary">{{ receipt.correlative }}</td>
+              <td class="px-4 py-3 text-sm font-mono text-main">{{ receipt.purchaseOrder?.correlative }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ receipt.warehouse?.name }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ receipt.receivedBy?.name }}</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" [class]="statusColors[receipt.status] || ''">
+                  {{ statusLabels[receipt.status] || receipt.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <a [routerLink]="['/app/compras/recepciones', receipt.id]" class="text-primary hover:text-primary/80 text-sm">Ver</a>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="px-4 py-8 text-center text-muted">No se encontraron recepciones</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

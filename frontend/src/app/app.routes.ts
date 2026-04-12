@@ -164,6 +164,86 @@ export const routes: Routes = [
             (m) => m.StockDashboardComponent,
           ),
       },
+      // ── Compras (P2P) ──────────────────────────────────────────────────────
+      {
+        path: 'compras/proveedores',
+        loadComponent: () =>
+          import('./features/purchases/vendor-list/vendor-list.component').then(
+            (m) => m.VendorListComponent,
+          ),
+      },
+      {
+        path: 'compras/proveedores/nuevo',
+        loadComponent: () =>
+          import('./features/purchases/vendor-form/vendor-form.component').then(
+            (m) => m.VendorFormComponent,
+          ),
+      },
+      {
+        path: 'compras/proveedores/:id',
+        loadComponent: () =>
+          import('./features/purchases/vendor-form/vendor-form.component').then(
+            (m) => m.VendorFormComponent,
+          ),
+      },
+      {
+        path: 'compras/requerimientos',
+        loadComponent: () =>
+          import('./features/purchases/requisition-list/requisition-list.component').then(
+            (m) => m.RequisitionListComponent,
+          ),
+      },
+      {
+        path: 'compras/requerimientos/nuevo',
+        loadComponent: () =>
+          import('./features/purchases/requisition-form/requisition-form.component').then(
+            (m) => m.RequisitionFormComponent,
+          ),
+      },
+      {
+        path: 'compras/requerimientos/:id',
+        loadComponent: () =>
+          import('./features/purchases/requisition-detail/requisition-detail.component').then(
+            (m) => m.RequisitionDetailComponent,
+          ),
+      },
+      {
+        path: 'compras/ordenes',
+        loadComponent: () =>
+          import('./features/purchases/purchase-order-list/purchase-order-list.component').then(
+            (m) => m.PurchaseOrderListComponent,
+          ),
+      },
+      {
+        path: 'compras/ordenes/:id',
+        loadComponent: () =>
+          import('./features/purchases/purchase-order-detail/purchase-order-detail.component').then(
+            (m) => m.PurchaseOrderDetailComponent,
+          ),
+      },
+      {
+        path: 'compras/recepciones',
+        loadComponent: () =>
+          import('./features/purchases/receipt-list/receipt-list.component').then(
+            (m) => m.ReceiptListComponent,
+          ),
+      },
+      {
+        path: 'compras/recepciones/:id',
+        loadComponent: () =>
+          import('./features/purchases/receipt-form/receipt-form.component').then(
+            (m) => m.ReceiptFormComponent,
+          ),
+      },
+      {
+        path: 'compras/configuracion',
+        canActivate: [authGuard],
+        data: { roles: ['ADMIN', 'SUPER_ADMIN'] },
+        loadComponent: () =>
+          import('./features/purchases/purchase-settings/purchase-settings.component').then(
+            (m) => m.PurchaseSettingsComponent,
+          ),
+      },
       // ── Configuración (ADMIN) ──────────────────────────────────────────────
       {
         path: 'catalogos',

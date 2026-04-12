@@ -128,6 +128,27 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: 'Compras',
+    roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+    items: [
+      { label: 'Requerimientos', route: '/app/compras/requerimientos', icon: ICONS.documentText },
+      { label: 'Órdenes de Compra', route: '/app/compras/ordenes', icon: ICONS.clipboard },
+      { label: 'Recepciones', route: '/app/compras/recepciones', icon: ICONS.archive },
+      {
+        label: 'Proveedores',
+        route: '/app/compras/proveedores',
+        icon: ICONS.users,
+        roles: ['SUPER_ADMIN', 'ADMIN'],
+      },
+      {
+        label: 'Config. Compras',
+        route: '/app/compras/configuracion',
+        icon: ICONS.cog,
+        roles: ['SUPER_ADMIN', 'ADMIN'],
+      },
+    ],
+  },
+  {
     label: 'Configuración',
     roles: ['SUPER_ADMIN', 'ADMIN'],
     items: [

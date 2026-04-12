@@ -2,10 +2,15 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTenantRoleDto } from './dto/create-tenant-role.dto';
 import { UpdateTenantRoleDto } from './dto/update-tenant-role.dto';
+import {
+  ensureDefaultTenantRolesForTenant,
+  SYSTEM_MIRROR_ROLE_NAME,
+} from './tenant-role-defaults';
 
 const ROLE_SELECT = {
   id: true,
@@ -23,11 +28,17 @@ export class TenantRolesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(tenantId: string) {
+    await ensureDefaultTenantRolesForTenant(this.prisma, tenantId);
     return this.prisma.tenantRole.findMany({
       where: { tenantId },
       select: ROLE_SELECT,
-      orderBy: { createdAt: 'asc' },
+      orderBy: { name: 'asc' },
     });
+  }
+
+  /** Idempotente: asegura roles espejo y devuelve el listado (útil para botón en UI). */
+  async ensureDefaultsAndList(tenantId: string) {
+    return this.findAll(tenantId);
   }
 
   async create(tenantId: string, dto: CreateTenantRoleDto) {
@@ -56,6 +67,13 @@ export class TenantRolesService {
     });
     if (!role) throw new NotFoundException('Rol no encontrado.');
 
+    const mirrorNames = new Set(Object.values(SYSTEM_MIRROR_ROLE_NAME));
+    if (mirrorNames.has(role.name) && dto.name !== undefined && dto.name !== role.name) {
+      throw new BadRequestException(
+        'No se puede renombrar un rol base del sistema (Sistema · …).',
+      );
+    }
+
     if (dto.name && dto.name !== role.name) {
       const dup = await this.prisma.tenantRole.findFirst({
         where: { tenantId, name: dto.name, id: { not: id } },
@@ -82,6 +100,13 @@ export class TenantRolesService {
       where: { id, tenantId },
     });
     if (!role) throw new NotFoundException('Rol no encontrado.');
+
+    const mirrorNames = new Set(Object.values(SYSTEM_MIRROR_ROLE_NAME));
+    if (mirrorNames.has(role.name)) {
+      throw new BadRequestException(
+        'No se puede eliminar un rol base del sistema (Sistema · …).',
+      );
+    }
 
     // Desasignar usuarios que tenían este rol custom antes de eliminarlo.
     await this.prisma.user.updateMany({
