@@ -22,6 +22,8 @@ export class UsersService {
       email: string;
       name: string;
       role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+      /** Si se envía, debe pertenecer al tenant; el rol efectivo sale del TenantRole.baseRole */
+      customRoleId?: string | null;
       rut?: string;
       phone?: string;
       birthDate?: string | Date;
@@ -30,7 +32,26 @@ export class UsersService {
     },
     tenantId?: string,
   ) {
-    if (data.role !== 'SUPER_ADMIN' && !tenantId) {
+    let effectiveRole = data.role;
+    let customRoleId: string | null =
+      data.customRoleId === undefined || data.customRoleId === ''
+        ? null
+        : data.customRoleId;
+
+    if (customRoleId && tenantId) {
+      const tr = await this.prisma.tenantRole.findFirst({
+        where: { id: customRoleId, tenantId },
+      });
+      if (!tr) {
+        throw new BadRequestException(
+          'El rol de organización seleccionado no es válido o no pertenece a su tenant.',
+        );
+      }
+      effectiveRole = tr.baseRole as typeof effectiveRole;
+      customRoleId = tr.id;
+    }
+
+    if (effectiveRole !== 'SUPER_ADMIN' && !tenantId) {
       throw new BadRequestException(
         'El Tenant ID es obligatorio para este rol.',
       );
@@ -51,15 +72,16 @@ export class UsersService {
           data: {
             email: data.email,
             name: data.name,
-            role: data.role as any,
+            role: effectiveRole as any,
             password: '',
             isActive: false,
             activationToken,
-            tenantId: data.role === 'SUPER_ADMIN' ? null : tenantId,
+            tenantId: effectiveRole === 'SUPER_ADMIN' ? null : tenantId,
             rut: data.rut,
             phone: data.phone,
             birthDate: data.birthDate ? new Date(data.birthDate) : null,
             position: data.position,
+            customRoleId,
           },
         });
 
@@ -93,7 +115,7 @@ export class UsersService {
           <div style="font-family: sans-serif; color: #333;">
             <h2>Bienvenido al Sistema de Gestión de Activos TPM</h2>
             <p>Hola <strong>${data.name}</strong>,</p>
-            <p>Has sido invitado a participar en el sistema con el rol de <strong>${data.role}</strong>.</p>
+            <p>Has sido invitado a participar en el sistema con el rol de <strong>${effectiveRole}</strong>.</p>
             <p>Para activar tu cuenta y establecer tu contraseña, haz clic en el siguiente enlace:</p>
             <p style="margin: 30px 0;">
               <a href="${activationLink}" 

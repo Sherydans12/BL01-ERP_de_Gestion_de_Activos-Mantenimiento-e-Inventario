@@ -12,6 +12,10 @@ import {
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { UsersService, User } from '../../../core/services/users/users.service';
+import {
+  TenantRolesService,
+  TenantRole,
+} from '../../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { finalize } from 'rxjs';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
@@ -119,7 +123,7 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                           user.role === 'MECHANIC',
                       }"
                     >
-                      {{ user.role }}
+                      {{ user.customRole?.name || user.role }}
                     </span>
                   </td>
                   <td class="px-6 py-4 text-muted font-mono">
@@ -319,68 +323,135 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                 </button>
               </h3>
               <form [formGroup]="userForm" class="space-y-4">
-                <input
-                  type="text"
-                  formControlName="name"
-                  class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
-                  placeholder="Nombre Completo"
-                />
-                <input
-                  type="email"
-                  formControlName="email"
-                  class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
-                  placeholder="Email"
-                />
-                <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label
+                    for="invite-name"
+                    class="block text-sm font-medium text-main mb-1"
+                    >Nombre completo</label
+                  >
                   <input
+                    id="invite-name"
                     type="text"
-                    formControlName="rut"
-                    (input)="formatRut($event)"
-                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono uppercase focus:outline-none focus:border-primary placeholder:text-muted/50"
-                    placeholder="RUT"
-                    maxlength="12"
+                    formControlName="name"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
+                    placeholder="Ej. Juan Pérez"
                   />
+                </div>
+                <div>
+                  <label
+                    for="invite-email"
+                    class="block text-sm font-medium text-main mb-1"
+                    >Correo electrónico</label
+                  >
                   <input
-                    type="text"
-                    formControlName="phone"
-                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono focus:outline-none focus:border-primary placeholder:text-muted/50"
-                    placeholder="Teléfono"
+                    id="invite-email"
+                    type="email"
+                    formControlName="email"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
+                    placeholder="correo@empresa.cl"
                   />
                 </div>
                 <div class="grid grid-cols-2 gap-4">
-                  <input
-                    type="date"
-                    formControlName="birthDate"
-                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono focus:outline-none focus:border-primary [color-scheme:dark]"
-                  />
-                  <input
-                    type="text"
-                    formControlName="position"
-                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
-                    placeholder="Cargo"
-                  />
+                  <div>
+                    <label
+                      for="invite-rut"
+                      class="block text-sm font-medium text-main mb-1"
+                      >RUT</label
+                    >
+                    <input
+                      id="invite-rut"
+                      type="text"
+                      formControlName="rut"
+                      (input)="formatRut($event)"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono uppercase focus:outline-none focus:border-primary placeholder:text-muted/50"
+                      placeholder="12.345.678-9"
+                      maxlength="12"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      for="invite-phone"
+                      class="block text-sm font-medium text-main mb-1"
+                      >Teléfono</label
+                    >
+                    <input
+                      id="invite-phone"
+                      type="text"
+                      formControlName="phone"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono focus:outline-none focus:border-primary placeholder:text-muted/50"
+                      placeholder="+56 9 1234 5678"
+                    />
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      for="invite-birth"
+                      class="block text-sm font-medium text-main mb-1"
+                      >Fecha de nacimiento</label
+                    >
+                    <input
+                      id="invite-birth"
+                      type="date"
+                      formControlName="birthDate"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono focus:outline-none focus:border-primary [color-scheme:dark]"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      for="invite-position"
+                      class="block text-sm font-medium text-main mb-1"
+                      >Cargo</label
+                    >
+                    <input
+                      id="invite-position"
+                      type="text"
+                      formControlName="position"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary placeholder:text-muted/50"
+                      placeholder="Ej. Jefe de taller"
+                    />
+                  </div>
                 </div>
                 @if (isEditing()) {
+                  <div>
+                    <label
+                      for="invite-active"
+                      class="block text-sm font-medium text-main mb-1"
+                      >Estado de la cuenta</label
+                    >
+                    <select
+                      id="invite-active"
+                      formControlName="isActive"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
+                    >
+                      <option [value]="true">Activo</option>
+                      <option [value]="false">Inactivo</option>
+                    </select>
+                  </div>
+                }
+                <div>
+                  <label
+                    for="invite-tenant-role"
+                    class="block text-sm font-medium text-main mb-1"
+                    >Rol en la organización</label
+                  >
                   <select
-                    formControlName="isActive"
+                    id="invite-tenant-role"
+                    formControlName="tenantRoleId"
                     class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
                   >
-                    <option [value]="true">Activo</option>
-                    <option [value]="false">Inactivo</option>
+                    @for (r of availableRoles(); track r.id) {
+                      <option [value]="r.id">{{ r.name }}</option>
+                    }
                   </select>
-                }
-                <select
-                  formControlName="role"
-                  class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main font-mono uppercase focus:outline-none focus:border-primary"
-                >
-                  <option value="MECHANIC">Mecánico</option>
-                  <option value="SUPERVISOR">Supervisor</option>
-                  <option value="ADMIN">Administrador</option>
-                </select>
+                  <p class="text-xs text-muted mt-1">
+                    Incluye roles base (espejo) y roles personalizados del tenant.
+                  </p>
+                </div>
 
                 @if (
-                  userForm.get('role')?.value === 'SUPERVISOR' ||
-                  userForm.get('role')?.value === 'MECHANIC'
+                  selectedRoleBaseRole() === 'SUPERVISOR' ||
+                  selectedRoleBaseRole() === 'MECHANIC'
                 ) {
                   <div class="mt-6 pt-5 border-t border-border">
                     <label
@@ -538,6 +609,7 @@ export class UserManagementComponent implements OnInit {
   private injector = inject(Injector);
   private usersService = inject(UsersService);
   private contractsService = inject(ContractsService);
+  private tenantRolesService = inject(TenantRolesService);
   private fb = inject(FormBuilder);
   private notification = inject(NotificationService);
 
@@ -547,6 +619,10 @@ export class UserManagementComponent implements OnInit {
 
   users = signal<User[]>([]);
   availableContracts = signal<Contract[]>([]);
+  /** Roles del tenant (espejo + personalizados) para invitación/edición */
+  availableRoles = signal<TenantRole[]>([]);
+  /** Rol base (enum) del TenantRole seleccionado en el formulario */
+  selectedRoleBaseRole = signal<TenantRole['baseRole'] | null>(null);
 
   // Paginación
   currentPage = signal(1);
@@ -572,7 +648,7 @@ export class UserManagementComponent implements OnInit {
   userForm = this.fb.nonNullable.group({
     name: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
-    role: ['MECHANIC', Validators.required],
+    tenantRoleId: ['', Validators.required],
     rut: [''],
     phone: [''],
     birthDate: [''],
@@ -584,6 +660,27 @@ export class UserManagementComponent implements OnInit {
   ngOnInit() {
     this.loadUsers();
     this.loadContracts();
+    this.loadTenantRoles();
+
+    this.userForm.get('tenantRoleId')?.valueChanges.subscribe((id) => {
+      const r = this.availableRoles().find((x) => x.id === id);
+      this.selectedRoleBaseRole.set(r?.baseRole ?? null);
+    });
+  }
+
+  loadTenantRoles() {
+    this.tenantRolesService.getAll().subscribe({
+      next: (roles) => {
+        this.availableRoles.set(roles);
+        const id = this.userForm.get('tenantRoleId')?.value;
+        if (typeof id === 'string' && id) {
+          const r = roles.find((x) => x.id === id);
+          this.selectedRoleBaseRole.set(r?.baseRole ?? null);
+        }
+      },
+      error: () =>
+        this.notification.error('No se pudieron cargar los roles del tenant'),
+    });
   }
 
   loadContracts() {
@@ -668,7 +765,22 @@ export class UserManagementComponent implements OnInit {
   openInviteModal() {
     this.isEditing.set(false);
     this.selectedUser.set(null);
-    this.userForm.reset({ role: 'MECHANIC', isActive: true, contractIds: [] });
+    const roles = this.availableRoles();
+    const defaultId = roles[0]?.id ?? '';
+    this.userForm.reset({
+      name: '',
+      email: '',
+      tenantRoleId: defaultId,
+      rut: '',
+      phone: '',
+      birthDate: '',
+      position: '',
+      isActive: true,
+      contractIds: [],
+    });
+    this.selectedRoleBaseRole.set(
+      roles.find((x) => x.id === defaultId)?.baseRole ?? null,
+    );
     this.formModalOpen.set(true);
     this.scheduleUserFormDialogOpen();
   }
@@ -694,10 +806,12 @@ export class UserManagementComponent implements OnInit {
       ? new Date(user.birthDate).toISOString().split('T')[0]
       : '';
 
+    const tenantRoleId = this.resolveTenantRoleIdForUser(user);
+
     this.userForm.patchValue({
       name: user.name,
       email: user.email,
-      role: user.role,
+      tenantRoleId,
       rut: user.rut || '',
       phone: user.phone || '',
       birthDate: formattedDate,
@@ -709,8 +823,25 @@ export class UserManagementComponent implements OnInit {
         : [],
     });
 
+    const r = this.availableRoles().find((x) => x.id === tenantRoleId);
+    this.selectedRoleBaseRole.set(r?.baseRole ?? null);
+
     this.formModalOpen.set(true);
     this.scheduleUserFormDialogOpen();
+  }
+
+  /** Si el usuario no tiene customRoleId (legado), usa el rol espejo que coincida con User.role */
+  private resolveTenantRoleIdForUser(user: User): string {
+    const roles = this.availableRoles();
+    if (user.customRoleId) {
+      return user.customRoleId;
+    }
+    const mirror = roles.find(
+      (tr) =>
+        tr.baseRole === (user.role as TenantRole['baseRole']) &&
+        tr.name.startsWith('Sistema'),
+    );
+    return mirror?.id ?? roles[0]?.id ?? '';
   }
 
   isContractSelected(id: string): boolean {
@@ -744,9 +875,15 @@ export class UserManagementComponent implements OnInit {
 
   submitForm() {
     if (this.userForm.valid) {
-      const formData = this.userForm.getRawValue();
+      const payload = this.buildPayloadFromForm();
+      if (!payload) {
+        this.notification.error(
+          'Seleccione un rol de organización válido en la lista.',
+        );
+        return;
+      }
 
-      if (formData.rut && !this.validateRut(formData.rut)) {
+      if (payload.rut && !this.validateRut(payload.rut)) {
         this.notification.error(
           'El RUT ingresado no es válido (Dígito verificador incorrecto)',
         );
@@ -758,7 +895,7 @@ export class UserManagementComponent implements OnInit {
       if (this.isEditing() && this.selectedUser()) {
         const id = this.selectedUser()!.id;
         this.usersService
-          .updateUser(id, formData)
+          .updateUser(id, payload)
           .pipe(finalize(() => this.isSubmitting.set(false)))
           .subscribe({
             next: () => {
@@ -772,8 +909,13 @@ export class UserManagementComponent implements OnInit {
             },
           });
       } else {
+        const {
+          isActive: _skip,
+          ...inviteBody
+        } = payload;
+        void _skip;
         this.usersService
-          .createUser(formData)
+          .createUser(inviteBody)
           .pipe(finalize(() => this.isSubmitting.set(false)))
           .subscribe({
             next: () => {
@@ -790,6 +932,37 @@ export class UserManagementComponent implements OnInit {
           });
       }
     }
+  }
+
+  private buildPayloadFromForm():
+    | {
+        name: string;
+        email: string;
+        role: string;
+        customRoleId: string;
+        rut?: string;
+        phone?: string;
+        birthDate?: string;
+        position?: string;
+        isActive?: boolean;
+        contractIds?: string[];
+      }
+    | null {
+    const raw = this.userForm.getRawValue();
+    const tr = this.availableRoles().find((r) => r.id === raw.tenantRoleId);
+    if (!tr) return null;
+    return {
+      name: raw.name,
+      email: raw.email,
+      role: tr.baseRole,
+      customRoleId: tr.id,
+      rut: raw.rut?.trim() || undefined,
+      phone: raw.phone?.trim() || undefined,
+      birthDate: raw.birthDate?.trim() || undefined,
+      position: raw.position?.trim() || undefined,
+      isActive: raw.isActive,
+      contractIds: raw.contractIds,
+    };
   }
 
   validateRut(rut: string): boolean {

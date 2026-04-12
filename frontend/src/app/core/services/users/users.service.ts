@@ -14,6 +14,8 @@ export interface User {
   phone?: string;
   birthDate?: string;
   position?: string;
+  customRoleId?: string | null;
+  customRole?: { id: string; name: string; baseRole: string } | null;
   contractAccess?: { contractId: string }[];
 }
 
