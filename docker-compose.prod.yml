@@ -15,7 +15,7 @@ services:
       - erp-network-prod
 
   db-backup:
-    image: eeshugerman/postgres-backup-s3:latest
+    image: eeshugerman/postgres-backup-s3:16
     container_name: erp-db-backup
     restart: always
     depends_on:
