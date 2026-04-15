@@ -1,100 +1,296 @@
 <div class="space-y-6">
-  <!-- Cabecera Industrial -->
-  <div
-    class="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-border/50"
-  >
-    <div class="flex items-center gap-4">
-      <div class="p-3 bg-primary/10 rounded-xl border border-primary/20">
-        <svg
-          class="w-6 h-6 text-primary"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-          ></path>
-        </svg>
+  <!-- Cabecera -->
+  <div class="flex flex-col gap-4 pb-2 border-b border-border/50">
+    <div
+      class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"
+    >
+      <div class="flex items-center gap-4 min-w-0">
+        <div class="p-3 bg-primary/10 rounded-xl border border-primary/20 shrink-0">
+          <svg
+            class="w-6 h-6 text-primary"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+            ></path>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <h2
+            class="text-2xl font-bold text-main tracking-tight flex flex-wrap items-center gap-3"
+          >
+            Control de Stock
+            @if (pendingRegularizationCount() > 0) {
+              <button
+                type="button"
+                (click)="openPendingRegularizationModal()"
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-error/10 border border-error/20 rounded-full animate-pulse text-[10px] font-mono font-bold text-error uppercase tracking-tighter hover:bg-error/20 transition-colors cursor-pointer"
+                title="Ver auditoría de pendientes de regularización"
+              >
+                <span class="w-1.5 h-1.5 bg-error rounded-full"></span>
+                {{ pendingRegularizationCount() }} Pendiente{{
+                  pendingRegularizationCount() > 1 ? "s" : ""
+                }}
+              </button>
+            }
+          </h2>
+          <p class="text-sm text-muted font-medium">
+            Saldos por bodega y movimientos de almacén.
+          </p>
+        </div>
       </div>
-      <div>
-        <h2
-          class="text-2xl font-bold text-main tracking-tight flex items-center gap-3"
+      @if (selectedWarehouseId()) {
+        <button
+          type="button"
+          (click)="openTransactionModal()"
+          class="shrink-0 inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-lg transition-colors"
         >
-          Control de Inventario
-          @if (pendingRegularizationCount() > 0) {
-            <span
-              class="flex items-center gap-1.5 px-2.5 py-1 bg-error/10 border border-error/20 rounded-full animate-pulse text-[10px] font-mono font-bold text-error uppercase tracking-tighter"
-            >
-              <span class="w-1.5 h-1.5 bg-error rounded-full"></span>
-              {{ pendingRegularizationCount() }} Pendiente{{
-                pendingRegularizationCount() > 1 ? "s" : ""
-              }}
-            </span>
-          }
-        </h2>
-        <p class="text-sm text-muted font-medium">
-          Control de saldos y movimientos de almacén.
-        </p>
-      </div>
+          + REGISTRAR MOVIMIENTO
+        </button>
+      }
     </div>
 
-    <div class="flex items-center gap-4">
-      <div class="w-72">
+    <div
+      class="flex flex-wrap items-end gap-x-6 gap-y-3 w-full"
+    >
+      <div class="min-w-[min(100%,14rem)] w-full sm:w-auto sm:flex-1 sm:max-w-xs">
         <label
-          class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5 ml-1"
-          >Bodega Activa</label
+          class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1"
+          >Bodega</label
         >
         <div class="relative group">
           <select
             (change)="onWarehouseSelect($event)"
-            class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm"
+            [disabled]="warehousesLoading()"
+            class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm disabled:opacity-50"
           >
-            <option value="">-- Seleccionar Almacén --</option>
+            <option value="">
+              {{ warehousesLoading() ? "Cargando…" : "-- Seleccionar bodega --" }}
+            </option>
             @for (w of warehouses(); track w.id) {
-              <option [value]="w.id">{{ w.code }} - {{ w.name }}</option>
+              <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
             }
           </select>
           <div
             class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors"
           >
-            <svg
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              ></path>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
             </svg>
           </div>
         </div>
       </div>
+      @if (selectedWarehouseId()) {
+        <div class="min-w-[min(100%,12rem)] w-full sm:w-auto sm:max-w-[15rem]">
+          <label
+            class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1"
+            >Familia</label
+          >
+          <div class="relative group">
+            <select
+              (change)="onFamilyFilterChange($event)"
+              class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm"
+            >
+              <option value="">Todas las familias</option>
+              @for (f of families(); track f.id) {
+                <option [value]="f.id">{{ f.name }}</option>
+              }
+            </select>
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="min-w-[min(100%,12rem)] w-full sm:w-auto sm:max-w-[15rem]">
+          <label
+            class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1"
+            >Subcategoría</label
+          >
+          <div class="relative group">
+            <select
+              (change)="onSubcategoryFilterChange($event)"
+              [disabled]="!selectedFamilyId()"
+              class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm disabled:opacity-50"
+            >
+              <option value="">
+                {{ selectedFamilyId() ? 'Todas en la familia' : '— Elija familia —' }}
+              </option>
+              @for (c of subcategories(); track c.id) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   </div>
 
+  @if (canSeeValuationReport()) {
+    <div
+      class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-2"
+    >
+      <div
+        class="lg:col-span-1 rounded-xl border-2 border-primary/40 bg-gradient-to-br from-primary/15 to-dark p-5 shadow-lg"
+      >
+        <p
+          class="text-[10px] font-mono text-muted uppercase tracking-widest mb-1"
+        >
+          Valor total del inventario (empresa)
+        </p>
+        @if (valuationLoading()) {
+          <p class="text-sm text-muted font-mono animate-pulse">Calculando…</p>
+        } @else {
+          <p class="text-3xl font-bold font-mono text-primary">
+            ${{ valuationGrandTotal() | number: "1.0-0" }}
+          </p>
+          <p class="text-xs text-muted mt-2">
+            Suma de saldo × CPP en todas las bodegas, por familia de artículo.
+          </p>
+        }
+      </div>
+      <div
+        class="lg:col-span-2 rounded-xl border border-border bg-surface p-4"
+      >
+        <div
+          class="flex flex-wrap items-start justify-between gap-3 mb-3"
+        >
+          <h3
+            class="text-xs font-mono font-bold text-primary uppercase tracking-wider"
+          >
+            Valorización por familia (nivel 1)
+          </h3>
+          <div class="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              (click)="downloadMasterReport('pdf')"
+              [disabled]="valuationLoading() || masterReportBusy()"
+              class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40"
+              title="Familia, subcategoría, stock total, CPP, valor; resumen por bodega"
+            >
+              Reporte maestro PDF
+            </button>
+            <button
+              type="button"
+              (click)="downloadMasterReport('xlsx')"
+              [disabled]="valuationLoading() || masterReportBusy()"
+              class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40"
+            >
+              Reporte maestro Excel
+            </button>
+            <button
+              type="button"
+              (click)="exportValuationPdf()"
+              [disabled]="
+                valuationLoading() || valuationByFamily().length === 0
+              "
+              class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-border text-muted hover:text-main hover:bg-dark disabled:opacity-40"
+            >
+              Exportar PDF
+            </button>
+            <button
+              type="button"
+              (click)="exportValuationExcel()"
+              [disabled]="
+                valuationLoading() || valuationByFamily().length === 0
+              "
+              class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-border text-muted hover:text-main hover:bg-dark disabled:opacity-40"
+            >
+              Exportar Excel
+            </button>
+          </div>
+        </div>
+        @if (valuationLoading()) {
+          <p class="text-sm text-muted font-mono py-6 text-center">Cargando…</p>
+        } @else if (valuationByFamily().length === 0) {
+          <p class="text-sm text-muted font-mono py-4">
+            Sin datos de stock valorizado. Registre entradas y CPP en bodegas.
+          </p>
+        } @else {
+          <div class="space-y-3 max-h-56 overflow-y-auto pr-1">
+            @for (f of valuationByFamily(); track f.familyId) {
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-main font-medium truncate pr-2">{{
+                    f.familyName
+                  }}</span>
+                  <span class="font-mono text-muted shrink-0"
+                    >${{ f.totalValue | number: "1.0-0" }}</span
+                  >
+                </div>
+                <div class="h-2 rounded-full bg-dark overflow-hidden">
+                  <div
+                    class="h-full rounded-full bg-primary/80 transition-all"
+                    [style.width.%]="familyBarPercent(f.totalValue)"
+                  ></div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
   @if (selectedWarehouseId()) {
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+      <div class="bg-surface border border-border rounded-xl p-4">
+        <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Artículos</p>
+        <p class="text-2xl font-bold text-main font-mono mt-1">{{ totalItemCount() }}</p>
+      </div>
+      <div class="bg-surface border border-border rounded-xl p-4">
+        <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Valor Total</p>
+        <p class="text-2xl font-bold text-primary font-mono mt-1">
+          @if (canSeeStockCosts()) {
+            ${{ totalStockValue() | number:'1.0-0' }}
+          } @else {
+            $ ****
+          }
+        </p>
+      </div>
+      <div class="bg-surface border border-border rounded-xl p-4">
+        <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Bajo Stock</p>
+        <p class="text-2xl font-bold font-mono mt-1" [class]="lowStockAlerts().length > 0 ? 'text-error' : 'text-emerald-400'">{{ lowStockAlerts().length }}</p>
+      </div>
+      <div class="bg-surface border border-border rounded-xl p-4">
+        <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Regularizaciones</p>
+        <p class="text-2xl font-bold font-mono mt-1" [class]="pendingRegularizationCount() > 0 ? 'text-error' : 'text-emerald-400'">{{ pendingRegularizationCount() }}</p>
+      </div>
+    </div>
+
+    @if (lowStockAlerts().length > 0) {
+      <div class="bg-error/10 border border-error/30 rounded-xl p-3 mb-4 flex gap-2 items-start">
+        <svg class="w-4 h-4 text-error shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <p class="text-xs text-error">
+          {{ lowStockAlerts().length }} artículo(s) bajo stock mínimo:
+          @for (a of lowStockAlerts().slice(0, 5); track a.id) {
+            <strong>{{ a.item.partNumber }}</strong> ({{ a.quantity }}/{{ a.minStock }}){{ $last ? '' : ', ' }}
+          }
+          @if (lowStockAlerts().length > 5) { <span>y {{ lowStockAlerts().length - 5 }} más...</span> }
+        </p>
+      </div>
+    }
+
     <div
       class="bg-surface backdrop-blur-xl border border-border rounded-xl shadow-lg overflow-hidden flex flex-col"
     >
-      <div
-        class="p-4 border-b border-border flex justify-between items-center bg-dark/50"
-      >
+      <div class="p-4 border-b border-border bg-dark/50">
         <h3 class="text-sm font-mono text-primary font-bold">
           INVENTARIO ACTUAL
         </h3>
-        <button
-          (click)="openTransactionModal()"
-          class="text-xs bg-primary text-dark font-bold font-mono py-1.5 px-4 rounded hover:bg-primary/90 transition-colors"
-        >
-          + REGISTRAR MOVIMIENTO
-        </button>
       </div>
 
       <table class="w-full text-left border-collapse">
@@ -103,6 +299,7 @@
             class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
           >
             <th class="py-3 px-6 border-b border-border">N° Parte / Ítem</th>
+            <th class="py-3 px-6 border-b border-border text-left hidden lg:table-cell">Req. compra</th>
             <th class="py-3 px-6 border-b border-border">Categoría</th>
             <th class="py-3 px-6 border-b border-border text-center">
               Stock Actual
@@ -113,45 +310,110 @@
             <th class="py-3 px-6 border-b border-border text-right">
               Valor Total
             </th>
+            @if (canAdjustStock()) {
+              <th class="py-3 px-4 border-b border-border text-center w-28">
+                Acciones
+              </th>
+            }
           </tr>
         </thead>
         <tbody class="text-sm text-muted divide-y divide-border/50">
-          @for (s of stockItems(); track s.id) {
-            <tr class="hover:bg-dark/40 transition-colors">
-              <td class="py-4 px-6">
-                <div class="font-mono text-primary font-bold">
-                  {{ s.item.partNumber }}
-                </div>
-                <div class="text-main truncate max-w-xs">
-                  {{ s.item.name }}
-                </div>
-              </td>
-              <td class="py-4 px-6 text-xs uppercase">
-                {{ s.item.category }}
-              </td>
-              <td class="py-4 px-6 text-center">
-                <span
-                  class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border"
-                >
-                  {{ s.quantity }} {{ s.item.unitOfMeasure }}
-                </span>
-              </td>
-              <td class="py-4 px-6 text-right font-mono">
-                ${{ s.unitCost || 0 | number: "1.0-0" }}
-              </td>
-              <td class="py-4 px-6 text-right font-mono text-primary">
-                ${{ s.quantity * (s.unitCost || 0) | number: "1.0-0" }}
-              </td>
-            </tr>
-          } @empty {
+          @if (stockLoading()) {
+            @for (_ of tableSkeletonRows; track $index) {
+              <tr
+                appSkeletonRow
+                [columnCount]="canAdjustStock() ? 7 : 6"
+              ></tr>
+            }
+          } @else if (
+            filteredStockItems().length === 0 && stockItems().length > 0
+          ) {
             <tr>
               <td
-                colspan="5"
+                [attr.colspan]="canAdjustStock() ? 7 : 6"
                 class="py-12 text-center text-muted font-mono text-sm"
               >
-                No hay stock registrado en esta bodega. Registre una entrada.
+                No hay artículos en esta bodega para la familia / subcategoría seleccionada.
               </td>
             </tr>
+          } @else {
+            @for (s of filteredStockItems(); track s.id) {
+              <tr [class]="stockRowClasses(s)">
+                <td class="py-4 px-6">
+                  <div class="font-mono text-primary font-bold">
+                    {{ s.item.partNumber }}
+                  </div>
+                  <div class="text-main truncate max-w-xs">
+                    {{ s.item.name }}
+                  </div>
+                  @if (itemDescriptionLabel(s.item); as itemDesc) {
+                    <div class="text-[11px] text-muted uppercase tracking-wide max-w-xs truncate">
+                      {{ itemDesc }}
+                    </div>
+                  }
+                </td>
+                <td class="py-4 px-6 text-xs hidden lg:table-cell align-top">
+                  @if (s.linkedRequisition?.id && s.linkedRequisition?.correlative) {
+                    <app-entity-link
+                      kind="REQ"
+                      [id]="s.linkedRequisition.id"
+                      [label]="s.linkedRequisition.correlative"
+                      variant="link"
+                    />
+                  } @else {
+                    <span class="text-muted text-[11px]">N/A</span>
+                  }
+                </td>
+                <td class="py-4 px-6 text-xs uppercase">
+                  @if (s.item.itemCategory?.parentCategory) {
+                    <span class="text-main/90">{{ s.item.itemCategory.parentCategory.name }}</span>
+                    <span class="text-muted"> · </span>
+                  }
+                  {{ s.item.itemCategory?.name || "—" }}
+                </td>
+                <td class="py-4 px-6 text-center">
+                  <span
+                    class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border"
+                  >
+                    {{ s.quantity }} {{ s.item.unitOfMeasure?.abbreviation ?? "—" }}
+                  </span>
+                </td>
+                <td class="py-4 px-6 text-right font-mono">
+                  @if (canSeeStockCosts()) {
+                    ${{ s.unitCost || 0 | number: "1.0-0" }}
+                  } @else {
+                    $ ****
+                  }
+                </td>
+                <td class="py-4 px-6 text-right font-mono text-primary">
+                  @if (canSeeStockCosts()) {
+                    ${{ s.quantity * (s.unitCost || 0) | number: "1.0-0" }}
+                  } @else {
+                    $ ****
+                  }
+                </td>
+                @if (canAdjustStock()) {
+                  <td class="py-4 px-4 text-center">
+                    <button
+                      type="button"
+                      (click)="openAdjustModal(s)"
+                      class="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                    >
+                      Ajustar
+                    </button>
+                  </td>
+                }
+              </tr>
+            } @empty {
+              <tr>
+                <td
+                  [attr.colspan]="canAdjustStock() ? 7 : 6"
+                  class="py-12 text-center text-muted font-mono text-sm"
+                >
+                  No hay stock registrado en esta bodega. Registre una entrada.
+                </td>
+              </tr>
+            }
           }
         </tbody>
       </table>
@@ -260,19 +522,35 @@
 
           <div>
             <label class="block text-xs font-medium text-muted mb-1"
-              >Artículo del Catálogo</label
+              >Artículo (Catálogo Maestro de Artículos)</label
             >
-            <select
-              formControlName="itemId"
-              class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
-            >
-              <option value="" disabled>Seleccionar artículo...</option>
-              @for (item of catalogItems(); track item.id) {
-                <option [value]="item.id">
-                  {{ item.partNumber }} - {{ item.name }}
-                </option>
-              }
-            </select>
+            <input type="hidden" formControlName="itemId" />
+            @if (transactionItemPreview(); as prev) {
+              <div
+                class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-dark/50"
+              >
+                <div class="flex-1 min-w-0 font-mono text-sm text-main">
+                  <span class="text-primary">{{ prev.partNumber }}</span>
+                  <span class="text-muted mx-1">—</span>
+                  <span>{{ prev.name }}</span>
+                </div>
+                <button
+                  type="button"
+                  (click)="showItemPicker.set(true)"
+                  class="shrink-0 text-xs font-mono px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                >
+                  Cambiar
+                </button>
+              </div>
+            } @else {
+              <button
+                type="button"
+                (click)="showItemPicker.set(true)"
+                class="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-border text-sm text-muted hover:border-primary/50 hover:text-main transition-colors"
+              >
+                Buscar artículo en el Catálogo Maestro de Artículos…
+              </button>
+            }
           </div>
 
           <div class="grid grid-cols-2 gap-4">
@@ -333,4 +611,206 @@
       </div>
     </dialog>
   }
+
+  @if (showAdjustModal()) {
+    <dialog
+      #adjustDialog
+      class="dialog-native-shell animate-fade-in [&::backdrop]:bg-black/80 [&::backdrop]:backdrop-blur-sm"
+      (close)="onAdjustDialogClose()"
+    >
+      <div
+        class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+        (click)="closeAdjustModal()"
+      >
+        <div
+          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
+          (click)="$event.stopPropagation()"
+        >
+          <div
+            class="p-4 border-b border-border flex justify-between items-center bg-dark"
+          >
+            <h3 class="font-bold text-main font-mono text-sm">
+              Ajuste de inventario físico
+            </h3>
+            <button
+              type="button"
+              (click)="closeAdjustModal()"
+              class="text-muted hover:text-error transition-colors"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                ></path>
+              </svg>
+            </button>
+          </div>
+
+          @if (adjustStockRow(); as adj) {
+            <form
+              [formGroup]="adjustmentForm"
+              (ngSubmit)="submitAdjustment()"
+              class="p-6 space-y-4"
+            >
+              <p class="text-xs text-muted font-mono">
+                <span class="text-primary font-bold">{{ adj.item.partNumber }}</span>
+                — {{ adj.item.name }}
+                @if (itemDescriptionLabel(adj.item); as itemDesc) {
+                  <span class="text-main"> · {{ itemDesc }}</span>
+                }
+              </p>
+              <p class="text-[11px] text-muted">
+                Stock en sistema (esta bodega):
+                <span class="text-main font-mono font-bold">{{ adj.quantity }}</span>
+                {{ adj.item.unitOfMeasure?.abbreviation ?? "" }}
+              </p>
+              <p class="text-[11px] text-muted">
+                Umbrales actuales:
+                <span class="text-main font-mono font-bold">
+                  mín {{ adj.minStock ?? 0 }} / máx {{ adj.maxStock ?? 0 }}
+                </span>
+              </p>
+
+              <div>
+                <label class="block text-xs font-medium text-muted mb-1"
+                  >Nuevo stock físico contado <span class="text-error">*</span></label
+                >
+                <input
+                  type="number"
+                  formControlName="newPhysical"
+                  step="any"
+                  min="0"
+                  class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                />
+              </div>
+
+              <div
+                class="rounded-lg border border-border bg-dark/40 px-3 py-2 text-sm font-mono"
+              >
+                <span class="text-muted">Diferencia (físico − sistema):</span>
+                @if (adjustmentDifference() !== null) {
+                  <span
+                    class="ml-2 font-bold"
+                    [class.text-emerald-400]="(adjustmentDifference() ?? 0) > 0"
+                    [class.text-error]="(adjustmentDifference() ?? 0) < 0"
+                    [class.text-muted]="adjustmentDifference() === 0"
+                  >
+                    {{ adjustmentDifference()! > 0 ? "+" : ""
+                    }}{{ adjustmentDifference() | number: "1.0-4" }}
+                  </span>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-muted mb-1"
+                    >Stock mínimo <span class="text-error">*</span></label
+                  >
+                  <input
+                    type="number"
+                    formControlName="minStock"
+                    step="any"
+                    min="0"
+                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-muted mb-1"
+                    >Stock máximo <span class="text-error">*</span></label
+                  >
+                  <input
+                    type="number"
+                    formControlName="maxStock"
+                    step="any"
+                    min="0"
+                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-muted mb-1"
+                  >Motivo contable <span class="text-error">*</span></label
+                >
+                <select
+                  formControlName="reason"
+                  class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
+                >
+                  <option value="MERMAS">Mermas</option>
+                  <option value="CONTEO">Error de conteo</option>
+                  <option value="DANO">Daño</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-muted mb-1"
+                  >Comentario / detalle <span class="text-error">*</span></label
+                >
+                <textarea
+                  formControlName="comment"
+                  rows="3"
+                  class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+                  placeholder="Describa el hallazgo (obligatorio para auditoría)."
+                ></textarea>
+              </div>
+
+              <div class="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  (click)="closeAdjustModal()"
+                  class="px-4 py-2 text-sm text-muted hover:text-main"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  [disabled]="adjustmentForm.invalid"
+                  class="bg-primary text-dark px-6 py-2 text-sm font-bold font-mono rounded disabled:opacity-50"
+                >
+                  Confirmar ajuste
+                </button>
+              </div>
+            </form>
+          }
+        </div>
+      </div>
+    </dialog>
+  }
+
+  <app-global-item-picker
+    [open]="showItemPicker()"
+    [warehouseId]="selectedWarehouseId()"
+    [strictFamilyFirst]="true"
+    title="Catálogo Maestro de Artículos"
+    (closed)="onTransactionItemPickerClosed()"
+    (itemPicked)="onTransactionItemPicked($event)"
+  />
+
+  <app-pending-regularization-modal
+    [open]="pendingRegModalOpen()"
+    [warehouseId]="selectedWarehouseId()"
+    (closed)="onPendingModalClosed()"
+    (openAdjust)="onPendingOpenAdjust($event)"
+  />
+
+  <app-confirm-modal
+    [isOpen]="showAdjustmentConfirmModal()"
+    title="Confirmar ajuste de inventario"
+    message="¿Está seguro? Esta acción modificará el stock físico y generará una transacción de ajuste que afectará la valorización de la bodega."
+    [consequenceSummary]="adjustmentConfirmSummary()"
+    confirmText="Sí, aplicar ajuste"
+    cancelText="Revisar nuevamente"
+    [riskLevel]="adjustmentRiskLevel()"
+    (confirm)="confirmAdjustment()"
+    (cancel)="cancelAdjustmentConfirmation()"
+  />
 </div>

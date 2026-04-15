@@ -46,7 +46,9 @@ export class TenantRolesService {
       where: { tenantId, name: dto.name },
     });
     if (existing) {
-      throw new ConflictException(`Ya existe un rol con el nombre "${dto.name}".`);
+      throw new ConflictException(
+        `Ya existe un rol con el nombre "${dto.name}".`,
+      );
     }
 
     return this.prisma.tenantRole.create({
@@ -68,7 +70,11 @@ export class TenantRolesService {
     if (!role) throw new NotFoundException('Rol no encontrado.');
 
     const mirrorNames = new Set(Object.values(SYSTEM_MIRROR_ROLE_NAME));
-    if (mirrorNames.has(role.name) && dto.name !== undefined && dto.name !== role.name) {
+    if (
+      mirrorNames.has(role.name) &&
+      dto.name !== undefined &&
+      dto.name !== role.name
+    ) {
       throw new BadRequestException(
         'No se puede renombrar un rol base del sistema (Sistema · …).',
       );
@@ -79,7 +85,9 @@ export class TenantRolesService {
         where: { tenantId, name: dto.name, id: { not: id } },
       });
       if (dup) {
-        throw new ConflictException(`Ya existe un rol con el nombre "${dto.name}".`);
+        throw new ConflictException(
+          `Ya existe un rol con el nombre "${dto.name}".`,
+        );
       }
     }
 

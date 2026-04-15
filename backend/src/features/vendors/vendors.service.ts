@@ -42,8 +42,13 @@ export class VendorsService {
         data: { ...data, tenantId },
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException('Ya existe un proveedor con ese código o RUT');
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Ya existe un proveedor con ese código o RUT',
+        );
       }
       throw e;
     }
@@ -69,7 +74,10 @@ export class VendorsService {
         data,
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
         throw new ConflictException('Ya existe un proveedor con ese RUT');
       }
       throw e;

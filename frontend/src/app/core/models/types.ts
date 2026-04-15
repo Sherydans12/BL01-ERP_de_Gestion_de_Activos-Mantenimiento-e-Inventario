@@ -117,11 +117,26 @@ export interface MeterAdjustment {
   user?: { name: string; email: string };
 }
 
+/** Costos imputados al activo desde recepciones de OC (compras externas). */
+export interface AssetCostRecord {
+  id: string;
+  equipmentId: string;
+  amount: string | number;
+  type: 'PURCHASE';
+  referenceId: string;
+  warehouseReceiptId?: string | null;
+  recordedAt: string;
+  purchaseOrder?: { correlative: string };
+  warehouseReceipt?: { correlative: string } | null;
+}
+
 // Respuesta analítica para el modal de detalle
 export interface EquipmentAnalytics {
   equipment: Equipment;
   workOrders: WorkOrder[];
   meterAdjustments: MeterAdjustment[];
+  /** Costos por compras externas imputados al activo (recepciones de OC con equipo). */
+  assetCostRecords?: AssetCostRecord[];
 }
 
 // Usuario (Payload Auth)

@@ -16,20 +16,24 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { Equipment, MeterType } from '../../../core/models/types';
 import { MaintenanceKitsService } from '../../../core/services/maintenance-kits/maintenance-kits.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
-import { InventoryItemsService } from '../../../core/services/inventory-items/inventory-items.service';
-import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
 import {
-  Subject,
-  debounceTime,
-  distinctUntilChanged,
-  switchMap,
-  of,
-} from 'rxjs';
+  InventoryItemsService,
+  ItemPickerRow,
+} from '../../../core/services/inventory-items/inventory-items.service';
+import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
+import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
+import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 
 @Component({
   selector: 'app-work-order-form',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    RouterLink,
+    GlobalItemPickerComponent,
+    EntityLinkComponent,
+  ],
   templateUrl: './work-order-form.component.html',
 })
 export class WorkOrderFormComponent implements OnInit {
@@ -59,9 +63,15 @@ export class WorkOrderFormComponent implements OnInit {
 
   // --- INTEGRACIÓN INVENTARIO ---
   warehouses = signal<any[]>([]);
-  searchResults = signal<any[]>([]);
-  activeSearchIndex = signal<number>(-1);
-  warehouseStocks = signal<any[]>([]); // Stock de la bodega seleccionada para costeo
+  warehouseStocks = signal<any[]>([]);
+  showPartPicker = signal(false);
+  partPickerIndex = signal(-1);
+
+  /** Requerimientos / OC de compras que referencian esta OT (trazabilidad). */
+  linkedPurchaseRequisitions = signal<{ id: string; correlative: string }[]>(
+    [],
+  );
+  linkedPurchaseOrders = signal<{ id: string; correlative: string }[]>([]);
 
   // Costo total estimado basado en repuestos vinculados y stock de bodega
   estimatedCost = computed(() => {
@@ -90,8 +100,11 @@ export class WorkOrderFormComponent implements OnInit {
     return this.mode === 'READONLY';
   }
 
-  // Debounce para búsqueda de ítems de inventario
-  private searchSubject = new Subject<{ query: string; index: number }>();
+  /** Bodega de la OT para mostrar stock en el selector global. */
+  pickerWarehouseId(): string | null {
+    const v = this.otForm?.get('warehouseId')?.value;
+    return typeof v === 'string' && v.trim() ? v.trim() : null;
+  }
 
   meterLabel = computed(() => {
     return this.selectedEquipmentMeterType() === MeterType.HOURS
@@ -158,28 +171,6 @@ export class WorkOrderFormComponent implements OnInit {
 
     this.buildSystemsCheckboxes();
 
-    // Configurar debounce para búsqueda de ítems
-    this.searchSubject
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(
-          (prev, curr) =>
-            prev.query === curr.query && prev.index === curr.index,
-        ),
-        switchMap(({ query, index }) => {
-          if (query.length < 2) {
-            return of({ results: [] as any[], index });
-          }
-          return this.inventoryItemsService
-            .searchItems(query)
-            .pipe(switchMap((results) => of({ results, index })));
-        }),
-      )
-      .subscribe(({ results, index }) => {
-        this.searchResults.set(results);
-        this.activeSearchIndex.set(index);
-      });
-
     this.route.paramMap.subscribe((params) => {
       this.otId = params.get('id');
       if (this.otId) {
@@ -230,7 +221,7 @@ export class WorkOrderFormComponent implements OnInit {
 
         if (this.partsArray.length > 0 && this.mode === 'CREATING') {
           this.notificationService.info(
-            'Revisa los repuestos. El equipo ha cambiado.',
+            'Revisa los materiales de la OT. El equipo ha cambiado.',
           );
         }
 
@@ -272,6 +263,16 @@ export class WorkOrderFormComponent implements OnInit {
         if (ot.status === 'CLOSED') {
           this.mode = 'READONLY';
         }
+
+        const otx = ot as any;
+        this.linkedPurchaseRequisitions.set(
+          Array.isArray(otx.purchaseRequisitions)
+            ? otx.purchaseRequisitions
+            : [],
+        );
+        this.linkedPurchaseOrders.set(
+          Array.isArray(otx.purchaseOrders) ? otx.purchaseOrders : [],
+        );
 
         if (ot.equipment) {
           this.selectedEquipmentMeterType.set(ot.equipment.meterType);
@@ -462,22 +463,32 @@ export class WorkOrderFormComponent implements OnInit {
   }
   removePartRow(index: number) {
     this.partsArray.removeAt(index);
-    if (this.activeSearchIndex() === index) {
-      this.closeSearch();
+    if (this.partPickerIndex() === index) {
+      this.showPartPicker.set(false);
+      this.partPickerIndex.set(-1);
     }
   }
 
-  // --- AUTOCOMPLETE INVENTARIO ---
-  onPartSearch(event: Event, index: number) {
-    const query = (event.target as HTMLInputElement).value;
-    if (query.length >= 2) {
-      this.searchSubject.next({ query, index });
-    } else {
-      this.closeSearch();
-    }
+  openPartPicker(index: number) {
+    this.partPickerIndex.set(index);
+    this.showPartPicker.set(true);
   }
 
-  selectInventoryItem(item: any, index: number) {
+  onPartPickerClosed() {
+    this.showPartPicker.set(false);
+    this.partPickerIndex.set(-1);
+  }
+
+  onPartPicked(row: ItemPickerRow) {
+    const i = this.partPickerIndex();
+    if (i >= 0) {
+      this.selectInventoryItem(row, i);
+    }
+    this.showPartPicker.set(false);
+    this.partPickerIndex.set(-1);
+  }
+
+  selectInventoryItem(item: ItemPickerRow, index: number) {
     const partGroup = this.partsArray.at(index) as FormGroup;
     partGroup.patchValue({
       partNumber: item.partNumber,
@@ -485,7 +496,6 @@ export class WorkOrderFormComponent implements OnInit {
       inventoryItemId: item.id,
       linkedItemName: `${item.partNumber} - ${item.name}`,
     });
-    this.closeSearch();
   }
 
   unlinkInventoryItem(index: number) {
@@ -494,11 +504,6 @@ export class WorkOrderFormComponent implements OnInit {
       inventoryItemId: '',
       linkedItemName: '',
     });
-  }
-
-  closeSearch() {
-    this.searchResults.set([]);
-    this.activeSearchIndex.set(-1);
   }
 
   // --- GUARDADO ---

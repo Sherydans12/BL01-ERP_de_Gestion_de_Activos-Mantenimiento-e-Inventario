@@ -22,7 +22,11 @@ export class LocalDriver implements StorageDriver {
     }
   }
 
-  async upload(key: string, buffer: Buffer, _mimetype: string): Promise<string> {
+  async upload(
+    key: string,
+    buffer: Buffer,
+    _mimetype: string,
+  ): Promise<string> {
     const fullPath = join(this.basePath, key);
     const dir = dirname(fullPath);
     if (!existsSync(dir)) {

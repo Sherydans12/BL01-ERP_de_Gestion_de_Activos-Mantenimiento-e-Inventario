@@ -1,0 +1,214 @@
+<div class="p-6 relative">
+  <app-purchases-push-notice />
+
+  <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-main">Calendario de pagos</h1>
+      <p class="text-sm text-muted mt-1">
+        Vencimientos por contrato: ámbar pendiente de conciliación 3-way; verde lista para pagar; rojo con discrepancia.
+      </p>
+    </div>
+    <nav class="flex flex-wrap gap-2 shrink-0" aria-label="Vista facturas">
+      <a
+        routerLink="/app/compras/facturas"
+        [queryParams]="contractId() ? { contractId: contractId() } : {}"
+        class="px-4 py-2 rounded-lg border border-border text-sm text-main hover:bg-dark/50"
+        routerLinkActive="bg-primary/15 border-primary text-primary"
+        [routerLinkActiveOptions]="{ exact: true }"
+        >Lista de facturas</a>
+      <span
+        class="px-4 py-2 rounded-lg border border-primary bg-primary/15 text-sm text-primary font-medium"
+        >Calendario</span>
+    </nav>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+    <div class="flex flex-col sm:flex-row flex-wrap gap-4 items-end">
+      <div class="min-w-[220px] flex-1">
+        <label class="block text-xs font-medium text-muted mb-1">Contrato</label>
+        <select
+          [ngModel]="contractId()"
+          (ngModelChange)="onContractSelect($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+        >
+          <option value="">Seleccione un contrato</option>
+          @for (c of contracts(); track c.id) {
+            <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="prevMonth()"
+          class="px-3 py-2 border border-border rounded-lg text-main hover:bg-dark/50"
+          aria-label="Mes anterior"
+        >
+          ‹
+        </button>
+        <span class="text-main font-medium capitalize min-w-[12rem] text-center">{{
+          monthTitle()
+        }}</span>
+        <button
+          type="button"
+          (click)="nextMonth()"
+          class="px-3 py-2 border border-border rounded-lg text-main hover:bg-dark/50"
+          aria-label="Mes siguiente"
+        >
+          ›
+        </button>
+      </div>
+    </div>
+    <p class="text-xs text-muted mt-3 flex flex-wrap gap-4">
+      <span class="inline-flex items-center gap-1.5"
+        ><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Pendiente conciliación</span>
+      <span class="inline-flex items-center gap-1.5"
+        ><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Conciliada (listo para pagar)</span>
+      <span class="inline-flex items-center gap-1.5"
+        ><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Discrepancia</span>
+      <span class="inline-flex items-center gap-1.5"
+        ><span class="w-2.5 h-2.5 rounded-full border border-dashed border-amber-500 bg-amber-500/30"></span> Día mixto (pendiente + conciliada)</span>
+    </p>
+  </div>
+
+  @if (!contractId().trim()) {
+    <div class="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-muted/40 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+      <p class="text-lg font-medium text-main mb-1">Seleccione un contrato</p>
+      <p class="text-sm text-muted">Elija un contrato en el filtro superior para visualizar los vencimientos de facturas pendientes de pago.</p>
+    </div>
+  } @else if (isLoading()) {
+    <div class="flex justify-center py-16">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+    </div>
+  } @else {
+    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+      <div class="grid grid-cols-7 border-b border-border bg-dark/40">
+        @for (w of weekdayLabels; track w) {
+          <div class="px-2 py-2 text-center text-xs font-medium text-muted uppercase">{{ w }}</div>
+        }
+      </div>
+      <div class="grid grid-cols-7 gap-px bg-border">
+        @for (cell of monthCells(); track trackMonthCell($index, cell)) {
+          @let dk = cell.dateKey;
+          @let agg = dayAgg(dk);
+          @let total = badgeTotal(agg);
+          @let toneClass = tone(agg);
+          <button
+            type="button"
+            [disabled]="!cell.inMonth || total <= 0"
+            (click)="openDay(dk)"
+            class="min-h-[5.5rem] p-1.5 text-left bg-surface transition-colors disabled:cursor-default disabled:opacity-60 hover:bg-dark/30"
+            [ngClass]="calendarCellFrameClass(agg)"
+            [class.ring-1]="selectedDateKey() === dk"
+            [class.ring-primary]="selectedDateKey() === dk"
+          >
+            @if (cell.inMonth) {
+              <div class="text-sm text-main font-medium">{{ dk!.slice(8, 10) }}</div>
+              @if (total > 0) {
+                <div class="mt-1 flex items-center gap-1">
+                  @if (toneClass === 'mixed') {
+                    <span class="inline-flex gap-0.5 shrink-0" aria-hidden="true">
+                      <span class="inline-block w-2 h-2 rounded-full bg-amber-500/90"></span>
+                      <span class="inline-block w-2 h-2 rounded-full bg-emerald-500/90"></span>
+                    </span>
+                  } @else {
+                    <span
+                      class="inline-block w-2 h-2 rounded-full shrink-0"
+                      [class.bg-amber-500]="toneClass === 'pending'"
+                      [class.bg-emerald-500]="toneClass === 'ok'"
+                      [class.bg-red-500]="toneClass === 'risk'"
+                    ></span>
+                  }
+                  <span class="text-[11px] font-mono text-main leading-tight">{{ total | clpCurrency }}</span>
+                </div>
+              }
+            }
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (selectedDateKey()) {
+    <div
+      class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+      (click)="closePanel()"
+      role="presentation"
+    ></div>
+    <aside
+      class="fixed top-0 right-0 z-50 h-full w-full max-w-md border-l border-border bg-surface shadow-2xl flex flex-col"
+    >
+      <div class="flex items-center justify-between p-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-main capitalize">
+          Vencimientos · {{ selectedDateLabel() }}
+        </h2>
+        <button
+          type="button"
+          (click)="closePanel()"
+          class="p-2 rounded-lg text-muted hover:text-main hover:bg-dark/50"
+          aria-label="Cerrar"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4">
+        @if (dayInvoicesLoading()) {
+          <div class="flex justify-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        } @else if (dayInvoices().length === 0) {
+          <div class="flex flex-col items-center justify-center py-8 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-muted/40 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p class="text-sm text-muted">No hay facturas pendientes para este día.</p>
+            <p class="text-xs text-muted/70 mt-1">Las facturas ya pagadas no se muestran en el calendario.</p>
+          </div>
+        } @else {
+          <ul class="space-y-3">
+            @for (inv of dayInvoices(); track inv.id) {
+              <li
+                class="rounded-lg border p-3 flex flex-col gap-1"
+                [class.border-border]="inv.status !== 'DISCREPANCY'"
+                [class.border-red-600]="inv.status === 'DISCREPANCY'"
+              >
+                <div class="flex justify-between gap-2 items-start">
+                  <app-entity-link
+                    kind="INV"
+                    [id]="inv.id"
+                    [label]="inv.invoiceNumber"
+                    variant="link"
+                    [purchaseOrderIdForDetail]="inv.purchaseOrder?.id ?? null"
+                  />
+                  <span class="text-xs font-mono text-main shrink-0">{{ inv.totalAmount | financialClp }}</span>
+                </div>
+                <p class="text-xs text-muted">{{ inv.vendor?.name }}</p>
+                <div class="flex flex-wrap gap-2 mt-1 items-center">
+                  <span
+                    class="inline-flex px-2 py-0.5 rounded text-[10px] font-medium text-white"
+                    [class.bg-amber-600]="inv.status === 'PENDING'"
+                    [class.bg-emerald-600]="inv.status === 'MATCHED'"
+                    [class.bg-red-600]="inv.status === 'DISCREPANCY'"
+                  >
+                    {{ statusLabels[inv.status] || inv.status }}
+                  </span>
+                  @if (inv.purchaseOrder?.id) {
+                    <app-entity-link
+                      kind="PO"
+                      [id]="inv.purchaseOrder!.id"
+                      [label]="'OC ' + inv.purchaseOrder!.correlative"
+                      variant="link"
+                    />
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </aside>
+  }
+</div>

@@ -5,11 +5,13 @@ import { FormsModule } from '@angular/forms';
 import { PurchasesService, PurchaseRequisition } from '../../../core/services/purchases/purchases.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
+import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 
 @Component({
   selector: 'app-requisition-list',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule],
+  imports: [CommonModule, RouterModule, FormsModule, PurchasesPushNoticeComponent, EntityLinkComponent],
   templateUrl: './requisition-list.component.html',
 })
 export class RequisitionListComponent {
@@ -59,7 +61,14 @@ export class RequisitionListComponent {
     this.isLoading.set(true);
     this.purchasesService.getRequisitions().subscribe({
       next: (data) => { this.requisitions.set(data); this.isLoading.set(false); },
-      error: () => { this.notify.error('Error al cargar requerimientos'); this.isLoading.set(false); },
+      error: (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al cargar requerimientos');
+        this.isLoading.set(false);
+      },
     });
   }
 }

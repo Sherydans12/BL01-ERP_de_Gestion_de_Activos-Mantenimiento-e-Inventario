@@ -1,7 +1,18 @@
-<div class="p-6 max-w-4xl mx-auto">
-  <h1 class="text-2xl font-bold text-main mb-6">Nuevo Requerimiento de Compra</h1>
+<div class="p-6 max-w-5xl mx-auto">
+  <h1 class="text-2xl font-bold text-main mb-2">
+    @if (isEditMode()) {
+      Editar requerimiento de compra
+    } @else {
+      Nuevo requerimiento de compra
+    }
+  </h1>
+  @if (!isEditMode()) {
+    <p class="text-sm text-muted mb-6">Complete los ítems con el mayor detalle posible; los campos marcados como opcional ayudan a cotizar más rápido.</p>
+  } @else {
+    <p class="text-sm text-muted mb-6">Los cambios quedan registrados en auditoría y son visibles en la orden de compra asociada.</p>
+  }
 
-  @if (isLoadingContracts()) {
+  @if (pageLoading()) {
     <div class="flex justify-center py-12">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     </div>
@@ -11,17 +22,21 @@
       <div>
         <label class="block text-sm font-medium text-muted mb-1">Contrato *</label>
         <select [ngModel]="selectedContractId()" (ngModelChange)="onContractChange($event)"
-                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
+                [disabled]="isEditMode()"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed">
           <option value="">— Seleccionar contrato —</option>
           @for (c of contracts(); track c.id) {
             <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
           }
         </select>
+        @if (isEditMode()) {
+          <p class="text-xs text-muted mt-1">El contrato no se puede cambiar al editar.</p>
+        }
       </div>
       <div>
         <label class="block text-sm font-medium text-muted mb-1">Subcontrato</label>
         <select [ngModel]="selectedSubcontractId()" (ngModelChange)="selectedSubcontractId.set($event)"
-                [disabled]="availableSubcontracts().length === 0"
+                [disabled]="isEditMode() || availableSubcontracts().length === 0"
                 class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
           <option value="">— Sin subcontrato —</option>
           @for (s of availableSubcontracts(); track s.id) {
@@ -35,53 +50,157 @@
       <textarea [ngModel]="description()" (ngModelChange)="description.set($event)" rows="3"
                 class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none resize-none"></textarea>
     </div>
-    <div>
-      <label class="block text-sm font-medium text-muted mb-1">Justificación</label>
-      <textarea [ngModel]="justification()" (ngModelChange)="justification.set($event)" rows="2"
-                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none resize-none"></textarea>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">Justificación <span class="text-xs font-normal">(opcional)</span></label>
+        <textarea [ngModel]="justification()" (ngModelChange)="justification.set($event)" rows="2"
+                  class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none resize-none"></textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">Prioridad</label>
+        <select [ngModel]="priority()" (ngModelChange)="priority.set($event)"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
+          <option value="LOW">Baja</option>
+          <option value="MEDIUM">Media</option>
+          <option value="HIGH">Alta</option>
+        </select>
+        <p class="text-xs text-muted mt-1">Define la urgencia relativa frente a otros requerimientos.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">
+          Orden de trabajo <span class="text-xs font-normal">(opcional)</span>
+        </label>
+        <div class="relative">
+          <select
+            [ngModel]="selectedWorkOrderId()"
+            (ngModelChange)="onWorkOrderChange($event)"
+            [disabled]="!selectedContractId() || isLoadingWorkOrders() || isFetchingOtDetail()"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <option value="">— Sin imputar a OT —</option>
+            @for (wo of workOrders(); track wo.id) {
+              <option [value]="wo.id">{{ workOrderLabel(wo) }}</option>
+            }
+          </select>
+          @if (isLoadingWorkOrders() || isFetchingOtDetail()) {
+            <span class="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none">
+              <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></span>
+            </span>
+          }
+        </div>
+        <p class="text-xs text-muted mt-1">Solo OT del contrato seleccionado. Si elige una OT, el equipo se asigna automáticamente.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">
+          Equipo <span class="text-xs font-normal">(opcional)</span>
+          @if (equipmentLocked()) {
+            <span class="text-xs text-primary/90 ml-1">(definido por la OT)</span>
+          }
+        </label>
+        <div class="relative">
+          <select
+            [ngModel]="selectedEquipmentId()"
+            (ngModelChange)="onEquipmentChange($event)"
+            [disabled]="!selectedContractId() || isLoadingEquipments() || equipmentLocked() || isFetchingOtDetail()"
+            [attr.aria-readonly]="equipmentLocked() ? true : null"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <option value="">— Compra general / sin equipo —</option>
+            @for (eq of equipments(); track eq.id) {
+              <option [value]="eq.id">{{ equipmentLabel(eq) }}</option>
+            }
+          </select>
+          @if (isLoadingEquipments()) {
+            <span class="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none">
+              <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></span>
+            </span>
+          }
+        </div>
+        <p class="text-xs text-muted mt-1">Equipos del contrato actual. Con OT seleccionada, el equipo queda bloqueado para evitar inconsistencias.</p>
+      </div>
     </div>
 
     <div>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold text-main">Ítems Solicitados</h2>
-        <button (click)="addItem()" class="text-sm text-primary hover:text-primary/80">+ Agregar ítem</button>
+        <div>
+          <h2 class="text-lg font-semibold text-main">Ítems solicitados</h2>
+          <p class="text-xs text-muted mt-0.5">Descripción y cantidad son obligatorias. Nº de parte y notas son <strong class="text-main/80">opcionales</strong> pero mejoran la cotización.</p>
+        </div>
+        <button type="button" (click)="addItem()" class="text-sm text-primary hover:text-primary/80">+ Agregar ítem</button>
       </div>
 
-      <div class="space-y-3">
+      <div class="space-y-4">
         @for (item of items(); track $index; let i = $index) {
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start p-3 bg-dark/50 rounded-lg border border-border/50">
-            <div class="sm:col-span-5">
-              <input type="text" placeholder="Descripción del ítem *"
-                     [ngModel]="item.description" (ngModelChange)="updateItem(i, 'description', $event)"
-                     class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+          <div class="p-3 bg-dark/50 rounded-lg border border-border/50 space-y-3">
+            @if (item.inventoryItemId) {
+              <div class="flex items-center gap-2 px-2 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span class="text-emerald-300">Vinculado al catálogo: <strong class="text-emerald-200">{{ item.inventoryItemName || item.description }}</strong></span>
+                <button type="button" (click)="unlinkInventoryItem(i)" class="ml-auto text-emerald-400/60 hover:text-red-400 text-xs transition-colors" title="Desvincular">desvincular</button>
+              </div>
+            }
+            <div>
+              <label class="block text-xs text-muted mb-1">Catálogo Maestro de Artículos <span class="text-primary/80">(opcional)</span></label>
+              <button type="button" (click)="openRowPicker(i)"
+                      class="w-full sm:w-auto px-4 py-2 text-sm font-medium text-primary border border-primary/40 rounded-lg hover:bg-primary/10 transition-colors text-left">
+                Buscar o crear artículo…
+              </button>
             </div>
-            <div class="sm:col-span-2">
-              <input type="number" placeholder="Cant." min="1"
-                     [ngModel]="item.quantity" (ngModelChange)="updateItem(i, 'quantity', $event)"
-                     class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
-            </div>
-            <div class="sm:col-span-2">
-              <select [ngModel]="item.unitOfMeasure" (ngModelChange)="updateItem(i, 'unitOfMeasure', $event)"
-                      class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
-                @for (u of UOM_PRESETS; track u.value) {
-                  <option [value]="u.value">{{ u.label }}</option>
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+              <div class="sm:col-span-5">
+                <label class="block text-xs text-muted mb-1">Descripción *</label>
+                <input type="text" placeholder="Descripción del ítem"
+                       [ngModel]="item.description" (ngModelChange)="updateItem(i, 'description', $event)"
+                       class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs text-muted mb-1">Cantidad *</label>
+                <input type="number" placeholder="Cant." min="1"
+                       [ngModel]="item.quantity" (ngModelChange)="updateItem(i, 'quantity', $event)"
+                       class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs text-muted mb-1">U.M. *</label>
+                <select [ngModel]="item.unitOfMeasure" (ngModelChange)="updateItem(i, 'unitOfMeasure', $event)"
+                        class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+                  @for (u of UOM_PRESETS; track u.value) {
+                    <option [value]="u.value">{{ u.label }}</option>
+                  }
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs text-muted mb-1">Costo est. <span class="text-[10px]">(opc.)</span></label>
+                <div class="flex">
+                  <span class="inline-flex items-center px-2 bg-dark border border-r-0 border-border rounded-l-lg text-muted text-xs">CLP</span>
+                  <input type="number" placeholder="—" min="0"
+                         [ngModel]="item.estimatedCost" (ngModelChange)="updateItem(i, 'estimatedCost', $event)"
+                         class="w-full px-2 py-2 bg-dark border border-border rounded-r-lg text-main text-sm font-mono focus:border-primary focus:outline-none">
+                </div>
+              </div>
+              <div class="sm:col-span-1 flex justify-center pt-6">
+                @if (items().length > 1) {
+                  <button type="button" (click)="removeItem(i)" class="p-2 text-red-400 hover:text-red-300" title="Quitar ítem">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
                 }
-              </select>
-            </div>
-            <div class="sm:col-span-2">
-              <div class="flex">
-                <span class="inline-flex items-center px-2 bg-dark border border-r-0 border-border rounded-l-lg text-muted text-xs">CLP</span>
-                <input type="number" placeholder="Costo est." min="0"
-                       [ngModel]="item.estimatedCost" (ngModelChange)="updateItem(i, 'estimatedCost', $event)"
-                       class="w-full px-2 py-2 bg-dark border border-border rounded-r-lg text-main text-sm font-mono focus:border-primary focus:outline-none">
               </div>
             </div>
-            <div class="sm:col-span-1 flex justify-center">
-              @if (items().length > 1) {
-                <button (click)="removeItem(i)" class="p-2 text-red-400 hover:text-red-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                </button>
-              }
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pl-0 md:pl-0 border-t border-border/40 pt-3">
+              <div>
+                <label class="block text-xs text-muted mb-1">Nº de parte <span class="text-primary/80">(opcional)</span></label>
+                <input type="text" placeholder="Ej. 577-1440, según catálogo o fabricante"
+                       [ngModel]="item.partNumber" (ngModelChange)="updateItem(i, 'partNumber', $event)"
+                       class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs text-muted mb-1">Notas / especificación <span class="text-primary/80">(opcional)</span></label>
+                <input type="text" placeholder="Marca preferida, alternativos, grado, etc."
+                       [ngModel]="item.itemNotes" (ngModelChange)="updateItem(i, 'itemNotes', $event)"
+                       class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+              </div>
             </div>
           </div>
         }
@@ -91,11 +210,23 @@
     <div class="flex justify-end gap-3 pt-4">
       <button type="button" (click)="cancel()"
               class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors">Cancelar</button>
-      <button (click)="save()" [disabled]="isSaving() || !selectedContractId()"
+      <button type="button" (click)="save()" [disabled]="isSaving() || !selectedContractId()"
               class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
-        {{ isSaving() ? 'Guardando...' : 'Crear Requerimiento' }}
+        @if (isEditMode()) {
+          {{ isSaving() ? 'Guardando...' : 'Guardar cambios' }}
+        } @else {
+          {{ isSaving() ? 'Guardando...' : 'Crear requerimiento' }}
+        }
       </button>
     </div>
   </div>
   }
+
+  <app-global-item-picker
+    [open]="showItemPicker()"
+    [strictFamilyFirst]="true"
+    title="Catálogo Maestro de Artículos"
+    (closed)="onPickerClosed()"
+    (itemPicked)="onPickerItem($event)"
+  />
 </div>

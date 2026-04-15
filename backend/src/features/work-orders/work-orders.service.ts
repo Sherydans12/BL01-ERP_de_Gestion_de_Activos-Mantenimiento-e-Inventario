@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import Decimal from 'decimal.js';
 
 interface CreateWorkOrderDto {
   equipmentId: string;
@@ -318,6 +319,7 @@ export class WorkOrdersService {
           systems: { include: { catalogItem: { select: { name: true } } } },
           fluids: { include: { catalogItem: { select: { name: true } } } },
           subcontract: { select: { name: true, code: true } },
+          purchaseOrders: { select: { id: true, correlative: true } },
         },
       }),
       this.prisma.workOrder.count({ where }),
@@ -503,6 +505,7 @@ export class WorkOrdersService {
     return this.prisma.workOrder.findFirst({
       where,
       include: {
+        subcontract: { select: { id: true, name: true, code: true } },
         equipment: {
           include: {
             contract: { select: { id: true, name: true, code: true } },
@@ -521,8 +524,16 @@ export class WorkOrdersService {
         fluids: { include: { catalogItem: true } },
         tasks: true,
         parts: { include: { inventoryItem: true } },
-        fluidSamples: true,
+        fluidSamples: {
+          include: { system: { select: { id: true, name: true } } },
+        },
         stockReservations: true,
+        purchaseRequisitions: {
+          select: { id: true, correlative: true, status: true },
+        },
+        purchaseOrders: {
+          select: { id: true, correlative: true, status: true },
+        },
       },
     });
   }
@@ -559,134 +570,155 @@ export class WorkOrdersService {
 
     try {
       if (status === 'CLOSED') {
-        return await this.prisma.$transaction(async (tx: any) => {
-          const workOrder = await tx.workOrder.findFirst({
-            where,
-            include: {
-              equipment: true,
-              parts: true,
-            },
-          });
-
-          if (!workOrder)
-            throw new BadRequestException('Orden de Trabajo no encontrada');
-          if (workOrder.status === 'CLOSED')
-            throw new BadRequestException(
-              'La Orden de Trabajo ya se encuentra CERRADA',
-            );
-
-          // --- VALIDACIÓN DE MEDIDOR CON SOPORTE DE MeterAdjustment ---
-          if (workOrder.finalMeter < workOrder.initialMeter) {
-            // Verificar si hay un ajuste de medidor reciente que justifique el reinicio
-            const recentAdj = await tx.meterAdjustment.findFirst({
-              where: { equipmentId: workOrder.equipmentId },
-              orderBy: { date: 'desc' },
+        return await this.prisma.$transaction(
+          async (tx: any) => {
+            const workOrder = await tx.workOrder.findFirst({
+              where,
+              include: {
+                equipment: true,
+                parts: {
+                  include: { inventoryItem: { select: { isInventory: true } } },
+                },
+              },
             });
 
-            if (!recentAdj || recentAdj.newValue > workOrder.finalMeter) {
+            if (!workOrder)
+              throw new BadRequestException('Orden de Trabajo no encontrada');
+            if (workOrder.status === 'CLOSED')
               throw new BadRequestException(
-                `El medidor final (${workOrder.finalMeter}) es menor al inicial (${workOrder.initialMeter}). Registre un Ajuste de Medidor para justificar el reinicio del contador.`,
+                'La Orden de Trabajo ya se encuentra CERRADA',
+              );
+
+            if (workOrder.finalMeter < workOrder.initialMeter) {
+              const recentAdj = await tx.meterAdjustment.findFirst({
+                where: { equipmentId: workOrder.equipmentId },
+                orderBy: { date: 'desc' },
+              });
+
+              if (!recentAdj || recentAdj.newValue > workOrder.finalMeter) {
+                throw new BadRequestException(
+                  `El medidor final (${workOrder.finalMeter}) es menor al inicial (${workOrder.initialMeter}). Registre un Ajuste de Medidor para justificar el reinicio del contador.`,
+                );
+              }
+            }
+
+            const inventoryParts = workOrder.parts.filter(
+              (p: any) => p.inventoryItemId && p.inventoryItem?.isInventory,
+            );
+
+            const effectiveWarehouseId = warehouseId || workOrder.warehouseId;
+
+            if (inventoryParts.length > 0 && !effectiveWarehouseId) {
+              throw new BadRequestException(
+                'Debe seleccionar una bodega de origen para descontar los repuestos vinculados al catálogo.',
               );
             }
-          }
 
-          // --- CONSUMO DE INVENTARIO CON STOCK NEGATIVO PERMITIDO ---
-          const linkedParts = workOrder.parts.filter(
-            (p: any) => p.inventoryItemId,
-          );
+            const updateData: any = {
+              status: 'CLOSED',
+              closedAt: new Date(),
+            };
+            if (effectiveWarehouseId && !workOrder.warehouseId) {
+              updateData.warehouseId = effectiveWarehouseId;
+            }
 
-          const effectiveWarehouseId = warehouseId || workOrder.warehouseId;
+            const updatedOt = await tx.workOrder.update({
+              where: { id },
+              data: updateData,
+            });
 
-          if (linkedParts.length > 0 && !effectiveWarehouseId) {
-            throw new BadRequestException(
-              'Debe seleccionar una bodega de origen para descontar los repuestos vinculados al catálogo.',
-            );
-          }
+            await tx.equipment.update({
+              where: { id: workOrder.equipmentId },
+              data: { currentMeter: workOrder.finalMeter },
+            });
 
-          const updateData: any = {
-            status: 'CLOSED',
-            closedAt: new Date(),
-          };
-          if (effectiveWarehouseId && !workOrder.warehouseId) {
-            updateData.warehouseId = effectiveWarehouseId;
-          }
+            let totalPartsCost = new Decimal(0);
 
-          const updatedOt = await tx.workOrder.update({
-            where: { id },
-            data: updateData,
-          });
+            if (inventoryParts.length > 0 && effectiveWarehouseId) {
+              for (const part of inventoryParts) {
+                const currentStock = await tx.itemStock.findUnique({
+                  where: {
+                    warehouseId_itemId: {
+                      warehouseId: effectiveWarehouseId,
+                      itemId: part.inventoryItemId,
+                    },
+                  },
+                });
 
-          await tx.equipment.update({
-            where: { id: workOrder.equipmentId },
-            data: { currentMeter: workOrder.finalMeter },
-          });
+                const previousQty = currentStock?.quantity || 0;
+                const newQty = previousQty - part.quantity;
+                const isPendingRegularization = newQty < 0;
 
-          // Procesar consumo — stock negativo PERMITIDO
-          if (linkedParts.length > 0 && effectiveWarehouseId) {
-            for (const part of linkedParts) {
-              // Buscar o crear stock
-              let currentStock = await tx.itemStock.findUnique({
-                where: {
-                  warehouseId_itemId: {
+                const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
+
+                await tx.itemStock.upsert({
+                  where: {
+                    warehouseId_itemId: {
+                      warehouseId: effectiveWarehouseId,
+                      itemId: part.inventoryItemId,
+                    },
+                  },
+                  update: { quantity: newQty },
+                  create: {
                     warehouseId: effectiveWarehouseId,
                     itemId: part.inventoryItemId,
+                    quantity: newQty,
+                    unitCost: 0,
                   },
-                },
-              });
+                });
 
-              const previousQty = currentStock?.quantity || 0;
-              const newQty = previousQty - part.quantity;
-              const isPendingRegularization = newQty < 0;
-
-              // Upsert stock (permite negativo)
-              await tx.itemStock.upsert({
-                where: {
-                  warehouseId_itemId: {
-                    warehouseId: effectiveWarehouseId,
-                    itemId: part.inventoryItemId,
+                await tx.inventoryTransaction.create({
+                  data: {
+                    type: 'WORK_ORDER_ISSUE',
+                    quantity: part.quantity,
+                    previousStock: previousQty,
+                    newStock: newQty,
+                    isPendingRegularization,
+                    referenceId: workOrder.id,
+                    referenceType: 'WORK_ORDER',
+                    notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
+                    warehouse: { connect: { id: effectiveWarehouseId } },
+                    item: { connect: { id: part.inventoryItemId } },
+                    user: { connect: { id: userId } },
                   },
-                },
-                update: { quantity: newQty },
-                create: {
-                  warehouseId: effectiveWarehouseId,
-                  itemId: part.inventoryItemId,
-                  quantity: newQty,
-                  unitCost: 0,
-                },
-              });
+                });
 
-              // Generar registro OUT en el Kárdex
-              await tx.inventoryTransaction.create({
+                await tx.workOrderPart.update({
+                  where: { id: part.id },
+                  data: { unitCost: frozenUnitCost },
+                });
+
+                totalPartsCost = totalPartsCost.plus(
+                  new Decimal(part.quantity).mul(new Decimal(frozenUnitCost)),
+                );
+              }
+            }
+
+            if (totalPartsCost.greaterThan(0)) {
+              await tx.assetCostRecord.create({
                 data: {
-                  type: 'OUT',
-                  quantity: part.quantity,
-                  previousStock: previousQty,
-                  newStock: newQty,
-                  isPendingRegularization,
-                  referenceId: workOrder.id,
-                  referenceType: 'WORK_ORDER',
-                  notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
-                  warehouse: { connect: { id: effectiveWarehouseId } },
-                  item: { connect: { id: part.inventoryItemId } },
-                  user: { connect: { id: userId } },
+                  tenantId: workOrder.tenantId,
+                  equipmentId: workOrder.equipmentId,
+                  amount: totalPartsCost.toFixed(2),
+                  type: 'WORK_ORDER',
+                  workOrderId: workOrder.id,
+                  recordedAt: new Date(),
                 },
-              });
-
-              // [NUEVO] CONGELAR COSTO HISTÓRICO EN LA OT
-              await tx.workOrderPart.update({
-                where: { id: part.id },
-                data: { unitCost: currentStock?.unitCost || 0 },
               });
             }
-          }
 
-          // --- LIMPIEZA DE RESERVAS ---
-          await tx.stockReservation.deleteMany({
-            where: { workOrderId: workOrder.id },
-          });
+            await tx.stockReservation.deleteMany({
+              where: { workOrderId: workOrder.id },
+            });
 
-          return updatedOt;
-        });
+            return updatedOt;
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 10_000,
+            timeout: 60_000,
+          },
+        );
       } else {
         const existing = await this.prisma.workOrder.findFirst({ where });
         if (!existing) throw new BadRequestException('Orden no encontrada');

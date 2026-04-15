@@ -1,0 +1,158 @@
+import {
+  Component,
+  EventEmitter,
+  Output,
+  Input,
+  signal,
+  inject,
+  OnInit,
+  OnChanges,
+  SimpleChanges,
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import {
+  InventoryItemsService,
+  ItemCategory,
+  QuickCreateItemResult,
+} from '../../../core/services/inventory-items/inventory-items.service';
+import { NotificationService } from '../../../core/services/notification/notification.service';
+import {
+  UnitsOfMeasureService,
+  UnitOfMeasureRow,
+} from '../../../core/services/units-of-measure/units-of-measure.service';
+
+@Component({
+  selector: 'app-quick-add-item-modal',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './quick-add-item-modal.component.html',
+})
+export class QuickAddItemModalComponent implements OnInit, OnChanges {
+  @Input() open = false;
+  @Input() warehouseId: string | null = null;
+  /**
+   * Dentro de otro `<dialog>` (p. ej. GlobalItemPicker): el overlay debe ser
+   * `absolute` para apilarse correctamente sobre el contenido del diálogo padre.
+   */
+  @Input() overlayInsideDialog = false;
+  @Output() closed = new EventEmitter<void>();
+  @Output() itemCreated = new EventEmitter<QuickCreateItemResult>();
+
+  private itemsService = inject(InventoryItemsService);
+  private notify = inject(NotificationService);
+  private uomService = inject(UnitsOfMeasureService);
+
+  families = signal<ItemCategory[]>([]);
+  subcategories = signal<ItemCategory[]>([]);
+  units = signal<UnitOfMeasureRow[]>([]);
+  isSaving = signal(false);
+
+  name = '';
+  familyId = '';
+  /** ID de la subcategoría (se envía como categoryId al API). */
+  subcategoryId = '';
+  unitOfMeasureId = '';
+  minStock: number | null = null;
+  maxStock: number | null = null;
+
+  ngOnInit() {
+    this.loadFamilies();
+    this.loadUnits();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['open']?.currentValue === true) {
+      this.loadFamilies();
+      this.loadUnits();
+    }
+  }
+
+  private loadFamilies() {
+    this.itemsService.getCategoryFamilies().subscribe({
+      next: (rows) => this.families.set(rows),
+      error: () => {},
+    });
+  }
+
+  private loadUnits() {
+    this.uomService.list().subscribe({
+      next: (rows) => {
+        this.units.set(rows);
+        if (!this.unitOfMeasureId && rows.length) {
+          const un = rows.find((u) => u.abbreviation === 'UN');
+          this.unitOfMeasureId = (un ?? rows[0]).id;
+        }
+      },
+      error: () => this.units.set([]),
+    });
+  }
+
+  onFamilyChange(_id: string) {
+    this.subcategoryId = '';
+    this.subcategories.set([]);
+    if (!this.familyId) return;
+    this.itemsService.getCategoryChildren(this.familyId).subscribe({
+      next: (rows) => this.subcategories.set(rows),
+      error: () => this.subcategories.set([]),
+    });
+  }
+
+  close() {
+    this.resetForm();
+    this.closed.emit();
+  }
+
+  save() {
+    if (!this.name.trim()) {
+      this.notify.error('El nombre del artículo es obligatorio');
+      return;
+    }
+    if (!this.familyId || !this.subcategoryId) {
+      this.notify.error('Seleccione familia y subcategoría');
+      return;
+    }
+    if (!this.unitOfMeasureId) {
+      this.notify.error('Seleccione la unidad de medida');
+      return;
+    }
+
+    this.isSaving.set(true);
+    this.itemsService
+      .quickCreateItem({
+        name: this.name.trim(),
+        categoryId: this.subcategoryId,
+        unitOfMeasureId: this.unitOfMeasureId,
+        warehouseId: this.warehouseId?.trim() || undefined,
+        minStock: this.minStock ?? undefined,
+        maxStock: this.maxStock ?? undefined,
+      })
+      .subscribe({
+        next: (item) => {
+          this.notify.success(
+            `Artículo "${item.name}" creado (${item.partNumber})`,
+          );
+          this.itemCreated.emit(item);
+          this.isSaving.set(false);
+          this.resetForm();
+          this.closed.emit();
+        },
+        error: (err) => {
+          this.notify.error(err.error?.message || 'Error al crear artículo');
+          this.isSaving.set(false);
+        },
+      });
+  }
+
+  private resetForm() {
+    this.name = '';
+    this.familyId = '';
+    this.subcategoryId = '';
+    this.subcategories.set([]);
+    const rows = this.units();
+    const un = rows.find((u) => u.abbreviation === 'UN');
+    this.unitOfMeasureId = un ? un.id : rows[0]?.id ?? '';
+    this.minStock = null;
+    this.maxStock = null;
+  }
+}

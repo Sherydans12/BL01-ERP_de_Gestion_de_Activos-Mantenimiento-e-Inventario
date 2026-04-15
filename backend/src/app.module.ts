@@ -20,6 +20,10 @@ import { MeterAdjustmentsModule } from './features/meter-adjustments/meter-adjus
 import { TenantRolesModule } from './features/tenant-roles/tenant-roles.module';
 import { VendorsModule } from './features/vendors/vendors.module';
 import { PurchasesModule } from './features/purchases/purchases.module';
+import { UnitsOfMeasureModule } from './features/units-of-measure/units-of-measure.module';
+import { InventoryAnalyticsModule } from './features/inventory-analytics/inventory-analytics.module';
+import { InventoryAdjustmentModule } from './features/inventory-adjustment/inventory-adjustment.module';
+import { InventoryTransferModule } from './features/inventory-transfer/inventory-transfer.module';
 
 @Module({
   imports: [
@@ -42,6 +46,10 @@ import { PurchasesModule } from './features/purchases/purchases.module';
     MeterAdjustmentsModule,
     VendorsModule,
     PurchasesModule,
+    UnitsOfMeasureModule,
+    InventoryAnalyticsModule,
+    InventoryAdjustmentModule,
+    InventoryTransferModule,
   ],
   controllers: [AppController],
   providers: [AppService],

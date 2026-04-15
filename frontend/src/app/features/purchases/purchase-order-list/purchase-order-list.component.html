@@ -1,4 +1,6 @@
 <div class="p-6">
+  <app-purchases-push-notice />
+
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
     <h1 class="text-2xl font-bold text-main">Órdenes de Compra</h1>
   </div>
@@ -10,7 +12,9 @@
       <option value="PENDING_APPROVAL">Pendiente Aprobación</option>
       <option value="PARTIALLY_APPROVED">Parcialmente Aprobada</option>
       <option value="APPROVED">Aprobada</option>
-      <option value="SENT_TO_SUPPLIER">Enviada a Proveedor</option>
+      <option value="SENT">Enviada al proveedor</option>
+      <option value="ORDERED">Pedida al proveedor</option>
+      <option value="SENT_TO_SUPPLIER">Enviada (hist.)</option>
       <option value="RECEIVED">Recibida</option>
     </select>
   </div>
@@ -23,6 +27,7 @@
         <thead>
           <tr class="border-b border-border">
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Correlativo</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden lg:table-cell">Contrato / Subcontrato</th>
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Proveedor</th>
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Monto</th>
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Firmas</th>
@@ -33,7 +38,15 @@
         <tbody>
           @for (order of filteredOrders(); track order.id) {
             <tr class="border-b border-border/50 hover:bg-dark/50 transition-colors">
-              <td class="px-4 py-3 text-sm font-mono text-primary">{{ order.correlative }}</td>
+              <td class="px-4 py-3 text-sm">
+                <app-entity-link kind="PO" [id]="order.id" [label]="order.correlative" variant="link" />
+              </td>
+              <td class="px-4 py-3 text-sm text-main hidden lg:table-cell max-w-[14rem]">
+                <span class="font-medium">{{ order.contract?.name || '—' }}</span>
+                @if (order.subcontract) {
+                  <span class="block text-xs text-muted mt-0.5">{{ order.subcontract.code }} — {{ order.subcontract.name }}</span>
+                }
+              </td>
               <td class="px-4 py-3 text-sm text-main">{{ order.quotation?.vendor?.name || '—' }}</td>
               <td class="px-4 py-3 text-sm font-mono text-main">{{ order.totalAmount | clpCurrency }}</td>
               <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ order._count?.approvals || 0 }}/{{ order.requiredSignatures }}</td>
@@ -47,7 +60,7 @@
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="px-4 py-8 text-center text-muted">No se encontraron órdenes de compra</td></tr>
+            <tr><td colspan="7" class="px-4 py-8 text-center text-muted">No se encontraron órdenes de compra</td></tr>
           }
         </tbody>
       </table>

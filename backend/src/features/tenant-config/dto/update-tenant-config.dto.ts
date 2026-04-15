@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsEnum, IsObject, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsObject,
+  Matches,
+} from 'class-validator';
 import { BackgroundPreference } from '@prisma/client';
 
 export class UpdateTenantConfigDto {

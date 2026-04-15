@@ -6,10 +6,10 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import type { Readable } from 'stream';
+import { Readable } from 'stream';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PO_STATUSES_ALLOW_WAREHOUSE_RECEIPT } from './po-receipt-eligible-statuses';
 import { SequenceService } from '../../common/sequence/sequence.service';
-import { StorageService } from '../../common/storage/storage.service';
 import {
   generateSignatureHash,
   verifySignatureIntegrity,
@@ -21,8 +21,17 @@ import {
   resolveApprovalPolicyForUser,
   SYSTEM_MIRROR_ROLE_NAME,
 } from '../tenant-roles/tenant-role-defaults';
+import {
+  EQUIPMENT_LINK_SELECT,
+  WORK_ORDER_LINK_SELECT,
+} from './purchase-asset-links.include';
+import { generatePurchaseOrderPdfBuffer } from './purchase-order-pdf.generator';
+import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import { ActivityAction, Prisma } from '@prisma/client';
 
-const SUBCONTRACT_SELECT = { select: { id: true, code: true, name: true } } as const;
+const SUBCONTRACT_SELECT = {
+  select: { id: true, code: true, name: true },
+} as const;
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -31,16 +40,35 @@ export class PurchaseOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequenceService: SequenceService,
-    private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
   ) {}
 
-  async findAll(tenantId: string, status?: string) {
+  private buildContractScope(user?: {
+    role?: string;
+    allowedContracts?: string[];
+  }): Prisma.PurchaseOrderWhereInput {
+    if (!user) return {};
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return {};
+    const allowed = user.allowedContracts ?? [];
+    if (allowed.includes('ALL')) return {};
+    if (!allowed.length) {
+      return { contractId: '00000000-0000-4000-8000-000000000000' };
+    }
+    return { contractId: { in: allowed } };
+  }
+
+  async findAll(
+    tenantId: string,
+    status?: string,
+    user?: { role?: string; allowedContracts?: string[] },
+  ) {
+    const contractFilter = this.buildContractScope(user);
     return this.prisma.purchaseOrder.findMany({
       where: {
         tenantId,
         ...(status && { status: status as any }),
+        ...contractFilter,
       },
       include: {
         contract: { select: { id: true, code: true, name: true } },
@@ -57,21 +85,80 @@ export class PurchaseOrdersService {
     });
   }
 
-  async findById(id: string, tenantId: string) {
+  /** OCs en las que se puede abrir recepción de bodega (mismo criterio que WarehouseReceiptsService.create). */
+  async findEligibleForWarehouseReceipt(
+    tenantId: string,
+    user?: { role?: string; allowedContracts?: string[] },
+  ) {
+    const contractFilter = this.buildContractScope(user);
+    return this.prisma.purchaseOrder.findMany({
+      where: {
+        tenantId,
+        status: { in: [...PO_STATUSES_ALLOW_WAREHOUSE_RECEIPT] },
+        ...contractFilter,
+      },
+      include: {
+        contract: { select: { id: true, code: true, name: true } },
+        subcontract: SUBCONTRACT_SELECT,
+        quotation: {
+          select: {
+            id: true,
+            vendor: { select: { id: true, name: true, code: true } },
+          },
+        },
+        _count: { select: { approvals: true, items: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findById(
+    id: string,
+    tenantId: string,
+    user?: { role?: string; allowedContracts?: string[] },
+  ) {
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id, tenantId },
       include: {
         contract: { select: { id: true, code: true, name: true } },
         subcontract: SUBCONTRACT_SELECT,
+        equipment: EQUIPMENT_LINK_SELECT,
+        workOrder: WORK_ORDER_LINK_SELECT,
         quotation: {
           include: {
-            vendor: { select: { id: true, name: true, code: true } },
-            requisition: { select: { id: true, correlative: true, description: true } },
+            vendor: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                rut: true,
+                address: true,
+                contactPhone: true,
+              },
+            },
+            items: true,
+            requisition: {
+              include: {
+                quotations: {
+                  include: {
+                    vendor: { select: { id: true, name: true, code: true } },
+                  },
+                  orderBy: { createdAt: 'desc' },
+                },
+              },
+            },
           },
         },
         items: {
           include: {
-            inventoryItem: { select: { id: true, partNumber: true, name: true } },
+            inventoryItem: {
+              select: {
+                id: true,
+                partNumber: true,
+                name: true,
+                isInventory: true,
+              },
+            },
           },
         },
         approvals: {
@@ -81,10 +168,39 @@ export class PurchaseOrdersService {
           },
           orderBy: { level: 'asc' },
         },
+        purchaseInvoice: {
+          include: {
+            vendor: { select: { id: true, name: true, code: true } },
+          },
+        },
+        receipts: {
+          include: {
+            warehouse: {
+              select: { id: true, code: true, name: true, location: true },
+            },
+            items: {
+              include: {
+                orderItem: {
+                  select: {
+                    id: true,
+                    unitCost: true,
+                    quantity: true,
+                    description: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
+
+    if (user) {
+      assertUserHasContractAccess(user, order.contractId);
+    }
 
     const enrichedApprovals = order.approvals.map((approval) => {
       const payload: SignaturePayload = {
@@ -117,6 +233,82 @@ export class PurchaseOrdersService {
   }
 
   /**
+   * Vincula una línea de OC (texto libre) a un artículo del catálogo. Solo permitido antes de la aprobación final.
+   */
+  async linkItemToCatalog(
+    orderId: string,
+    orderItemId: string,
+    inventoryItemId: string,
+    user: {
+      id: string;
+      tenantId: string;
+      role?: string;
+      allowedContracts?: string[];
+    },
+  ) {
+    const allowedStatuses = [
+      'DRAFT',
+      'PENDING_APPROVAL',
+      'PARTIALLY_APPROVED',
+    ] as const;
+
+    const order = await this.prisma.purchaseOrder.findFirst({
+      where: { id: orderId, tenantId: user.tenantId },
+    });
+    if (!order) throw new NotFoundException('Orden de compra no encontrada');
+    assertUserHasContractAccess(user, order.contractId);
+
+    if (
+      !allowedStatuses.includes(
+        order.status as (typeof allowedStatuses)[number],
+      )
+    ) {
+      throw new BadRequestException(
+        'Solo se puede vincular al catálogo mientras la OC está en borrador o pendiente de aprobación (no aplica tras aprobación o envío).',
+      );
+    }
+
+    const line = await this.prisma.purchaseOrderItem.findFirst({
+      where: { id: orderItemId, purchaseOrderId: orderId },
+    });
+    if (!line) throw new NotFoundException('Línea de orden no encontrada');
+
+    if (line.inventoryItemId) {
+      throw new BadRequestException(
+        'Esta línea ya está vinculada a un artículo de catálogo.',
+      );
+    }
+
+    const catalogItem = await this.prisma.inventoryItem.findFirst({
+      where: { id: inventoryItemId, tenantId: user.tenantId },
+    });
+    if (!catalogItem) {
+      throw new NotFoundException('Artículo de inventario no encontrado');
+    }
+
+    await this.prisma.purchaseOrderItem.update({
+      where: { id: orderItemId },
+      data: { inventoryItemId },
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'PURCHASE_ORDER',
+      entityId: orderId,
+      action: ActivityAction.SYSTEM_UPDATE,
+      newValue: {
+        message: `Ítem vinculado al catálogo: ${catalogItem.name}`,
+        catalogItemName: catalogItem.name,
+        orderItemId,
+        inventoryItemId,
+      },
+    });
+
+    return this.findById(orderId, user.tenantId, user);
+  }
+
+  /**
    * Historial de auditoría para la OC: eventos de la propia orden y del requerimiento vinculado (si existe).
    */
   async findActivityLogs(orderId: string, tenantId: string) {
@@ -130,48 +322,90 @@ export class PurchaseOrdersService {
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
 
     const requisitionId = order.quotation?.requisitionId;
-    const orFilter = requisitionId
+    const invoice = await this.prisma.purchaseInvoice.findUnique({
+      where: { purchaseOrderId: orderId },
+      select: { id: true },
+    });
+
+    const orFilter: Prisma.ActivityLogWhereInput[] = requisitionId
       ? [
-          { entityType: 'PURCHASE_ORDER' as const, entityId: orderId },
-          { entityType: 'REQUISITION' as const, entityId: requisitionId },
+          { entityType: 'PURCHASE_ORDER', entityId: orderId },
+          { entityType: 'REQUISITION', entityId: requisitionId },
         ]
-      : [{ entityType: 'PURCHASE_ORDER' as const, entityId: orderId }];
+      : [{ entityType: 'PURCHASE_ORDER', entityId: orderId }];
+
+    if (invoice) {
+      orFilter.push({
+        entityType: 'PURCHASE_INVOICE',
+        entityId: invoice.id,
+      });
+    }
+
+    orFilter.push({
+      entityType: 'PURCHASE_INVOICE',
+      details: {
+        path: ['metadata', 'purchaseOrderId'],
+        equals: orderId,
+      },
+    });
 
     return this.prisma.activityLog.findMany({
       where: {
         tenantId,
         OR: orFilter,
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         user: { select: { id: true, name: true, email: true } },
       },
     });
   }
 
-  /**
-   * Resuelve la clave interna de almacenamiento a partir de pdfUrl (clave o ruta /uploads/...).
-   */
-  private resolvePdfStorageKey(pdfUrl: string): string {
-    const trimmed = pdfUrl.trim();
-    if (trimmed.startsWith('/uploads/')) {
-      return trimmed.slice('/uploads/'.length);
+  /** Dirección de entrega y condición de pago (campos operativos; no modifican firmas ni montos). */
+  async updateOrderLogistics(
+    orderId: string,
+    data: {
+      deliveryAddress?: string | null;
+      paymentTerms?: string | null;
+    },
+    user: { tenantId: string; role?: string; allowedContracts?: string[] },
+  ) {
+    const tenantId = user.tenantId;
+    const order = await this.prisma.purchaseOrder.findFirst({
+      where: { id: orderId, tenantId },
+      select: { id: true, contractId: true },
+    });
+    if (!order) throw new NotFoundException('Orden de compra no encontrada');
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
+
+    const hasChange =
+      data.deliveryAddress !== undefined || data.paymentTerms !== undefined;
+    if (!hasChange) {
+      throw new BadRequestException('No se recibieron campos para actualizar.');
     }
-    try {
-      const u = new URL(trimmed);
-      const path = u.pathname;
-      if (path.startsWith('/uploads/')) {
-        return path.slice('/uploads/'.length);
-      }
-    } catch {
-      /* no es URL absoluta */
+
+    const updateData: Prisma.PurchaseOrderUpdateInput = {};
+    if (data.deliveryAddress !== undefined) {
+      updateData.deliveryAddress = data.deliveryAddress;
     }
-    return trimmed;
+    if (data.paymentTerms !== undefined) {
+      updateData.paymentTerms = data.paymentTerms;
+    }
+
+    await this.prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: updateData,
+    });
+
+    return this.findById(orderId, tenantId, user);
   }
 
   /**
-   * Obtiene un stream de lectura del PDF de la OC para el tenant indicado.
-   * Lanza NotFoundException si la OC no existe, no tiene pdfUrl o el archivo no está en disco.
+   * PDF de la OC generado al vuelo (incluye equipo / OT para trazabilidad operativa).
    */
   async getPurchaseOrderPdfStream(
     id: string,
@@ -179,33 +413,32 @@ export class PurchaseOrdersService {
   ): Promise<Readable> {
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id, tenantId },
-      select: { id: true, pdfUrl: true },
+      include: {
+        contract: { select: { id: true, code: true, name: true } },
+        subcontract: SUBCONTRACT_SELECT,
+        equipment: EQUIPMENT_LINK_SELECT,
+        workOrder: WORK_ORDER_LINK_SELECT,
+        quotation: {
+          include: {
+            vendor: { select: { id: true, code: true, name: true } },
+          },
+        },
+        items: {
+          include: {
+            inventoryItem: {
+              select: { id: true, partNumber: true, name: true },
+            },
+          },
+        },
+      },
     });
 
-    if (!order || !order.pdfUrl?.trim()) {
-      throw new NotFoundException(
-        'Orden de compra no encontrada o sin PDF generado',
-      );
+    if (!order) {
+      throw new NotFoundException('Orden de compra no encontrada');
     }
 
-    const key = this.resolvePdfStorageKey(order.pdfUrl);
-
-    try {
-      return await this.storage.getFileStream(key);
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException)?.code;
-      const message = err instanceof Error ? err.message : String(err);
-      if (
-        code === 'ENOENT' ||
-        message.includes('ENOENT') ||
-        message.includes('not found')
-      ) {
-        throw new NotFoundException(
-          'El archivo PDF no está disponible en el servidor',
-        );
-      }
-      throw err;
-    }
+    const buffer = await generatePurchaseOrderPdfBuffer(order);
+    return Readable.from(buffer);
   }
 
   async createFromQuotation(quotationId: string, user: any) {
@@ -224,11 +457,39 @@ export class PurchaseOrdersService {
         throw new NotFoundException('Cotización ganadora no encontrada');
       }
 
+      assertUserHasContractAccess(
+        user,
+        quotation.requisition.contractId,
+        'No tiene acceso al contrato del requerimiento para generar esta OC',
+      );
+
       const existingPO = await tx.purchaseOrder.findFirst({
         where: { quotationId },
       });
       if (existingPO) {
         throw new ConflictException('Ya existe una OC para esta cotización');
+      }
+
+      let resolvedEquipmentId = quotation.requisition.equipmentId ?? undefined;
+      const resolvedWorkOrderId =
+        quotation.requisition.workOrderId ?? undefined;
+
+      if (resolvedWorkOrderId) {
+        const wo = await tx.workOrder.findFirst({
+          where: { id: resolvedWorkOrderId, tenantId },
+          select: { equipmentId: true, status: true },
+        });
+        if (!wo) {
+          throw new BadRequestException(
+            'La orden de trabajo vinculada al requerimiento ya no existe',
+          );
+        }
+        if (wo.equipmentId !== (resolvedEquipmentId ?? null)) {
+          this.logger.warn(
+            `OT ${resolvedWorkOrderId}: equipmentId cambió de ${resolvedEquipmentId} a ${wo.equipmentId}. Re-sincronizando OC.`,
+          );
+          resolvedEquipmentId = wo.equipmentId ?? undefined;
+        }
       }
 
       const requisitionStatusBefore = quotation.requisition.status;
@@ -238,10 +499,14 @@ export class PurchaseOrdersService {
       });
       const threshold = settings ? Number(settings.approvalThreshold) : 0;
       const totalAmount = Number(quotation.totalAmount);
-      const requiredSignatures = totalAmount >= threshold && threshold > 0 ? 3 : 2;
+      const requiredSignatures =
+        totalAmount >= threshold && threshold > 0 ? 3 : 2;
 
       const correlative = await this.sequenceService.getNextCorrelative(
-        tenantId, 'OC', 'OC', tx,
+        tenantId,
+        'OC',
+        'OC',
+        tx,
       );
 
       const created = await tx.purchaseOrder.create({
@@ -255,6 +520,8 @@ export class PurchaseOrdersService {
           totalAmount: quotation.totalAmount,
           currency: quotation.currency,
           requiredSignatures,
+          equipmentId: resolvedEquipmentId,
+          workOrderId: resolvedWorkOrderId,
           items: {
             create: quotation.items.map((qi) => ({
               description: qi.requisitionItem.description,
@@ -264,7 +531,11 @@ export class PurchaseOrdersService {
             })),
           },
         },
-        include: { items: true },
+        include: {
+          items: true,
+          equipment: EQUIPMENT_LINK_SELECT,
+          workOrder: WORK_ORDER_LINK_SELECT,
+        },
       });
 
       await tx.purchaseRequisition.update({
@@ -272,7 +543,11 @@ export class PurchaseOrdersService {
         data: { status: 'APPROVED' },
       });
 
-      return { order: created, requisitionStatusBefore, requisitionId: quotation.requisitionId };
+      return {
+        order: created,
+        requisitionStatusBefore,
+        requisitionId: quotation.requisitionId,
+      };
     });
 
     await this.audit.log({
@@ -301,7 +576,9 @@ export class PurchaseOrdersService {
       tenantId,
       order.order.id,
     ).catch((err) =>
-      this.logger.warn(`No se pudo enviar notificación push (nueva OC): ${err}`),
+      this.logger.warn(
+        `No se pudo enviar notificación push (nueva OC): ${err}`,
+      ),
     );
 
     return order.order;
@@ -317,8 +594,23 @@ export class PurchaseOrdersService {
 
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
 
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
+
     if (!['PENDING_APPROVAL', 'PARTIALLY_APPROVED'].includes(order.status)) {
       throw new BadRequestException('La OC no está pendiente de aprobación');
+    }
+
+    const userAlreadySigned = order.approvals.some(
+      (a) => a.approvedById === user.id,
+    );
+    if (userAlreadySigned) {
+      throw new ConflictException(
+        'Ya registró una firma en esta orden de compra. No puede volver a firmar la misma OC.',
+      );
     }
 
     const policies = await this.prisma.approvalPolicy.findMany({
@@ -349,7 +641,7 @@ export class PurchaseOrdersService {
     );
     if (existingApproval) {
       throw new ConflictException(
-        `El nivel ${matchingPolicy.level} ya fue firmado`,
+        `El nivel ${matchingPolicy.level} ya tiene una firma registrada. Cada nivel se firma una sola vez; la siguiente aprobación corresponde al rol configurado para el siguiente nivel.`,
       );
     }
 
@@ -442,6 +734,12 @@ export class PurchaseOrdersService {
 
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
 
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
+
     if (!['PENDING_APPROVAL', 'PARTIALLY_APPROVED'].includes(order.status)) {
       throw new BadRequestException('La OC no está pendiente de aprobación');
     }
@@ -465,6 +763,61 @@ export class PurchaseOrdersService {
     return updated;
   }
 
+  async cancel(orderId: string, reason: string | undefined, user: any) {
+    const order = await this.prisma.purchaseOrder.findFirst({
+      where: { id: orderId, tenantId: user.tenantId },
+    });
+
+    if (!order) throw new NotFoundException('Orden de compra no encontrada');
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
+
+    const cancelReason = reason?.trim();
+    if (!cancelReason) {
+      throw new BadRequestException(
+        'Debe proporcionar un motivo de anulación de la OC.',
+      );
+    }
+    if (['CANCELLED', 'RECEIVED', 'CLOSED'].includes(order.status)) {
+      throw new BadRequestException(
+        'La OC no puede anularse en su estado actual.',
+      );
+    }
+
+    const hasOperationalReceipts = await this.prisma.warehouseReceipt.count({
+      where: {
+        purchaseOrderId: orderId,
+        status: { in: ['PARTIAL', 'COMPLETED'] },
+      },
+    });
+    if (hasOperationalReceipts > 0) {
+      throw new BadRequestException(
+        'No se puede anular una OC con recepciones de bodega confirmadas.',
+      );
+    }
+
+    const previousStatus = order.status;
+    const updated = await this.prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED', notes: cancelReason },
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'PURCHASE_ORDER',
+      entityId: orderId,
+      action: 'STATUS_CHANGE',
+      oldValue: { status: previousStatus },
+      newValue: { status: updated.status, reason: cancelReason },
+    });
+
+    return updated;
+  }
+
   async resetToDraft(orderId: string, user: any) {
     const tenantId = user.tenantId;
     const order = await this.prisma.purchaseOrder.findFirst({
@@ -472,6 +825,12 @@ export class PurchaseOrdersService {
     });
 
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
+
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
 
     if (order.status !== 'REJECTED') {
       throw new BadRequestException(
@@ -517,6 +876,12 @@ export class PurchaseOrdersService {
     });
 
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
+
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
 
     const editableStatuses = [
       'DRAFT',
@@ -599,6 +964,39 @@ export class PurchaseOrdersService {
       });
     }
 
+    if (data.items?.length) {
+      const lineDiffs = this.diffPoLineEdits(order.items, data.items);
+      for (const d of lineDiffs) {
+        await this.audit.log({
+          userId: user.id,
+          tenantId,
+          entityType: 'PURCHASE_ORDER',
+          entityId: orderId,
+          action: ActivityAction.UPDATE,
+          oldValue: {
+            itemLabel: d.label,
+            [d.fieldKey]: d.prev,
+          },
+          newValue: {
+            itemLabel: d.label,
+            [d.fieldKey]: d.next,
+          },
+          unified: {
+            field: d.fieldKey,
+            prev: d.prev,
+            next: d.next,
+            metadata: {
+              itemDescription: d.label,
+              event:
+                d.fieldKey === 'unitCost'
+                  ? 'po_line_unit_cost_changed'
+                  : 'po_line_quantity_changed',
+            },
+          },
+        });
+      }
+    }
+
     if (updated.status === 'PENDING_APPROVAL') {
       void this.notifyApproversForPendingSignature(tenantId, orderId).catch(
         (err) =>
@@ -617,6 +1015,12 @@ export class PurchaseOrdersService {
     });
 
     if (!order) throw new NotFoundException('Orden de compra no encontrada');
+
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
 
     if (order.status !== 'PARTIALLY_RECEIVED') {
       throw new BadRequestException(
@@ -650,9 +1054,137 @@ export class PurchaseOrdersService {
   }
 
   /**
+   * Marca la OC como enviada al proveedor (documento comunicado). Solo desde APPROVED.
+   */
+  async markAsSentToSupplier(orderId: string, user: any) {
+    const tenantId = user.tenantId;
+    const order = await this.prisma.purchaseOrder.findFirst({
+      where: { id: orderId, tenantId },
+    });
+
+    if (!order) throw new NotFoundException('Orden de compra no encontrada');
+
+    assertUserHasContractAccess(
+      user,
+      order.contractId,
+      'No tiene acceso al contrato de esta orden de compra',
+    );
+
+    if (order.status !== 'APPROVED') {
+      throw new BadRequestException(
+        'Solo una orden aprobada puede marcarse como enviada al proveedor',
+      );
+    }
+
+    const prevStatus = order.status;
+    const sentAt = new Date();
+    const updated = await this.prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: { status: 'SENT', sentAt },
+    });
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { name: true },
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId,
+      entityType: 'PURCHASE_ORDER',
+      entityId: orderId,
+      action: 'STATUS_CHANGE',
+      oldValue: { status: prevStatus },
+      newValue: {
+        status: updated.status,
+        event: 'marked_sent_to_supplier',
+        sentAt: sentAt.toISOString(),
+        performedByUserId: user.id,
+        performedByName: actor?.name ?? '',
+      },
+      unified: {
+        field: 'status',
+        prev: prevStatus,
+        next: updated.status,
+        metadata: {
+          sentAt: sentAt.toISOString(),
+          performedByUserId: user.id,
+          performedByName: actor?.name ?? '',
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
    * Notifica por Web Push a los usuarios cuyo rol coincide con la política del
    * siguiente nivel de firma pendiente (según ApprovalPolicy).
    */
+  /**
+   * Compara líneas de OC antes/después de `updateSensitiveFields` (mismo ítem por inventario o descripción).
+   */
+  private diffPoLineEdits(
+    before: Array<{
+      description: string;
+      quantity: number;
+      unitCost: unknown;
+      inventoryItemId: string | null;
+    }>,
+    after: Array<{
+      description?: string;
+      quantity?: number;
+      unitCost?: number;
+      inventoryItemId?: string | null;
+    }>,
+  ): Array<{
+    label: string;
+    fieldKey: 'unitCost' | 'quantity';
+    prev: number;
+    next: number;
+  }> {
+    const out: Array<{
+      label: string;
+      fieldKey: 'unitCost' | 'quantity';
+      prev: number;
+      next: number;
+    }> = [];
+    for (const b of before) {
+      const match = after.find(
+        (a) =>
+          (b.inventoryItemId != null &&
+            a.inventoryItemId != null &&
+            a.inventoryItemId === b.inventoryItemId) ||
+          (b.inventoryItemId == null &&
+            String(a.description ?? '').trim() ===
+              String(b.description ?? '').trim()),
+      );
+      if (!match) continue;
+      const label = (b.description || 'Ítem').trim();
+      const bu = Number(b.unitCost);
+      const bq = Number(b.quantity);
+      const au = Number(match.unitCost);
+      const aq = Number(match.quantity);
+      if (!Number.isNaN(bu) && !Number.isNaN(au) && bu !== au) {
+        out.push({
+          label,
+          fieldKey: 'unitCost',
+          prev: bu,
+          next: au,
+        });
+      }
+      if (!Number.isNaN(bq) && !Number.isNaN(aq) && bq !== aq) {
+        out.push({
+          label,
+          fieldKey: 'quantity',
+          prev: bq,
+          next: aq,
+        });
+      }
+    }
+    return out;
+  }
+
   private async notifyApproversForPendingSignature(
     tenantId: string,
     orderId: string,
@@ -683,21 +1215,37 @@ export class PurchaseOrdersService {
     const mirrorName = SYSTEM_MIRROR_ROLE_NAME[nextPolicy.role.baseRole];
     const policyIsMirror = nextPolicy.role.name === mirrorName;
 
+    const policyRoleMatch: Prisma.UserWhereInput = {
+      OR: [
+        { customRoleId: nextPolicy.roleId },
+        ...(policyIsMirror
+          ? [
+              {
+                customRoleId: null,
+                role: nextPolicy.role.baseRole,
+              },
+            ]
+          : []),
+      ],
+    };
+
+    const contractScope: Prisma.UserWhereInput = {
+      OR: [
+        { role: 'ADMIN' },
+        { role: 'SUPER_ADMIN' },
+        {
+          contractAccess: {
+            some: { contractId: order.contractId },
+          },
+        },
+      ],
+    };
+
     const recipients = await this.prisma.user.findMany({
       where: {
         tenantId,
         isActive: true,
-        OR: [
-          { customRoleId: nextPolicy.roleId },
-          ...(policyIsMirror
-            ? [
-                {
-                  customRoleId: null,
-                  role: nextPolicy.role.baseRole,
-                },
-              ]
-            : []),
-        ],
+        AND: [policyRoleMatch, contractScope],
       },
       select: { id: true },
     });

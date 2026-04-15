@@ -317,6 +317,20 @@ export class AuthService {
     return roles.includes(user.role);
   }
 
+  /**
+   * Compras / supervisión: montos completos en facturas y OC.
+   * Mecánicos y perfiles operativos ven ítems pero no precios ni totales.
+   */
+  canSeePurchaseFinancials(): boolean {
+    const user = this.currentUser();
+    if (!user) return false;
+    return (
+      user.role === 'SUPER_ADMIN' ||
+      user.role === 'ADMIN' ||
+      user.role === 'SUPERVISOR'
+    );
+  }
+
   forceLogout() {
     if (this.forceLogoutInProgress) return;
     this.forceLogoutInProgress = true;

@@ -1,0 +1,205 @@
+<div class="space-y-6">
+  <div class="flex items-center justify-between gap-3 border-b border-border/50 pb-3">
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">Transferencias entre Bodegas</h2>
+      <p class="text-sm text-muted">Movimientos W2W con control de impacto financiero.</p>
+    </div>
+  </div>
+
+  <section class="rounded-xl border border-border bg-surface p-4 space-y-4">
+    <h3 class="text-xs font-mono font-bold text-primary uppercase tracking-wider">
+      Nueva Transferencia
+    </h3>
+
+    <form [formGroup]="transferForm" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div>
+        <label class="mb-1 block text-[10px] font-mono uppercase tracking-widest text-muted">
+          Bodega origen
+        </label>
+        <select
+          formControlName="originWarehouseId"
+          class="w-full rounded-lg border border-border bg-dark px-3 py-2.5 text-sm text-main outline-none focus:border-primary/50"
+        >
+          <option value="">
+            {{ warehousesLoading() ? "Cargando..." : "-- Seleccione origen --" }}
+          </option>
+          @for (w of warehouses(); track w.id) {
+            <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-[10px] font-mono uppercase tracking-widest text-muted">
+          Bodega destino
+        </label>
+        <select
+          formControlName="destinationWarehouseId"
+          class="w-full rounded-lg border border-border bg-dark px-3 py-2.5 text-sm text-main outline-none focus:border-primary/50"
+        >
+          <option value="">-- Seleccione destino --</option>
+          @for (w of warehouses(); track w.id) {
+            <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
+          }
+        </select>
+      </div>
+    </form>
+
+    <div class="space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <h4 class="text-xs font-mono uppercase tracking-wider text-muted">Ítems de la transferencia</h4>
+        <button
+          type="button"
+          (click)="openPicker()"
+          class="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-mono text-primary hover:bg-primary/10"
+        >
+          + Agregar ítem
+        </button>
+      </div>
+
+      <div class="overflow-hidden rounded-xl border border-border">
+        <table class="w-full border-collapse text-sm">
+          <thead>
+            <tr class="bg-dark text-xs uppercase tracking-wider text-muted font-mono">
+              <th class="px-4 py-2.5 text-left">N° Parte / Ítem</th>
+              <th class="px-4 py-2.5 text-center">Cantidad</th>
+              <th class="px-4 py-2.5 text-center">Acción</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border/50">
+            @for (line of lines(); track line.itemId) {
+              <tr>
+                <td class="px-4 py-2.5">
+                  <div class="font-mono text-primary">{{ line.partNumber }}</div>
+                  <div class="text-main">{{ line.name }}</div>
+                </td>
+                <td class="px-4 py-2.5 text-center">
+                  <input
+                    type="number"
+                    min="0.0001"
+                    step="0.0001"
+                    [value]="line.quantity"
+                    (input)="setLineQty(line.itemId, $any($event.target).value)"
+                    class="w-28 rounded border border-border bg-dark px-2 py-1 text-right font-mono text-main outline-none focus:border-primary"
+                  />
+                  <span class="ml-2 text-xs text-muted">{{ line.unitOfMeasure }}</span>
+                </td>
+                <td class="px-4 py-2.5 text-center">
+                  <button
+                    type="button"
+                    (click)="removeLine(line.itemId)"
+                    class="rounded border border-error/40 px-2 py-1 text-[11px] font-mono uppercase text-error hover:bg-error/10"
+                  >
+                    Quitar
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="3" class="px-4 py-8 text-center text-sm font-mono text-muted">
+                  No hay ítems agregados.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="flex justify-end">
+      <button
+        type="button"
+        (click)="requestSendTransfer()"
+        [disabled]="!canSubmit()"
+        class="rounded-lg bg-primary px-5 py-2 text-sm font-bold font-mono text-dark disabled:opacity-50"
+      >
+        ENVIAR
+      </button>
+    </div>
+  </section>
+
+  <section class="rounded-xl border border-border bg-surface overflow-hidden">
+    <div class="border-b border-border bg-dark/50 px-4 py-3">
+      <h3 class="text-xs font-mono font-bold uppercase tracking-wider text-primary">
+        Listado de Transferencias
+      </h3>
+    </div>
+    <table class="w-full border-collapse text-sm">
+      <thead>
+        <tr class="bg-dark text-xs uppercase tracking-wider text-muted font-mono">
+          <th class="px-4 py-2.5 text-left">Origen</th>
+          <th class="px-4 py-2.5 text-left">Destino</th>
+          <th class="px-4 py-2.5 text-center">Estado</th>
+          <th class="px-4 py-2.5 text-center">Fecha</th>
+          <th class="px-4 py-2.5 text-center">Acción</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border/50">
+        @if (transfersLoading()) {
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-sm font-mono text-muted">Cargando transferencias...</td>
+          </tr>
+        } @else {
+          @for (t of transfers(); track t.id) {
+            <tr>
+              <td class="px-4 py-2.5">
+                {{ t.originWarehouse?.code || "—" }} — {{ t.originWarehouse?.name || "Sin bodega" }}
+              </td>
+              <td class="px-4 py-2.5">
+                {{ t.destinationWarehouse?.code || "—" }} — {{ t.destinationWarehouse?.name || "Sin bodega" }}
+              </td>
+              <td class="px-4 py-2.5 text-center">
+                <span class="rounded-full px-2.5 py-1 text-[11px] font-mono" [class]="statusBadgeClass(t.status)">
+                  {{ statusLabel(t.status) }}
+                </span>
+              </td>
+              <td class="px-4 py-2.5 text-center font-mono">
+                {{ t.createdAt | date: "dd/MM/yyyy HH:mm" }}
+              </td>
+              <td class="px-4 py-2.5 text-center">
+                @if (canConfirmReception(t)) {
+                  <button
+                    type="button"
+                    (click)="requestConfirmReception(t)"
+                    class="rounded border border-amber-500/40 px-2 py-1 text-[11px] font-mono uppercase text-amber-300 hover:bg-amber-500/10"
+                  >
+                    Confirmar recepción
+                  </button>
+                } @else {
+                  <span class="text-xs text-muted">—</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="px-4 py-10 text-center text-sm font-mono text-muted">
+                No hay transferencias registradas.
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <app-global-item-picker
+    [open]="pickerOpen()"
+    [warehouseId]="transferForm.get('originWarehouseId')?.value || null"
+    [strictFamilyFirst]="true"
+    title="Catálogo Maestro de Artículos"
+    (closed)="onPickerClosed()"
+    (itemPicked)="onItemPicked($event)"
+  />
+
+  <app-confirm-modal
+    [isOpen]="confirmOpen()"
+    [title]="confirmTitle()"
+    [message]="transferWarningMessage"
+    [consequenceSummary]="confirmSummary()"
+    [riskLevel]="'warning'"
+    [confirmText]="confirmText()"
+    cancelText="Revisar"
+    (cancel)="cancelConfirm()"
+    (confirm)="confirmAction()"
+  />
+</div>

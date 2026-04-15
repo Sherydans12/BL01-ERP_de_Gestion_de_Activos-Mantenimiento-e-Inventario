@@ -3,38 +3,379 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SequenceService } from '../../common/sequence/sequence.service';
+import { StorageService } from '../../common/storage/storage.service';
+
+const ITEM_CATEGORY_SELECT = {
+  id: true,
+  name: true,
+  parentCategoryId: true,
+  parentCategory: { select: { id: true, name: true } },
+} as const;
+
+const UOM_SELECT = {
+  id: true,
+  name: true,
+  abbreviation: true,
+} as const;
+
+/** Familia (nombre padre) → subcategoría → artículo (PostgreSQL / Prisma). */
+const ITEM_CATALOG_ORDER_BY: Prisma.InventoryItemOrderByWithRelationInput[] = [
+  { itemCategory: { parentCategory: { name: 'asc' } } },
+  { itemCategory: { name: 'asc' } },
+  { name: 'asc' },
+];
 
 export interface CreateInventoryItemDto {
   partNumber: string;
   name: string;
   description?: string;
-  category: string;
-  unitOfMeasure: string;
+  /** Obligatorio: subcategoría (nivel 2). */
+  categoryId: string;
+  unitOfMeasureId: string;
   brand?: string;
-  isSerialized: boolean;
+  isSerialized?: boolean;
+  isInventory?: boolean;
+  isAsset?: boolean;
+  isConsumable?: boolean;
+}
+
+export interface QuickCreateItemDto {
+  name: string;
+  /** Obligatorio: subcategoría (nivel 2). */
+  categoryId: string;
+  unitOfMeasureId: string;
+  warehouseId?: string;
+  minStock?: number;
+  maxStock?: number;
 }
 
 @Injectable()
 export class InventoryItemsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sequenceService: SequenceService,
+    private readonly storageService: StorageService,
+  ) {}
 
-  async findAll(user: any) {
-    return this.prisma.inventoryItem.findMany({
-      where: { tenantId: user.tenantId },
-      orderBy: { name: 'asc' },
+  private isMechanic(user: { role?: string } | null | undefined): boolean {
+    return user?.role === 'MECHANIC';
+  }
+
+  private maskPickerCostByRole(
+    user: { role?: string } | null | undefined,
+    value: number | null,
+  ): number | null {
+    if (!this.isMechanic(user)) return value;
+    return null;
+  }
+
+  /**
+   * Patrón ILIKE '%…%' con escape de comodines para uso con pg_trgm (GIN).
+   */
+  private static ilikeContainsPattern(q: string): string {
+    const s = q
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    return `%${s}%`;
+  }
+
+  /**
+   * Resuelve IDs por texto (nombre, parte, descripción, qr_code) con SQL parametrizado
+   * para favorecer planes con índices gin_trgm en columnas de texto.
+   */
+  private async searchInventoryItemIdsPgTrgm(
+    tenantId: string,
+    q: string,
+  ): Promise<string[]> {
+    const trimmed = q.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const pat = InventoryItemsService.ilikeContainsPattern(trimmed);
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT i.id
+      FROM inventory_items i
+      WHERE i.tenant_id = ${tenantId}::uuid
+        AND (
+          i.name ILIKE ${pat} ESCAPE '\\'
+          OR i.part_number ILIKE ${pat} ESCAPE '\\'
+          OR COALESCE(i.description, '') ILIKE ${pat} ESCAPE '\\'
+          OR i.qr_code ILIKE ${pat} ESCAPE '\\'
+          OR TRIM(i.part_number) = TRIM(${trimmed})
+          OR TRIM(i.qr_code) = TRIM(${trimmed})
+        )
+    `);
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Filtros compartidos: IDs por texto (pg_trgm) y categoría.
+   * Si `searchIds` es `[]`, no usar este helper sin un early-return previo (evita `IN ()`).
+   */
+  private async buildInventoryItemWhere(
+    tenantId: string,
+    opts: {
+      categoryId?: string;
+      searchIds?: string[];
+    },
+  ): Promise<Prisma.InventoryItemWhereInput> {
+    const where: Prisma.InventoryItemWhereInput = { tenantId };
+
+    if (opts.searchIds !== undefined) {
+      where.id = { in: opts.searchIds };
+    }
+
+    if (opts.categoryId?.trim()) {
+      const cat = await this.prisma.itemCategory.findFirst({
+        where: { id: opts.categoryId.trim(), tenantId },
+      });
+      if (cat) {
+        if (!cat.parentCategoryId) {
+          where.itemCategory = { parentCategoryId: opts.categoryId.trim() };
+        } else {
+          where.categoryId = opts.categoryId.trim();
+        }
+      }
+    }
+
+    return where;
+  }
+
+  /** Catálogo maestro paginado (GET /inventory-items). */
+  async findCatalog(
+    user: any,
+    opts: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+      categoryId?: string;
+    },
+  ) {
+    const tenantId = user.tenantId as string;
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 25));
+    const q = opts.search?.trim();
+    let searchIds: string[] | undefined;
+    if (q) {
+      searchIds = await this.searchInventoryItemIdsPgTrgm(tenantId, q);
+      if (searchIds.length === 0) {
+        return { data: [], total: 0, page, pageSize };
+      }
+    }
+    const where = await this.buildInventoryItemWhere(tenantId, {
+      categoryId: opts.categoryId,
+      searchIds,
     });
+    const skip = (page - 1) * pageSize;
+
+    const [data, total] = await Promise.all([
+      this.prisma.inventoryItem.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: ITEM_CATALOG_ORDER_BY,
+        include: {
+          itemCategory: { select: ITEM_CATEGORY_SELECT },
+          unitOfMeasure: { select: UOM_SELECT },
+        },
+      }),
+      this.prisma.inventoryItem.count({ where }),
+    ]);
+
+    return { data, total, page, pageSize };
+  }
+
+  /** Solo subcategorías (hoja); no familias sueltas. Valida familia misma tenant. */
+  private async assertLeafCategory(categoryId: string, tenantId: string) {
+    const cat = await this.prisma.itemCategory.findFirst({
+      where: { id: categoryId, tenantId },
+    });
+    if (!cat) {
+      throw new BadRequestException(
+        'La categoría no existe o no pertenece a su empresa.',
+      );
+    }
+    if (!cat.parentCategoryId) {
+      throw new BadRequestException(
+        'Debe seleccionar una subcategoría (no una familia de nivel superior).',
+      );
+    }
+    const parent = await this.prisma.itemCategory.findFirst({
+      where: { id: cat.parentCategoryId, tenantId },
+    });
+    if (!parent) {
+      throw new BadRequestException(
+        'La familia de la subcategoría no existe o no pertenece a su empresa.',
+      );
+    }
+    if (parent.parentCategoryId) {
+      throw new BadRequestException(
+        'Solo se permiten dos niveles: familia y subcategoría.',
+      );
+    }
+    return cat;
+  }
+
+  private async assertUnitOfMeasure(id: string, tenantId: string) {
+    const u = await this.prisma.unitOfMeasure.findFirst({
+      where: { id, tenantId },
+    });
+    if (!u) {
+      throw new BadRequestException('Unidad de medida no válida.');
+    }
+    return u;
+  }
+
+  private async assertUnitOfMeasureTx(
+    tx: Prisma.TransactionClient,
+    id: string,
+    tenantId: string,
+  ) {
+    const u = await tx.unitOfMeasure.findFirst({
+      where: { id, tenantId },
+    });
+    if (!u) {
+      throw new BadRequestException('Unidad de medida no válida.');
+    }
+    return u;
+  }
+
+  /**
+   * Listado paginado para selectores (Catálogo Maestro): búsqueda por texto,
+   * filtro por familia o subcategoría, y saldo opcional por bodega.
+   */
+  async findForPicker(
+    user: any,
+    opts: {
+      search?: string;
+      categoryId?: string;
+      warehouseId?: string;
+      page?: number;
+      pageSize?: number;
+    },
+  ) {
+    const tenantId = user.tenantId as string;
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 20));
+
+    const q = opts.search?.trim();
+    let searchIds: string[] | undefined;
+    if (q) {
+      searchIds = await this.searchInventoryItemIdsPgTrgm(tenantId, q);
+      if (searchIds.length === 0) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          pageSize,
+        };
+      }
+    }
+
+    const where = await this.buildInventoryItemWhere(tenantId, {
+      categoryId: opts.categoryId,
+      searchIds,
+    });
+
+    let warehouseIdForStock: string | undefined;
+    if (opts.warehouseId?.trim()) {
+      const wh = await this.prisma.warehouse.findFirst({
+        where: { id: opts.warehouseId.trim(), tenantId },
+        select: { id: true },
+      });
+      if (wh) {
+        warehouseIdForStock = wh.id;
+      }
+    }
+
+    const skip = (page - 1) * pageSize;
+
+    const include: Prisma.InventoryItemInclude = {
+      itemCategory: { select: ITEM_CATEGORY_SELECT },
+      unitOfMeasure: { select: UOM_SELECT },
+    };
+    if (warehouseIdForStock) {
+      include.stocks = {
+        where: { warehouseId: warehouseIdForStock },
+        select: { quantity: true, unitCost: true },
+      };
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.inventoryItem.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: ITEM_CATALOG_ORDER_BY,
+        include,
+      }),
+      this.prisma.inventoryItem.count({ where }),
+    ]);
+
+    return {
+      data: rows.map((item) => {
+        const row = item as typeof item & {
+          stocks?: { quantity: number; unitCost: unknown }[];
+        };
+        const stocks = row.stocks;
+        let stockQuantity: number | null = null;
+        let stockUnitCost: number | null = null;
+        if (warehouseIdForStock) {
+          stockQuantity = stocks?.length ? stocks[0].quantity : 0;
+          const uc = stocks?.length ? stocks[0].unitCost : null;
+          stockUnitCost = uc !== null && uc !== undefined ? Number(uc) : null;
+        } else {
+          stockUnitCost = null;
+        }
+        return {
+          id: row.id,
+          qrCode: row.qrCode,
+          partNumber: row.partNumber,
+          name: row.name,
+          description: row.description,
+          unitOfMeasure: row.unitOfMeasure,
+          brand: row.brand,
+          categoryId: row.categoryId,
+          itemCategory: row.itemCategory,
+          stockQuantity,
+          stockUnitCost: this.maskPickerCostByRole(user, stockUnitCost),
+        };
+      }),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async findOne(id: string, user: any) {
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id, tenantId: user.tenantId },
+      include: {
+        itemCategory: { select: ITEM_CATEGORY_SELECT },
+        unitOfMeasure: { select: UOM_SELECT },
+      },
     });
     if (!item) throw new NotFoundException('Artículo no encontrado');
     return item;
   }
 
   async create(dto: CreateInventoryItemDto, user: any) {
+    if (!dto.categoryId?.trim()) {
+      throw new BadRequestException(
+        'Debe seleccionar familia y subcategoría para el artículo.',
+      );
+    }
+    if (!dto.unitOfMeasureId?.trim()) {
+      throw new BadRequestException('Debe indicar la unidad de medida.');
+    }
+    await this.assertLeafCategory(dto.categoryId, user.tenantId);
+    await this.assertUnitOfMeasure(dto.unitOfMeasureId, user.tenantId);
+
     const existing = await this.prisma.inventoryItem.findUnique({
       where: {
         tenantId_partNumber: {
@@ -50,18 +391,46 @@ export class InventoryItemsService {
       );
     }
 
+    const id = randomUUID();
+    const qrCode = `INV:${id}`;
+
     return this.prisma.inventoryItem.create({
       data: {
+        id,
+        qrCode,
         tenantId: user.tenantId,
-        ...dto,
+        partNumber: dto.partNumber,
+        name: dto.name,
+        description: dto.description,
+        categoryId: dto.categoryId,
+        unitOfMeasureId: dto.unitOfMeasureId,
+        brand: dto.brand,
+        isSerialized: dto.isSerialized ?? false,
+        isInventory: dto.isInventory ?? true,
+        isAsset: dto.isAsset ?? false,
+        isConsumable: dto.isConsumable ?? true,
+      },
+      include: {
+        itemCategory: { select: ITEM_CATEGORY_SELECT },
+        unitOfMeasure: { select: UOM_SELECT },
       },
     });
   }
 
   async update(id: string, dto: CreateInventoryItemDto, user: any) {
-    await this.findOne(id, user); // Validar que existe y pertenece al tenant
+    await this.findOne(id, user);
 
-    // Validar si el nuevo partNumber ya está en uso por otro ID
+    if (!dto.categoryId?.trim()) {
+      throw new BadRequestException(
+        'Debe seleccionar familia y subcategoría para el artículo.',
+      );
+    }
+    if (!dto.unitOfMeasureId?.trim()) {
+      throw new BadRequestException('Debe indicar la unidad de medida.');
+    }
+    await this.assertLeafCategory(dto.categoryId, user.tenantId);
+    await this.assertUnitOfMeasure(dto.unitOfMeasureId, user.tenantId);
+
     const existing = await this.prisma.inventoryItem.findFirst({
       where: {
         tenantId: user.tenantId,
@@ -78,36 +447,413 @@ export class InventoryItemsService {
 
     return this.prisma.inventoryItem.update({
       where: { id },
-      data: dto,
+      data: {
+        partNumber: dto.partNumber,
+        name: dto.name,
+        description: dto.description,
+        categoryId: dto.categoryId,
+        unitOfMeasureId: dto.unitOfMeasureId,
+        brand: dto.brand,
+        isSerialized: dto.isSerialized ?? false,
+        isInventory: dto.isInventory ?? true,
+        isAsset: dto.isAsset ?? false,
+        isConsumable: dto.isConsumable ?? true,
+      },
+      include: {
+        itemCategory: { select: ITEM_CATEGORY_SELECT },
+        unitOfMeasure: { select: UOM_SELECT },
+      },
     });
+  }
+
+  async quickCreate(dto: QuickCreateItemDto, user: any) {
+    if (!dto.categoryId?.trim()) {
+      throw new BadRequestException(
+        'Seleccione familia y subcategoría antes de crear el artículo.',
+      );
+    }
+    if (!dto.unitOfMeasureId?.trim()) {
+      throw new BadRequestException('Seleccione la unidad de medida.');
+    }
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        await this.assertLeafCategoryWithTx(tx, dto.categoryId, user.tenantId);
+        await this.assertUnitOfMeasureTx(
+          tx,
+          dto.unitOfMeasureId,
+          user.tenantId,
+        );
+
+        const partNumber = await this.sequenceService.getNextCorrelative(
+          user.tenantId,
+          'INV_ITEM_AUTO',
+          'AUTO',
+          tx,
+        );
+
+        const id = randomUUID();
+        const qrCode = `INV:${id}`;
+
+        const item = await tx.inventoryItem.create({
+          data: {
+            id,
+            qrCode,
+            tenantId: user.tenantId,
+            partNumber,
+            name: dto.name.trim(),
+            categoryId: dto.categoryId,
+            unitOfMeasureId: dto.unitOfMeasureId,
+            isInventory: true,
+            isConsumable: true,
+          },
+          select: {
+            id: true,
+            qrCode: true,
+            partNumber: true,
+            name: true,
+            categoryId: true,
+            unitOfMeasure: { select: UOM_SELECT },
+            itemCategory: { select: ITEM_CATEGORY_SELECT },
+          },
+        });
+
+        if (dto.warehouseId?.trim()) {
+          const warehouse = await tx.warehouse.findFirst({
+            where: { id: dto.warehouseId.trim(), tenantId: user.tenantId },
+            select: { id: true },
+          });
+          if (!warehouse) {
+            throw new BadRequestException(
+              'La bodega seleccionada no existe o no pertenece a su empresa.',
+            );
+          }
+
+          const minStock =
+            dto.minStock !== undefined && dto.minStock !== null
+              ? Number(dto.minStock)
+              : 0;
+          const maxStock =
+            dto.maxStock !== undefined && dto.maxStock !== null
+              ? Number(dto.maxStock)
+              : 0;
+
+          if (!Number.isFinite(minStock) || minStock < 0) {
+            throw new BadRequestException(
+              'El stock mínimo debe ser un número mayor o igual a cero.',
+            );
+          }
+          if (!Number.isFinite(maxStock) || maxStock < 0) {
+            throw new BadRequestException(
+              'El stock máximo debe ser un número mayor o igual a cero.',
+            );
+          }
+          if (maxStock > 0 && maxStock < minStock) {
+            throw new BadRequestException(
+              'El stock máximo no puede ser menor que el stock mínimo.',
+            );
+          }
+
+          await tx.itemStock.upsert({
+            where: {
+              warehouseId_itemId: {
+                warehouseId: warehouse.id,
+                itemId: item.id,
+              },
+            },
+            update: {
+              minStock,
+              maxStock,
+            },
+            create: {
+              warehouseId: warehouse.id,
+              itemId: item.id,
+              quantity: 0,
+              unitCost: 0,
+              minStock,
+              maxStock,
+            },
+          });
+        }
+
+        return item;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
+    );
+  }
+
+  private async assertLeafCategoryWithTx(
+    tx: Prisma.TransactionClient,
+    categoryId: string,
+    tenantId: string,
+  ) {
+    const cat = await tx.itemCategory.findFirst({
+      where: { id: categoryId, tenantId },
+    });
+    if (!cat) {
+      throw new BadRequestException(
+        'La categoría no existe o no pertenece a su empresa.',
+      );
+    }
+    if (!cat.parentCategoryId) {
+      throw new BadRequestException(
+        'Debe seleccionar una subcategoría (no una familia de nivel superior).',
+      );
+    }
+    const parent = await tx.itemCategory.findFirst({
+      where: { id: cat.parentCategoryId, tenantId },
+    });
+    if (!parent) {
+      throw new BadRequestException(
+        'La familia de la subcategoría no existe o no pertenece a su empresa.',
+      );
+    }
+    if (parent.parentCategoryId) {
+      throw new BadRequestException(
+        'Solo se permiten dos niveles: familia y subcategoría.',
+      );
+    }
+  }
+
+  /**
+   * Kardex: movimientos de inventario del artículo (paginado), con referencia a OC/OT cuando aplica.
+   */
+  async findItemLedger(
+    itemId: string,
+    user: any,
+    opts: { page?: number; pageSize?: number },
+  ) {
+    const tenantId = user.tenantId as string;
+    const exists = await this.prisma.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { id: true },
+    });
+    if (!exists) {
+      throw new NotFoundException('Artículo no encontrado');
+    }
+
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 25));
+    const skip = (page - 1) * pageSize;
+    const where = { itemId };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.inventoryTransaction.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { date: 'desc' },
+        include: {
+          warehouse: { select: { id: true, code: true, name: true } },
+          user: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.inventoryTransaction.count({ where }),
+    ]);
+
+    const woIds = [
+      ...new Set(
+        rows
+          .filter(
+            (r) =>
+              r.referenceType === 'WORK_ORDER' &&
+              r.referenceId &&
+              r.referenceId.length > 0,
+          )
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    const wrIds = [
+      ...new Set(
+        rows
+          .filter(
+            (r) =>
+              r.referenceType === 'PURCHASE_RECEIPT' &&
+              r.referenceId &&
+              r.referenceId.length > 0,
+          )
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    const trfIds = [
+      ...new Set(
+        rows
+          .filter(
+            (r) =>
+              r.referenceType === 'INVENTORY_TRANSFER' &&
+              r.referenceId &&
+              r.referenceId.length > 0,
+          )
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+
+    const [wos, wrs, transfers] = await Promise.all([
+      woIds.length
+        ? this.prisma.workOrder.findMany({
+            where: { id: { in: woIds }, tenantId },
+            select: { id: true, correlative: true },
+          })
+        : [],
+      wrIds.length
+        ? this.prisma.warehouseReceipt.findMany({
+            where: { id: { in: wrIds }, tenantId },
+            select: {
+              id: true,
+              correlative: true,
+              purchaseOrderId: true,
+              purchaseOrder: {
+                select: { id: true, correlative: true },
+              },
+            },
+          })
+        : [],
+      trfIds.length
+        ? this.prisma.inventoryTransfer.findMany({
+            where: { id: { in: trfIds }, tenantId },
+            select: {
+              id: true,
+              originWarehouse: { select: { code: true, name: true } },
+              destinationWarehouse: { select: { code: true, name: true } },
+            },
+          })
+        : [],
+    ]);
+
+    const woMap = new Map(wos.map((w) => [w.id, w.correlative]));
+    const wrMap = new Map(
+      wrs.map((w) => [
+        w.id,
+        {
+          correlative: w.correlative,
+          purchaseOrderId: w.purchaseOrderId,
+          poCorrelative: w.purchaseOrder?.correlative ?? null,
+        },
+      ]),
+    );
+
+    const trfMap = new Map(
+      transfers.map((t) => [
+        t.id,
+        {
+          originCode: t.originWarehouse.code,
+          destCode: t.destinationWarehouse.code,
+        },
+      ]),
+    );
+
+    const data = rows.map((r) => {
+      let reference: {
+        kind: string;
+        label: string;
+        workOrderId?: string;
+        warehouseReceiptId?: string;
+        purchaseOrderId?: string;
+        purchaseOrderCorrelative?: string;
+        transferId?: string;
+      } | null = null;
+      if (r.referenceId && r.referenceType) {
+        if (r.referenceType === 'WORK_ORDER') {
+          const cor = woMap.get(r.referenceId);
+          reference = {
+            kind: 'WORK_ORDER',
+            label: cor ? `OT ${cor}` : 'Orden de trabajo',
+            workOrderId: r.referenceId,
+          };
+        } else if (r.referenceType === 'PURCHASE_RECEIPT') {
+          const wr = wrMap.get(r.referenceId);
+          reference = {
+            kind: 'PURCHASE_RECEIPT',
+            label: wr
+              ? `Recepción ${wr.correlative}${wr.poCorrelative ? ` (OC ${wr.poCorrelative})` : ''}`
+              : 'Recepción de compra',
+            warehouseReceiptId: r.referenceId,
+            purchaseOrderId: wr?.purchaseOrderId,
+            purchaseOrderCorrelative: wr?.poCorrelative ?? undefined,
+          };
+        } else if (r.referenceType === 'INVENTORY_TRANSFER') {
+          const tr = trfMap.get(r.referenceId);
+          const side =
+            r.type === 'TRANSFER_OUT'
+              ? 'Salida traslado'
+              : r.type === 'TRANSFER_IN'
+                ? 'Entrada traslado'
+                : 'Transferencia';
+          reference = {
+            kind: 'INVENTORY_TRANSFER',
+            label: tr
+              ? `${side}: ${tr.originCode} → ${tr.destCode}`
+              : 'Transferencia entre bodegas',
+            transferId: r.referenceId,
+          };
+        } else if (r.referenceType === 'INVENTORY_ADJUSTMENT') {
+          reference = {
+            kind: 'INVENTORY_ADJUSTMENT',
+            label: 'Ajuste de inventario',
+          };
+        } else {
+          reference = {
+            kind: r.referenceType,
+            label: r.notes?.slice(0, 120) || r.referenceType,
+          };
+        }
+      }
+
+      return {
+        id: r.id,
+        date: r.date.toISOString(),
+        type: r.type,
+        quantity: r.quantity,
+        previousStock: r.previousStock,
+        newStock: r.newStock,
+        notes: r.notes,
+        isPendingRegularization: r.isPendingRegularization,
+        referenceType: r.referenceType,
+        warehouse: r.warehouse,
+        user: r.user,
+        reference,
+      };
+    });
+
+    return { data, total, page, pageSize };
   }
 
   async search(user: any, q: string) {
     if (!q || q.trim().length < 2) return [];
 
+    const tenantId = user.tenantId;
+    const searchIds = await this.searchInventoryItemIdsPgTrgm(tenantId, q);
+    if (searchIds.length === 0) return [];
+
+    const where = await this.buildInventoryItemWhere(tenantId, {
+      searchIds,
+    });
+
     return this.prisma.inventoryItem.findMany({
-      where: {
-        tenantId: user.tenantId,
-        OR: [
-          { partNumber: { contains: q, mode: 'insensitive' } },
-          { name: { contains: q, mode: 'insensitive' } },
-        ],
-      },
+      where,
       select: {
         id: true,
         partNumber: true,
         name: true,
-        unitOfMeasure: true,
-        category: true,
+        unitOfMeasure: { select: UOM_SELECT },
+        categoryId: true,
+        itemCategory: { select: ITEM_CATEGORY_SELECT },
         brand: true,
+        isInventory: true,
+        isAsset: true,
+        isConsumable: true,
       },
-      orderBy: { partNumber: 'asc' },
+      orderBy: ITEM_CATALOG_ORDER_BY,
       take: 15,
     });
   }
 
   async remove(id: string, user: any) {
-    await this.findOne(id, user); // Validar
+    await this.findOne(id, user);
 
     try {
       return await this.prisma.inventoryItem.delete({
@@ -118,5 +864,116 @@ export class InventoryItemsService {
         'No se puede eliminar el artículo porque ya tiene historial de stock o transacciones en bodegas.',
       );
     }
+  }
+
+  async listAttachments(itemId: string, user: any) {
+    const tenantId = user.tenantId as string;
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { id: true },
+    });
+    if (!item) throw new NotFoundException('Artículo no encontrado');
+
+    const rows = await this.prisma.inventoryItemAttachment.findMany({
+      where: { itemId, tenantId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        fileName: true,
+        mimeType: true,
+        storageKey: true,
+        sizeBytes: true,
+        createdAt: true,
+        uploadedBy: { select: { id: true, name: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      createdAt: row.createdAt.toISOString(),
+      uploadedBy: row.uploadedBy,
+      url: this.storageService.getFileUrl(row.storageKey),
+    }));
+  }
+
+  async addAttachment(
+    itemId: string,
+    file: {
+      buffer: Buffer;
+      originalname: string;
+      mimetype: string;
+      size: number;
+    },
+    user: any,
+  ) {
+    const tenantId = user.tenantId as string;
+    const userId = user.id || user.sub;
+    if (!userId) {
+      throw new BadRequestException('Usuario no identificado.');
+    }
+
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { id: true },
+    });
+    if (!item) throw new NotFoundException('Artículo no encontrado');
+
+    const mt = file.mimetype?.toLowerCase() ?? '';
+    if (!mt.includes('pdf')) {
+      throw new BadRequestException('Solo se permiten archivos PDF.');
+    }
+
+    const storageKey = await this.storageService.uploadFile(
+      file,
+      'inventory-item-docs',
+    );
+
+    const row = await this.prisma.inventoryItemAttachment.create({
+      data: {
+        tenantId,
+        itemId,
+        fileName: file.originalname.slice(0, 250),
+        storageKey,
+        mimeType: file.mimetype.slice(0, 120),
+        sizeBytes: file.size,
+        uploadedById: userId,
+      },
+      select: {
+        id: true,
+        fileName: true,
+        mimeType: true,
+        storageKey: true,
+        sizeBytes: true,
+        createdAt: true,
+        uploadedBy: { select: { id: true, name: true } },
+      },
+    });
+
+    return {
+      id: row.id,
+      fileName: row.fileName,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      createdAt: row.createdAt.toISOString(),
+      uploadedBy: row.uploadedBy,
+      url: this.storageService.getFileUrl(row.storageKey),
+    };
+  }
+
+  async removeAttachment(itemId: string, attachmentId: string, user: any) {
+    const tenantId = user.tenantId as string;
+    const att = await this.prisma.inventoryItemAttachment.findFirst({
+      where: { id: attachmentId, itemId, tenantId },
+    });
+    if (!att) throw new NotFoundException('Adjunto no encontrado');
+
+    await this.storageService.deleteFile(att.storageKey);
+    await this.prisma.inventoryItemAttachment.delete({
+      where: { id: attachmentId },
+    });
+    return { ok: true };
   }
 }

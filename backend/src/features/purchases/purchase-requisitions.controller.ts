@@ -28,12 +28,24 @@ export class PurchaseRequisitionsController {
     @Query('contractId') contractId?: string,
     @Query('status') status?: string,
   ) {
-    return this.service.findAll(req.user.tenantId, contractId, status);
+    return this.service.findAll(
+      req.user.tenantId,
+      contractId,
+      status,
+      req.user,
+    );
+  }
+
+  /** Historial de auditoría del requerimiento. Debe declararse antes de `GET :id`. */
+  @Get(':id/logs')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  findActivityLogs(@Param('id') id: string, @Req() req: any) {
+    return this.service.findActivityLogs(id, req.user.tenantId);
   }
 
   @Get(':id')
   findById(@Param('id') id: string, @Req() req: any) {
-    return this.service.findById(id, req.user.tenantId);
+    return this.service.findById(id, req.user.tenantId, req.user);
   }
 
   @Post()
@@ -49,6 +61,21 @@ export class PurchaseRequisitionsController {
   @Post(':id/submit')
   submit(@Param('id') id: string, @Req() req: any) {
     return this.service.submit(id, req.user);
+  }
+
+  @Post(':id/cancel')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  cancel(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Req() req: any,
+  ) {
+    return this.service.cancel(id, body?.reason, req.user);
+  }
+
+  @Post(':id/duplicate')
+  duplicate(@Param('id') id: string, @Req() req: any) {
+    return this.service.duplicate(id, req.user);
   }
 
   @Post(':id/start-quoting')

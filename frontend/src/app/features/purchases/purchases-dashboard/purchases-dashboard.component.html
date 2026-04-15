@@ -1,0 +1,310 @@
+<div class="p-6 max-w-7xl mx-auto">
+  <app-purchases-push-notice />
+
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-main">Analítica de compras</h1>
+      <p class="text-sm text-muted mt-1">KPIs, imputación, proveedores y evolución del gasto aprobado.</p>
+      <p class="text-sm font-medium text-main mt-2">
+        Contrato actual: <span class="text-primary">{{ selectedContractDisplay() }}</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+    <div class="flex flex-col lg:flex-row lg:flex-wrap gap-4 lg:items-end">
+      <div class="flex flex-col sm:flex-row gap-4 flex-1">
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1">Desde</label>
+          <input type="date" [ngModel]="dateFrom()" (ngModelChange)="dateFrom.set($event)"
+                 class="px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1">Hasta</label>
+          <input type="date" [ngModel]="dateTo()" (ngModelChange)="dateTo.set($event)"
+                 class="px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none" />
+        </div>
+        <div class="min-w-[200px]">
+          <label class="block text-xs font-medium text-muted mb-1">Contrato</label>
+          <select [ngModel]="contractId()" (ngModelChange)="contractId.set($event)"
+                  class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
+            <option value="">Todos los contratos</option>
+            @for (c of contracts(); track c.id) {
+              <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 items-end shrink-0 w-full lg:w-auto justify-stretch lg:justify-end">
+        <button
+          type="button"
+          (click)="exportExecutiveReport()"
+          [disabled]="!canExportExecutiveReport() || isExportingPdf()"
+          [attr.title]="exportPdfHint() || 'Descargar reporte ejecutivo en PDF'"
+          class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-border bg-surface text-main text-sm font-medium hover:bg-dark/50 hover:border-primary/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface shrink-0 flex-1 sm:flex-none min-w-0"
+        >
+          @if (isExportingPdf()) {
+            <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent shrink-0" aria-hidden="true"></span>
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          }
+          <span class="truncate">{{ isExportingPdf() ? 'Generando…' : 'Exportar Reporte PDF' }}</span>
+        </button>
+        <button type="button" (click)="load()"
+                class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 shrink-0 flex-1 sm:flex-none">
+          Aplicar filtros
+        </button>
+      </div>
+    </div>
+    @if (dashboard() && !isLoading() && !canExportExecutiveReport() && exportPdfHint()) {
+      <p class="text-xs text-amber-400/90 mt-3" role="status">{{ exportPdfHint() }}</p>
+    }
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-16"><div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div></div>
+  } @else if (!dashboard()) {
+    <div class="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-muted/40 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+      <p class="text-lg font-medium text-main mb-1">No se pudieron cargar los datos</p>
+      <p class="text-sm text-muted mb-4">Verifique su conexión o los filtros aplicados e intente de nuevo.</p>
+      <button type="button" (click)="load()" class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90">
+        Reintentar
+      </button>
+    </div>
+  } @else if (dashboard()) {
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <h2 class="text-lg font-semibold text-main mb-3">Últimas órdenes de compra</h2>
+        @if (recentPurchaseOrders().length === 0) {
+          <p class="text-sm text-muted">Sin órdenes recientes en el alcance del filtro de contrato.</p>
+        } @else {
+          <ul class="space-y-2">
+            @for (o of recentPurchaseOrders(); track o.id) {
+              <li class="flex flex-wrap justify-between gap-2 items-center text-sm">
+                <app-entity-link kind="PO" [id]="o.id" [label]="o.correlative" variant="link" />
+                <span class="text-xs text-muted font-mono">{{ o.createdAt | date: 'dd/MM/yyyy' }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+      <div class="rounded-xl border border-amber-500/25 bg-amber-500/[0.03] p-4">
+        <h2 class="text-lg font-semibold text-main mb-3">Facturas por conciliar</h2>
+        @if (pendingReconcileInvoices().length === 0) {
+          <p class="text-sm text-muted">No hay facturas en estado pendiente de conciliación en este alcance.</p>
+        } @else {
+          <ul class="space-y-3">
+            @for (inv of pendingReconcileInvoices(); track inv.id) {
+              <li class="border-b border-border/50 pb-3 last:border-0 last:pb-0">
+                <div class="flex flex-wrap justify-between gap-2 items-start">
+                  <app-entity-link
+                    kind="INV"
+                    [id]="inv.id"
+                    [label]="inv.invoiceNumber"
+                    variant="link"
+                    [purchaseOrderIdForDetail]="inv.purchaseOrder?.id ?? null"
+                  />
+                  <span class="text-[11px] text-muted font-mono">{{ inv.emissionDate | date: 'dd/MM/yyyy' }}</span>
+                </div>
+                @if (inv.purchaseOrder?.id) {
+                  <div class="mt-1.5">
+                    <app-entity-link
+                      kind="PO"
+                      [id]="inv.purchaseOrder!.id"
+                      [label]="'OC ' + inv.purchaseOrder!.correlative"
+                      variant="link"
+                    />
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-xs text-muted uppercase tracking-wider">Gasto total aprobado</p>
+        <p class="text-2xl font-bold font-mono text-main mt-1">{{ dashboard()!.kpis.totalApprovedSpend | clpCurrency }}</p>
+        <p class="text-xs text-muted mt-2">OC en estados aprobados en el período</p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-xs text-muted uppercase tracking-wider">OCs pendientes de firma</p>
+        <p class="text-2xl font-bold font-mono text-amber-400 mt-1">{{ dashboard()!.kpis.pendingSignaturePurchaseOrders }}</p>
+        <p class="text-xs text-muted mt-2">En aprobación (todas las fechas)</p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-xs text-muted uppercase tracking-wider flex items-center gap-1.5">
+          Tasa discrepancia facturas
+          <app-purchases-concept-info label="3-Way Match" [text]="conceptThreeWay" />
+        </p>
+        <p class="text-2xl font-bold font-mono text-main mt-1">
+          {{ (dashboard()!.kpis.invoiceDiscrepancyRate * 100) | number:'1.1-1' }}%
+        </p>
+        <p class="text-xs text-muted mt-2">
+          {{ dashboard()!.kpis.invoiceDiscrepancyCount }} / {{ dashboard()!.kpis.invoiceTotalForRate }} facturas en período
+        </p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="text-xs text-muted uppercase tracking-wider flex items-center gap-1.5">
+          Prevención de sobrepagos
+          <app-purchases-concept-info label="Prevención de sobrepagos" [text]="conceptOverpay" />
+        </p>
+        <p class="text-2xl font-bold font-mono text-green-400 mt-1">{{ dashboard()!.overpaymentPrevention | clpCurrency }}</p>
+        <p class="text-xs text-muted mt-2">Monto total de cobros en exceso detectados y corregidos mediante la validación contable.</p>
+      </div>
+    </div>
+
+    @if (canSeeFinancialSavings() && savingsVariation(); as savings) {
+      <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 mb-6">
+        <h2 class="text-lg font-semibold text-main mb-1">Ahorro y variación de precios</h2>
+        @if (savings.spotlightFamily) {
+          <p class="text-sm text-muted">
+            Este mes has ahorrado
+            <span class="text-emerald-400 font-semibold">{{ savings.spotlightFamily.savingsRate | number: '1.1-1' }}%</span>
+            en la familia
+            <span class="text-main font-semibold">{{ savings.spotlightFamily.familyName }}</span>
+            gracias a la gestión de precios.
+          </p>
+          <p class="text-xs text-muted mt-2">
+            Ahorro total: {{ savings.savingsAmount | clpCurrency }} · Sobrecosto: {{ savings.overcostAmount | clpCurrency }}
+          </p>
+        } @else {
+          <p class="text-sm text-muted">No hay datos comparables de ahorro para el mes seleccionado.</p>
+        }
+      </div>
+    }
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <h2 class="text-lg font-semibold text-main mb-4">Distribución por imputación</h2>
+        <div class="h-64 relative">
+          <canvas #pieCanvas class="w-full h-full" [class.opacity-0]="!hasPieChart()" [class.pointer-events-none]="!hasPieChart()"></canvas>
+          @if (!hasPieChart()) {
+            <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4 border border-dashed border-border rounded-lg bg-dark/20">
+              <span class="text-3xl mb-2" aria-hidden="true">📊</span>
+              <p class="text-sm text-muted">Sin gasto aprobado en el período seleccionado.</p>
+            </div>
+          }
+        </div>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <h2 class="text-lg font-semibold text-main mb-4">Top 5 proveedores por monto</h2>
+        <div class="h-64 relative">
+          <canvas #barCanvas class="w-full h-full" [class.opacity-0]="!hasBarChart()" [class.pointer-events-none]="!hasBarChart()"></canvas>
+          @if (!hasBarChart()) {
+            <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4 border border-dashed border-border rounded-lg bg-dark/20">
+              <span class="text-3xl mb-2" aria-hidden="true">📊</span>
+              <p class="text-sm text-muted">Sin datos de proveedores en el rango de fechas.</p>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-border bg-surface p-4 mb-6">
+      <h2 class="text-lg font-semibold text-main mb-4">Evolución mensual del gasto aprobado</h2>
+      <div class="h-72 relative">
+        <canvas #lineCanvas class="w-full h-full" [class.opacity-0]="!hasLineChart()" [class.pointer-events-none]="!hasLineChart()"></canvas>
+        @if (!hasLineChart()) {
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4 border border-dashed border-border rounded-lg bg-dark/20">
+            <span class="text-3xl mb-2" aria-hidden="true">📈</span>
+            <p class="text-sm text-muted">Sin movimientos en el rango de fechas seleccionado.</p>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-border bg-surface p-4 mb-6">
+      <h2 class="text-lg font-semibold text-main mb-2">Desempeño de proveedores (tiempo de entrega)</h2>
+      <p class="text-sm text-muted mb-4">
+        Clasificación A (<= 3 días), B (4-7 días), C (> 7 días o sin desempeño consistente).
+      </p>
+      @if (vendorsPerformance().length === 0) {
+        <p class="text-sm text-muted">Sin datos de recepciones para el rango seleccionado.</p>
+      } @else {
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-muted">
+                <th class="py-2 pr-4">Proveedor</th>
+                <th class="py-2 pr-4">Recepciones</th>
+                <th class="py-2 pr-4">Lead time prom.</th>
+                <th class="py-2 pr-4">Recepciones tardías</th>
+                <th class="py-2 pr-4">Cumplimiento</th>
+                <th class="py-2">Clase</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (v of vendorsPerformance(); track v.vendorId) {
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4">
+                    <span class="font-medium text-main">{{ v.vendorName }}</span>
+                    <span class="text-xs text-muted ml-1">({{ v.vendorCode }})</span>
+                  </td>
+                  <td class="py-2 pr-4">{{ v.receiptsCount }}</td>
+                  <td class="py-2 pr-4 font-mono">{{ v.avgLeadTimeDays | number: '1.1-1' }} días</td>
+                  <td class="py-2 pr-4">{{ v.lateReceiptsCount }}</td>
+                  <td class="py-2 pr-4">{{ (v.onTimeRate * 100) | number: '1.0-0' }}%</td>
+                  <td class="py-2">
+                    <span
+                      class="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded text-xs font-bold"
+                      [class]="v.grade === 'A' ? 'bg-emerald-500/20 text-emerald-400' : (v.grade === 'B' ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400')"
+                    >
+                      {{ v.grade }}
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+
+    <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-6">
+      <h2 class="text-lg font-semibold text-main mb-2">Órdenes críticas</h2>
+      <p class="text-sm text-muted mb-4">
+        OC con monto mayor a {{ 5000000 | clpCurrency }} y más de 48 h en firma sin completar todas las firmas requeridas.
+      </p>
+      @if (dashboard()!.criticalOrders.length === 0) {
+        <p class="text-sm text-muted">No hay órdenes que cumplan el criterio.</p>
+      } @else {
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-muted">
+                <th class="py-2 pr-4">OC</th>
+                <th class="py-2 pr-4">Contrato</th>
+                <th class="py-2 pr-4">Monto</th>
+                <th class="py-2 pr-4">Firmas</th>
+                <th class="py-2 pr-4">Horas esperando</th>
+                <th class="py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (o of dashboard()!.criticalOrders; track o.id) {
+                <tr class="border-b border-border/50">
+                  <td class="py-2 pr-4 font-mono">{{ o.correlative }}</td>
+                  <td class="py-2 pr-4">{{ o.contract.code }}</td>
+                  <td class="py-2 pr-4 font-mono">{{ o.totalAmount | clpCurrency }}</td>
+                  <td class="py-2 pr-4">{{ o.approvalsCount }} / {{ o.requiredSignatures }}</td>
+                  <td class="py-2 pr-4">{{ o.hoursWaiting }} h</td>
+                  <td class="py-2">
+                    <a [routerLink]="['/app/compras/ordenes', o.id]" class="text-primary hover:underline">Ver</a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  }
+</div>

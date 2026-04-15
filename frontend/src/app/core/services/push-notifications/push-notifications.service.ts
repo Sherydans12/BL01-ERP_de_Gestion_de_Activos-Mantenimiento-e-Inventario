@@ -28,10 +28,13 @@ export class PushNotificationsService {
   ) {
     if (isPlatformBrowser(this.platformId) && this.swPush.isEnabled) {
       this.swPush.notificationClicks.subscribe((event) => {
-        const orderId = this.extractOrderIdFromPayload(event.notification.data);
+        const { orderId, queryParams } = this.parsePushNotificationData(
+          event.notification.data,
+        );
         if (orderId) {
+          const extras = queryParams ? { queryParams } : {};
           void this.router
-            .navigate(['/app/compras/ordenes', orderId])
+            .navigate(['/app/compras/ordenes', orderId], extras)
             .then(() => this.dismissBrowserNotifications());
         } else {
           void this.dismissBrowserNotifications();
@@ -66,23 +69,35 @@ export class PushNotificationsService {
     }
   }
 
-  /** Angular expone `notification` como NotificationOptions + title, no como Notification DOM. */
-  private extractOrderIdFromPayload(data: unknown): string | null {
-    if (data == null) return null;
-    if (typeof data === 'object' && data !== null && 'orderId' in data) {
-      const v = (data as Record<string, unknown>)['orderId'];
-      return typeof v === 'string' ? v : null;
+  /**
+   * Lee `orderId` y `type` del payload push (objeto o JSON en string).
+   * `INVOICE_DISCREPANCY` abre la OC en la pestaña Facturación.
+   */
+  private parsePushNotificationData(data: unknown): {
+    orderId: string | null;
+    queryParams?: Record<string, string>;
+  } {
+    let raw: Record<string, unknown> | null = null;
+    if (data == null) {
+      return { orderId: null };
     }
-    if (typeof data === 'string') {
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      raw = data as Record<string, unknown>;
+    } else if (typeof data === 'string') {
       try {
-        const parsed = JSON.parse(data) as Record<string, unknown>;
-        const id = parsed['orderId'];
-        return typeof id === 'string' ? id : null;
+        raw = JSON.parse(data) as Record<string, unknown>;
       } catch {
-        return null;
+        return { orderId: null };
       }
+    } else {
+      return { orderId: null };
     }
-    return null;
+    const orderId =
+      typeof raw['orderId'] === 'string' ? raw['orderId'] : null;
+    const type = typeof raw['type'] === 'string' ? raw['type'] : null;
+    const queryParams =
+      type === 'INVOICE_DISCREPANCY' ? { tab: 'billing' } : undefined;
+    return { orderId, queryParams };
   }
 
   static isApproverRole(role: string | undefined): boolean {

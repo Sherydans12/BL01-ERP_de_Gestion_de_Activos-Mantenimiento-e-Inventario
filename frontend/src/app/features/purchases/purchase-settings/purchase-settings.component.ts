@@ -11,6 +11,7 @@ import { TenantRolesService, TenantRole } from '../../../core/services/tenant-ro
 import { TenantService } from '../../../core/services/tenant/tenant.service';
 import { PushNotificationsService } from '../../../core/services/push-notifications/push-notifications.service';
 import { ClpCurrencyPipe } from '../../../shared/pipes/clp-currency.pipe';
+import { switchMap } from 'rxjs/operators';
 
 function mapTenantConfigRoles(
   rows: Array<{
@@ -53,6 +54,8 @@ export class PurchaseSettingsComponent implements OnInit {
 
   threshold = signal(0);
   currency = signal('CLP');
+  /** Margen relativo (p. ej. 1 = 1%) para validación 3-way match factura vs OC / recepción. */
+  invoiceMatchTolerancePercent = signal(1);
   policies = signal<Array<{
     level: number;
     description: string;
@@ -103,6 +106,9 @@ export class PurchaseSettingsComponent implements OnInit {
         this.settings.set(data);
         this.threshold.set(Number(data.approvalThreshold));
         this.currency.set(data.currency);
+        this.invoiceMatchTolerancePercent.set(
+          Number(data.invoiceMatchTolerancePercent ?? 1),
+        );
         this.policies.set(
           data.approvalPolicies.map((p) => ({
             level: p.level,
@@ -195,17 +201,7 @@ export class PurchaseSettingsComponent implements OnInit {
     );
   }
 
-  saveSettings() {
-    this.isSaving.set(true);
-    this.purchasesService
-      .updateSettings({ approvalThreshold: this.threshold(), currency: this.currency() })
-      .subscribe({
-        next: () => this.notify.success('Configuración guardada'),
-        error: () => this.notify.error('Error al guardar configuración'),
-      });
-  }
-
-  savePolicies() {
+  save() {
     if (this.policies().length < 2) {
       this.notify.error('Debe configurar al menos 2 niveles de firma.');
       return;
@@ -215,24 +211,23 @@ export class PurchaseSettingsComponent implements OnInit {
       return;
     }
     this.isSaving.set(true);
-    this.purchasesService.upsertPolicies(this.policies()).subscribe({
-      next: () => {
-        this.notify.success('Políticas de aprobación guardadas');
-        this.isSaving.set(false);
-      },
-      error: () => {
-        this.notify.error('Error al guardar políticas');
-        this.isSaving.set(false);
-      },
-    });
-  }
-
-  save() {
-    if (this.policies().length < 2) {
-      this.notify.error('Debe configurar al menos 2 niveles de firma.');
-      return;
-    }
-    this.saveSettings();
-    this.savePolicies();
+    this.purchasesService
+      .updateSettings({
+        approvalThreshold: this.threshold(),
+        currency: this.currency(),
+        invoiceMatchTolerancePercent: this.invoiceMatchTolerancePercent(),
+      })
+      .pipe(switchMap(() => this.purchasesService.upsertPolicies(this.policies())))
+      .subscribe({
+        next: () => {
+          this.notify.success('Configuración y políticas guardadas');
+          this.loadSettings();
+          this.isSaving.set(false);
+        },
+        error: () => {
+          this.notify.error('Error al guardar configuración');
+          this.isSaving.set(false);
+        },
+      });
   }
 }

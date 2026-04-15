@@ -30,7 +30,7 @@ export class VendorsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
   create(@Body() body: any, @Req() req: any) {
     return this.vendorsService.create(body, req.user.tenantId);
   }

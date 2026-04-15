@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Body,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Put, Body, Req, UseGuards } from '@nestjs/common';
 import { PurchaseSettingsService } from './purchase-settings.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -23,7 +16,15 @@ export class PurchaseSettingsController {
   }
 
   @Put()
-  updateSettings(@Body() body: any, @Req() req: any) {
+  updateSettings(
+    @Body()
+    body: {
+      approvalThreshold?: number;
+      currency?: string;
+      invoiceMatchTolerancePercent?: number;
+    },
+    @Req() req: any,
+  ) {
     return this.settingsService.updateSettings(req.user.tenantId, body);
   }
 

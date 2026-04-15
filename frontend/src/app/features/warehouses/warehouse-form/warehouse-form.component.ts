@@ -112,7 +112,7 @@ export class WarehouseFormComponent implements OnInit {
       },
       error: () => {
         this.notificationService.error('Bodega no encontrada');
-        this.router.navigate(['/app/bodegas']);
+        this.router.navigate(['/app/inventario/bodegas']);
       },
     });
   }
@@ -133,7 +133,7 @@ export class WarehouseFormComponent implements OnInit {
       this.warehousesService.createWarehouse(payload).subscribe({
         next: () => {
           this.notificationService.success('Bodega creada.');
-          this.router.navigate(['/app/bodegas']);
+          this.router.navigate(['/app/inventario/bodegas']);
         },
         error: (err) =>
           this.notificationService.error(
@@ -146,7 +146,7 @@ export class WarehouseFormComponent implements OnInit {
         .subscribe({
           next: () => {
             this.notificationService.success('Bodega actualizada.');
-            this.router.navigate(['/app/bodegas']);
+            this.router.navigate(['/app/inventario/bodegas']);
           },
           error: (err) =>
             this.notificationService.error(

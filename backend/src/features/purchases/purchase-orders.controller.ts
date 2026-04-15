@@ -22,10 +22,24 @@ export class PurchaseOrdersController {
 
   @Get()
   findAll(@Req() req: any, @Query('status') status?: string) {
-    return this.service.findAll(req.user.tenantId, status);
+    return this.service.findAll(req.user.tenantId, status, req.user);
+  }
+
+  /**
+   * Listado de OC elegibles para abrir una recepción (SENT, ORDERED, PARTIALLY_RECEIVED; legado SENT_TO_SUPPLIER).
+   * Debe declararse antes de `:id` para no capturarse como UUID.
+   */
+  @Get('eligible-for-receipt')
+  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  findEligibleForReceipt(@Req() req: any) {
+    return this.service.findEligibleForWarehouseReceipt(
+      req.user.tenantId,
+      req.user,
+    );
   }
 
   @Get(':id/logs')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
   findActivityLogs(@Param('id') id: string, @Req() req: any) {
     return this.service.findActivityLogs(id, req.user.tenantId);
   }
@@ -48,7 +62,24 @@ export class PurchaseOrdersController {
 
   @Get(':id')
   findById(@Param('id') id: string, @Req() req: any) {
-    return this.service.findById(id, req.user.tenantId);
+    return this.service.findById(id, req.user.tenantId, req.user);
+  }
+
+  /** Vincular línea de OC (sin catálogo) a un artículo creado o existente. */
+  @Patch(':id/items/:itemId/link-catalog')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  linkItemToCatalog(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() body: { inventoryItemId: string },
+    @Req() req: any,
+  ) {
+    return this.service.linkItemToCatalog(
+      id,
+      itemId,
+      body.inventoryItemId,
+      req.user,
+    );
   }
 
   @Post()
@@ -58,12 +89,19 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id/approve')
+  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
   approve(
     @Param('id') id: string,
     @Body() body: { comment?: string },
     @Req() req: any,
   ) {
     return this.service.approve(id, body.comment, req.user);
+  }
+
+  @Post(':id/sent-to-supplier')
+  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  markAsSentToSupplier(@Param('id') id: string, @Req() req: any) {
+    return this.service.markAsSentToSupplier(id, req.user);
   }
 
   @Post(':id/reject')
@@ -76,10 +114,31 @@ export class PurchaseOrdersController {
     return this.service.reject(id, body.reason, req.user);
   }
 
+  @Post(':id/cancel')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  cancel(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Req() req: any,
+  ) {
+    return this.service.cancel(id, body?.reason, req.user);
+  }
+
   @Post(':id/reset')
   @Roles('ADMIN', 'SUPER_ADMIN')
   resetToDraft(@Param('id') id: string, @Req() req: any) {
     return this.service.resetToDraft(id, req.user);
+  }
+
+  @Patch(':id/logistics')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  updateLogistics(
+    @Param('id') id: string,
+    @Body()
+    body: { deliveryAddress?: string | null; paymentTerms?: string | null },
+    @Req() req: any,
+  ) {
+    return this.service.updateOrderLogistics(id, body, req.user);
   }
 
   @Patch(':id/sensitive')

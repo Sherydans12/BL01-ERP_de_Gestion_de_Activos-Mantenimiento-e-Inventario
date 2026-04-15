@@ -20,8 +20,11 @@ export class CatalogsController {
   constructor(private readonly catalogsService: CatalogsService) {}
 
   @Post()
-  create(@Body() createCatalogDto: Prisma.CatalogItemCreateInput) {
-    return this.catalogsService.create(createCatalogDto);
+  create(
+    @Req() req: any,
+    @Body() createCatalogDto: Prisma.CatalogItemCreateInput,
+  ) {
+    return this.catalogsService.create(req.user?.tenantId, createCatalogDto);
   }
 
   @Get('contracts') // <--- CAMBIO: de 'sites' a 'contracts'
@@ -30,21 +33,22 @@ export class CatalogsController {
   }
 
   @Get()
-  findAll(@Query('activeOnly') activeOnly?: string) {
+  findAll(@Req() req: any, @Query('activeOnly') activeOnly?: string) {
     const isActiveOnly = activeOnly === 'true';
-    return this.catalogsService.findAll(isActiveOnly);
+    return this.catalogsService.findAll(req.user?.tenantId, isActiveOnly);
   }
 
   @Patch(':id')
   update(
+    @Req() req: any,
     @Param('id') id: string,
     @Body() updateCatalogDto: Prisma.CatalogItemUpdateInput,
   ) {
-    return this.catalogsService.update(id, updateCatalogDto);
+    return this.catalogsService.update(req.user?.tenantId, id, updateCatalogDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.catalogsService.remove(id);
+  remove(@Req() req: any, @Param('id') id: string) {
+    return this.catalogsService.remove(req.user?.tenantId, id);
   }
 }

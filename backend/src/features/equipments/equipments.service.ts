@@ -199,7 +199,7 @@ export class EquipmentsService {
       where.AND = andConditions;
     }
 
-    const [equipment, workOrders, meterAdjustments] =
+    const [equipment, workOrders, meterAdjustments, assetCostRecords] =
       await this.prisma.$transaction([
         this.prisma.equipment.findFirst({
           where,
@@ -220,13 +220,23 @@ export class EquipmentsService {
             user: { select: { name: true, email: true } },
           },
         }),
+        this.prisma.assetCostRecord.findMany({
+          where: { equipmentId: id, tenantId },
+          orderBy: { recordedAt: 'desc' },
+          take: 100,
+          include: {
+            purchaseOrder: { select: { correlative: true } },
+            workOrder: { select: { correlative: true } },
+            warehouseReceipt: { select: { correlative: true } },
+          },
+        }),
       ]);
 
     if (!equipment) {
       throw new BadRequestException('Equipo no encontrado o sin permisos');
     }
 
-    return { equipment, workOrders, meterAdjustments };
+    return { equipment, workOrders, meterAdjustments, assetCostRecords };
   }
 
   async findOne(user: any, id: string, siteHeader?: string) {

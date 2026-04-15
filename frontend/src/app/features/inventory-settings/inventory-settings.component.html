@@ -1,0 +1,419 @@
+<div class="mx-auto max-w-4xl space-y-6 p-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-main">
+        Configuración de categorías de inventario
+      </h1>
+      <p class="mt-1 text-sm text-muted">
+        <span class="font-medium text-main/90">Gestión de Bodegas</span> —
+        defina familias y subcategorías privadas para su empresa (ámbito tenant).
+      </p>
+    </div>
+    <a
+      routerLink="/app/inventario/bodegas"
+      class="shrink-0 text-sm font-mono text-primary hover:text-primary/80"
+    >
+      ← Volver a Gestión de Bodegas
+    </a>
+  </div>
+
+  <div class="flex flex-wrap gap-2 border-b border-border pb-1">
+    <button
+      type="button"
+      (click)="setTab('categories')"
+      class="rounded-t-lg px-4 py-2 font-mono text-sm font-bold transition-colors"
+      [class.bg-surface]="activeTab() === 'categories'"
+      [class.text-primary]="activeTab() === 'categories'"
+      [class.text-muted]="activeTab() !== 'categories'"
+    >
+      Familias y subcategorías
+    </button>
+    <button
+      type="button"
+      (click)="setTab('uom')"
+      class="rounded-t-lg px-4 py-2 font-mono text-sm font-bold transition-colors"
+      [class.bg-surface]="activeTab() === 'uom'"
+      [class.text-primary]="activeTab() === 'uom'"
+      [class.text-muted]="activeTab() !== 'uom'"
+    >
+      Unidades de Medida
+    </button>
+  </div>
+
+  @if (activeTab() === "categories") {
+  <div
+    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4"
+  >
+    <p class="text-sm text-muted">
+      Estructura usada por el
+      <strong class="text-main">Catálogo Maestro de Artículos</strong> y por los
+      selectores de compras y órdenes de trabajo.
+    </p>
+    <button
+      type="button"
+      (click)="openNewFamily()"
+      class="inline-flex items-center rounded-lg bg-primary px-4 py-2 font-mono text-sm font-bold text-dark shadow transition-colors hover:bg-primary/90"
+    >
+      + Nueva familia
+    </button>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-16">
+      <div
+        class="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent"
+      ></div>
+    </div>
+  } @else if (categoryFamilies().length === 0) {
+    <div
+      class="rounded-xl border border-dashed border-border bg-dark/20 p-10 text-center"
+    >
+      <p class="text-muted">
+        Aún no hay familias. Cree la primera para comenzar a clasificar
+        artículos.
+      </p>
+    </div>
+  } @else {
+    <p class="text-xs text-muted">
+      Cada familia es un acordeón: al expandir se cargan las subcategorías (mejor
+      rendimiento con muchas familias).
+    </p>
+    <div class="space-y-3">
+      @for (fam of categoryFamilies(); track fam.id) {
+        <details
+          class="group overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
+          (toggle)="onFamilyAccordionToggle($event, fam)"
+        >
+          <summary
+            class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:content-none bg-dark/40 hover:bg-dark/55"
+          >
+            <div class="min-w-0 text-left">
+              <h2
+                class="font-mono text-sm font-bold uppercase tracking-wide text-primary"
+              >
+                {{ fam.name }}
+              </h2>
+              @if (fam.description) {
+                <p class="mt-1 text-sm text-muted">{{ fam.description }}</p>
+              }
+              <p class="mt-1 font-mono text-[10px] text-muted">
+                {{ fam._count?.childCategories ?? 0 }} subcategoría(s) — pulse
+                para expandir
+              </p>
+            </div>
+            <span
+              class="shrink-0 text-muted transition-transform group-open:rotate-180"
+              aria-hidden="true"
+              >▼</span
+            >
+          </summary>
+          <div class="border-t border-border/60 bg-dark/20 px-4 py-4">
+            <div class="mb-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                (click)="openNewSub(fam.id)"
+                class="rounded-lg border border-primary/40 px-3 py-1.5 font-mono text-xs text-primary hover:bg-primary/10"
+              >
+                + Subcategoría
+              </button>
+              <button
+                type="button"
+                (click)="editFamily(fam)"
+                class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-muted hover:text-main"
+              >
+                Editar familia
+              </button>
+              <button
+                type="button"
+                (click)="deleteFamily(fam)"
+                class="rounded-lg border border-error/30 px-3 py-1.5 font-mono text-xs text-error hover:bg-error/10"
+              >
+                Eliminar familia
+              </button>
+            </div>
+            @if (loadingChildrenId() === fam.id) {
+              <div class="flex justify-center py-8">
+                <div
+                  class="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                ></div>
+              </div>
+            } @else {
+              <ul class="divide-y divide-border/50 rounded-lg border border-border/40">
+                @for (
+                  sub of childrenByFamily()[fam.id] || [];
+                  track sub.id
+                ) {
+                  <li
+                    class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <span class="font-medium text-main">{{ sub.name }}</span>
+                      @if (sub.description) {
+                        <p class="text-sm text-muted">{{ sub.description }}</p>
+                      }
+                      <p class="mt-0.5 font-mono text-[10px] text-muted">
+                        {{ sub._count?.items ?? 0 }} artículo(s)
+                      </p>
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        (click)="editSub(sub)"
+                        class="text-xs text-primary hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        (click)="deleteSub(sub, fam.id)"
+                        class="text-xs text-error hover:underline"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </li>
+                } @empty {
+                  <li class="px-4 py-6 text-center text-sm text-muted">
+                    Sin subcategorías cargadas. Si acaba de expandir, espere un
+                    momento; si sigue vacío, cree la primera subcategoría.
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </details>
+      }
+    </div>
+  }
+  } @else {
+  <div
+    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4"
+  >
+    <p class="text-sm text-muted">
+      Defina unidades para su empresa (p. ej.
+      <span class="font-mono text-main">Tambor 200L</span>,
+      <span class="font-mono text-main">Caja 12 unidades</span>). Se crean por
+      defecto UN, KG, LT y MT.
+    </p>
+    <button
+      type="button"
+      (click)="openNewUom()"
+      class="inline-flex items-center rounded-lg bg-primary px-4 py-2 font-mono text-sm font-bold text-dark shadow transition-colors hover:bg-primary/90"
+    >
+      + Nueva unidad
+    </button>
+  </div>
+
+  @if (uomLoading()) {
+    <div class="flex justify-center py-16">
+      <div
+        class="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent"
+      ></div>
+    </div>
+  } @else if (uoms().length === 0) {
+    <div
+      class="rounded-xl border border-dashed border-border bg-dark/20 p-10 text-center"
+    >
+      <p class="text-muted">No hay unidades registradas.</p>
+    </div>
+  } @else {
+    <div
+      class="overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
+    >
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-border bg-dark/40 font-mono text-[10px] uppercase tracking-wider text-muted"
+        >
+          <tr>
+            <th class="px-4 py-3">Nombre</th>
+            <th class="px-4 py-3">Abreviatura</th>
+            <th class="px-4 py-3 text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border/50">
+          @for (u of uoms(); track u.id) {
+            <tr>
+              <td class="px-4 py-3 font-medium text-main">{{ u.name }}</td>
+              <td class="px-4 py-3 font-mono text-xs text-primary">
+                {{ u.abbreviation }}
+              </td>
+              <td class="px-4 py-3 text-right space-x-2">
+                <button
+                  type="button"
+                  (click)="editUom(u)"
+                  class="text-xs text-primary hover:underline"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  (click)="deleteUom(u)"
+                  class="text-xs text-error hover:underline"
+                >
+                  Eliminar
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  }
+
+  @if (showFamilyModal()) {
+    <div
+      class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      (click)="closeFamilyModal()"
+    >
+      <div
+        class="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl"
+        (click)="$event.stopPropagation()"
+      >
+        <h3 class="mb-4 font-mono text-lg font-bold text-main">
+          {{ editingFamilyId() ? "Editar familia" : "Nueva familia" }}
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="mb-1 block text-xs text-muted">Nombre *</label>
+            <input
+              type="text"
+              [(ngModel)]="familyName"
+              class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted"
+              >Descripción (opcional)</label
+            >
+            <textarea
+              [(ngModel)]="familyDescription"
+              rows="2"
+              class="w-full resize-none rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
+            ></textarea>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            (click)="closeFamilyModal()"
+            class="rounded-lg border border-border px-4 py-2 text-sm text-muted"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="saveFamily()"
+            class="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-dark"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showSubModal()) {
+    <div
+      class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      (click)="closeSubModal()"
+    >
+      <div
+        class="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl"
+        (click)="$event.stopPropagation()"
+      >
+        <h3 class="mb-4 font-mono text-lg font-bold text-main">
+          {{ editingSubId() ? "Editar subcategoría" : "Nueva subcategoría" }}
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="mb-1 block text-xs text-muted">Nombre *</label>
+            <input
+              type="text"
+              [(ngModel)]="subName"
+              class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted"
+              >Descripción (opcional)</label
+            >
+            <textarea
+              [(ngModel)]="subDescription"
+              rows="2"
+              class="w-full resize-none rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
+            ></textarea>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            (click)="closeSubModal()"
+            class="rounded-lg border border-border px-4 py-2 text-sm text-muted"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="saveSub()"
+            class="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-dark"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showUomModal()) {
+    <div
+      class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      (click)="closeUomModal()"
+    >
+      <div
+        class="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl"
+        (click)="$event.stopPropagation()"
+      >
+        <h3 class="mb-4 font-mono text-lg font-bold text-main">
+          {{ editingUomId() ? "Editar unidad" : "Nueva unidad de medida" }}
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="mb-1 block text-xs text-muted">Nombre *</label>
+            <input
+              type="text"
+              [(ngModel)]="uomName"
+              placeholder="Ej: Tambor 200 litros"
+              class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted">Abreviatura *</label>
+            <input
+              type="text"
+              [(ngModel)]="uomAbbrev"
+              placeholder="Ej: TB200"
+              class="w-full rounded-lg border border-border bg-dark px-3 py-2 font-mono text-sm uppercase text-main"
+            />
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            (click)="closeUomModal()"
+            class="rounded-lg border border-border px-4 py-2 text-sm text-muted"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="saveUom()"
+            class="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-dark"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

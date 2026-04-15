@@ -1,0 +1,145 @@
+<div class="space-y-6 pb-10">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-border/50 pb-4">
+    <div>
+      <h2 class="text-2xl font-bold text-main tracking-tight">
+        Centro de alertas de abastecimiento
+      </h2>
+      <p class="text-sm text-muted mt-1 max-w-2xl">
+        Artículos con stock en o por debajo del mínimo. La cantidad sugerida cubre
+        el déficit hasta el mínimo más la cobertura de unos 30 días según el
+        consumo medio mensual (salidas últimos 90 días ÷ 3).
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-2 shrink-0">
+      <button
+        type="button"
+        (click)="forceRefresh()"
+        class="px-4 py-2 text-xs font-mono rounded-lg border border-border text-muted hover:text-main hover:bg-dark"
+      >
+        🔄 Actualizar
+      </button>
+      <button
+        type="button"
+        (click)="generateRequisition()"
+        [disabled]="rows().length === 0 || loading()"
+        class="px-4 py-2 text-xs font-mono font-bold rounded-lg bg-primary text-dark hover:bg-primary/90 disabled:opacity-40"
+      >
+        Generar requerimiento masivo
+      </button>
+    </div>
+  </div>
+
+  <div
+    class="bg-surface border border-border rounded-xl shadow-lg overflow-hidden"
+  >
+    <div class="p-4 border-b border-border bg-dark/50 flex justify-between items-center">
+      <h3 class="text-sm font-mono text-primary font-bold uppercase">
+        Stock bajo mínimo
+      </h3>
+      @if (!loading()) {
+        <span class="text-xs font-mono text-muted"
+          >{{ rows().length }} alerta(s)</span
+        >
+      }
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm border-collapse min-w-[1020px]">
+        <thead
+          class="bg-dark text-muted font-mono text-[10px] uppercase tracking-wider"
+        >
+          <tr>
+            <th class="py-3 px-4 border-b border-border">Bodega</th>
+            <th class="py-3 px-4 border-b border-border">N° Parte</th>
+            <th class="py-3 px-4 border-b border-border">Artículo</th>
+            <th class="py-3 px-4 border-b border-border text-center">Actual</th>
+            <th class="py-3 px-4 border-b border-border text-center">Mín.</th>
+            <th class="py-3 px-4 border-b border-border text-center">Objetivo</th>
+            <th
+              class="py-3 px-4 border-b border-border text-center max-w-[7rem]"
+              title="Promedio mensual = salidas (90 días) ÷ 3"
+            >
+              Cons. prom./mes
+            </th>
+            <th class="py-3 px-4 border-b border-border text-center text-primary">
+              Cantidad sugerida
+            </th>
+            <th class="py-3 px-4 border-b border-border">Req. vinculado</th>
+            <th class="py-3 px-4 border-b border-border">Acción</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border/40 text-muted">
+          @if (loading()) {
+            @for (_ of skeletonRows; track $index) {
+              <tr appSkeletonRow [columnCount]="10"></tr>
+            }
+          } @else if (rows().length === 0) {
+            <tr>
+              <td
+                colspan="10"
+                class="py-14 text-center font-mono text-sm text-muted"
+              >
+                No hay alertas: todo el stock con mínimo configurado está por
+                encima del umbral.
+              </td>
+            </tr>
+          } @else {
+            @for (r of rows(); track r.id) {
+              <tr class="hover:bg-dark/30 transition-colors">
+                <td class="py-3 px-4 text-xs">
+                  <span class="text-primary font-mono font-bold">{{
+                    r.warehouse.code
+                  }}</span>
+                  <span class="text-muted"> — {{ r.warehouse.name }}</span>
+                </td>
+                <td class="py-3 px-4 font-mono text-xs text-primary">
+                  {{ r.item.partNumber }}
+                </td>
+                <td class="py-3 px-4 text-main text-sm">
+                  {{ r.item.name }}
+                </td>
+                <td class="py-3 px-4 text-center font-mono">
+                  {{ r.quantity | number: "1.0-2" }}
+                </td>
+                <td class="py-3 px-4 text-center font-mono">
+                  {{ r.minStock | number: "1.0-2" }}
+                </td>
+                <td class="py-3 px-4 text-center font-mono text-main">
+                  {{ r.optimalTarget | number: "1.0-2" }}
+                </td>
+                <td
+                  class="py-3 px-4 text-center font-mono text-xs text-muted"
+                  [attr.title]="consumptionTooltip(r)"
+                >
+                  {{ r.avgMonthlyConsumption | number: "1.0-2" }}
+                </td>
+                <td class="py-3 px-4 text-center font-mono font-bold text-primary">
+                  {{ r.suggestedOrderQty | number: "1.0-2" }}
+                </td>
+                <td class="py-3 px-4 text-xs">
+                  @if (r.linkedRequisition) {
+                    <app-entity-link
+                      kind="REQ"
+                      [id]="r.linkedRequisition.id"
+                      [label]="r.linkedRequisition.correlative"
+                      variant="badge"
+                    />
+                  } @else {
+                    <span class="text-muted font-mono text-[11px]">—</span>
+                  }
+                </td>
+                <td class="py-3 px-4">
+                  <a
+                    [routerLink]="['/app/articulos', r.item.id]"
+                    class="text-[11px] font-mono text-primary hover:underline"
+                    >Ficha catálogo</a
+                  >
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

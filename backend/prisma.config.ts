@@ -9,7 +9,7 @@ export default defineConfig({
     url: process.env.DATABASE_URL,
   },
   migrations: {
-    // Esto es lo que le faltaba para que 'npx prisma db seed' funcione
-    seed: 'node dist/prisma/seed.js',
+    // Mismo comando que package.json "prisma.seed" (no usar dist/prisma: Nest no compila prisma/)
+    seed: 'ts-node prisma/seed.ts',
   },
 });

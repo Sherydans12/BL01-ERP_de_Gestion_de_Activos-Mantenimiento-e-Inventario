@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PurchasesService, WarehouseReceipt, ReceiptItem } from '../../../core/services/purchases/purchases.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
 
 interface EditableReceiptItem extends ReceiptItem {
   _quantityReceived: number;
@@ -13,7 +15,7 @@ interface EditableReceiptItem extends ReceiptItem {
 @Component({
   selector: 'app-receipt-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ConfirmModalComponent, PurchasesPushNoticeComponent],
   templateUrl: './receipt-form.component.html',
 })
 export class ReceiptFormComponent implements OnInit {
@@ -26,12 +28,37 @@ export class ReceiptFormComponent implements OnInit {
   editableItems = signal<EditableReceiptItem[]>([]);
   isLoading = signal(true);
   isSaving = signal(false);
+  showConfirmReceiptModal = signal(false);
 
   isReadonly = computed(() => this.receipt()?.status === 'COMPLETED');
 
   hasDiscrepancies = computed(() =>
-    this.editableItems().some(i => i._quantityReceived !== i.quantityExpected)
+    this.editableItems().some(i => i._quantityReceived !== i.quantityExpected),
   );
+
+  hasUnlinkedItems = computed(() =>
+    this.editableItems().some(i => !i.orderItem?.inventoryItem),
+  );
+
+  hasDirectExpenseItems = computed(() =>
+    this.editableItems().some(
+      i => i.orderItem?.inventoryItem && !(i.orderItem.inventoryItem as any).isInventory,
+    ),
+  );
+
+  isItemUnlinked(item: EditableReceiptItem): boolean {
+    return !item.orderItem?.inventoryItem;
+  }
+
+  isItemDirectExpense(item: EditableReceiptItem): boolean {
+    const inv = item.orderItem?.inventoryItem as any;
+    return inv && inv.isInventory === false;
+  }
+
+  isItemStockTracked(item: EditableReceiptItem): boolean {
+    const inv = item.orderItem?.inventoryItem as any;
+    return inv && inv.isInventory !== false;
+  }
 
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -52,7 +79,14 @@ export class ReceiptFormComponent implements OnInit {
         );
         this.isLoading.set(false);
       },
-      error: () => { this.notify.error('Error al cargar recepción'); this.isLoading.set(false); },
+      error: (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al cargar recepción');
+        this.isLoading.set(false);
+      },
     });
   }
 
@@ -80,21 +114,93 @@ export class ReceiptFormComponent implements OnInit {
     }));
 
     this.purchasesService.updateReceiptItems(receipt.id, items).subscribe({
-      next: () => { this.notify.success('Cantidades guardadas'); this.isSaving.set(false); },
-      error: () => { this.notify.error('Error al guardar'); this.isSaving.set(false); },
+      next: () => {
+        this.notify.success('Cantidades guardadas');
+        this.load(receipt.id);
+        this.isSaving.set(false);
+      },
+      error: (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al guardar');
+        this.isSaving.set(false);
+      },
     });
   }
 
-  confirm() {
+  requestConfirmReceipt() {
+    const receipt = this.receipt();
+    if (!receipt) return;
+    const totalReceived = this.editableItems().reduce((s, i) => s + Number(i._quantityReceived), 0);
+    if (totalReceived <= 0) {
+      this.notify.warning('Indique cantidades recibidas antes de confirmar');
+      return;
+    }
+    this.showConfirmReceiptModal.set(true);
+  }
+
+  cancelConfirmReceipt() {
+    this.showConfirmReceiptModal.set(false);
+  }
+
+  /** Guarda líneas y confirma recepción: actualiza inventario de forma definitiva. */
+  confirmReceiptFinal() {
+    this.showConfirmReceiptModal.set(false);
     const receipt = this.receipt();
     if (!receipt) return;
 
-    this.saveItems();
-    setTimeout(() => {
-      this.purchasesService.confirmReceipt(receipt.id).subscribe({
-        next: () => { this.notify.success('Recepción confirmada. Inventario actualizado.'); this.load(receipt.id); },
-        error: (err: any) => this.notify.error(err?.error?.message || 'Error al confirmar'),
-      });
-    }, 500);
+    const items = this.editableItems().map((i) => ({
+      id: i.id,
+      quantityReceived: i._quantityReceived,
+      observations: i._observations || undefined,
+    }));
+
+    this.isSaving.set(true);
+    this.purchasesService.updateReceiptItems(receipt.id, items).subscribe({
+      next: () => {
+        this.purchasesService.confirmReceipt(receipt.id).subscribe({
+          next: (result: any) => {
+            const summary = result?.stockSummary;
+            if (summary?.skippedItems > 0) {
+              this.notify.success(
+                `Recepción confirmada. ${summary.trackedItems} ítem(s) actualizaron el stock.`,
+              );
+              if (summary.skippedNoLink > 0) {
+                this.notify.warning(
+                  `${summary.skippedNoLink} ítem(s) sin vínculo al catálogo (no mueven stock).`,
+                );
+              }
+              if (summary.directExpenseItems > 0) {
+                this.notify.info(
+                  `${summary.directExpenseItems} ítem(s) registrado(s) como Gasto Directo (sin movimiento de stock).`,
+                );
+              }
+            } else {
+              this.notify.success('Recepción confirmada. Inventario actualizado.');
+            }
+            this.load(receipt.id);
+            this.isSaving.set(false);
+          },
+          error: (err: unknown) => {
+            const msg =
+              err && typeof err === 'object' && 'error' in err
+                ? (err as { error?: { message?: string } }).error?.message
+                : undefined;
+            this.notify.error(typeof msg === 'string' ? msg : 'Error al confirmar recepción');
+            this.isSaving.set(false);
+          },
+        });
+      },
+      error: (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al guardar cantidades');
+        this.isSaving.set(false);
+      },
+    });
   }
 }

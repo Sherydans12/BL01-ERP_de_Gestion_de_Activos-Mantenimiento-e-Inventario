@@ -19,7 +19,13 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed:p2p-test-users": "ts-node prisma/seed-p2p-test-users.ts"
+    "seed:p2p-test-users": "ts-node prisma/seed-p2p-test-users.ts",
+    "seed:catalog-masters": "ts-node prisma/seed-catalog-masters.ts",
+    "seed:super-admin": "ts-node prisma/seed-super-admin-user.ts",
+    "seed:load-test-items": "ts-node prisma/seed-load-test-items.ts",
+    "db:clean-test-data": "ts-node prisma/clean-test-data.ts",
+    "db:clean-bootstrap-tpm": "ts-node prisma/clean-and-bootstrap-tpm-users.ts",
+    "db:import-inventory-excel": "ts-node prisma/import-inventory-from-excel.ts"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",
@@ -36,13 +42,17 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.4",
+    "decimal.js": "^10.6.0",
+    "exceljs": "^4.4.0",
     "nodemailer": "^8.0.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdfkit": "^0.18.0",
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -56,6 +66,7 @@
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^7.0.11",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pdfkit": "^0.17.5",
     "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
     "@types/web-push": "^3.6.4",

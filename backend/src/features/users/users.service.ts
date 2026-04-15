@@ -225,7 +225,8 @@ export class UsersService {
             birthDate: data.birthDate ? new Date(data.birthDate) : null,
             position: data.position,
             isActive: data.isActive,
-            customRoleId: data.customRoleId !== undefined ? data.customRoleId : undefined,
+            customRoleId:
+              data.customRoleId !== undefined ? data.customRoleId : undefined,
           },
         });
 

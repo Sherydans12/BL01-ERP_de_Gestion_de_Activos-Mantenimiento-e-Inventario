@@ -57,6 +57,7 @@ const ICONS = {
   adjustments: 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4',
   users: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   shieldCheck: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  calendar: 'M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z',
 };
 
 /**
@@ -70,7 +71,7 @@ const ICONS = {
  * Maestro de Flota       |    ✓     |     ✓      |   ✓   |      ✓
  * Órdenes de Trabajo     |    ✓     |     ✓      |   ✓   |      ✓
  * Config. Pautas (PM)    |    –     |     ✓      |   ✓   |      ✓
- * Catálogo de Repuestos  |    –     |     ✓      |   ✓   |      ✓
+ * Catálogo Maestro       |    –     |     ✓      |   ✓   |      ✓
  * Gestión de Bodegas     |    –     |     ✓      |   ✓   |      ✓
  * Control de Stock       |    ✓     |     ✓      |   ✓   |      ✓
  * Catálogos Maestros     |    –     |     –      |   ✓   |      ✓
@@ -113,18 +114,36 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Inventario',
     items: [
       {
-        label: 'Catálogo de Repuestos',
+        label: 'Catálogo Maestro de Artículos',
         route: '/app/articulos',
         icon: ICONS.cube,
         roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
       },
       {
         label: 'Gestión de Bodegas',
-        route: '/app/bodegas',
+        route: '/app/inventario/bodegas',
         icon: ICONS.archive,
         roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
       },
+      {
+        label: 'Transferencias entre Bodegas',
+        route: '/app/inventario/transferencias',
+        icon: ICONS.collection,
+        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+      },
+      {
+        label: 'Configuración de categorías',
+        route: '/app/inventario/configuracion',
+        icon: ICONS.adjustments,
+        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+      },
       { label: 'Control de Stock', route: '/app/stock', icon: ICONS.chartBar },
+      {
+        label: 'Abastecimiento',
+        route: '/app/inventario/abastecimiento',
+        icon: ICONS.clipboard,
+        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+      },
     ],
   },
   {
@@ -132,6 +151,9 @@ export const NAV_SECTIONS: NavSection[] = [
     roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
     items: [
       { label: 'Requerimientos', route: '/app/compras/requerimientos', icon: ICONS.documentText },
+      { label: 'Analítica', route: '/app/compras/analytics', icon: ICONS.chartBar },
+      { label: 'Facturas', route: '/app/compras/facturas', icon: ICONS.documentText },
+      { label: 'Calendario de Pagos', route: '/app/compras/calendario-pagos', icon: ICONS.calendar },
       { label: 'Órdenes de Compra', route: '/app/compras/ordenes', icon: ICONS.clipboard },
       { label: 'Recepciones', route: '/app/compras/recepciones', icon: ICONS.archive },
       {

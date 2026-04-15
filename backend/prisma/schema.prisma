@@ -57,6 +57,9 @@ model Equipment {
   subcontract           Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
   workOrders            WorkOrder[]
   meterAdjustments      MeterAdjustment[]
+  purchaseRequisitions  PurchaseRequisition[] @relation("RequisitionEquipment")
+  purchaseOrders        PurchaseOrder[]       @relation("OrderEquipment")
+  assetCostRecords      AssetCostRecord[]
 
   @@unique([tenantId, internalId])
   @@unique([tenantId, plate])
@@ -132,8 +135,11 @@ model WorkOrder {
   tasks             WorkOrderTask[]
   parts             WorkOrderPart[]
   fluidSamples      FluidSample[]
-  stockReservations StockReservation[]
-  
+  stockReservations    StockReservation[]
+  purchaseRequisitions PurchaseRequisition[] @relation("RequisitionWorkOrder")
+  purchaseOrders       PurchaseOrder[]       @relation("OrderWorkOrder")
+  assetCostRecords     AssetCostRecord[]
+
   @@unique([tenantId, correlative])
   @@map("work_orders")
 }
@@ -330,12 +336,14 @@ model User {
   contractAccess      UserContract[]  
   inventoryTransactions InventoryTransaction[]
   meterAdjustments    MeterAdjustment[]
+  inventoryItemAttachments InventoryItemAttachment[]
 
   purchaseRequisitions    PurchaseRequisition[]      @relation("RequisitionRequester")
   purchaseOrderApprovals  PurchaseOrderApproval[]    @relation("POApprover")
   warehouseReceipts       WarehouseReceipt[]         @relation("ReceiptReceiver")
   activityLogs            ActivityLog[]
   pushSubscriptions       PushSubscription[]
+  inventoryTransfersCreated InventoryTransfer[] @relation("InventoryTransferCreatedBy")
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -364,6 +372,8 @@ model Tenant {
   catalogs              CatalogItem[]
   warehouses            Warehouse[]
   inventoryItems        InventoryItem[]
+  itemCategories        ItemCategory[]
+  unitOfMeasures       UnitOfMeasure[]
   tenantRoles           TenantRole[]
 
   vendors               Vendor[]
@@ -372,10 +382,14 @@ model Tenant {
   purchaseQuotations    PurchaseQuotation[]
   purchaseOrders        PurchaseOrder[]
   warehouseReceipts     WarehouseReceipt[]
+  purchaseInvoices      PurchaseInvoice[]
+  assetCostRecords      AssetCostRecord[]
   sequenceCounters      SequenceCounter[]
   activityLogs          ActivityLog[]
   pushSubscriptions     PushSubscription[]
-  
+  inventoryItemAttachments InventoryItemAttachment[]
+  inventoryTransfers    InventoryTransfer[]
+
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
 
@@ -476,69 +490,156 @@ model UserContract {
 // 8. MÓDULO DE INVENTARIO Y BODEGA (FASE C)
 // ==========================================
 
+model ItemCategory {
+  id               String         @id @default(uuid()) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  name             String         @db.VarChar(100)
+  description      String?        @db.Text
+  /// Nivel 1 (familia): null. Nivel 2 (subcategoría): referencia a la familia.
+  parentCategoryId String?        @map("parent_category_id") @db.Uuid
+  /// true = familia de nivel 1 (sin padre). Los artículos solo se vinculan a subcategorías (hojas).
+  isGlobal         Boolean        @default(false) @map("is_global")
+
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentCategory   ItemCategory?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: Restrict)
+  childCategories  ItemCategory[] @relation("CategoryHierarchy")
+  items            InventoryItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, parentCategoryId])
+  @@map("item_categories")
+}
+
+/// Unidades de medida configurables por tenant (maestro).
+model UnitOfMeasure {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  name          String   @db.VarChar(100)
+  abbreviation  String   @db.VarChar(20)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryItems InventoryItem[]
+
+  @@unique([tenantId, abbreviation])
+  @@index([tenantId])
+  @@map("unit_of_measures")
+}
+
+model WarehouseBin {
+  id          String    @id @default(uuid()) @db.Uuid
+  warehouseId String    @map("warehouse_id") @db.Uuid
+  code        String    @db.VarChar(50)
+  label       String?   @db.VarChar(100)
+
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stocks      ItemStock[]
+
+  @@unique([warehouseId, code])
+  @@map("warehouse_bins")
+}
+
 model Warehouse {
   id              String       @id @default(uuid()) @db.Uuid
   tenantId        String       @map("tenant_id") @db.Uuid
   contractId      String       @map("contract_id") @db.Uuid 
   subcontractId   String?      @map("subcontract_id") @db.Uuid // NUEVO: Bodega asignable a Subcontrato
 
-  code            String       @db.VarChar(50)
-  name            String       @db.VarChar(100)
-  location        String?      @db.VarChar(255)
-  isActive        Boolean      @default(true) @map("is_active")
+  code            String        @db.VarChar(50)
+  name            String        @db.VarChar(100)
+  location        String?       @db.VarChar(255)
+  type            WarehouseType @default(PHYSICAL)
+  isActive        Boolean       @default(true) @map("is_active")
 
   tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contract        Contract     @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  subcontract     Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict) // Relación
+  subcontract     Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
   
-  stocks          ItemStock[]
-  transactions    InventoryTransaction[]
-  workOrders      WorkOrder[]
+  bins              WarehouseBin[]
+  stocks            ItemStock[]
+  transactions      InventoryTransaction[]
+  workOrders        WorkOrder[]
   stockReservations StockReservation[]
   warehouseReceipts WarehouseReceipt[]
+  outboundTransfers  InventoryTransfer[] @relation("InventoryTransferOrigin")
+  inboundTransfers   InventoryTransfer[] @relation("InventoryTransferDestination")
 
   @@unique([tenantId, code])
   @@map("warehouses")
 }
 
 model InventoryItem {
-  id              String       @id @default(uuid()) @db.Uuid
-  tenantId        String       @map("tenant_id") @db.Uuid
-  
-  partNumber      String       @map("part_number") @db.VarChar(50)
-  name            String       @db.VarChar(150)
-  description     String?      @db.Text
-  category        String       @db.VarChar(50) // NUEVO: String libre para crear las que quieras
-  unitOfMeasure   String       @map("unit_of_measure") @db.VarChar(20) 
-  brand           String?      @db.VarChar(50)
-  
-  isSerialized    Boolean      @default(false) @map("is_serialized") // NUEVO: Bandera para Componentes Mayores
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
 
-  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  stocks          ItemStock[]
-  transactions    InventoryTransaction[]
-  workOrderParts  WorkOrderPart[]
+  /// Payload estable para QR / pistola (típicamente INV:<uuid>).
+  qrCode          String        @map("qr_code") @db.VarChar(120)
+  partNumber      String        @map("part_number") @db.VarChar(50)
+  name            String        @db.VarChar(150)
+  description     String?       @db.Text
+  /// Subcategoría (nivel 2); la familia se obtiene vía itemCategory.parentCategory.
+  categoryId       String         @map("category_id") @db.Uuid
+  unitOfMeasureId  String         @map("unit_of_measure_id") @db.Uuid
+  brand            String?        @db.VarChar(50)
+  
+  isSerialized    Boolean       @default(false) @map("is_serialized")
+  isInventory     Boolean       @default(true)  @map("is_inventory")
+  isAsset         Boolean       @default(false) @map("is_asset")
+  isConsumable    Boolean       @default(true)  @map("is_consumable")
+
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemCategory      ItemCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  unitOfMeasure     UnitOfMeasure  @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
+  stocks            ItemStock[]
+  transactions      InventoryTransaction[]
+  workOrderParts    WorkOrderPart[]
   stockReservations StockReservation[]
   requisitionItems  RequisitionItem[]
   purchaseOrderItems PurchaseOrderItem[]
+  attachments        InventoryItemAttachment[]
+  inventoryTransferLines InventoryTransferLine[]
 
   @@unique([tenantId, partNumber])
+  @@unique([tenantId, qrCode])
+  @@index([tenantId, qrCode])
   @@map("inventory_items")
+}
+
+/// PDFs / fichas técnicas adjuntas al artículo (almacenamiento vía StorageService).
+model InventoryItemAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  itemId       String   @map("item_id") @db.Uuid
+  fileName     String   @map("file_name") @db.VarChar(255)
+  /// Clave relativa devuelta por el driver (ej. `inventory-item-docs/123-file.pdf`).
+  storageKey   String   @map("storage_key") @db.VarChar(500)
+  mimeType     String   @map("mime_type") @db.VarChar(120)
+  sizeBytes    Int?     @map("size_bytes")
+  uploadedById String   @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  uploadedBy User          @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, itemId])
+  @@map("inventory_item_attachments")
 }
 
 model ItemStock {
   id              String        @id @default(uuid()) @db.Uuid
   warehouseId     String        @map("warehouse_id") @db.Uuid
   itemId          String        @map("item_id") @db.Uuid
+  binId           String?       @map("bin_id") @db.Uuid
   
   quantity        Float         @default(0) 
-  unitCost        Float?        @map("unit_cost") // NUEVO: El precio ahora vive en la bodega de la faena
+  unitCost        Decimal?      @map("unit_cost") @db.Decimal(18, 4)
   minStock        Float         @default(0) @map("min_stock")
   maxStock        Float         @default(0) @map("max_stock")
   shelfLocation   String?       @map("shelf_location") @db.VarChar(50) 
 
   warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   item            InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  bin             WarehouseBin? @relation(fields: [binId], references: [id], onDelete: SetNull)
 
   @@unique([warehouseId, itemId]) 
   @@map("item_stocks")
@@ -573,7 +674,51 @@ enum TransactionType {
   IN      
   OUT     
   ADJUST  
-  RETURN  
+  RETURN
+  PURCHASE_RECEIPT
+  WORK_ORDER_ISSUE
+  TRANSFER_OUT
+  TRANSFER_IN
+}
+
+enum InventoryTransferStatus {
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+/// Transferencia entre bodegas (W2W); líneas y transacciones en una sola operación atómica.
+model InventoryTransfer {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  tenantId               String                  @map("tenant_id") @db.Uuid
+  originWarehouseId      String                  @map("origin_warehouse_id") @db.Uuid
+  destinationWarehouseId String                  @map("destination_warehouse_id") @db.Uuid
+  status                 InventoryTransferStatus @default(SHIPPED)
+  createdById            String                  @map("created_by_id") @db.Uuid
+  createdAt              DateTime                @default(now()) @map("created_at")
+
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  originWarehouse        Warehouse     @relation("InventoryTransferOrigin", fields: [originWarehouseId], references: [id], onDelete: Restrict)
+  destinationWarehouse   Warehouse     @relation("InventoryTransferDestination", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
+  createdBy              User          @relation("InventoryTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lines                  InventoryTransferLine[]
+
+  @@index([tenantId, createdAt])
+  @@map("inventory_transfers")
+}
+
+model InventoryTransferLine {
+  id         String   @id @default(uuid()) @db.Uuid
+  transferId String   @map("transfer_id") @db.Uuid
+  itemId     String   @map("item_id") @db.Uuid
+  quantity   Float
+  unitCost   Decimal  @map("unit_cost") @db.Decimal(18, 4)
+
+  transfer InventoryTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  item     InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([transferId])
+  @@map("inventory_transfer_lines")
 }
 
 // ==========================================
@@ -592,6 +737,40 @@ model MeterAdjustment {
   user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@map("meter_adjustments")
+}
+
+/// Costos imputados al activo desde compras (PURCHASE) u órdenes de trabajo (WORK_ORDER).
+model AssetCostRecord {
+  id                 String            @id @default(uuid()) @db.Uuid
+  tenantId           String            @map("tenant_id") @db.Uuid
+  equipmentId        String            @map("equipment_id") @db.Uuid
+  amount             Decimal           @db.Decimal(18, 2)
+  type               AssetCostType
+  purchaseOrderId    String?           @map("purchase_order_id") @db.Uuid
+  workOrderId        String?           @map("work_order_id") @db.Uuid
+  warehouseReceiptId String?           @unique @map("warehouse_receipt_id") @db.Uuid
+  recordedAt         DateTime          @default(now()) @map("recorded_at")
+
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  equipment          Equipment         @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  workOrder          WorkOrder?        @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  warehouseReceipt   WarehouseReceipt? @relation(fields: [warehouseReceiptId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, equipmentId])
+  @@index([tenantId, recordedAt])
+  @@map("asset_cost_records")
+}
+
+enum AssetCostType {
+  PURCHASE
+  WORK_ORDER
+}
+
+enum WarehouseType {
+  PHYSICAL
+  VIRTUAL
+  TRANSIT
 }
 
 // ==========================================
@@ -648,7 +827,8 @@ model Vendor {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  quotations    PurchaseQuotation[]
+  quotations       PurchaseQuotation[]
+  purchaseInvoices PurchaseInvoice[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, rut])
@@ -659,10 +839,12 @@ model Vendor {
 // 13. CONFIGURACIÓN DINÁMICA DE COMPRAS
 // ==========================================
 model PurchaseSettings {
-  id                 String   @id @default(uuid()) @db.Uuid
-  tenantId           String   @unique @map("tenant_id") @db.Uuid
-  approvalThreshold  Decimal  @default(0) @map("approval_threshold") @db.Decimal(18, 2)
-  currency           String   @default("CLP") @db.VarChar(10)
+  id                           String   @id @default(uuid()) @db.Uuid
+  tenantId                     String   @unique @map("tenant_id") @db.Uuid
+  approvalThreshold            Decimal  @default(0) @map("approval_threshold") @db.Decimal(18, 2)
+  currency                     String   @default("CLP") @db.VarChar(10)
+  /// Margen relativo (p. ej. 1 = 1%) para el match factura vs OC / recepción (3-way match).
+  invoiceMatchTolerancePercent Decimal  @default(1) @map("invoice_match_tolerance_percent") @db.Decimal(9, 4)
 
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
@@ -705,6 +887,9 @@ model PurchaseRequisition {
   status          RequisitionStatus   @default(DRAFT)
   description     String              @db.Text
   justification   String?             @db.Text
+  equipmentId     String?             @map("equipment_id") @db.Uuid
+  workOrderId     String?             @map("work_order_id") @db.Uuid
+  priority        RequisitionPriority @default(MEDIUM)
 
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")
@@ -713,10 +898,14 @@ model PurchaseRequisition {
   contract        Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
   subcontract     Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
   requestedBy     User                @relation("RequisitionRequester", fields: [requestedById], references: [id])
+  equipment       Equipment?          @relation("RequisitionEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
+  workOrder       WorkOrder?          @relation("RequisitionWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
   items           RequisitionItem[]
   quotations      PurchaseQuotation[]
 
   @@unique([tenantId, correlative])
+  @@index([tenantId, equipmentId])
+  @@index([tenantId, workOrderId])
   @@map("purchase_requisitions")
 }
 
@@ -725,6 +914,10 @@ model RequisitionItem {
   requisitionId   String              @map("requisition_id") @db.Uuid
   inventoryItemId String?             @map("inventory_item_id") @db.Uuid
   description     String              @db.VarChar(255)
+  /// Nº de parte libre (opcional; refina la solicitud aunque no exista en inventario)
+  partNumber      String?             @map("part_number") @db.VarChar(80)
+  /// Notas / especificación opcional (marca deseada, alternativos, etc.)
+  itemNotes       String?             @map("item_notes") @db.VarChar(500)
   quantity        Float
   unitOfMeasure   String              @map("unit_of_measure") @db.VarChar(20)
   estimatedCost   Decimal?            @map("estimated_cost") @db.Decimal(18, 2)
@@ -789,6 +982,14 @@ model PurchaseOrder {
   requiredSignatures Int                 @default(2) @map("required_signatures")
   notes              String?             @db.Text
   pdfUrl             String?             @map("pdf_url") @db.Text
+  equipmentId        String?             @map("equipment_id") @db.Uuid
+  workOrderId        String?             @map("work_order_id") @db.Uuid
+  /** Momento en que la OC quedó marcada como enviada al proveedor (KPI lead time). */
+  sentAt             DateTime?           @map("sent_at")
+  /** Dirección de entrega acordada (puede distingirse de la dirección fiscal del proveedor). */
+  deliveryAddress    String?             @map("delivery_address") @db.VarChar(500)
+  /** Condición de pago declarada en la OC (ej. «30 días», «Contado»). */
+  paymentTerms       String?             @map("payment_terms") @db.VarChar(120)
 
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
@@ -797,11 +998,17 @@ model PurchaseOrder {
   contract           Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
   subcontract        Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
   quotation          PurchaseQuotation?  @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  equipment          Equipment?          @relation("OrderEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
+  workOrder          WorkOrder?          @relation("OrderWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
   items              PurchaseOrderItem[]
   approvals          PurchaseOrderApproval[]
   receipts           WarehouseReceipt[]
+  assetCostRecords   AssetCostRecord[]
+  purchaseInvoice    PurchaseInvoice?
 
   @@unique([tenantId, correlative])
+  @@index([tenantId, equipmentId])
+  @@index([tenantId, workOrderId])
   @@map("purchase_orders")
 }
 
@@ -862,6 +1069,7 @@ model WarehouseReceipt {
   warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   receivedBy      User          @relation("ReceiptReceiver", fields: [receivedById], references: [id])
   items           ReceiptItem[]
+  assetCostRecord AssetCostRecord?
 
   @@unique([tenantId, correlative])
   @@map("warehouse_receipts")
@@ -881,9 +1089,50 @@ model ReceiptItem {
   @@map("receipt_items")
 }
 
+/// Factura de proveedor vinculada a una OC (relación 1:1). Validación 3-way match vs OC y recepciones.
+model PurchaseInvoice {
+  id              String                @id @default(uuid()) @db.Uuid
+  tenantId        String                @map("tenant_id") @db.Uuid
+  vendorId        String                @map("vendor_id") @db.Uuid
+  purchaseOrderId String                @unique @map("purchase_order_id") @db.Uuid
+  invoiceNumber   String                @map("invoice_number") @db.VarChar(80)
+  emissionDate    DateTime              @map("emission_date")
+  /** Vencimiento pactado para el calendario de pagos. */
+  dueDate         DateTime?             @map("due_date")
+  totalAmount     Decimal               @map("total_amount") @db.Decimal(18, 2)
+  /** Monto neto afecto (registro manual; opcional). */
+  netAmount       Decimal?              @map("net_amount") @db.Decimal(18, 2)
+  /** IVA u otros impuestos (registro manual; opcional). */
+  taxAmount       Decimal?              @map("tax_amount") @db.Decimal(18, 2)
+  status          PurchaseInvoiceStatus @default(PENDING)
+  pdfUrl          String?               @map("pdf_url") @db.VarChar(500)
+  /** Referencia bancaria / comprobante al registrar el pago. */
+  paymentReference String?              @map("payment_reference") @db.VarChar(120)
+  /** Momento en que se registró el pago efectivo. */
+  paidAt          DateTime?             @map("paid_at")
+
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendor          Vendor                @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  purchaseOrder   PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, vendorId])
+  @@index([tenantId, dueDate])
+  @@map("purchase_invoices")
+}
+
 // ==========================================
 // ENUMS: MÓDULO DE COMPRAS
 // ==========================================
+enum PurchaseInvoiceStatus {
+  PENDING
+  MATCHED
+  DISCREPANCY
+  PAID
+}
+
 enum RequisitionStatus {
   DRAFT
   SUBMITTED
@@ -892,6 +1141,12 @@ enum RequisitionStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+enum RequisitionPriority {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum QuotationStatus {
@@ -906,6 +1161,11 @@ enum PurchaseOrderStatus {
   PARTIALLY_APPROVED
   APPROVED
   REJECTED
+  /** Documento comunicado / despacho administrativo al proveedor (sustituye el legado SENT_TO_SUPPLIER). */
+  SENT
+  /** Pedido formalizado al proveedor (mismo derecho de recepción que SENT). */
+  ORDERED
+  /** Legado (antes de SENT); no usar en flujos nuevos. */
   SENT_TO_SUPPLIER
   PARTIALLY_RECEIVED
   RECEIVED
@@ -973,4 +1233,5 @@ enum ActivityAction {
   DELETE
   STATUS_CHANGE
   SIGNATURE
+  SYSTEM_UPDATE
 }

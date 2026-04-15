@@ -3,12 +3,13 @@ import { isPlatformBrowser } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { SeoService } from './core/seo/seo.service';
 import { ToastComponent } from './shared/components/toast/toast.component';
+import { QuickViewHostComponent } from './shared/components/quick-view/quick-view-host.component';
 import { ThemeService } from './core/services/theme/theme.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, ToastComponent],
+  imports: [RouterOutlet, ToastComponent, QuickViewHostComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

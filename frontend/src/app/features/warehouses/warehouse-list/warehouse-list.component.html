@@ -2,18 +2,26 @@
   <div class="flex justify-between items-center">
     <div>
       <h2 class="text-2xl font-bold text-main tracking-tight">
-        Bodegas de Pañol
+        Gestión de Bodegas
       </h2>
       <p class="text-sm text-muted mt-1">
         Gestione las ubicaciones físicas de almacenamiento por contrato.
       </p>
     </div>
-    <a
-      routerLink="/app/bodegas/nueva"
-      class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
-    >
-      + NUEVA BODEGA
-    </a>
+    <div class="flex flex-wrap items-center gap-2">
+      <a
+        routerLink="/app/inventario/configuracion"
+        class="border border-border text-main font-mono text-sm py-2 px-4 rounded-lg hover:bg-dark/40 transition-colors"
+      >
+        Configuración de categorías
+      </a>
+      <a
+        routerLink="/app/inventario/bodegas/nueva"
+        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
+      >
+        + NUEVA BODEGA
+      </a>
+    </div>
   </div>
 
   <div
@@ -40,7 +48,12 @@
         </tr>
       </thead>
       <tbody class="text-sm text-muted divide-y divide-border/50">
-        @for (warehouse of warehouses(); track warehouse.id) {
+        @if (isLoading()) {
+          @for (_ of tableSkeletonRows; track $index) {
+            <tr appSkeletonRow [columnCount]="5"></tr>
+          }
+        } @else {
+          @for (warehouse of warehouses(); track warehouse.id) {
           <tr class="hover:bg-dark/40 transition-colors">
             <td class="py-4 px-6 font-mono text-primary font-bold">
               {{ warehouse.code }}
@@ -76,7 +89,7 @@
             </td>
             <td class="py-4 px-6 text-right space-x-2">
               <a
-                [routerLink]="['/app/bodegas', warehouse.id]"
+                [routerLink]="['/app/inventario/bodegas', warehouse.id]"
                 class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs px-2 py-1"
                 >EDITAR</a
               >
@@ -88,15 +101,16 @@
               </button>
             </td>
           </tr>
-        } @empty {
-          <tr>
-            <td
-              colspan="5"
-              class="py-12 text-center text-muted font-mono text-sm"
-            >
-              No hay bodegas configuradas para esta vista.
-            </td>
-          </tr>
+          } @empty {
+            <tr>
+              <td
+                colspan="5"
+                class="py-12 text-center text-muted font-mono text-sm"
+              >
+                No hay bodegas configuradas para esta vista.
+              </td>
+            </tr>
+          }
         }
       </tbody>
     </table>

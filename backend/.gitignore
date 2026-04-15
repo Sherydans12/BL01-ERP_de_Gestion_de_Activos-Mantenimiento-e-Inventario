@@ -35,6 +35,9 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# Archivos subidos en runtime (PDF, imágenes de cotizaciones, etc.)
+uploads/
+
 # dotenv environment variable files
 .env
 .env.development.local

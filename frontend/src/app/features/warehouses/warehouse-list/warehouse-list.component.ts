@@ -4,11 +4,12 @@ import { RouterLink } from '@angular/router';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { SkeletonRowComponent } from '../../../shared/components/skeleton-row/skeleton-row.component';
 
 @Component({
   selector: 'app-warehouse-list',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, SkeletonRowComponent],
   templateUrl: './warehouse-list.component.html',
 })
 export class WarehouseListComponent implements OnInit {
@@ -17,21 +18,33 @@ export class WarehouseListComponent implements OnInit {
   private authService = inject(AuthService);
 
   warehouses = signal<any[]>([]);
+  isLoading = signal(true);
+  readonly tableSkeletonRows = Array.from({ length: 6 }, (_, i) => i);
 
   constructor() {
     // Reactividad multifaena: recarga al cambiar el selector superior
-    effect(() => {
-      const currentContract = this.authService.currentContractId();
-      this.loadWarehouses();
-    });
+    effect(
+      () => {
+        this.authService.currentContractId();
+        this.loadWarehouses();
+      },
+      { allowSignalWrites: true },
+    );
   }
 
   ngOnInit() {}
 
   loadWarehouses() {
+    this.isLoading.set(true);
     this.warehousesService.getWarehouses().subscribe({
-      next: (data) => this.warehouses.set(data),
-      error: (err) => console.error('Error al cargar bodegas', err),
+      next: (data) => {
+        this.warehouses.set(data);
+        this.isLoading.set(false);
+      },
+      error: (err) => {
+        console.error('Error al cargar bodegas', err);
+        this.isLoading.set(false);
+      },
     });
   }
 

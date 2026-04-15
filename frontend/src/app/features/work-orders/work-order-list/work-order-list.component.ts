@@ -8,9 +8,11 @@ import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-modal/equipment-detail-modal.component';
+import { WorkOrderDetailModalComponent } from '../work-order-detail-modal/work-order-detail-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { Router } from '@angular/router';
+import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 
 @Component({
   selector: 'app-work-order-list',
@@ -21,6 +23,8 @@ import { Router } from '@angular/router';
     FormsModule,
     ConfirmModalComponent,
     EquipmentDetailModalComponent,
+    WorkOrderDetailModalComponent,
+    EntityLinkComponent,
   ],
   templateUrl: './work-order-list.component.html',
 })
@@ -55,6 +59,9 @@ export class WorkOrderListComponent implements OnInit {
 
   showEquipmentDetailModal = signal(false);
   selectedEquipmentIdForDetail = signal<string | null>(null);
+
+  showOtDetailModal = signal(false);
+  selectedOtIdForDetail = signal<string | null>(null);
 
   constructor() {
     effect(
@@ -199,6 +206,16 @@ export class WorkOrderListComponent implements OnInit {
     }
     this.selectedEquipmentIdForDetail.set(id);
     this.showEquipmentDetailModal.set(true);
+  }
+
+  openOtDetailModal(otId: string) {
+    this.selectedOtIdForDetail.set(otId);
+    this.showOtDetailModal.set(true);
+  }
+
+  closeOtDetailModal() {
+    this.showOtDetailModal.set(false);
+    this.selectedOtIdForDetail.set(null);
   }
 
   viewPdf(id: string) {

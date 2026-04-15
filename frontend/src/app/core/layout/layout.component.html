@@ -207,6 +207,15 @@
       <!-- Right: theme toggle + logout -->
       <div class="flex items-center gap-2">
         <button
+          type="button"
+          (click)="openCommandPalette()"
+          class="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs text-muted hover:text-main hover:border-primary/40 transition-colors"
+          title="Búsqueda global (Ctrl/Cmd + K)"
+        >
+          <span>Buscar</span>
+          <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-dark border border-border">Ctrl+K</span>
+        </button>
+        <button
           (click)="themeService.toggleTheme()"
           class="p-2 rounded-lg text-muted hover:text-main hover:bg-primary/5 transition-colors"
           [attr.aria-label]="themeService.isDark() ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
@@ -245,3 +254,53 @@
     </div>
   </main>
 </div>
+
+@if (commandPaletteOpen()) {
+  <div class="fixed inset-0 z-[90] bg-dark/70 backdrop-blur-sm" (click)="closeCommandPalette()"></div>
+  <div class="fixed inset-0 z-[95] p-4 sm:p-8 flex items-start justify-center pointer-events-none">
+    <div class="w-full max-w-2xl pointer-events-auto mt-8 sm:mt-14 rounded-xl border border-border bg-surface shadow-2xl overflow-hidden">
+      <div class="p-3 border-b border-border">
+        <input
+          type="text"
+          [value]="commandQuery()"
+          (input)="onCommandQueryChange($any($event.target).value)"
+          placeholder="Buscar OT, equipo, repuesto, bodega, OC, factura, recepción..."
+          class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main outline-none focus:border-primary"
+          autofocus
+        />
+      </div>
+      <div class="max-h-80 overflow-y-auto">
+        @if (commandLoading()) {
+          <p class="px-4 py-3 text-sm text-muted">Buscando…</p>
+        } @else if (!commandQuery().trim()) {
+          <p class="px-4 py-3 text-sm text-muted">Busca por correlativo, código, patente, nombre o parte para abrir rápido.</p>
+        } @else if (commandResults().length === 0) {
+          <p class="px-4 py-3 text-sm text-muted">Sin resultados para "{{ commandQuery() }}".</p>
+        } @else {
+          @for (row of commandResults(); track row.kind + '-' + row.id) {
+            <button
+              type="button"
+              (click)="openCommandResult(row)"
+              class="w-full text-left px-4 py-3 border-b border-border/60 last:border-b-0 hover:bg-primary/5 transition-colors"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0 flex items-start gap-2">
+                  <span class="shrink-0 mt-0.5 p-1 rounded bg-dark border border-border text-muted">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.75">
+                      <path stroke-linecap="round" stroke-linejoin="round" [attr.d]="commandKindIcon(row.kind)" />
+                    </svg>
+                  </span>
+                  <div class="min-w-0">
+                  <p class="text-sm text-main truncate">{{ row.title }}</p>
+                  <p class="text-xs text-muted font-mono truncate">{{ row.code }}</p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-1 rounded border border-border text-muted">{{ commandKindLabel(row.kind) }}</span>
+              </div>
+            </button>
+          }
+        }
+      </div>
+    </div>
+  </div>
+}

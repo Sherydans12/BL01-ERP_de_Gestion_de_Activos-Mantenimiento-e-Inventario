@@ -8,7 +8,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { AuditService, pickChanged } from '../../common/audit/audit.service';
+import type { Prisma } from '@prisma/client';
 import { RequisitionStatus } from '@prisma/client';
+import {
+  EQUIPMENT_LINK_SELECT,
+  WORK_ORDER_LINK_SELECT,
+} from './purchase-asset-links.include';
+import { assertUserHasContractAccess } from './purchase-contract-access.util';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,7 +23,64 @@ function isUuid(value: string | undefined | null): boolean {
   return typeof value === 'string' && UUID_RE.test(value);
 }
 
-const SUBCONTRACT_SELECT = { select: { id: true, code: true, name: true } } as const;
+const SUBCONTRACT_SELECT = {
+  select: { id: true, code: true, name: true },
+} as const;
+
+/** Include ligero para listados y detalle (equipo / OT vinculados al requerimiento). */
+function equipmentDisplayName(
+  e: {
+    internalId: string;
+    plate?: string | null;
+    brand: string;
+    model: string;
+  } | null,
+): string | null {
+  if (!e) return null;
+  const label = [e.brand, e.model].filter(Boolean).join(' ').trim();
+  return label || e.internalId || e.plate || null;
+}
+
+function workOrderDisplayName(
+  wo: { correlative: string; description: string } | null,
+): string | null {
+  if (!wo) return null;
+  const short =
+    wo.description.length > 80
+      ? `${wo.description.slice(0, 77)}...`
+      : wo.description;
+  return `${wo.correlative}${short ? ` — ${short}` : ''}`;
+}
+
+/** Serialización estable de ítems para auditoría (diff en detalle de OC vía requerimiento vinculado). */
+function requisitionItemsSnapshot(
+  items: Array<{
+    id: string;
+    description: string;
+    quantity: unknown;
+    unitOfMeasure: string;
+    estimatedCost: unknown;
+    inventoryItemId?: string | null;
+    partNumber?: string | null;
+    itemNotes?: string | null;
+  }>,
+) {
+  return [...items]
+    .map((i) => ({
+      id: i.id,
+      description: i.description,
+      quantity: Number(i.quantity),
+      unitOfMeasure: i.unitOfMeasure,
+      estimatedCost:
+        i.estimatedCost != null
+          ? Number(i.estimatedCost as number | string)
+          : null,
+      inventoryItemId: i.inventoryItemId ?? null,
+      partNumber: i.partNumber ?? null,
+      itemNotes: i.itemNotes ?? null,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
 
 @Injectable()
 export class PurchaseRequisitionsService {
@@ -28,33 +91,169 @@ export class PurchaseRequisitionsService {
     private readonly audit: AuditService,
   ) {}
 
-  async findAll(tenantId: string, contractId?: string, status?: string) {
+  private assertEquipmentBelongsToContract(
+    equipment: {
+      contractId: string | null;
+      subcontractId: string | null;
+      subcontract: { contractId: string } | null;
+    },
+    contractId: string,
+  ) {
+    const direct = equipment.contractId === contractId;
+    const viaSubcontract =
+      !!equipment.subcontractId &&
+      equipment.subcontract?.contractId === contractId;
+    if (!direct && !viaSubcontract) {
+      throw new BadRequestException(
+        'El equipo no pertenece al contrato del requerimiento',
+      );
+    }
+  }
+
+  /**
+   * Si el requerimiento tiene subcontrato, el equipo no debe estar asignado a otro subcontrato distinto.
+   * Equipo solo a nivel contrato (sin subcontrato) sigue siendo válido si pertenece al contrato.
+   */
+  private assertEquipmentAlignedWithRequisitionSubcontract(
+    equipment: { contractId: string | null; subcontractId: string | null },
+    requisitionSubcontractId: string | null,
+  ) {
+    if (!requisitionSubcontractId) {
+      return;
+    }
+    if (equipment.subcontractId != null) {
+      if (equipment.subcontractId !== requisitionSubcontractId) {
+        throw new BadRequestException(
+          'El equipo no está asignado al mismo subcontrato que el requerimiento',
+        );
+      }
+    }
+  }
+
+  /**
+   * Resuelve vínculos OT/equipo: si hay OT, el equipo es el de la OT.
+   * Valida coherencia si se envían ambos identificadores.
+   */
+  private async resolveRequisitionAssetLinks(
+    db: Prisma.TransactionClient | PrismaService,
+    tenantId: string,
+    contractId: string,
+    requisitionSubcontractId: string | null,
+    workOrderId: string | null,
+    equipmentId: string | null,
+  ): Promise<{ equipmentId: string | null; workOrderId: string | null }> {
+    if (workOrderId) {
+      if (!isUuid(workOrderId)) {
+        throw new BadRequestException('ID de orden de trabajo inválido');
+      }
+      const wo = await db.workOrder.findFirst({
+        where: { id: workOrderId, tenantId },
+        include: {
+          equipment: {
+            include: { subcontract: { select: { contractId: true } } },
+          },
+        },
+      });
+      if (!wo) {
+        throw new BadRequestException(
+          'La orden de trabajo no existe o no pertenece a su organización',
+        );
+      }
+      this.assertEquipmentBelongsToContract(wo.equipment, contractId);
+      this.assertEquipmentAlignedWithRequisitionSubcontract(
+        wo.equipment,
+        requisitionSubcontractId,
+      );
+      if (equipmentId !== null && equipmentId !== wo.equipmentId) {
+        throw new BadRequestException(
+          'El equipo indicado no corresponde al equipo de la orden de trabajo seleccionada',
+        );
+      }
+      return { equipmentId: wo.equipmentId, workOrderId: wo.id };
+    }
+
+    if (equipmentId) {
+      if (!isUuid(equipmentId)) {
+        throw new BadRequestException('ID de equipo inválido');
+      }
+      const eq = await db.equipment.findFirst({
+        where: { id: equipmentId, tenantId },
+        include: { subcontract: { select: { contractId: true } } },
+      });
+      if (!eq) {
+        throw new BadRequestException(
+          'El equipo no existe o no pertenece a su organización',
+        );
+      }
+      this.assertEquipmentBelongsToContract(eq, contractId);
+      this.assertEquipmentAlignedWithRequisitionSubcontract(
+        eq,
+        requisitionSubcontractId,
+      );
+      return { equipmentId: eq.id, workOrderId: null };
+    }
+
+    return { equipmentId: null, workOrderId: null };
+  }
+
+  private buildContractScope(
+    user?: { role?: string; allowedContracts?: string[] },
+    contractId?: string,
+  ): { contractId?: string | { in: string[] } } {
+    if (contractId && contractId !== 'ALL') return { contractId };
+    if (!user) return {};
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return {};
+    const allowed = user.allowedContracts ?? [];
+    if (allowed.includes('ALL')) return {};
+    if (!allowed.length) {
+      return { contractId: '00000000-0000-4000-8000-000000000000' };
+    }
+    return { contractId: { in: allowed } };
+  }
+
+  async findAll(
+    tenantId: string,
+    contractId?: string,
+    status?: string,
+    user?: { role?: string; allowedContracts?: string[] },
+  ) {
+    const contractFilter = this.buildContractScope(user, contractId);
     return this.prisma.purchaseRequisition.findMany({
       where: {
         tenantId,
-        ...(contractId && contractId !== 'ALL' && { contractId }),
+        ...contractFilter,
         ...(status && { status: status as RequisitionStatus }),
       },
       include: {
         requestedBy: { select: { id: true, name: true, email: true } },
         contract: { select: { id: true, code: true, name: true } },
         subcontract: SUBCONTRACT_SELECT,
+        equipment: EQUIPMENT_LINK_SELECT,
+        workOrder: WORK_ORDER_LINK_SELECT,
         _count: { select: { items: true, quotations: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findById(id: string, tenantId: string) {
+  async findById(
+    id: string,
+    tenantId: string,
+    user?: { role?: string; allowedContracts?: string[] },
+  ) {
     const requisition = await this.prisma.purchaseRequisition.findFirst({
       where: { id, tenantId },
       include: {
         requestedBy: { select: { id: true, name: true, email: true } },
         contract: { select: { id: true, code: true, name: true } },
         subcontract: SUBCONTRACT_SELECT,
+        equipment: EQUIPMENT_LINK_SELECT,
+        workOrder: WORK_ORDER_LINK_SELECT,
         items: {
           include: {
-            inventoryItem: { select: { id: true, partNumber: true, name: true } },
+            inventoryItem: {
+              select: { id: true, partNumber: true, name: true },
+            },
           },
         },
         quotations: {
@@ -62,7 +261,20 @@ export class PurchaseRequisitionsService {
             vendor: { select: { id: true, code: true, name: true } },
             items: {
               include: {
-                requisitionItem: { select: { id: true, description: true } },
+                requisitionItem: {
+                  select: {
+                    id: true,
+                    description: true,
+                    quantity: true,
+                    unitOfMeasure: true,
+                    partNumber: true,
+                    itemNotes: true,
+                    inventoryItemId: true,
+                    inventoryItem: {
+                      select: { id: true, partNumber: true, name: true },
+                    },
+                  },
+                },
               },
             },
           },
@@ -70,8 +282,37 @@ export class PurchaseRequisitionsService {
         },
       },
     });
-    if (!requisition) throw new NotFoundException('Requerimiento no encontrado');
+    if (!requisition)
+      throw new NotFoundException('Requerimiento no encontrado');
+
+    if (user) {
+      assertUserHasContractAccess(user, requisition.contractId);
+    }
+
     return requisition;
+  }
+
+  /**
+   * Auditoría del requerimiento (creación, envío, cotizaciones vía metadatos en otros eventos si aplica).
+   */
+  async findActivityLogs(requisitionId: string, tenantId: string) {
+    const req = await this.prisma.purchaseRequisition.findFirst({
+      where: { id: requisitionId, tenantId },
+      select: { id: true },
+    });
+    if (!req) throw new NotFoundException('Requerimiento no encontrado');
+
+    return this.prisma.activityLog.findMany({
+      where: {
+        tenantId,
+        entityType: 'REQUISITION',
+        entityId: requisitionId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
   }
 
   async create(
@@ -80,12 +321,17 @@ export class PurchaseRequisitionsService {
       subcontractId?: string;
       description: string;
       justification?: string;
+      priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+      workOrderId?: string | null;
+      equipmentId?: string | null;
       items: Array<{
         inventoryItemId?: string;
         description: string;
         quantity: number;
         unitOfMeasure: string;
         estimatedCost?: number;
+        partNumber?: string;
+        itemNotes?: string;
       }>;
     },
     user: any,
@@ -127,9 +373,30 @@ export class PurchaseRequisitionsService {
       }
     }
 
+    const woIn =
+      data.workOrderId != null && String(data.workOrderId).trim() !== ''
+        ? String(data.workOrderId).trim()
+        : null;
+    const eqIn =
+      data.equipmentId != null && String(data.equipmentId).trim() !== ''
+        ? String(data.equipmentId).trim()
+        : null;
+
+    const assetLinks = await this.resolveRequisitionAssetLinks(
+      this.prisma,
+      tenantId,
+      data.contractId,
+      data.subcontractId ?? null,
+      woIn,
+      eqIn,
+    );
+
     const created = await this.prisma.$transaction(async (tx) => {
       const correlative = await this.sequenceService.getNextCorrelative(
-        tenantId, 'SRC', 'SRC', tx,
+        tenantId,
+        'SRC',
+        'SRC',
+        tx,
       );
 
       return tx.purchaseRequisition.create({
@@ -141,6 +408,9 @@ export class PurchaseRequisitionsService {
           requestedById: user.id,
           description: data.description,
           justification: data.justification,
+          priority: data.priority ?? 'MEDIUM',
+          equipmentId: assetLinks.equipmentId ?? undefined,
+          workOrderId: assetLinks.workOrderId ?? undefined,
           items: {
             create: data.items.map((item) => ({
               description: item.description,
@@ -148,12 +418,16 @@ export class PurchaseRequisitionsService {
               unitOfMeasure: item.unitOfMeasure,
               estimatedCost: item.estimatedCost,
               inventoryItemId: item.inventoryItemId,
+              partNumber: item.partNumber ?? undefined,
+              itemNotes: item.itemNotes ?? undefined,
             })),
           },
         },
         include: {
           items: true,
           requestedBy: { select: { id: true, name: true } },
+          equipment: EQUIPMENT_LINK_SELECT,
+          workOrder: WORK_ORDER_LINK_SELECT,
         },
       });
     });
@@ -169,6 +443,17 @@ export class PurchaseRequisitionsService {
         status: created.status,
         description: created.description,
         itemsCount: created.items.length,
+        itemsSnapshot: requisitionItemsSnapshot(created.items),
+        equipmentId: created.equipmentId,
+        workOrderId: created.workOrderId,
+        equipmentRef: created.equipment?.internalId ?? null,
+        equipmentName: created.equipment
+          ? equipmentDisplayName(created.equipment)
+          : null,
+        workOrderRef: created.workOrder?.correlative ?? null,
+        workOrderSummary: created.workOrder
+          ? workOrderDisplayName(created.workOrder)
+          : null,
       },
     });
 
@@ -178,48 +463,314 @@ export class PurchaseRequisitionsService {
   async update(id: string, data: any, user: any) {
     const requisition = await this.findById(id, user.tenantId);
 
-    if (requisition.status !== 'DRAFT') {
-      throw new BadRequestException('Solo se pueden editar requerimientos en estado DRAFT');
+    const hasWorkOrderKey = Object.prototype.hasOwnProperty.call(
+      data,
+      'workOrderId',
+    );
+    const hasEquipmentKey = Object.prototype.hasOwnProperty.call(
+      data,
+      'equipmentId',
+    );
+    const wantsAssetLinkChange = hasWorkOrderKey || hasEquipmentKey;
+
+    const isPurchaser = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'].includes(
+      user.role,
+    );
+    const isOwnerOrAdmin =
+      requisition.requestedById === user.id ||
+      user.role === 'ADMIN' ||
+      user.role === 'SUPER_ADMIN';
+
+    if (wantsAssetLinkChange) {
+      if (!['DRAFT', 'SUBMITTED'].includes(requisition.status)) {
+        throw new BadRequestException(
+          'Solo se pueden modificar equipo y orden de trabajo mientras el requerimiento está en borrador o enviado',
+        );
+      }
+      if (!isOwnerOrAdmin) {
+        throw new ForbiddenException(
+          'Solo el solicitante o un administrador puede modificar el vínculo con equipo u orden de trabajo',
+        );
+      }
     }
-    if (requisition.requestedById !== user.id && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      throw new ForbiddenException('No tienes permiso para editar este requerimiento');
+
+    const otherDefinedKeys = Object.keys(data).filter((k) => {
+      if (k === 'workOrderId' || k === 'equipmentId') return false;
+      return data[k] !== undefined;
+    });
+
+    const parseOptionalUuid = (v: unknown): string | null => {
+      if (v === null || v === undefined) return null;
+      const s = String(v).trim();
+      if (s === '') return null;
+      return s;
+    };
+
+    /** Enviado: únicamente OT / equipo. */
+    if (requisition.status === 'SUBMITTED') {
+      if (otherDefinedKeys.length > 0) {
+        throw new BadRequestException(
+          'En estado Enviado solo puede actualizar equipo y orden de trabajo',
+        );
+      }
+      if (!wantsAssetLinkChange) {
+        throw new BadRequestException(
+          'No hay cambios permitidos para este requerimiento en estado enviado',
+        );
+      }
+
+      const mergedWo = hasWorkOrderKey
+        ? parseOptionalUuid(data.workOrderId)
+        : (requisition.workOrderId ?? null);
+      const mergedEq = hasEquipmentKey
+        ? parseOptionalUuid(data.equipmentId)
+        : (requisition.equipmentId ?? null);
+
+      const resolved = await this.resolveRequisitionAssetLinks(
+        this.prisma,
+        user.tenantId,
+        requisition.contractId,
+        requisition.subcontractId ?? null,
+        mergedWo,
+        mergedEq,
+      );
+
+      const before = {
+        equipmentId: requisition.equipmentId,
+        workOrderId: requisition.workOrderId,
+        equipmentRef: requisition.equipment?.internalId ?? null,
+        equipmentName: requisition.equipment
+          ? equipmentDisplayName(requisition.equipment)
+          : null,
+        workOrderRef: requisition.workOrder?.correlative ?? null,
+        workOrderSummary: requisition.workOrder
+          ? workOrderDisplayName(requisition.workOrder)
+          : null,
+      };
+
+      const updated = await this.prisma.purchaseRequisition.update({
+        where: { id },
+        data: {
+          equipmentId: resolved.equipmentId,
+          workOrderId: resolved.workOrderId,
+        },
+        include: {
+          items: true,
+          equipment: EQUIPMENT_LINK_SELECT,
+          workOrder: WORK_ORDER_LINK_SELECT,
+        },
+      });
+
+      const after = {
+        equipmentId: updated.equipmentId,
+        workOrderId: updated.workOrderId,
+        equipmentRef: updated.equipment?.internalId ?? null,
+        equipmentName: updated.equipment
+          ? equipmentDisplayName(updated.equipment)
+          : null,
+        workOrderRef: updated.workOrder?.correlative ?? null,
+        workOrderSummary: updated.workOrder
+          ? workOrderDisplayName(updated.workOrder)
+          : null,
+      };
+
+      const { oldValue, newValue } = pickChanged(
+        before as Record<string, unknown>,
+        after as Record<string, unknown>,
+      );
+      if (Object.keys(oldValue).length > 0) {
+        await this.audit.log({
+          userId: user.id,
+          tenantId: user.tenantId,
+          entityType: 'REQUISITION',
+          entityId: id,
+          action: 'UPDATE',
+          oldValue,
+          newValue,
+        });
+      }
+
+      return updated;
+    }
+
+    const canEditDraft = requisition.status === 'DRAFT' && isOwnerOrAdmin;
+    const canEditQuoting = requisition.status === 'QUOTING' && isPurchaser;
+    /** Ganadora elegida pero OC aún no generada: compras puede seguir ajustando ítems. */
+    const canEditPendingWinner =
+      requisition.status === 'PENDING_APPROVAL' && isPurchaser;
+
+    if (!canEditDraft && !canEditQuoting && !canEditPendingWinner) {
+      if (requisition.status === 'QUOTING') {
+        throw new ForbiddenException(
+          'Solo personal de compras puede editar un requerimiento en fase de cotización',
+        );
+      }
+      if (requisition.status === 'PENDING_APPROVAL') {
+        throw new ForbiddenException(
+          'Solo personal de compras puede editar mientras la OC no haya sido generada',
+        );
+      }
+      throw new BadRequestException(
+        'Solo se pueden editar requerimientos en borrador (solicitante o admin), en cotización o pendiente de OC (compras)',
+      );
+    }
+
+    if (data.items && Array.isArray(data.items) && data.items.length === 0) {
+      throw new BadRequestException(
+        'El requerimiento debe tener al menos un ítem',
+      );
+    }
+
+    let resolvedAssets:
+      | { equipmentId: string | null; workOrderId: string | null }
+      | undefined;
+    if (wantsAssetLinkChange && requisition.status === 'DRAFT') {
+      const mergedWo = hasWorkOrderKey
+        ? parseOptionalUuid(data.workOrderId)
+        : (requisition.workOrderId ?? null);
+      const mergedEq = hasEquipmentKey
+        ? parseOptionalUuid(data.equipmentId)
+        : (requisition.equipmentId ?? null);
+
+      resolvedAssets = await this.resolveRequisitionAssetLinks(
+        this.prisma,
+        user.tenantId,
+        requisition.contractId,
+        requisition.subcontractId ?? null,
+        mergedWo,
+        mergedEq,
+      );
     }
 
     const before = {
       description: requisition.description,
       justification: requisition.justification ?? null,
-      itemsCount: requisition.items.length,
+      priority: requisition.priority,
+      itemsSnapshot: requisitionItemsSnapshot(requisition.items),
+      equipmentId: requisition.equipmentId,
+      workOrderId: requisition.workOrderId,
+      equipmentRef: requisition.equipment?.internalId ?? null,
+      equipmentName: requisition.equipment
+        ? equipmentDisplayName(requisition.equipment)
+        : null,
+      workOrderRef: requisition.workOrder?.correlative ?? null,
+      workOrderSummary: requisition.workOrder
+        ? workOrderDisplayName(requisition.workOrder)
+        : null,
     };
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (data.items) {
-        await tx.requisitionItem.deleteMany({ where: { requisitionId: id } });
-        await tx.requisitionItem.createMany({
-          data: data.items.map((item: any) => ({
-            requisitionId: id,
-            description: item.description,
-            quantity: item.quantity,
-            unitOfMeasure: item.unitOfMeasure,
-            estimatedCost: item.estimatedCost,
-            inventoryItemId: item.inventoryItemId,
-          })),
-        });
+      if (data.items && Array.isArray(data.items)) {
+        if (requisition.status === 'DRAFT') {
+          await tx.requisitionItem.deleteMany({ where: { requisitionId: id } });
+          await tx.requisitionItem.createMany({
+            data: data.items.map((item: any) => ({
+              requisitionId: id,
+              description: item.description,
+              quantity: item.quantity,
+              unitOfMeasure: item.unitOfMeasure,
+              estimatedCost: item.estimatedCost,
+              inventoryItemId: item.inventoryItemId,
+              partNumber: item.partNumber ?? undefined,
+              itemNotes: item.itemNotes ?? undefined,
+            })),
+          });
+        } else {
+          const existingItems = requisition.items;
+          const payloadItems: any[] = data.items;
+          const payloadIds = new Set(
+            payloadItems.map((i) => i.id).filter(Boolean),
+          );
+
+          for (const old of existingItems) {
+            if (!payloadIds.has(old.id)) {
+              const refCount = await tx.quotationItem.count({
+                where: { requisitionItemId: old.id },
+              });
+              if (refCount > 0) {
+                throw new BadRequestException(
+                  'No se puede eliminar un ítem que ya figura en una cotización',
+                );
+              }
+              await tx.requisitionItem.delete({ where: { id: old.id } });
+            }
+          }
+
+          for (const item of payloadItems) {
+            if (item.id && existingItems.some((e) => e.id === item.id)) {
+              await tx.requisitionItem.update({
+                where: { id: item.id },
+                data: {
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitOfMeasure: item.unitOfMeasure,
+                  estimatedCost: item.estimatedCost,
+                  inventoryItemId: item.inventoryItemId ?? null,
+                  partNumber: item.partNumber ?? null,
+                  itemNotes: item.itemNotes ?? null,
+                },
+              });
+            } else {
+              await tx.requisitionItem.create({
+                data: {
+                  requisitionId: id,
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitOfMeasure: item.unitOfMeasure,
+                  estimatedCost: item.estimatedCost,
+                  inventoryItemId: item.inventoryItemId ?? undefined,
+                  partNumber: item.partNumber ?? undefined,
+                  itemNotes: item.itemNotes ?? undefined,
+                },
+              });
+            }
+          }
+        }
       }
 
       return tx.purchaseRequisition.update({
         where: { id },
         data: {
-          description: data.description,
-          justification: data.justification,
+          ...(data.description !== undefined
+            ? { description: data.description }
+            : {}),
+          ...(data.justification !== undefined
+            ? { justification: data.justification }
+            : {}),
+          ...(data.priority !== undefined &&
+          ['LOW', 'MEDIUM', 'HIGH'].includes(String(data.priority))
+            ? { priority: data.priority }
+            : {}),
+          ...(resolvedAssets
+            ? {
+                equipmentId: resolvedAssets.equipmentId,
+                workOrderId: resolvedAssets.workOrderId,
+              }
+            : {}),
         },
-        include: { items: true },
+        include: {
+          items: true,
+          equipment: EQUIPMENT_LINK_SELECT,
+          workOrder: WORK_ORDER_LINK_SELECT,
+        },
       });
     });
 
     const after = {
       description: updated.description,
       justification: updated.justification ?? null,
-      itemsCount: updated.items.length,
+      priority: updated.priority,
+      itemsSnapshot: requisitionItemsSnapshot(updated.items),
+      equipmentId: updated.equipmentId,
+      workOrderId: updated.workOrderId,
+      equipmentRef: updated.equipment?.internalId ?? null,
+      equipmentName: updated.equipment
+        ? equipmentDisplayName(updated.equipment)
+        : null,
+      workOrderRef: updated.workOrder?.correlative ?? null,
+      workOrderSummary: updated.workOrder
+        ? workOrderDisplayName(updated.workOrder)
+        : null,
     };
     const { oldValue, newValue } = pickChanged(
       before as Record<string, unknown>,
@@ -240,14 +791,45 @@ export class PurchaseRequisitionsService {
     return updated;
   }
 
+  async duplicate(id: string, user: any) {
+    const original = await this.findById(id, user.tenantId);
+
+    return this.create(
+      {
+        contractId: original.contractId,
+        subcontractId: original.subcontractId ?? undefined,
+        description: `[Copia] ${original.description}`,
+        justification: original.justification ?? undefined,
+        priority: original.priority,
+        workOrderId: original.workOrderId ?? undefined,
+        equipmentId: original.equipmentId ?? undefined,
+        items: original.items.map((item) => ({
+          inventoryItemId: item.inventoryItemId ?? undefined,
+          description: item.description,
+          quantity: Number(item.quantity),
+          unitOfMeasure: item.unitOfMeasure,
+          estimatedCost:
+            item.estimatedCost != null ? Number(item.estimatedCost) : undefined,
+          partNumber: item.partNumber ?? undefined,
+          itemNotes: item.itemNotes ?? undefined,
+        })),
+      },
+      user,
+    );
+  }
+
   async submit(id: string, user: any) {
     const requisition = await this.findById(id, user.tenantId);
 
     if (requisition.status !== 'DRAFT') {
-      throw new BadRequestException('Solo se pueden enviar requerimientos en estado DRAFT');
+      throw new BadRequestException(
+        'Solo se pueden enviar requerimientos en estado DRAFT',
+      );
     }
     if (requisition.items.length === 0) {
-      throw new BadRequestException('El requerimiento debe tener al menos un ítem');
+      throw new BadRequestException(
+        'El requerimiento debe tener al menos un ítem',
+      );
     }
 
     const prevStatus = requisition.status;
@@ -264,6 +846,86 @@ export class PurchaseRequisitionsService {
       action: 'STATUS_CHANGE',
       oldValue: { status: prevStatus },
       newValue: { status: updated.status },
+    });
+
+    return updated;
+  }
+
+  async cancel(id: string, reason: string | undefined, user: any) {
+    const requisition = await this.findById(id, user.tenantId);
+    assertUserHasContractAccess(user, requisition.contractId);
+
+    const cancelReason = reason?.trim();
+    if (!cancelReason) {
+      throw new BadRequestException(
+        'Debe ingresar un motivo de anulación del requerimiento.',
+      );
+    }
+    if (requisition.status === 'CANCELLED') {
+      throw new BadRequestException('El requerimiento ya está anulado.');
+    }
+    if (requisition.status === 'APPROVED') {
+      throw new BadRequestException(
+        'No se puede anular un requerimiento ya aprobado.',
+      );
+    }
+
+    const linkedOrder = await this.prisma.purchaseOrder.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        quotation: { requisitionId: id },
+        status: { notIn: ['CANCELLED', 'REJECTED'] },
+      },
+      select: { id: true, correlative: true, status: true },
+    });
+    if (linkedOrder) {
+      throw new BadRequestException(
+        `No se puede anular: el requerimiento ya tiene una OC activa vinculada (${linkedOrder.correlative}).`,
+      );
+    }
+
+    const reqLinesWithStock = await this.prisma.requisitionItem.findMany({
+      where: {
+        requisitionId: id,
+        inventoryItemId: { not: null },
+      },
+      select: {
+        id: true,
+        description: true,
+        inventoryItem: {
+          select: {
+            stocks: {
+              select: { quantity: true, minStock: true },
+            },
+          },
+        },
+      },
+    });
+    const lowStockCriticalLines = reqLinesWithStock.filter((line) =>
+      (line.inventoryItem?.stocks ?? []).some(
+        (s) =>
+          Number(s.minStock) > 0 && Number(s.quantity) <= Number(s.minStock),
+      ),
+    );
+
+    const prevStatus = requisition.status;
+    const updated = await this.prisma.purchaseRequisition.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'REQUISITION',
+      entityId: id,
+      action: 'STATUS_CHANGE',
+      oldValue: { status: prevStatus },
+      newValue: {
+        status: updated.status,
+        reason: cancelReason,
+        lowStockCriticalItems: lowStockCriticalLines.length,
+      },
     });
 
     return updated;
@@ -312,13 +974,19 @@ export class PurchaseRequisitionsService {
         notes?: string;
       }>;
     },
-    file: { buffer: Buffer; originalname: string; mimetype: string } | undefined,
+    file:
+      | { buffer: Buffer; originalname: string; mimetype: string }
+      | undefined,
     user: any,
   ) {
     const requisition = await this.findById(requisitionId, user.tenantId);
 
-    if (!['SUBMITTED', 'QUOTING'].includes(requisition.status)) {
-      throw new BadRequestException('El requerimiento no acepta cotizaciones en su estado actual');
+    if (
+      !['SUBMITTED', 'QUOTING', 'PENDING_APPROVAL'].includes(requisition.status)
+    ) {
+      throw new BadRequestException(
+        'El requerimiento no acepta cotizaciones en su estado actual',
+      );
     }
 
     let attachmentUrl: string | undefined;
@@ -414,25 +1082,34 @@ export class PurchaseRequisitionsService {
     return quotation;
   }
 
-  async selectQuotation(
-    requisitionId: string,
-    quotationId: string,
-    user: any,
-  ) {
+  async selectQuotation(requisitionId: string, quotationId: string, user: any) {
     const requisition = await this.findById(requisitionId, user.tenantId);
 
-    if (requisition.status !== 'QUOTING') {
-      throw new BadRequestException('El requerimiento no está en fase de cotización');
+    if (!['QUOTING', 'PENDING_APPROVAL'].includes(requisition.status)) {
+      throw new BadRequestException(
+        'Solo se puede elegir ganadora en cotización o antes de generar la orden de compra',
+      );
     }
 
     const quotation = requisition.quotations.find((q) => q.id === quotationId);
     if (!quotation) {
-      throw new NotFoundException('Cotización no encontrada en este requerimiento');
+      throw new NotFoundException(
+        'Cotización no encontrada en este requerimiento',
+      );
     }
 
     const statusBefore = requisition.status;
+    const previousWinner = requisition.quotations.find((q) => q.isWinner);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      /** Permite elegir una oferta que estaba como REJECTED al cambiar de ganadora. */
+      if (statusBefore === 'PENDING_APPROVAL') {
+        await tx.purchaseQuotation.updateMany({
+          where: { requisitionId },
+          data: { status: 'RECEIVED', isWinner: false },
+        });
+      }
+
       await tx.purchaseQuotation.updateMany({
         where: { requisitionId, id: { not: quotationId } },
         data: { status: 'REJECTED', isWinner: false },
@@ -443,10 +1120,12 @@ export class PurchaseRequisitionsService {
         data: { status: 'SELECTED', isWinner: true },
       });
 
-      await tx.purchaseRequisition.update({
-        where: { id: requisitionId },
-        data: { status: 'PENDING_APPROVAL' },
-      });
+      if (statusBefore === 'QUOTING') {
+        await tx.purchaseRequisition.update({
+          where: { id: requisitionId },
+          data: { status: 'PENDING_APPROVAL' },
+        });
+      }
 
       return tx.purchaseQuotation.findUnique({
         where: { id: quotationId },
@@ -457,18 +1136,39 @@ export class PurchaseRequisitionsService {
       });
     });
 
-    await this.audit.log({
-      userId: user.id,
-      tenantId: user.tenantId,
-      entityType: 'REQUISITION',
-      entityId: requisitionId,
-      action: 'STATUS_CHANGE',
-      oldValue: { status: statusBefore },
-      newValue: {
-        status: 'PENDING_APPROVAL',
-        selectedQuotationId: quotationId,
-      },
-    });
+    if (statusBefore === 'QUOTING') {
+      await this.audit.log({
+        userId: user.id,
+        tenantId: user.tenantId,
+        entityType: 'REQUISITION',
+        entityId: requisitionId,
+        action: 'STATUS_CHANGE',
+        oldValue: { status: statusBefore },
+        newValue: {
+          status: 'PENDING_APPROVAL',
+          selectedQuotationId: quotationId,
+        },
+      });
+    } else {
+      await this.audit.log({
+        userId: user.id,
+        tenantId: user.tenantId,
+        entityType: 'REQUISITION',
+        entityId: requisitionId,
+        action: 'UPDATE',
+        oldValue: {
+          event: 'winner_selection_changed',
+          previousWinnerQuotationId: previousWinner?.id ?? null,
+          previousVendorName: previousWinner?.vendor?.name ?? null,
+        },
+        newValue: {
+          event: 'winner_selection_changed',
+          selectedQuotationId: quotationId,
+          vendorName: result?.vendor?.name ?? null,
+          status: 'PENDING_APPROVAL',
+        },
+      });
+    }
 
     return result;
   }

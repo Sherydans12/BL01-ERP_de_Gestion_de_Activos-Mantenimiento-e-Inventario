@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 
@@ -40,14 +40,34 @@ export class WorkOrdersService {
     equipmentId?: string;
   }): Observable<{ data: any[]; total: number }> {
     // Limpiamos los undefined y null de los params
-    const cleanParams: any = {};
+    const cleanParams: Record<string, string | number> = {};
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== '') {
-        cleanParams[key] = value;
+        cleanParams[key] = value as string | number;
       }
     }
     return this.http.get<{ data: any[]; total: number }>(this.apiUrl, {
       params: cleanParams,
+    });
+  }
+
+  /**
+   * OTs filtradas por contrato (header `x-contract-id`, alineado con el backend).
+   */
+  getWorkOrdersForContract(
+    contractId: string,
+    params?: { page?: number; limit?: number; search?: string; status?: string },
+  ): Observable<{ data: any[]; total: number }> {
+    const cleanParams: Record<string, string | number> = {
+      page: params?.page ?? 1,
+      limit: params?.limit ?? 300,
+    };
+    if (params?.search) cleanParams['search'] = params.search;
+    if (params?.status) cleanParams['status'] = params.status;
+    const headers = new HttpHeaders().set('x-contract-id', contractId);
+    return this.http.get<{ data: any[]; total: number }>(this.apiUrl, {
+      params: cleanParams,
+      headers,
     });
   }
 

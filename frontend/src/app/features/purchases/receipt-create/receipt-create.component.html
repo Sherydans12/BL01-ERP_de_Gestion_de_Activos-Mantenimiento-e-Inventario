@@ -1,0 +1,92 @@
+<div class="p-6 max-w-3xl mx-auto">
+  <app-purchases-push-notice />
+
+  <div class="mb-8">
+    <a routerLink="/app/compras/recepciones" class="text-sm text-muted hover:text-primary mb-2 inline-block">← Volver al listado</a>
+    <h1 class="text-2xl font-bold text-main">Nueva recepción de bodega</h1>
+    <p class="text-sm text-muted mt-1">
+      Elija una orden de compra aprobada o enviada al proveedor y la bodega donde se registrará el ingreso.
+      Las líneas y cantidades esperadas se cargan al crear la recepción.
+    </p>
+  </div>
+
+  @if (isLoadingOrders()) {
+    <div class="flex justify-center py-16">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+    </div>
+  } @else {
+    <div class="bg-surface rounded-xl border border-border p-6 space-y-6">
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1.5">Orden de compra</label>
+        <select
+          [ngModel]="selectedOrderId()"
+          (ngModelChange)="onOrderChange($event)"
+          class="w-full px-3 py-2.5 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+        >
+          <option value="">— Seleccione una OC —</option>
+          @for (o of orders(); track o.id) {
+            <option [value]="o.id">
+              {{ o.correlative }} · {{ statusLabel[o.status] || o.status }}
+              · {{ o.contract?.code || '' }}{{ o.contract?.name ? (' — ' + (o.contract?.name ?? '')) : '' }}
+              @if (o._count?.items != null) {
+                ({{ o._count?.items }} ítems)
+              }
+            </option>
+          }
+        </select>
+        @if (orders().length === 0) {
+          <p class="text-xs text-amber-400/90 mt-2">
+            No hay órdenes elegibles (aprobada, enviada al proveedor o parcialmente recibida) en sus contratos.
+            Verifique el estado de la OC o sus permisos de contrato.
+          </p>
+        }
+      </div>
+
+      @if (selectedOrder()) {
+        <div class="rounded-lg border border-border bg-dark/30 px-4 py-3 text-sm">
+          <p class="text-muted text-xs uppercase tracking-wider mb-1">Vista previa</p>
+          <p class="text-main">
+            <span class="font-mono font-semibold">{{ selectedOrder()!.correlative }}</span>
+            · {{ selectedOrder()!.quotation?.vendor?.name || 'Proveedor' }}
+          </p>
+          <p class="text-muted text-xs mt-1">
+            Líneas en la OC: {{ selectedOrder()!._count?.items ?? '—' }}. Al crear, se precargan cantidades esperadas por línea (recibido inicia en 0).
+          </p>
+        </div>
+      }
+
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1.5">Bodega de recepción</label>
+        @if (isLoadingWarehouses()) {
+          <p class="text-sm text-muted py-2">Cargando bodegas del contrato…</p>
+        } @else if (!selectedOrderId()) {
+          <p class="text-sm text-muted py-2">Primero seleccione una orden de compra.</p>
+        } @else if (warehouses().length === 0) {
+          <p class="text-sm text-amber-400/90">No hay bodegas registradas para el contrato de esta OC.</p>
+        } @else {
+          <select
+            [ngModel]="selectedWarehouseId()"
+            (ngModelChange)="selectedWarehouseId.set($event)"
+            class="w-full px-3 py-2.5 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+          >
+            <option value="">— Seleccione bodega —</option>
+            @for (w of warehouses(); track w.id) {
+              <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
+            }
+          </select>
+        }
+      </div>
+
+      <div class="pt-2">
+        <button
+          type="button"
+          (click)="submit()"
+          [disabled]="isSubmitting() || !selectedOrderId() || !selectedWarehouseId()"
+          class="w-full sm:w-auto min-w-[220px] px-6 py-3 rounded-xl bg-primary text-black font-semibold text-base shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-45 disabled:cursor-not-allowed transition-colors"
+        >
+          {{ isSubmitting() ? 'Creando recepción…' : 'Crear recepción' }}
+        </button>
+      </div>
+    </div>
+  }
+</div>

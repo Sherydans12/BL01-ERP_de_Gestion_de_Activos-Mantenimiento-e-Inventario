@@ -13,7 +13,12 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     headers = headers.set('Authorization', `Bearer ${token}`);
   }
 
-  if (contractId && contractId !== 'ALL') {
+  /** No sobrescribir si el caller fijó ya el contrato (p. ej. formulario con contrato distinto al contexto global). */
+  if (
+    !headers.has('x-contract-id') &&
+    contractId &&
+    contractId !== 'ALL'
+  ) {
     headers = headers.set('x-contract-id', contractId);
   }
 

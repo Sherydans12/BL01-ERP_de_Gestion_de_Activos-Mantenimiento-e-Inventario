@@ -1,0 +1,86 @@
+<dialog
+  #dlg
+  class="app-quick-view-dialog"
+  (close)="onDialogClose()"
+  (click)="backdropClick($event)"
+>
+  <div
+    class="relative flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="flex items-start justify-between gap-3 border-b border-border bg-dark/40 px-4 py-3">
+      <div class="min-w-0">
+        <h2 class="text-sm font-mono font-bold uppercase tracking-wide text-primary">Orden de compra</h2>
+        @if (data) {
+          <p class="text-lg font-mono text-main mt-1">{{ data.correlative }}</p>
+          <span
+            class="inline-flex mt-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+            [ngClass]="statusClass[data.status] || 'bg-border/30 text-muted'"
+          >
+            {{ statusLabels[data.status] || data.status }}
+          </span>
+        }
+      </div>
+      <button type="button" (click)="close()" class="rounded p-1 text-muted hover:text-error" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-auto px-4 py-3">
+      @if (loading) {
+        <div class="space-y-2">
+          @for (_ of skeletonRows; track $index) {
+            <div class="h-8 rounded bg-dark/50 animate-pulse"></div>
+          }
+        </div>
+      } @else if (error) {
+        <p class="text-sm text-error">{{ error }}</p>
+      } @else if (data) {
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs mb-4">
+          <div class="sm:col-span-2">
+            <dt class="text-muted">Proveedor</dt>
+            <dd class="text-main font-medium">{{ vendorName(data) }}</dd>
+          </div>
+          <div>
+            <dt class="text-muted">Monto</dt>
+            <dd class="text-main font-mono">{{ data.totalAmount | financialClp: (data.currency || 'CLP') }}</dd>
+          </div>
+          <div>
+            <dt class="text-muted">Fecha</dt>
+            <dd class="text-main font-mono">
+              @if (data.sentAt) {
+                {{ data.sentAt | date: 'dd/MM/yyyy HH:mm' }}
+              } @else {
+                —
+              }
+            </dd>
+          </div>
+          <div class="sm:col-span-2">
+            <dt class="text-muted">Estado</dt>
+            <dd class="text-main">{{ statusLabels[data.status] || data.status }}</dd>
+          </div>
+        </dl>
+
+        <p class="text-[11px] font-mono uppercase text-muted mb-2">Líneas</p>
+        <div class="border border-border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-dark sticky top-0 font-mono text-[10px] uppercase text-muted">
+              <tr>
+                <th class="text-left py-2 px-2">Descripción</th>
+                <th class="text-right py-2 px-2">Cant.</th>
+                <th class="text-right py-2 px-2">Unit.</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border/40">
+              @for (it of data.items; track it.id) {
+                <tr>
+                  <td class="py-2 px-2 text-main">{{ it.description }}</td>
+                  <td class="py-2 px-2 text-right font-mono">{{ it.quantity }}</td>
+                  <td class="py-2 px-2 text-right font-mono">{{ it.unitCost | financialClp: (data.currency || 'CLP') }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  </div>
+</dialog>

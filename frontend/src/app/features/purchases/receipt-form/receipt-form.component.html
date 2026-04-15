@@ -1,11 +1,32 @@
 <div class="p-4 sm:p-6">
+  <app-purchases-push-notice />
+
   @if (isLoading()) {
     <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
   } @else if (receipt()) {
+    <div class="rounded-xl border border-primary/35 bg-gradient-to-r from-primary/10 to-transparent px-4 py-3 mb-6">
+      <p class="text-[11px] uppercase tracking-wider text-primary/90 font-medium mb-0.5">Contrato de la orden</p>
+      <p class="text-lg font-bold text-main">{{ receipt()!.purchaseOrder?.contract?.name || '—' }}</p>
+      @if (receipt()!.purchaseOrder?.subcontract) {
+        <p class="text-sm text-muted mt-1">
+          {{ receipt()!.purchaseOrder!.subcontract!.code }} — {{ receipt()!.purchaseOrder!.subcontract!.name }}
+        </p>
+      }
+    </div>
+
+    <div class="rounded-xl border border-emerald-500/35 bg-emerald-500/5 px-4 py-3 mb-4">
+      <p class="text-[11px] uppercase tracking-wider text-emerald-400/90 font-medium mb-1">Bodega de ingreso (stock)</p>
+      <p class="text-lg font-bold text-main font-mono">{{ receipt()!.warehouse?.code }} — {{ receipt()!.warehouse?.name }}</p>
+      @if (receipt()!.warehouse?.location) {
+        <p class="text-sm text-muted mt-1">{{ receipt()!.warehouse!.location }}</p>
+      }
+      <p class="text-xs text-muted mt-2">Los ítems inventariables suman saldo y CPP en <strong class="text-main">esta bodega</strong> al confirmar.</p>
+    </div>
+
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-main">{{ receipt()!.correlative }}</h1>
-        <p class="text-sm text-muted mt-1">OC: {{ receipt()!.purchaseOrder?.correlative }} | Bodega: {{ receipt()!.warehouse?.name }}</p>
+        <p class="text-sm text-muted mt-1">OC: {{ receipt()!.purchaseOrder?.correlative }}</p>
       </div>
       <div class="flex gap-2">
         @if (!isReadonly()) {
@@ -13,7 +34,7 @@
                   class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors disabled:opacity-50">
             Guardar Cantidades
           </button>
-          <button (click)="confirm()"
+          <button type="button" (click)="requestConfirmReceipt()"
                   class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
             Confirmar Recepción
           </button>
@@ -24,6 +45,38 @@
     @if (hasDiscrepancies() && !isReadonly()) {
       <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6">
         <p class="text-sm text-yellow-400 font-medium">Existen diferencias entre cantidades esperadas y recibidas. Registre observaciones.</p>
+      </div>
+    }
+
+    @if (!isReadonly() && hasUnlinkedItems()) {
+      <div class="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 mb-6 flex gap-3">
+        <svg class="w-5 h-5 text-orange-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <div>
+          <p class="text-sm font-semibold text-orange-400">Ítems sin vínculo al catálogo</p>
+          <p class="text-xs text-muted mt-1">
+            Los ítems marcados con <span class="text-orange-400 font-medium">Sin vínculo</span> fueron ingresados
+            como descripción libre en la OC y <strong>no generarán movimiento de inventario</strong> al confirmar.
+            Si necesita control de stock, edite la OC y vincule el ítem al catálogo antes de continuar.
+          </p>
+        </div>
+      </div>
+    }
+
+    @if (!isReadonly() && hasDirectExpenseItems()) {
+      <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6 flex gap-3">
+        <svg class="w-5 h-5 text-blue-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div>
+          <p class="text-sm font-semibold text-blue-400">Ítems de Gasto Directo</p>
+          <p class="text-xs text-muted mt-1">
+            Los ítems marcados como <span class="text-blue-400 font-medium">Gasto Directo</span> están vinculados al catálogo
+            pero configurados como no inventariables (isInventory = false). Se registran como gasto trazable pero <strong>no ocupan espacio físico ni mueven stock</strong>.
+          </p>
+        </div>
       </div>
     }
 
@@ -44,7 +97,20 @@
               <tr class="border-b border-border/50"
                   [ngClass]="{'bg-yellow-500/5': item._quantityReceived !== item.quantityExpected && !isReadonly()}">
                 <td class="px-4 py-3 text-sm text-main">
-                  {{ item.orderItem?.inventoryItem?.name || item.orderItem?.description || '—' }}
+                  <span>{{ item.orderItem?.inventoryItem?.name || item.orderItem?.description || '—' }}</span>
+                  @if (isItemUnlinked(item)) {
+                    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/25">
+                      Sin vínculo
+                    </span>
+                  } @else if (isItemDirectExpense(item)) {
+                    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                      Gasto Directo
+                    </span>
+                  } @else {
+                    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                      Stock
+                    </span>
+                  }
                 </td>
                 <td class="px-4 py-3 text-sm font-mono text-muted">
                   {{ item.orderItem?.inventoryItem?.partNumber || '—' }}
@@ -76,3 +142,14 @@
     </div>
   }
 </div>
+
+<app-confirm-modal
+  [isOpen]="showConfirmReceiptModal()"
+  title="Confirmar recepción en bodega"
+  message="Esta acción es irreversible: se actualizará el inventario de bodega, se imputarán costos al activo si aplica y se cambiará el estado de la orden de compra. Afecta stock y trazabilidad presupuestaria. Revise cantidades y observaciones. ¿Desea continuar?"
+  confirmText="Sí, confirmar recepción"
+  cancelText="Volver a revisar"
+  [isDanger]="true"
+  (confirm)="confirmReceiptFinal()"
+  (cancel)="cancelConfirmReceipt()"
+/>

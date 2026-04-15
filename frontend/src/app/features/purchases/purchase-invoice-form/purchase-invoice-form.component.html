@@ -1,0 +1,137 @@
+<div class="p-6 max-w-4xl mx-auto">
+  <app-purchases-push-notice />
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+  } @else if (order()) {
+    <div class="mb-6">
+      <a [routerLink]="['/app/compras/ordenes', order()!.id]"
+         [queryParams]="{ tab: 'billing' }"
+         class="text-sm text-muted hover:text-main">← Volver a la orden {{ order()!.correlative }}</a>
+      <h1 class="text-2xl font-bold text-main mt-4">Factura de compra (3-way match)</h1>
+      <p class="text-sm text-muted mt-1">
+        Proveedor: {{ order()!.quotation?.vendor?.name || '—' }} · OC {{ order()!.correlative }}
+      </p>
+    </div>
+
+    @if (!canRegister() && !existingInvoice()) {
+      <div class="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-main mb-6">
+        Solo puede cargarse una factura cuando la OC está <strong>aprobada</strong> o <strong>enviada al proveedor</strong>.
+        Estado actual: <span class="font-medium">{{ labelPoStatus(order()!.status) }}</span>.
+      </div>
+    }
+
+    <div class="bg-surface rounded-xl border border-border p-6 space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1">Número de factura</label>
+          <input type="text"
+                 [ngModel]="invoiceNumber()" (ngModelChange)="invoiceNumber.set($event)"
+                 class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+                 [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-muted mb-1">Fecha de emisión</label>
+          <input type="date"
+                 [ngModel]="emissionDate()" (ngModelChange)="emissionDate.set($event)"
+                 class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+                 [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">Fecha de vencimiento</label>
+        <input type="date"
+               [ngModel]="dueDate()" (ngModelChange)="dueDate.set($event)"
+               class="w-full sm:max-w-xs px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+               [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+        <p class="text-xs text-muted mt-1">Para calendario de pagos y seguimiento de obligaciones.</p>
+      </div>
+
+      <div class="rounded-lg border border-border/80 bg-dark/20 p-4">
+        <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted mb-3">Montos (CLP)</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Neto</label>
+            <input type="number" min="0" step="1"
+                   [ngModel]="netAmount()" (ngModelChange)="netAmount.set($event === '' || $event === null ? null : +$event)"
+                   placeholder="Opcional"
+                   class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main font-mono text-sm focus:border-primary focus:outline-none"
+                   [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">IVA / impuestos</label>
+            <input type="number" min="0" step="1"
+                   [ngModel]="taxAmount()" (ngModelChange)="taxAmount.set($event === '' || $event === null ? null : +$event)"
+                   placeholder="Opcional"
+                   class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main font-mono text-sm focus:border-primary focus:outline-none"
+                   [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-muted mb-1">Total facturado</label>
+            <input type="number" min="0" step="1"
+                   [ngModel]="totalAmount()" (ngModelChange)="totalAmount.set($event === '' || $event === null ? null : +$event)"
+                   class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main font-mono focus:border-primary focus:outline-none"
+                   [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+            <p class="text-xs text-muted mt-1">Se validará contra el total de la OC y el valor recepcionado en bodega.</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-muted mb-1">PDF de la factura (opcional)</label>
+        <input type="file" accept=".pdf,application/pdf"
+               (change)="onFileChange($event)"
+               class="block w-full text-sm text-muted file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-border file:bg-dark file:text-main"
+               [disabled]="!!existingInvoice() && existingInvoice()!.status === 'PAID'" />
+      </div>
+
+      <div class="flex flex-wrap gap-3 pt-2">
+        @if (canRegister() || existingInvoice()) {
+          <button type="button"
+                  (click)="save()"
+                  [disabled]="isSaving() || (!!existingInvoice() && existingInvoice()!.status === 'PAID')"
+                  class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
+            {{ isSaving() ? 'Guardando…' : (existingInvoice() ? 'Actualizar y validar' : 'Registrar y validar') }}
+          </button>
+        }
+        @if (existingInvoice() && existingInvoice()!.status !== 'PAID') {
+          <button
+            type="button"
+            (click)="requestDeleteInvoice()"
+            [disabled]="isSaving()"
+            class="px-4 py-2 border border-red-500/40 text-red-300 font-medium rounded-lg hover:bg-red-500/10 disabled:opacity-50"
+          >
+            Eliminar factura
+          </button>
+        }
+        <a [routerLink]="['/app/compras/ordenes', order()!.id]"
+           [queryParams]="{ tab: 'billing' }"
+           class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main">Cancelar</a>
+      </div>
+    </div>
+
+    <section class="mt-8 rounded-xl border border-border/80 bg-surface/80 p-5">
+      <h2 class="text-lg font-semibold text-main mb-1">Historial de actividad</h2>
+      <p class="text-xs text-muted mb-4">Eventos de auditoría de la orden de compra sin salir de esta pantalla.</p>
+      <app-activity-timeline
+        [logs]="activityLogs()"
+        [isLoading]="activityLogsLoading()" />
+    </section>
+  }
+</div>
+
+<app-confirm-modal
+  [isOpen]="showDeleteInvoiceModal()"
+  title="Eliminar factura"
+  message="Eliminar esta factura desvinculará los montos de la OC y la Recepción. Deberá conciliar nuevamente."
+  consequenceSummary="Esta acción impacta el 3-Way Match y la trazabilidad de facturación."
+  confirmText="Sí, eliminar"
+  cancelText="Volver"
+  [riskLevel]="'danger'"
+  [confirmDelayMs]="1000"
+  [requireAcknowledge]="requireExtraDeleteAck()"
+  acknowledgeLabel="No tengo rango ADMIN y confirmo esta eliminación con impacto contable"
+  (confirm)="confirmDeleteInvoice()"
+  (cancel)="cancelDeleteInvoiceModal()"
+/>

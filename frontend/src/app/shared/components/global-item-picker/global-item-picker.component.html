@@ -1,0 +1,248 @@
+<dialog
+  #pickerDialog
+  class="app-global-item-picker-dialog"
+  (close)="onDialogClose()"
+  (click)="backdropClick($event)"
+>
+  <div
+    class="relative flex max-h-[min(90vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+    (click)="$event.stopPropagation()"
+  >
+    <div
+      class="flex items-center justify-between gap-3 border-b border-border bg-dark/80 px-4 py-3"
+    >
+      <h2
+        class="text-sm font-mono font-bold uppercase tracking-wide text-main"
+      >
+        {{ title }}
+      </h2>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="openQuickAdd()"
+          class="rounded-lg border border-primary/50 px-3 py-1.5 font-mono text-xs text-primary transition-colors hover:bg-primary/10"
+        >
+          + Nuevo artículo
+        </button>
+        <button
+          type="button"
+          (click)="close()"
+          class="rounded p-1 text-muted transition-colors hover:text-error"
+          aria-label="Cerrar"
+        >
+          <svg
+            class="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-3 border-b border-border/60 bg-dark/30 p-4">
+      <div class="flex flex-col gap-3 sm:flex-row">
+        <div class="min-w-0 flex-1">
+          <label
+            class="mb-1 block font-mono text-[10px] uppercase text-muted"
+            >Buscar</label
+          >
+          <input
+            type="text"
+            [ngModel]="searchText"
+            (ngModelChange)="onSearchInput($event)"
+            (keydown)="onSearchKeydown($event)"
+            placeholder="Nombre, Nº de parte, QR o descripción…"
+            class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main outline-none focus:border-primary/60"
+            autocomplete="off"
+          />
+        </div>
+        <div class="w-full shrink-0 sm:w-44">
+          <label
+            class="mb-1 block font-mono text-[10px] uppercase text-muted"
+            >Familia (filtro principal)</label
+          >
+          <select
+            [ngModel]="familyId"
+            (ngModelChange)="onFamilyChange($event)"
+            class="w-full rounded-lg border border-border bg-dark px-2 py-2 text-sm text-main outline-none focus:border-primary/60"
+          >
+            <option value="">Todas</option>
+            @for (f of families(); track f.id) {
+              <option [value]="f.id">{{ f.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="w-full shrink-0 sm:w-44">
+          <label
+            class="mb-1 block font-mono text-[10px] uppercase text-muted"
+            >Subcategoría</label
+          >
+          <select
+            [ngModel]="subcategoryId"
+            (ngModelChange)="onSubcategoryChange($event)"
+            [disabled]="!familyId"
+            class="w-full rounded-lg border border-border bg-dark px-2 py-2 text-sm text-main outline-none focus:border-primary/60 disabled:opacity-50"
+          >
+            <option value="">
+              {{ familyId ? "Todas en la familia" : "— Familia —" }}
+            </option>
+            @for (c of subcategories(); track c.id) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      @if (strictFamilyFirst) {
+        <p
+          class="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 font-mono text-[11px] text-muted"
+        >
+          <span class="text-primary">Tip:</span> elija primero una
+          <strong class="text-main">familia</strong> para acotar resultados, o
+          escriba al menos <strong class="text-main">2 caracteres</strong> en
+          búsqueda para explorar todo el catálogo.
+        </p>
+      }
+      @if (warehouseId) {
+        <p class="font-mono text-[11px] text-muted">
+          <span class="text-primary">Stock:</span> saldo solo en la bodega
+          vinculada a este proceso (p. ej. bodega de la OT o movimiento
+          seleccionado).
+        </p>
+      }
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-auto">
+      <table class="w-full border-collapse text-left text-sm">
+        <thead
+          class="sticky top-0 z-10 border-b border-border bg-dark font-mono text-[10px] uppercase tracking-wider text-muted"
+        >
+          <tr>
+            <th class="px-4 py-2">Nº parte</th>
+            <th class="px-4 py-2">Nombre</th>
+            <th class="hidden px-4 py-2 md:table-cell">Categoría</th>
+            @if (warehouseId) {
+              <th class="w-24 px-4 py-2 text-right">CPP</th>
+              <th class="w-28 px-4 py-2 text-right">Disp. bodega</th>
+            }
+          </tr>
+        </thead>
+        <tbody
+          class="divide-y divide-border/40"
+          [class.opacity-50]="loading() && rows().length > 0"
+          [class.pointer-events-none]="loading() && rows().length > 0"
+        >
+          @if (loading() && rows().length === 0) {
+            @for (_ of [1, 2, 3, 4, 5, 6]; track _) {
+              <tr appSkeletonRow [columnCount]="warehouseId ? 4 : 3"></tr>
+            }
+          } @else if (!loading() && rows().length === 0) {
+            <tr>
+              <td
+                [attr.colspan]="warehouseId ? 4 : 3"
+                class="px-4 py-10 text-center font-mono text-xs text-muted"
+              >
+                @if (
+                  strictFamilyFirst && !familyId && searchText.length < 2
+                ) {
+                  Seleccione una familia o use la búsqueda (mín. 2 caracteres)
+                  para listar artículos.
+                } @else {
+                  Sin resultados. Ajuste filtros o cree un artículo nuevo.
+                }
+              </td>
+            </tr>
+          } @else {
+            @for (row of rows(); track row.id) {
+              <tr
+                class="cursor-pointer transition-colors hover:bg-primary/5"
+                (click)="pick(row)"
+              >
+                <td class="px-4 py-2.5 font-mono text-xs text-primary">
+                  {{ row.partNumber }}
+                </td>
+                <td class="px-4 py-2.5 text-main">
+                  <div class="font-medium">{{ row.name }}</div>
+                  @if (row.description) {
+                    <div
+                      class="mt-0.5 max-w-md line-clamp-2 text-[11px] text-muted"
+                    >
+                      {{ row.description }}
+                    </div>
+                  }
+                </td>
+                <td
+                  class="hidden px-4 py-2.5 text-xs text-muted md:table-cell"
+                >
+                  {{ familyLabel(row.itemCategory) }}
+                </td>
+                @if (warehouseId) {
+                  <td class="px-4 py-2.5 text-right font-mono text-xs text-muted">
+                    @if (row.stockUnitCost != null) {
+                      @if (canSeeUnitCosts()) {
+                        ${{ row.stockUnitCost | number: "1.0-2" }}
+                      } @else {
+                        $ ****
+                      }
+                    } @else {
+                      —
+                    }
+                  </td>
+                  <td class="px-4 py-2.5 text-right font-mono text-xs">
+                    @if (row.stockQuantity !== null) {
+                      {{ row.stockQuantity | number: "1.0-2" }}
+                    } @else {
+                      —
+                    }
+                  </td>
+                }
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div
+      class="flex items-center justify-between gap-3 border-t border-border bg-dark/50 px-4 py-3"
+    >
+      <span class="font-mono text-[11px] text-muted">
+        {{ total() }} resultado(s) · Pág. {{ page() }} /
+        {{ totalPages() }}
+      </span>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="prevPage()"
+          [disabled]="page() <= 1 || loading()"
+          class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-main hover:bg-dark disabled:opacity-40"
+        >
+          Anterior
+        </button>
+        <button
+          type="button"
+          (click)="nextPage()"
+          [disabled]="page() >= totalPages() || loading()"
+          class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-main hover:bg-dark disabled:opacity-40"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+
+    <app-quick-add-item-modal
+      [open]="quickAddOpen()"
+      [overlayInsideDialog]="true"
+      [warehouseId]="warehouseId"
+      (closed)="onQuickAddClosed()"
+      (itemCreated)="onQuickAddCreated($event)"
+    />
+  </div>
+</dialog>

@@ -1,0 +1,25 @@
+<span class="inline-flex items-center gap-1 max-w-full">
+  <button
+    type="button"
+    [attr.title]="tooltip"
+    (click)="onPrimaryClick($event)"
+    [class]="
+      variant() === 'badge'
+        ? 'inline-flex items-center rounded px-1.5 py-px text-xs font-mono border border-border/70 bg-dark/40 text-primary hover:bg-primary/10 hover:border-primary/40 transition-colors cursor-pointer hover:text-primary'
+        : 'text-left font-mono text-primary hover:underline decoration-primary/50 underline-offset-2 transition-colors cursor-pointer hover:text-primary'
+    "
+  >
+    {{ label() }}
+  </button>
+  <button
+    type="button"
+    [attr.title]="'Abrir detalle en nueva pestaña (o Ctrl+clic en la etiqueta)'"
+    (click)="openFullDetail($event)"
+    class="shrink-0 inline-flex p-0.5 rounded text-muted hover:text-primary opacity-70 hover:opacity-100 transition-opacity"
+    aria-label="Abrir en nueva pestaña"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+    </svg>
+  </button>
+</span>

@@ -56,16 +56,40 @@
                   {{ vendor.isActive ? 'Activo' : 'Inactivo' }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-right">
+              <td class="px-4 py-3 text-right whitespace-nowrap">
                 <a [routerLink]="['/app/compras/proveedores', vendor.id]"
-                   class="text-primary hover:text-primary/80 text-sm">Editar</a>
+                   class="text-primary hover:text-primary/80 text-sm mr-3">Editar</a>
+                @if (vendor.isActive) {
+                  <button type="button" (click)="openDeactivateModal(vendor)"
+                          class="text-red-400 hover:text-red-300 text-sm">Desactivar</button>
+                }
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="px-4 py-8 text-center text-muted">No se encontraron proveedores</td></tr>
+            <tr>
+              <td colspan="6" class="px-4 py-10 text-center">
+                <div class="flex flex-col items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <p class="text-sm text-muted">No se encontraron proveedores.</p>
+                  <a routerLink="/app/compras/proveedores/nuevo" class="text-xs text-primary hover:underline">Registrar nuevo proveedor</a>
+                </div>
+              </td>
+            </tr>
           }
         </tbody>
       </table>
     </div>
   }
+
+  <app-confirm-modal
+    [isOpen]="deactivateModalOpen()"
+    title="Desactivar proveedor"
+    [message]="'¿Está seguro de desactivar al proveedor ' + (deactivateTarget()?.name || '') + '? No podrá ser seleccionado en nuevas cotizaciones.'"
+    confirmText="Desactivar"
+    [isDanger]="true"
+    (confirm)="confirmDeactivate()"
+    (cancel)="closeDeactivateModal()"
+  />
 </div>

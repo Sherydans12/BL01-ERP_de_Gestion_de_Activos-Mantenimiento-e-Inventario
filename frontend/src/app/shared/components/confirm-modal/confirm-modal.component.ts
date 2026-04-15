@@ -12,11 +12,12 @@ import {
   viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-confirm-modal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     @if (isOpen) {
       <dialog
@@ -36,11 +37,7 @@ import { CommonModule } from '@angular/common';
             class="flex items-center gap-3 p-5 border-b border-border bg-dark/50"
           >
             <div
-              [class]="
-                isDanger
-                  ? 'p-2 bg-error/10 text-error rounded-full'
-                  : 'p-2 bg-primary/10 text-primary rounded-full'
-              "
+              [class]="iconClasses()"
             >
               <svg
                 class="w-6 h-6"
@@ -61,6 +58,35 @@ import { CommonModule } from '@angular/common';
 
           <div class="p-5 text-gray-300">
             <p>{{ message }}</p>
+            @if (consequenceSummary.trim()) {
+              <div class="mt-3 rounded-lg border border-border bg-dark/40 p-3">
+                <p class="text-xs text-muted uppercase tracking-wide mb-1">
+                  Impacto
+                </p>
+                <p class="text-sm text-main">{{ consequenceSummary }}</p>
+              </div>
+            }
+            @if (requireReason) {
+              <div class="mt-4">
+                <label class="block text-xs text-muted mb-1">{{ reasonLabel }}</label>
+                <textarea
+                  rows="3"
+                  [(ngModel)]="reasonText"
+                  [placeholder]="reasonPlaceholder"
+                  class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none"
+                ></textarea>
+              </div>
+            }
+            @if (requireAcknowledge) {
+              <label class="mt-4 inline-flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  [(ngModel)]="acknowledged"
+                  class="rounded border-border bg-dark text-primary focus:ring-primary mt-0.5"
+                />
+                <span class="text-xs text-main/90">{{ acknowledgeLabel }}</span>
+              </label>
+            }
           </div>
 
           <div
@@ -77,13 +103,10 @@ import { CommonModule } from '@angular/common';
             <button
               type="button"
               (click)="onConfirm()"
-              [class]="
-                isDanger
-                  ? 'px-5 py-2 rounded-lg bg-error hover:bg-error/90 text-white shadow-lg shadow-error/20 transition-colors font-medium text-sm'
-                  : 'px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-colors font-medium text-sm'
-              "
+              [disabled]="!canConfirm()"
+              [class]="confirmButtonClasses()"
             >
-              {{ confirmText }}
+              {{ confirmButtonLabel() }}
             </button>
           </div>
         </div>
@@ -138,12 +161,48 @@ export class ConfirmModalComponent implements OnChanges {
   @Input() confirmText = 'Confirmar';
   @Input() cancelText = 'Cancelar';
   @Input() isDanger = false;
+  @Input() riskLevel: 'info' | 'warning' | 'danger' = 'info';
+  @Input() consequenceSummary = '';
+  @Input() confirmDelayMs = 0;
+  @Input() requireReason = false;
+  @Input() reasonLabel = 'Motivo';
+  @Input() reasonPlaceholder = 'Ingrese el motivo...';
+  @Input() reasonMinLength = 3;
+  @Input() requireAcknowledge = false;
+  @Input() acknowledgeLabel = 'Entiendo el impacto de esta acción';
 
-  @Output() confirm = new EventEmitter<void>();
+  @Output() confirm = new EventEmitter<string | null>();
   @Output() cancel = new EventEmitter<void>();
+  delayUntil = 0;
+  reasonText = '';
+  acknowledged = false;
+
+  iconClasses(): string {
+    const level = this.effectiveRiskLevel();
+    if (level === 'danger') return 'p-2 bg-error/10 text-error rounded-full';
+    if (level === 'warning')
+      return 'p-2 bg-amber-500/15 text-amber-300 rounded-full';
+    return 'p-2 bg-primary/10 text-primary rounded-full';
+  }
+
+  confirmButtonClasses(): string {
+    const level = this.effectiveRiskLevel();
+    if (level === 'danger') {
+      return 'px-5 py-2 rounded-lg bg-error hover:bg-error/90 text-white shadow-lg shadow-error/20 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed';
+    }
+    if (level === 'warning') {
+      return 'px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed';
+    }
+    return 'px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed';
+  }
+
+  private effectiveRiskLevel(): 'info' | 'warning' | 'danger' {
+    return this.isDanger ? 'danger' : this.riskLevel;
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen) {
+      this.resetStateForOpen();
       afterNextRender(
         () => {
           const el = this.confirmDialog()?.nativeElement;
@@ -157,7 +216,8 @@ export class ConfirmModalComponent implements OnChanges {
   }
 
   onConfirm() {
-    this.confirm.emit();
+    if (!this.canConfirm()) return;
+    this.confirm.emit(this.requireReason ? this.reasonText.trim() : null);
   }
 
   /** Clic en Cancelar o fuera del panel: el padre baja `isOpen`. */
@@ -168,5 +228,34 @@ export class ConfirmModalComponent implements OnChanges {
   /** Escape: el navegador cierra el diálogo; notificamos al padre. */
   onEscapeCancel() {
     this.cancel.emit();
+  }
+
+  private resetStateForOpen() {
+    this.reasonText = '';
+    this.acknowledged = false;
+    this.delayUntil = Date.now() + Math.max(0, this.confirmDelayMs);
+  }
+
+  private delaySecondsLeft(): number {
+    const remainingMs = this.delayUntil - Date.now();
+    if (remainingMs <= 0) return 0;
+    return Math.ceil(remainingMs / 1000);
+  }
+
+  canConfirm(): boolean {
+    if (this.delaySecondsLeft() > 0) return false;
+    if (this.requireAcknowledge && !this.acknowledged) return false;
+    if (this.requireReason) {
+      return this.reasonText.trim().length >= this.reasonMinLength;
+    }
+    return true;
+  }
+
+  confirmButtonLabel(): string {
+    const sec = this.delaySecondsLeft();
+    if (sec > 0) {
+      return `${this.confirmText} (${sec}s)`;
+    }
+    return this.confirmText;
   }
 }

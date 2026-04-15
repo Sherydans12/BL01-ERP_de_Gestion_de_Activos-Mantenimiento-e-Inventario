@@ -226,12 +226,37 @@
           @for (ot of workOrders(); track ot.id) {
             <tr class="hover:bg-dark/40 transition-colors">
               <td class="py-4 px-6">
-                <div class="font-mono text-primary font-bold">
-                  {{ ot.correlative }}
-                </div>
-                <div class="text-xs text-muted mt-1">
-                  {{ ot.createdAt | date: "yyyy-MM-dd" }}
-                </div>
+                <button
+                  type="button"
+                  (click)="openOtDetailModal(ot.id)"
+                  class="text-left rounded-lg -m-1 p-1 hover:bg-dark/60 transition-colors group w-full max-w-[14rem]"
+                  title="Vista rápida de la orden de trabajo"
+                >
+                  <div
+                    class="font-mono text-primary font-bold group-hover:text-primary/90"
+                  >
+                    {{ ot.correlative }}
+                  </div>
+                  <div class="text-xs text-muted mt-1">
+                    {{ ot.createdAt | date: "yyyy-MM-dd" }}
+                  </div>
+                  <span
+                    class="inline-flex mt-1 text-[10px] font-mono text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >Vista OT →</span
+                  >
+                </button>
+                @if (ot.purchaseOrders?.length) {
+                  <div class="flex flex-wrap gap-1 mt-2">
+                    @for (po of ot.purchaseOrders; track po.id) {
+                      <app-entity-link
+                        kind="PO"
+                        [id]="po.id"
+                        [label]="po.correlative"
+                        variant="badge"
+                      />
+                    }
+                  </div>
+                }
               </td>
 
               <td class="py-4 px-6">
@@ -360,7 +385,7 @@
                   [routerLink]="['/app/ots', ot.id]"
                   class="text-muted hover:text-primary transition-colors font-mono text-xs border border-transparent hover:border-border px-2 py-1 rounded"
                 >
-                  DETALLE
+                  FORMULARIO
                 </a>
 
                 @if (ot.status === "OPEN") {
@@ -447,3 +472,9 @@
   [isOpen]="showEquipmentDetailModal()"
   (close)="showEquipmentDetailModal.set(false)"
 ></app-equipment-detail-modal>
+
+<app-work-order-detail-modal
+  [workOrderId]="selectedOtIdForDetail()"
+  [isOpen]="showOtDetailModal()"
+  (close)="closeOtDetailModal()"
+></app-work-order-detail-modal>

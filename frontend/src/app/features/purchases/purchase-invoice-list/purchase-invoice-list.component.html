@@ -1,0 +1,267 @@
+<div class="p-6">
+  <app-purchases-push-notice />
+
+  <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-main">Facturas de compra</h1>
+      <p class="text-sm text-muted mt-1">
+        Facturas registradas; filtros por contrato, vencimiento y discrepancias 3-way.
+      </p>
+    </div>
+    <nav class="flex flex-wrap gap-2 shrink-0" aria-label="Vista facturas">
+      <span
+        class="px-4 py-2 rounded-lg border border-primary bg-primary/15 text-sm text-primary font-medium"
+        >Lista</span
+      >
+      <a
+        routerLink="/app/compras/calendario-pagos"
+        [queryParams]="contractId() ? { contractId: contractId() } : {}"
+        class="px-4 py-2 rounded-lg border border-border text-sm text-main hover:bg-dark/50"
+        >Calendario de pagos</a
+      >
+    </nav>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+    <div class="flex flex-col xl:flex-row xl:flex-wrap gap-4 xl:items-end">
+      <div class="min-w-[200px] flex-1">
+        <label class="block text-xs font-medium text-muted mb-1">Contrato</label>
+        <select
+          [ngModel]="contractId()"
+          (ngModelChange)="contractId.set($event); syncContractQuery()"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+        >
+          <option value="">Todos (según su permiso)</option>
+          @for (c of contracts(); track c.id) {
+            <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1">Vencimiento desde</label>
+        <input
+          type="date"
+          [ngModel]="dueDateFrom()"
+          (ngModelChange)="dueDateFrom.set($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+        />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1">Vencimiento hasta</label>
+        <input
+          type="date"
+          [ngModel]="dueDateTo()"
+          (ngModelChange)="dueDateTo.set($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+        />
+      </div>
+      <button
+        type="button"
+        (click)="toggleOnlyDiscrepancies()"
+        class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors"
+        [ngClass]="
+          onlyDiscrepancies()
+            ? 'border-red-400 bg-red-500/15 text-red-300'
+            : 'border-border bg-dark text-main'
+        "
+        [attr.aria-pressed]="onlyDiscrepancies()"
+      >
+        <span
+          class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs transition-colors"
+          [class.bg-red-500]="onlyDiscrepancies()"
+          [class.text-white]="onlyDiscrepancies()"
+          [class.bg-border]="!onlyDiscrepancies()"
+          [class.text-muted]="!onlyDiscrepancies()"
+          aria-hidden="true"
+        >
+          @if (onlyDiscrepancies()) {
+            ✓
+          } @else {
+            !
+          }
+        </span>
+        <span>Solo con discrepancias</span>
+        @if (onlyDiscrepancies()) {
+          <span class="text-[11px] uppercase tracking-wide text-red-300/90">Activo</span>
+        }
+      </button>
+      <button
+        type="button"
+        (click)="load()"
+        class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 shrink-0"
+      >
+        Aplicar filtros
+      </button>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-12">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
+  } @else {
+    <div class="bg-surface rounded-xl border border-border overflow-hidden overflow-x-auto">
+      <table class="w-full min-w-[880px]">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Factura</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Proveedor</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">OC</th>
+            <th class="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Monto</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden lg:table-cell">Emisión</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden sm:table-cell">Vencimiento</th>
+            <th class="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Días p/ vencer</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Estado</th>
+            <th class="px-4 py-3 text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (inv of invoices(); track inv.id) {
+            <tr class="border-b border-border/50 hover:bg-dark/50 transition-colors">
+              <td class="px-4 py-3 text-sm">
+                @if (inv.invoiceNumber.trim()) {
+                  <app-entity-link
+                    kind="INV"
+                    [id]="inv.id"
+                    [label]="inv.invoiceNumber"
+                    [purchaseOrderIdForDetail]="inv.purchaseOrderId"
+                    variant="link"
+                  />
+                } @else {
+                  <span class="text-xs text-muted italic">Sin número</span>
+                }
+                @if (inv.hasDiscrepancy) {
+                  <span class="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400"
+                    >Discrepancia</span
+                  >
+                }
+              </td>
+              <td class="px-4 py-3 text-sm text-main hidden md:table-cell max-w-[14rem] truncate">
+                {{ inv.vendor?.name || '—' }}
+              </td>
+              <td class="px-4 py-3 text-sm font-mono text-main">
+                @if (inv.purchaseOrder?.id && inv.purchaseOrder?.correlative) {
+                  <app-entity-link
+                    kind="PO"
+                    [id]="inv.purchaseOrder!.id"
+                    [label]="inv.purchaseOrder!.correlative"
+                    variant="link"
+                  />
+                } @else {
+                  <span class="text-xs text-muted font-sans">Sin vincular</span>
+                }
+              </td>
+              <td class="px-4 py-3 text-sm font-mono text-right text-main">{{ inv.totalAmount | clpCurrency }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden lg:table-cell">{{ inv.emissionDate | date: 'dd/MM/yyyy' }}</td>
+              <td class="px-4 py-3 text-sm text-muted hidden sm:table-cell">
+                @if (inv.dueDate) {
+                  {{ inv.dueDate | date: 'dd/MM/yyyy' }}
+                } @else {
+                  —
+                }
+              </td>
+              <td class="px-4 py-3 text-sm text-right">
+                @if (daysUntilDue(inv) !== null) {
+                  <div class="inline-flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full shrink-0" [class]="dueSemaphoreClass(inv)"></span>
+                    <span class="font-mono" [class.text-red-400]="(daysUntilDue(inv)!) < 0"
+                          [class.text-amber-400]="(daysUntilDue(inv)!) >= 0 && (daysUntilDue(inv)!) <= 7"
+                          [class.text-main]="(daysUntilDue(inv)!) > 7">
+                      {{ daysUntilDue(inv) }}d
+                    </span>
+                  </div>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+              <td class="px-4 py-3">
+                <span
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                  [class]="statusColors[inv.status] || ''"
+                >
+                  <span class="text-[10px]">{{ statusIcons[inv.status] || '' }}</span>
+                  {{ statusLabels[inv.status] || inv.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right whitespace-nowrap">
+                @if (inv.purchaseOrder?.id) {
+                  <a
+                    [routerLink]="['/app/compras/ordenes', inv.purchaseOrder!.id]"
+                    [queryParams]="{ tab: 'billing' }"
+                    class="text-primary hover:text-primary/80 text-sm mr-2"
+                    >Ver OC</a
+                  >
+                }
+                @if (inv.status === 'MATCHED') {
+                  <button
+                    type="button"
+                    (click)="openPayDialog(inv)"
+                    class="text-sm text-green-400 hover:underline"
+                  >
+                    Registrar pago
+                  </button>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="9" class="px-4 py-12 text-center">
+                <div class="flex flex-col items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p class="text-sm text-muted">No hay facturas para los filtros seleccionados.</p>
+                  <p class="text-xs text-muted/70">Para registrar una factura, abra una Orden de Compra aprobada y seleccione la pestaña "Facturación".</p>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  @if (payDialogOpen()) {
+    <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" (click)="closePayDialog()">
+      <div
+        class="bg-surface border border-border rounded-xl shadow-xl max-w-md w-full p-6"
+        (click)="$event.stopPropagation()"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pay-dialog-title"
+      >
+        <h2 id="pay-dialog-title" class="text-lg font-semibold text-main mb-2">Registrar pago</h2>
+        <p class="text-sm text-muted mb-4">
+          Factura <span class="font-mono text-main">{{ payTarget()?.invoiceNumber }}</span>
+        </p>
+        <label class="block text-xs font-medium text-muted mb-1">Referencia de transferencia / comprobante</label>
+        <input
+          type="text"
+          [ngModel]="paymentRef()"
+          (ngModelChange)="paymentRef.set($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm mb-4 focus:border-primary focus:outline-none"
+          placeholder="Ej. transferencia #12345"
+          (keydown.enter)="submitPay()"
+        />
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            (click)="closePayDialog()"
+            class="px-4 py-2 border border-border rounded-lg text-main hover:bg-dark/50"
+            [disabled]="paySubmitting()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="submitPay()"
+            class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            [disabled]="paySubmitting()"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

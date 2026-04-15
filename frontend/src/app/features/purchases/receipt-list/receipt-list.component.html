@@ -1,6 +1,20 @@
 <div class="p-6">
+  <app-purchases-push-notice />
+
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-    <h1 class="text-2xl font-bold text-main">Recepciones de Bodega</h1>
+    <div>
+      <h1 class="text-2xl font-bold text-main">Recepciones de Bodega</h1>
+      <p class="text-sm text-muted mt-1">Ingresos de stock desde órdenes de compra aprobadas o enviadas al proveedor.</p>
+    </div>
+    <a
+      routerLink="/app/compras/recepciones/nueva"
+      class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-black font-semibold text-base shadow-lg shadow-primary/25 hover:bg-primary/90 transition-colors shrink-0"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Nueva recepción
+    </a>
   </div>
 
   @if (isLoading()) {
@@ -11,6 +25,7 @@
         <thead>
           <tr class="border-b border-border">
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Correlativo</th>
+            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden xl:table-cell">Contrato</th>
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">OC</th>
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Bodega</th>
             <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Recibido por</th>
@@ -21,8 +36,27 @@
         <tbody>
           @for (receipt of receipts(); track receipt.id) {
             <tr class="border-b border-border/50 hover:bg-dark/50 transition-colors">
-              <td class="px-4 py-3 text-sm font-mono text-primary">{{ receipt.correlative }}</td>
-              <td class="px-4 py-3 text-sm font-mono text-main">{{ receipt.purchaseOrder?.correlative }}</td>
+              <td class="px-4 py-3 text-sm">
+                <app-entity-link kind="WR" [id]="receipt.id" [label]="receipt.correlative" variant="link" />
+              </td>
+              <td class="px-4 py-3 text-sm text-main hidden xl:table-cell max-w-[12rem]">
+                <span class="font-medium">{{ receipt.purchaseOrder?.contract?.name || '—' }}</span>
+                @if (receipt.purchaseOrder?.subcontract) {
+                  <span class="block text-xs text-muted mt-0.5">{{ receipt.purchaseOrder!.subcontract!.code }}</span>
+                }
+              </td>
+              <td class="px-4 py-3 text-sm font-mono text-main">
+                @if (receipt.purchaseOrder?.id && receipt.purchaseOrder?.correlative) {
+                  <app-entity-link
+                    kind="PO"
+                    [id]="receipt.purchaseOrder!.id"
+                    [label]="receipt.purchaseOrder!.correlative"
+                    variant="link"
+                  />
+                } @else {
+                  <span class="text-xs text-muted font-sans">Sin vincular</span>
+                }
+              </td>
               <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ receipt.warehouse?.name }}</td>
               <td class="px-4 py-3 text-sm text-muted hidden md:table-cell">{{ receipt.receivedBy?.name }}</td>
               <td class="px-4 py-3">
@@ -35,7 +69,17 @@
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="px-4 py-8 text-center text-muted">No se encontraron recepciones</td></tr>
+            <tr>
+              <td colspan="7" class="px-4 py-12 text-center">
+                <p class="text-muted text-sm mb-3">Aún no hay recepciones registradas.</p>
+                <a
+                  routerLink="/app/compras/recepciones/nueva"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:bg-primary/90"
+                >
+                  Crear primera recepción
+                </a>
+              </td>
+            </tr>
           }
         </tbody>
       </table>

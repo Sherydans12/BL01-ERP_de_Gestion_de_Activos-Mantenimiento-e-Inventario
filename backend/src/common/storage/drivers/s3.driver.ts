@@ -15,7 +15,11 @@ export class S3Driver implements StorageDriver {
     this.region = config.get('AWS_REGION', 'us-east-1');
   }
 
-  async upload(key: string, _buffer: Buffer, _mimetype: string): Promise<string> {
+  async upload(
+    key: string,
+    _buffer: Buffer,
+    _mimetype: string,
+  ): Promise<string> {
     // TODO: Implementar con @aws-sdk/client-s3
     throw new Error(
       `S3 driver not yet implemented. Configure STORAGE_DRIVER=local or implement S3 upload for bucket: ${this.bucket}`,

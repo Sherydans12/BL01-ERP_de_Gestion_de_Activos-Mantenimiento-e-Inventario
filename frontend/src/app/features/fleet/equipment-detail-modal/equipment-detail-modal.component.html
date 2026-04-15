@@ -167,9 +167,6 @@
             {{ operationalStatus().label }}
           </span>
         </div>
-        @if (eq.ownership) {
-          <p class="text-[10px] text-muted mt-1.5">{{ eq.ownership }}</p>
-        }
       </div>
     </div>
 
@@ -417,7 +414,9 @@
                   <div class="absolute left-3.5 top-4 w-3 h-3 rounded-full border-2 border-surface"
                        [class]="event.type === 'OT'
                          ? (event.color === 'text-primary' ? 'bg-primary' : 'bg-warning')
-                         : 'bg-secondary'"></div>
+                         : event.type === 'PURCHASE'
+                           ? 'bg-emerald-500'
+                           : 'bg-secondary'"></div>
 
                   <!-- Content -->
                   <div class="flex-1 min-w-0">
@@ -426,6 +425,10 @@
                         @if (event.type === 'OT') {
                           <svg class="w-4 h-4 flex-shrink-0" [class]="event.color" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.049.58.025 1.193-.14 1.743"/>
+                          </svg>
+                        } @else if (event.type === 'PURCHASE') {
+                          <svg class="w-4 h-4 flex-shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3H15m-9 0v-4.5m0 4.5h-.106a2.25 2.25 0 0 1-2.164-1.605l-1.688-6.75M15 14.25v-4.5m0 4.5h.106a2.25 2.25 0 0 0 2.164-1.605l1.688-6.75M9 4.5h6.125c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125H9a1.125 1.125 0 0 1-1.125-1.125V5.625c0-.621.504-1.125 1.125-1.125Z"/>
                           </svg>
                         } @else {
                           @if (meterIcon() === 'clock') {

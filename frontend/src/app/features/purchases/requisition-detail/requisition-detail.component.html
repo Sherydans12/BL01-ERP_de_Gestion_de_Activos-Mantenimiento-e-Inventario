@@ -1,35 +1,81 @@
 <div class="p-6">
+  <app-purchases-push-notice />
+
   @if (isLoading()) {
     <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
   } @else if (requisition()) {
+    <div class="rounded-xl border border-primary/35 bg-gradient-to-r from-primary/10 to-transparent px-4 py-3 mb-6">
+      <p class="text-[11px] uppercase tracking-wider text-primary/90 font-medium mb-0.5">Contrato de trabajo</p>
+      <p class="text-xl font-bold text-main leading-tight">{{ requisition()!.contract?.name || '—' }}</p>
+      <p class="text-[11px] uppercase tracking-wide text-muted mt-3 mb-1">Centro de costos</p>
+      @if (requisition()!.subcontract) {
+        <p class="text-sm text-main">
+          <span class="font-mono text-primary">{{ requisition()!.subcontract!.code }}</span>
+          — {{ requisition()!.subcontract!.name }}
+        </p>
+      } @else {
+        <p class="text-sm text-muted">Sin subcontrato: imputación al contrato completo.</p>
+      }
+    </div>
+
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-main">{{ requisition()!.correlative }}</h1>
+        <div class="flex flex-wrap items-center gap-2">
+          <h1 class="text-2xl font-bold text-main">{{ requisition()!.correlative }}</h1>
+          <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
+                [ngClass]="priorityClass(requisition()!.priority)">
+            {{ priorityLabel(requisition()!.priority) }}
+          </span>
+        </div>
         <p class="text-sm text-muted mt-1">{{ requisition()!.description }}</p>
       </div>
       <div class="flex flex-wrap gap-2 justify-end">
+        <button type="button" (click)="duplicateRequisition()" [disabled]="isDuplicating()"
+                class="inline-flex items-center gap-1.5 px-4 py-2 border border-border text-muted font-medium rounded-lg hover:bg-dark/80 hover:text-main transition-colors disabled:opacity-50"
+                title="Crear copia en borrador con los mismos ítems">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          {{ isDuplicating() ? 'Duplicando...' : 'Duplicar' }}
+        </button>
+        @if (canEditRequisition()) {
+          <a [routerLink]="['/app/compras/requerimientos', requisition()!.id, 'edit']"
+             class="inline-flex items-center px-4 py-2 border border-border text-main font-medium rounded-lg hover:bg-dark/80 transition-colors">
+            Editar
+          </a>
+        }
         @if (canSubmit()) {
-          <button (click)="submit()" [disabled]="isSubmitting()"
+          <button type="button" (click)="requestSubmitRequisition()" [disabled]="isSubmitting()"
                   class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
-            {{ isSubmitting() ? 'Enviando...' : 'Enviar Requerimiento' }}
+            {{ isSubmitting() ? 'Enviando...' : 'Enviar requerimiento' }}
+          </button>
+        }
+        @if (canCancelRequisition()) {
+          <button
+            type="button"
+            (click)="requestCancelRequisition()"
+            [disabled]="isSubmitting()"
+            class="px-4 py-2 border border-red-500/40 text-red-300 font-medium rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
+          >
+            Anular requerimiento
           </button>
         }
         @if (canStartQuoting()) {
-          <button (click)="startQuoting()" [disabled]="isStartingQuotation()"
+          <button type="button" (click)="requestStartQuoting()" [disabled]="isStartingQuotation()"
                   class="px-4 py-2 bg-primary/20 text-primary font-medium rounded-lg hover:bg-primary/30 transition-colors disabled:opacity-50 border border-primary/40">
             {{ isStartingQuotation() ? 'Iniciando...' : 'Iniciar Cotización' }}
           </button>
         }
         @if (winnerQuotation() && requisition()!.status === 'PENDING_APPROVAL') {
-          <button (click)="createOrder()"
-                  class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
-            Generar Orden de Compra
+          <button type="button" (click)="requestCreateOrder()" [disabled]="isCreatingOrder()"
+                  class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {{ isCreatingOrder() ? 'Generando OC...' : 'Generar Orden de Compra' }}
           </button>
         }
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div class="bg-surface rounded-xl border border-border p-4">
         <p class="text-xs text-muted uppercase tracking-wider mb-1">Estado</p>
         <p class="text-main font-semibold">{{ statusLabels[requisition()!.status] || requisition()!.status }}</p>
@@ -43,39 +89,82 @@
         <p class="text-main">{{ requisition()!.contract?.name }}</p>
       </div>
       <div class="bg-surface rounded-xl border border-border p-4">
-        <p class="text-xs text-muted uppercase tracking-wider mb-1">Subcontrato</p>
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Centro de costos</p>
         @if (requisition()!.subcontract) {
-          <p class="text-main">{{ requisition()!.subcontract!.code }} — {{ requisition()!.subcontract!.name }}</p>
+          <p class="text-main text-sm leading-snug">{{ requisition()!.subcontract!.code }} — {{ requisition()!.subcontract!.name }}</p>
         } @else {
-          <p class="text-muted">—</p>
+          <p class="text-muted text-sm">Contrato global (sin subcontrato)</p>
         }
       </div>
     </div>
 
+    <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+      <h2 class="text-sm font-semibold text-main mb-3">Información de imputación</h2>
+      @if (requisition()!.equipment || requisition()!.workOrder) {
+        <div class="flex flex-wrap gap-2 items-center">
+          @if (requisition()!.equipment) {
+            <button
+              type="button"
+              (click)="openLinkedEquipmentModal()"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/25 hover:bg-primary/20 transition-colors cursor-pointer"
+              title="Ver ficha y analítica del activo"
+            >
+              <span class="font-mono">{{ requisition()!.equipment!.internalId }}</span>
+              <span class="text-main/90">{{ requisition()!.equipment!.brand }} {{ requisition()!.equipment!.model }}</span>
+            </button>
+          }
+          @if (requisition()!.workOrder) {
+            <button
+              type="button"
+              (click)="openLinkedOtModal()"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-300 border border-blue-500/25 hover:bg-blue-500/20 transition-colors cursor-pointer"
+              title="Vista rápida de la orden de trabajo"
+            >
+              OT {{ requisition()!.workOrder!.correlative }}
+            </button>
+          }
+        </div>
+      } @else {
+        <p class="text-sm text-muted italic">Gasto General / No asociado a activo</p>
+      }
+    </div>
+
     <div class="bg-surface rounded-xl border border-border overflow-hidden mb-6">
       <div class="px-4 py-3 border-b border-border">
-        <h2 class="text-lg font-semibold text-main">Ítems Solicitados</h2>
+        <h2 class="text-lg font-semibold text-main">Ítems solicitados</h2>
+        <p class="text-xs text-muted mt-1">Detalle completo de cada línea (descripción, parte, notas, cantidades y vínculo a inventario si aplica).</p>
       </div>
-      <table class="w-full">
-        <thead>
-          <tr class="border-b border-border">
-            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Descripción</th>
-            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Cantidad</th>
-            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">U.M.</th>
-            <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Costo Est.</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (item of requisition()!.items; track item.id) {
-            <tr class="border-b border-border/50">
-              <td class="px-4 py-3 text-sm text-main">{{ item.description }}</td>
-              <td class="px-4 py-3 text-sm text-main">{{ item.quantity }}</td>
-              <td class="px-4 py-3 text-sm text-muted">{{ item.unitOfMeasure }}</td>
-              <td class="px-4 py-3 text-sm font-mono text-main">{{ item.estimatedCost | clpCurrency }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+      <div class="divide-y divide-border/60">
+        @for (item of requisition()!.items; track item.id) {
+          <div class="px-4 py-4">
+            <p class="text-sm font-semibold text-main mb-3">{{ item.description }}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+              <div class="rounded-lg bg-dark/40 border border-border/50 px-3 py-2">
+                <p class="text-[10px] uppercase tracking-wider text-muted mb-0.5">Nº parte (solicitud)</p>
+                <p class="text-main">{{ item.partNumber?.trim() || '—' }}</p>
+              </div>
+              <div class="rounded-lg bg-dark/40 border border-border/50 px-3 py-2 sm:col-span-2 xl:col-span-1">
+                <p class="text-[10px] uppercase tracking-wider text-muted mb-0.5">Notas / especificación</p>
+                <p class="text-main whitespace-pre-wrap break-words">{{ item.itemNotes?.trim() || '—' }}</p>
+              </div>
+              <div class="rounded-lg bg-dark/40 border border-border/50 px-3 py-2">
+                <p class="text-[10px] uppercase tracking-wider text-muted mb-0.5">Cantidad</p>
+                <p class="text-main font-mono">{{ item.quantity }} <span class="text-muted font-sans">{{ item.unitOfMeasure }}</span></p>
+              </div>
+              <div class="rounded-lg bg-dark/40 border border-border/50 px-3 py-2">
+                <p class="text-[10px] uppercase tracking-wider text-muted mb-0.5">Costo estimado</p>
+                <p class="text-main font-mono">{{ item.estimatedCost | clpCurrency }}</p>
+              </div>
+              @if (item.inventoryItem) {
+                <div class="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 sm:col-span-2 xl:col-span-1">
+                  <p class="text-[10px] uppercase tracking-wider text-primary/80 mb-0.5">Ítem de inventario</p>
+                  <p class="text-main text-sm">{{ item.inventoryItem.partNumber }} — {{ item.inventoryItem.name }}</p>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
     </div>
 
     @if (showQuotationsSection()) {
@@ -93,15 +182,57 @@
         @if (showQuotationForm() && canAddQuotation()) {
           <div class="px-4 py-4 border-b border-border bg-dark/30 space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs text-muted uppercase tracking-wider mb-1">Proveedor</label>
-                <select [(ngModel)]="quotationVendorId"
-                        class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
-                  <option value="">— Seleccione —</option>
-                  @for (v of vendors(); track v.id) {
-                    <option [value]="v.id">{{ v.code }} — {{ v.name }}</option>
+              <div class="md:col-span-2 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-end gap-2">
+                  <div class="flex-1 min-w-0">
+                    <label class="block text-xs text-muted uppercase tracking-wider mb-1">Proveedor</label>
+                    <select [(ngModel)]="quotationVendorId"
+                            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
+                      <option value="">— Seleccione un proveedor —</option>
+                      @for (v of vendors(); track v.id) {
+                        <option [value]="v.id">{{ v.code }} — {{ v.name }}</option>
+                      }
+                    </select>
+                  </div>
+                  @if (canManagePurchases()) {
+                    <button type="button" (click)="toggleInlineVendorForm()"
+                            class="shrink-0 px-3 py-2 text-sm font-medium rounded-lg border border-border text-main hover:bg-dark/80 transition-colors whitespace-nowrap">
+                      {{ showInlineVendorForm() ? 'Ocultar registro' : '+ Nuevo proveedor' }}
+                    </button>
                   }
-                </select>
+                </div>
+                @if (showInlineVendorForm() && canManagePurchases()) {
+                  <div class="rounded-lg border border-primary/30 bg-dark/50 p-4 space-y-3">
+                    <p class="text-sm text-muted">Registre el proveedor aquí; al guardar quedará seleccionado para esta cotización.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label class="block text-xs text-muted mb-1">Código <span class="text-red-400">*</span></label>
+                        <input type="text" [(ngModel)]="newVendorCode" placeholder="Ej. PRV-001"
+                               class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none" />
+                      </div>
+                      <div class="sm:col-span-2">
+                        <label class="block text-xs text-muted mb-1">Nombre <span class="text-red-400">*</span></label>
+                        <input type="text" [(ngModel)]="newVendorName" placeholder="Razón social o nombre"
+                               class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none" />
+                      </div>
+                      <div class="sm:col-span-3">
+                        <label class="block text-xs text-muted mb-1">RUT (opcional)</label>
+                        <input type="text" [(ngModel)]="newVendorRut" placeholder="12.345.678-9"
+                               class="w-full max-w-xs px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none" />
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <button type="button" (click)="createVendorInline()" [disabled]="isCreatingVendor()"
+                              class="px-4 py-2 bg-primary text-black text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
+                        {{ isCreatingVendor() ? 'Guardando...' : 'Crear y seleccionar' }}
+                      </button>
+                      <button type="button" (click)="toggleInlineVendorForm()"
+                              class="px-4 py-2 text-sm text-muted hover:text-main">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                }
               </div>
               <div>
                 <label class="block text-xs text-muted uppercase tracking-wider mb-1">Adjunto (opcional)</label>
@@ -121,14 +252,32 @@
               </div>
             </div>
             <div>
-              <p class="text-xs text-muted uppercase tracking-wider mb-2">Precio unitario por línea</p>
-              <div class="space-y-2">
+              <p class="text-xs text-muted uppercase tracking-wider mb-2">Oferta por línea</p>
+              <p class="text-[11px] text-muted mb-3">Precio unitario, y opcionalmente marca y notas de la oferta (se muestran en el cuadro comparativo).</p>
+              <div class="space-y-4">
                 @for (item of requisition()!.items; track item.id) {
-                  <div class="flex flex-wrap items-center gap-2 text-sm">
-                    <span class="text-main flex-1 min-w-[12rem]">{{ item.description }}</span>
-                    <span class="text-muted">× {{ item.quantity }} {{ item.unitOfMeasure }}</span>
-                    <input type="number" [(ngModel)]="unitPrices[item.id]" min="0" step="1"
-                           class="w-36 px-2 py-1 bg-dark border border-border rounded-lg text-main font-mono focus:border-primary focus:outline-none" />
+                  <div class="rounded-lg border border-border/60 bg-dark/20 p-3 space-y-3">
+                    <div class="text-sm">
+                      <span class="text-main font-medium">{{ item.description }}</span>
+                      <span class="text-muted"> × {{ item.quantity }} {{ item.unitOfMeasure }}</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Precio unitario</label>
+                        <input type="number" [(ngModel)]="unitPrices[item.id]" min="0" step="1"
+                               class="w-full px-2 py-1.5 bg-dark border border-border rounded-lg text-main font-mono focus:border-primary focus:outline-none" />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Marca (opcional)</label>
+                        <input type="text" [(ngModel)]="lineBrands[item.id]" placeholder="Ej. marca ofertada"
+                               class="w-full px-2 py-1.5 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none" />
+                      </div>
+                      <div class="sm:col-span-2 lg:col-span-2">
+                        <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Notas de cotización (opcional)</label>
+                        <textarea [(ngModel)]="lineNotes[item.id]" rows="2" placeholder="Condición de la línea, alternativa, plazo parcial…"
+                                  class="w-full px-2 py-1.5 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-y min-h-[2.5rem]"></textarea>
+                      </div>
+                    </div>
                   </div>
                 }
               </div>
@@ -137,7 +286,7 @@
               <p class="text-sm text-main">
                 Total cotización: <span class="font-mono font-semibold text-primary">{{ getQuotationTotal() | clpCurrency:'CLP' }}</span>
               </p>
-              <button type="button" (click)="submitQuotation()" [disabled]="isSavingQuotation()"
+              <button type="button" (click)="requestSubmitQuotation()" [disabled]="isSavingQuotation()"
                       class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
                 {{ isSavingQuotation() ? 'Guardando...' : 'Registrar cotización' }}
               </button>
@@ -193,8 +342,8 @@
                       }
                     </td>
                     <td class="px-4 py-3 text-right">
-                      @if (canSelectWinner() && !q.isWinner && q.status !== 'REJECTED') {
-                        <button type="button" (click)="selectWinner(q.id)" class="text-sm font-medium text-primary hover:text-primary/80">Seleccionar ganadora</button>
+                      @if (canSelectWinner() && !q.isWinner && (requisition()!.status === 'PENDING_APPROVAL' || q.status !== 'REJECTED')) {
+                        <button type="button" (click)="requestSelectWinner(q.id)" class="text-sm font-medium text-primary hover:text-primary/80">Seleccionar ganadora</button>
                       }
                     </td>
                   </tr>
@@ -203,7 +352,174 @@
             </tbody>
           </table>
         </div>
+
+        @if ((requisition()!.quotations?.length ?? 0) > 0) {
+          <div class="border-t border-border px-4 py-4 space-y-5 bg-dark/15">
+            <div>
+              <h3 class="text-sm font-semibold text-main">Detalle por línea (comparativo)</h3>
+              <p class="text-xs text-muted mt-1">Precio unitario, subtotal y condiciones por cada ítem del requerimiento.</p>
+            </div>
+            @for (q of requisition()!.quotations!; track q.id) {
+              <div class="rounded-xl border border-border/60 overflow-hidden"
+                   [ngClass]="{'ring-1 ring-green-500/25': q.isWinner}">
+                <div class="px-4 py-2.5 bg-dark/50 border-b border-border/50 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    <span class="font-medium text-main truncate">{{ q.vendor?.code }} — {{ q.vendor?.name }}</span>
+                    @if (q.isWinner) {
+                      <span class="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/10 text-green-400">Ganadora</span>
+                    }
+                  </div>
+                  <span class="text-xs text-muted font-mono shrink-0">Total {{ q.totalAmount | clpCurrency:q.currency }}</span>
+                </div>
+                @if (q.items.length === 0) {
+                  <p class="px-4 py-3 text-sm text-muted">Sin líneas de detalle en esta cotización.</p>
+                } @else {
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted">
+                          <th class="px-3 py-2 min-w-[11rem]">Descripción solicitada</th>
+                          <th class="px-3 py-2 whitespace-nowrap">Nº parte</th>
+                          <th class="px-3 py-2 whitespace-nowrap">Cant. / U.M.</th>
+                          <th class="px-3 py-2 whitespace-nowrap text-right">P.U.</th>
+                          <th class="px-3 py-2 whitespace-nowrap text-right">Subtotal</th>
+                          <th class="px-3 py-2 whitespace-nowrap">Marca</th>
+                          <th class="px-3 py-2 min-w-[7rem]">Notas cotización</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (line of q.items; track line.id) {
+                          <tr class="border-b border-border/40 last:border-0 align-top"
+                              [ngClass]="{'bg-green-500/5': q.isWinner}">
+                            <td class="px-3 py-2.5 text-main">
+                              <span>{{ line.requisitionItem?.description || '—' }}</span>
+                              @if (line.requisitionItem?.inventoryItem) {
+                                <p class="text-xs text-primary/90 mt-1">
+                                  Inv.: {{ line.requisitionItem!.inventoryItem!.partNumber }} — {{ line.requisitionItem!.inventoryItem!.name }}
+                                </p>
+                              }
+                              @if (line.requisitionItem?.itemNotes?.trim()) {
+                                <p class="text-xs text-muted mt-1 whitespace-pre-wrap">{{ line.requisitionItem!.itemNotes }}</p>
+                              }
+                            </td>
+                            <td class="px-3 py-2.5 text-muted whitespace-nowrap">{{ line.requisitionItem?.partNumber?.trim() || '—' }}</td>
+                            <td class="px-3 py-2.5 font-mono whitespace-nowrap">
+                              {{ line.requisitionItem?.quantity ?? '—' }}
+                              <span class="text-muted font-sans">{{ line.requisitionItem?.unitOfMeasure }}</span>
+                            </td>
+                            <td class="px-3 py-2.5 text-right font-mono">{{ line.unitPrice | clpCurrency:q.currency }}</td>
+                            <td class="px-3 py-2.5 text-right font-mono text-main">{{ quotationLineSubtotal(line) | clpCurrency:q.currency }}</td>
+                            <td class="px-3 py-2.5 text-muted">{{ line.brand?.trim() || '—' }}</td>
+                            <td class="px-3 py-2.5 text-muted whitespace-pre-wrap break-words max-w-[18rem]">{{ line.notes?.trim() || '—' }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
       </div>
     }
+
+    <section class="bg-surface rounded-xl border border-border p-6 mt-8">
+      <h2 class="text-lg font-semibold text-main mb-1">Historial de actividad</h2>
+      <p class="text-xs text-muted mb-4">Auditoría de cambios y estados en este requerimiento.</p>
+      <app-activity-timeline
+        [logs]="activityLogs()"
+        [isLoading]="activityLogsLoading()" />
+    </section>
   }
 </div>
+
+<app-confirm-modal
+  [isOpen]="showSubmitConfirmModal()"
+  title="Confirmar envío del requerimiento"
+  message="Al enviarlo, dejará de ser borrador y pasará a estado «Enviado» para que compras continúe el proceso. Ya no podrá editarlo como borrador. Revise descripción, ítems, cantidades y costos estimados antes de confirmar."
+  confirmText="Sí, enviar"
+  cancelText="Volver a revisar"
+  [isDanger]="false"
+  [confirmDelayMs]="1000"
+  (confirm)="confirmSubmitRequisition()"
+  (cancel)="cancelSubmitRequisition()"
+/>
+
+<app-confirm-modal
+  [isOpen]="showStartQuotingModal()"
+  title="Iniciar fase de cotización"
+  message="El requerimiento pasará a «En cotización». El solicitante no podrá seguir editándolo como un envío simple y compras gestionará las ofertas. Confirme que el requerimiento está listo para cotizar."
+  confirmText="Iniciar cotización"
+  cancelText="Cancelar"
+  [isDanger]="false"
+  [confirmDelayMs]="1000"
+  (confirm)="confirmStartQuoting()"
+  (cancel)="cancelStartQuoting()"
+/>
+
+<app-confirm-modal
+  [isOpen]="showSelectWinnerModal()"
+  title="Seleccionar cotización ganadora"
+  message="Esta acción es irreversible en el sentido operativo: las demás ofertas quedarán rechazadas para este proceso y la ganadora será la base obligatoria para generar la orden de compra. Impacta compromiso de compra y trazabilidad presupuestaria. Si aún no genera la OC, podrá agregar otras cotizaciones o cambiar la ganadora antes de crear la OC. ¿Desea continuar?"
+  confirmText="Sí, es la ganadora"
+  cancelText="Cancelar"
+  [isDanger]="true"
+  [confirmDelayMs]="1000"
+  (confirm)="confirmSelectWinner()"
+  (cancel)="cancelSelectWinner()"
+/>
+
+<app-confirm-modal
+  [isOpen]="showCreateOrderModal()"
+  title="Generar orden de compra"
+  message="Esta acción es irreversible a nivel de flujo: se creará la orden de compra y el requerimiento pasará a aprobado; se iniciará el circuito de firmas y compromiso de compra frente al proveedor. Afecta inventario previsto y presupuesto. Verifique contrato, proveedor, montos e ítems en el cuadro comparativo. ¿Desea continuar?"
+  confirmText="Generar OC"
+  cancelText="Cancelar"
+  [isDanger]="true"
+  [confirmDelayMs]="1000"
+  (confirm)="confirmCreateOrder()"
+  (cancel)="cancelCreateOrder()"
+/>
+
+<app-confirm-modal
+  [isOpen]="showSubmitQuotationModal()"
+  title="Registrar esta cotización"
+  message="Se guardará la oferta con los precios y datos indicados. Podrá agregar otras cotizaciones después, pero este registro quedará en el historial del requerimiento."
+  confirmText="Registrar"
+  cancelText="Revisar datos"
+  [isDanger]="false"
+  [confirmDelayMs]="1000"
+  (confirm)="confirmSubmitQuotation()"
+  (cancel)="cancelSubmitQuotation()"
+/>
+
+<app-confirm-modal
+  [isOpen]="showCancelRequisitionModal()"
+  title="Anular requerimiento"
+  message="Está anulando este requerimiento. Si existe una OC activa vinculada, la acción será bloqueada por seguridad."
+  [consequenceSummary]="cancelRiskSummary()"
+  confirmText="Sí, anular"
+  cancelText="Volver"
+  [riskLevel]="'danger'"
+  [confirmDelayMs]="1000"
+  [requireReason]="true"
+  reasonLabel="Motivo de anulación (obligatorio)"
+  reasonPlaceholder="Explique por qué se anula el requerimiento"
+  [reasonMinLength]="5"
+  [requireAcknowledge]="requireExtraCancelConfirmation()"
+  acknowledgeLabel="Confirmo esta anulación sin rango ADMIN y asumo la responsabilidad administrativa"
+  (confirm)="confirmCancelRequisition($event)"
+  (cancel)="cancelCancelRequisitionModal()"
+/>
+
+<app-equipment-detail-modal
+  [equipmentId]="linkedEquipmentDetailId()"
+  [isOpen]="showLinkedEquipmentModal()"
+  (close)="closeLinkedEquipmentModal()"
+/>
+<app-work-order-detail-modal
+  [workOrderId]="linkedOtDetailId()"
+  [isOpen]="showLinkedOtModal()"
+  (close)="closeLinkedOtModal()"
+/>

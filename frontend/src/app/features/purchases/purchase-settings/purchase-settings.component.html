@@ -34,6 +34,20 @@
             <option value="EUR">EUR - Euro</option>
           </select>
         </div>
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-medium text-muted mb-1">Margen 3-way match (factura vs OC / recepción)</label>
+          <div class="flex items-center gap-2">
+            <input type="number" min="0" max="100" step="0.01"
+                   [ngModel]="invoiceMatchTolerancePercent()" (ngModelChange)="invoiceMatchTolerancePercent.set(+$event)"
+                   class="w-32 px-3 py-2 bg-dark border border-border rounded-lg text-main font-mono focus:border-primary focus:outline-none">
+            <span class="text-sm text-muted">% de tolerancia (p. ej. 1 = ±1%)</span>
+          </div>
+          <div class="mt-3 rounded-lg border border-sky-500/25 bg-sky-500/8 px-3 py-2.5 text-xs text-sky-100/90 leading-relaxed">
+            <span class="font-semibold text-sky-200">¿Para qué sirve?</span>
+            Define la variación permitida entre la factura, la OC y la recepción. Ayuda a evitar bloqueos por diferencias menores
+            (redondeos, flete o ajustes) y alerta cuando la desviación supera el margen configurado.
+          </div>
+        </div>
       </div>
       <div class="rounded-r-lg border-l-4 border-primary/45 bg-primary/5 my-6 pl-6 pr-5 py-5 text-sm text-muted leading-relaxed">
         Las compras inferiores a <span class="font-semibold text-main font-mono">{{ threshold() | clpCurrency:currency() }}</span>

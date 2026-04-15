@@ -2,12 +2,29 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { Observable, throwError } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { HttpResponse } from '@angular/common/http';
+import type {
+  CreateRequisitionPayload,
+  PurchaseEquipmentLink,
+  PurchaseWorkOrderLink,
+  UpdateRequisitionPayload,
+} from '../../models/purchases.interface';
+
+export type {
+  CreateRequisitionPayload,
+  PurchaseEquipmentLink,
+  PurchaseWorkOrderLink,
+  UpdateRequisitionPayload,
+} from '../../models/purchases.interface';
 
 export interface PurchaseSettings {
   id: string;
   tenantId: string;
   approvalThreshold: number;
   currency: string;
+  /** Margen relativo para 3-way match (p. ej. 1 = 1%). */
+  invoiceMatchTolerancePercent?: number;
   approvalPolicies: ApprovalPolicy[];
 }
 
@@ -27,8 +44,14 @@ export interface PurchaseRequisition {
   subcontractId?: string;
   requestedById: string;
   status: string;
+  /** Baja | Media | Alta */
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
   description: string;
   justification?: string;
+  equipmentId?: string | null;
+  workOrderId?: string | null;
+  equipment?: PurchaseEquipmentLink | null;
+  workOrder?: PurchaseWorkOrderLink | null;
   items: RequisitionItem[];
   quotations?: PurchaseQuotation[];
   requestedBy?: { id: string; name: string; email: string };
@@ -45,6 +68,10 @@ export interface RequisitionItem {
   unitOfMeasure: string;
   estimatedCost?: number;
   inventoryItemId?: string;
+  /** Nº de parte indicado por el solicitante (opcional) */
+  partNumber?: string | null;
+  /** Notas / especificación opcional */
+  itemNotes?: string | null;
   inventoryItem?: { id: string; partNumber: string; name: string };
 }
 
@@ -58,7 +85,14 @@ export interface PurchaseQuotation {
   attachmentUrl?: string;
   status: string;
   isWinner: boolean;
-  vendor?: { id: string; code: string; name: string };
+  vendor?: {
+    id: string;
+    code: string;
+    name: string;
+    rut?: string | null;
+    address?: string | null;
+    contactPhone?: string | null;
+  };
   items: QuotationItem[];
   createdAt: string;
 }
@@ -69,6 +103,57 @@ export interface QuotationItem {
   unitPrice: number;
   brand?: string;
   notes?: string;
+  requisitionItem?: {
+    id: string;
+    description: string;
+    quantity: number;
+    unitOfMeasure: string;
+    partNumber?: string | null;
+    itemNotes?: string | null;
+    inventoryItem?: { id: string; partNumber: string; name: string };
+  };
+}
+
+export type PurchaseInvoiceStatus = 'PENDING' | 'MATCHED' | 'DISCREPANCY' | 'PAID';
+
+export interface PurchaseInvoice {
+  id: string;
+  tenantId: string;
+  vendorId: string;
+  purchaseOrderId: string;
+  invoiceNumber: string;
+  emissionDate: string;
+  /** Vencimiento para calendario de pagos. */
+  dueDate?: string | null;
+  totalAmount: number;
+  /** Monto neto (opcional, registro manual). */
+  netAmount?: number | null;
+  /** IVA u otros impuestos (opcional, registro manual). */
+  taxAmount?: number | null;
+  status: PurchaseInvoiceStatus;
+  pdfUrl?: string | null;
+  paymentReference?: string | null;
+  paidAt?: string | null;
+  vendor?: { id: string; name: string; code: string };
+  purchaseOrder?: {
+    id: string;
+    correlative: string;
+    totalAmount: number;
+    status: string;
+    contractId?: string;
+  };
+  /** Presente en respuestas API enriquecidas. */
+  hasDiscrepancy?: boolean;
+  discrepancyReason?: string;
+  match?: {
+    poAmount: number;
+    invoiceAmount: number;
+    receivedAmount: number;
+    tolerancePercent: number;
+    matchPo: boolean;
+    matchReceived: boolean;
+    reasons: string[];
+  };
 }
 
 export interface PurchaseOrder {
@@ -82,15 +167,30 @@ export interface PurchaseOrder {
   currency: string;
   requiredSignatures: number;
   notes?: string;
+  deliveryAddress?: string | null;
+  paymentTerms?: string | null;
+  equipmentId?: string | null;
+  workOrderId?: string | null;
+  equipment?: PurchaseEquipmentLink | null;
+  workOrder?: PurchaseWorkOrderLink | null;
   items: PurchaseOrderItem[];
   approvals: PurchaseOrderApproval[];
   receipts?: WarehouseReceipt[];
+  purchaseInvoice?: PurchaseInvoice | null;
   quotation?: PurchaseQuotation & {
-    requisition?: { id: string; correlative: string; description: string };
+    requisition?: {
+      id: string;
+      correlative: string;
+      description: string;
+      /** Todas las cotizaciones del requerimiento (comparativo; la OC surge de la ganadora). */
+      quotations?: PurchaseQuotation[];
+    };
   };
   contract?: { id: string; code: string; name: string };
   subcontract?: { id: string; code: string; name: string };
   createdAt: string;
+  /** Marca de envío al proveedor (lead time / KPI). */
+  sentAt?: string | null;
   _count?: { approvals: number; items: number };
 }
 
@@ -100,7 +200,7 @@ export interface PurchaseOrderItem {
   quantity: number;
   unitCost: number;
   inventoryItemId?: string;
-  inventoryItem?: { id: string; partNumber: string; name: string };
+  inventoryItem?: { id: string; partNumber: string; name: string; isInventory?: boolean };
 }
 
 export interface PurchaseOrderApproval {
@@ -124,8 +224,17 @@ export interface WarehouseReceipt {
   observations?: string;
   receivedAt?: string;
   items: ReceiptItem[];
-  purchaseOrder?: { id: string; correlative: string; totalAmount: number; status: string };
-  warehouse?: { id: string; code: string; name: string };
+  purchaseOrder?: {
+    id: string;
+    correlative: string;
+    totalAmount: number;
+    status: string;
+    contract?: { id: string; code: string; name: string };
+    subcontract?: { id: string; code: string; name: string } | null;
+    equipment?: PurchaseEquipmentLink | null;
+    workOrder?: PurchaseWorkOrderLink | null;
+  };
+  warehouse?: { id: string; code: string; name: string; location?: string | null };
   receivedBy?: { id: string; name: string };
   createdAt: string;
   _count?: { items: number };
@@ -138,7 +247,12 @@ export interface ReceiptItem {
   quantityReceived: number;
   observations?: string;
   orderItem?: PurchaseOrderItem & {
-    inventoryItem?: { id: string; partNumber: string; name: string; unitOfMeasure: string };
+    inventoryItem?: {
+      id: string;
+      partNumber: string;
+      name: string;
+      unitOfMeasure: { id: string; name: string; abbreviation: string };
+    };
   };
 }
 
@@ -147,11 +261,17 @@ export type ActivityLogAction =
   | 'UPDATE'
   | 'DELETE'
   | 'STATUS_CHANGE'
-  | 'SIGNATURE';
+  | 'SIGNATURE'
+  | 'SYSTEM_UPDATE';
 
 export interface ActivityLogDetails {
   oldValue?: Record<string, unknown>;
   newValue?: Record<string, unknown>;
+  /** Capa unificada (diff por campo) — alineada con backend. */
+  field?: string;
+  prev?: unknown;
+  next?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ActivityLogEntry {
@@ -178,7 +298,11 @@ export class PurchasesService {
     return this.http.get<PurchaseSettings>(`${this.base}/purchase-settings`);
   }
 
-  updateSettings(data: { approvalThreshold?: number; currency?: string }): Observable<PurchaseSettings> {
+  updateSettings(data: {
+    approvalThreshold?: number;
+    currency?: string;
+    invoiceMatchTolerancePercent?: number;
+  }): Observable<PurchaseSettings> {
     return this.http.put<PurchaseSettings>(`${this.base}/purchase-settings`, data);
   }
 
@@ -199,16 +323,44 @@ export class PurchasesService {
     return this.http.get<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}`);
   }
 
-  createRequisition(data: any): Observable<PurchaseRequisition> {
-    return this.http.post<PurchaseRequisition>(`${this.base}/purchase-requisitions`, data);
+  getRequisitionActivityLogs(id: string): Observable<ActivityLogEntry[]> {
+    return this.http.get<ActivityLogEntry[]>(
+      `${this.base}/purchase-requisitions/${id}/logs`,
+    );
   }
 
-  updateRequisition(id: string, data: any): Observable<PurchaseRequisition> {
-    return this.http.patch<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}`, data);
+  createRequisition(
+    data: CreateRequisitionPayload,
+  ): Observable<PurchaseRequisition> {
+    return this.http.post<PurchaseRequisition>(
+      `${this.base}/purchase-requisitions`,
+      data,
+    );
+  }
+
+  updateRequisition(
+    id: string,
+    data: UpdateRequisitionPayload,
+  ): Observable<PurchaseRequisition> {
+    return this.http.patch<PurchaseRequisition>(
+      `${this.base}/purchase-requisitions/${id}`,
+      data,
+    );
   }
 
   submitRequisition(id: string): Observable<PurchaseRequisition> {
     return this.http.post<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}/submit`, {});
+  }
+
+  cancelRequisition(id: string, reason: string): Observable<PurchaseRequisition> {
+    return this.http.post<PurchaseRequisition>(
+      `${this.base}/purchase-requisitions/${id}/cancel`,
+      { reason },
+    );
+  }
+
+  duplicateRequisition(id: string): Observable<PurchaseRequisition> {
+    return this.http.post<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}/duplicate`, {});
   }
 
   /**
@@ -246,8 +398,26 @@ export class PurchasesService {
     return this.http.get<PurchaseOrder[]>(`${this.base}/purchase-orders`, { params: params as any });
   }
 
+  /** OC en SENT | ORDERED | PARTIALLY_RECEIVED | SENT_TO_SUPPLIER (alcance contractual del usuario). */
+  getOrdersEligibleForReceipt(): Observable<PurchaseOrder[]> {
+    return this.http.get<PurchaseOrder[]>(
+      `${this.base}/purchase-orders/eligible-for-receipt`,
+    );
+  }
+
   getOrder(id: string): Observable<PurchaseOrder> {
     return this.http.get<PurchaseOrder>(`${this.base}/purchase-orders/${id}`);
+  }
+
+  linkOrderItemToCatalog(
+    orderId: string,
+    orderItemId: string,
+    inventoryItemId: string,
+  ): Observable<PurchaseOrder> {
+    return this.http.patch<PurchaseOrder>(
+      `${this.base}/purchase-orders/${orderId}/items/${orderItemId}/link-catalog`,
+      { inventoryItemId },
+    );
   }
 
   getOrderPdf(id: string): Observable<Blob> {
@@ -258,6 +428,16 @@ export class PurchasesService {
 
   getOrderActivityLogs(id: string): Observable<ActivityLogEntry[]> {
     return this.http.get<ActivityLogEntry[]>(`${this.base}/purchase-orders/${id}/logs`);
+  }
+
+  patchOrderLogistics(
+    id: string,
+    body: { deliveryAddress?: string | null; paymentTerms?: string | null },
+  ): Observable<PurchaseOrder> {
+    return this.http.patch<PurchaseOrder>(
+      `${this.base}/purchase-orders/${id}/logistics`,
+      body,
+    );
   }
 
   createOrder(quotationId: string): Observable<PurchaseOrder> {
@@ -280,6 +460,15 @@ export class PurchasesService {
     return this.http.post<PurchaseOrder>(`${this.base}/purchase-orders/${id}/force-close`, { reason });
   }
 
+  cancelOrder(id: string, reason: string): Observable<PurchaseOrder> {
+    return this.http.post<PurchaseOrder>(`${this.base}/purchase-orders/${id}/cancel`, { reason });
+  }
+
+  /** APPROVED → SENT (documento comunicado al proveedor). */
+  markOrderSentToSupplier(id: string): Observable<PurchaseOrder> {
+    return this.http.post<PurchaseOrder>(`${this.base}/purchase-orders/${id}/sent-to-supplier`, {});
+  }
+
   // -- Receipts --
   getReceipts(): Observable<WarehouseReceipt[]> {
     return this.http.get<WarehouseReceipt[]>(`${this.base}/warehouse-receipts`);
@@ -300,4 +489,193 @@ export class PurchasesService {
   confirmReceipt(id: string): Observable<WarehouseReceipt> {
     return this.http.post<WarehouseReceipt>(`${this.base}/warehouse-receipts/${id}/confirm`, {});
   }
+
+  // -- Purchase invoices (3-way match) --
+  createPurchaseInvoice(formData: FormData): Observable<PurchaseInvoice & { match?: PurchaseInvoice['match'] }> {
+    return this.http.post<PurchaseInvoice & { match?: PurchaseInvoice['match'] }>(
+      `${this.base}/purchase-invoices`,
+      formData,
+    );
+  }
+
+  updatePurchaseInvoice(
+    id: string,
+    formData: FormData,
+  ): Observable<PurchaseInvoice & { match?: PurchaseInvoice['match'] }> {
+    return this.http.patch<PurchaseInvoice & { match?: PurchaseInvoice['match'] }>(
+      `${this.base}/purchase-invoices/${id}`,
+      formData,
+    );
+  }
+
+  validatePurchaseInvoice(id: string): Observable<PurchaseInvoice & { match: NonNullable<PurchaseInvoice['match']> }> {
+    return this.http.post<PurchaseInvoice & { match: NonNullable<PurchaseInvoice['match']> }>(
+      `${this.base}/purchase-invoices/${id}/validate`,
+      {},
+    );
+  }
+
+  markPurchaseInvoicePaid(id: string): Observable<PurchaseInvoice> {
+    return this.http.post<PurchaseInvoice>(`${this.base}/purchase-invoices/${id}/mark-paid`, {});
+  }
+
+  /** Registra pago con referencia y fecha efectiva (paidAt). */
+  recordPurchaseInvoicePayment(
+    id: string,
+    paymentReference: string,
+  ): Observable<PurchaseInvoice> {
+    return this.http.post<PurchaseInvoice>(`${this.base}/purchase-invoices/${id}/pay`, {
+      paymentReference,
+    });
+  }
+
+  /** Calendario de pagos: totales por día de vencimiento (PENDING / MATCHED / DISCREPANCY no pagadas). */
+  getPaymentCalendar(params: {
+    from: string;
+    to: string;
+    contractId: string;
+  }): Observable<PurchasePaymentCalendarDay[]> {
+    return this.http.get<PurchasePaymentCalendarDay[]>(
+      `${this.base}/purchase-invoices/payment-calendar`,
+      {
+        params: {
+          from: params.from,
+          to: params.to,
+          contractId: params.contractId,
+        },
+      },
+    );
+  }
+
+  /** Detalle enriquecido (hasDiscrepancy, discrepancyReason, etc.). */
+  getPurchaseInvoice(id: string): Observable<PurchaseInvoice> {
+    return this.http.get<PurchaseInvoice>(`${this.base}/purchase-invoices/${id}`);
+  }
+
+  deletePurchaseInvoice(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/purchase-invoices/${id}`);
+  }
+
+  /** Listado global: filtros opcionales `status`, `contractId`, `dueDateFrom`, `dueDateTo` (YYYY-MM-DD). */
+  listPurchaseInvoices(params: {
+    status?: string;
+    contractId?: string;
+    dueDateFrom?: string;
+    dueDateTo?: string;
+  }): Observable<PurchaseInvoice[]> {
+    const q: Record<string, string> = {};
+    if (params.contractId?.trim()) q['contractId'] = params.contractId.trim();
+    if (params.status?.trim()) q['status'] = params.status.trim();
+    if (params.dueDateFrom?.trim()) q['dueDateFrom'] = params.dueDateFrom.trim();
+    if (params.dueDateTo?.trim()) q['dueDateTo'] = params.dueDateTo.trim();
+    return this.http.get<PurchaseInvoice[]>(`${this.base}/purchase-invoices`, { params: q });
+  }
+
+  // -- Analytics --
+  getPurchasesAnalyticsDashboard(params?: {
+    contractId?: string;
+    from?: string;
+    to?: string;
+  }): Observable<PurchasesAnalyticsDashboard> {
+    const httpParams: Record<string, string> = {};
+    if (params?.contractId) httpParams['contractId'] = params.contractId;
+    if (params?.from) httpParams['from'] = params.from;
+    if (params?.to) httpParams['to'] = params.to;
+    return this.http.get<PurchasesAnalyticsDashboard>(
+      `${this.base}/purchases/analytics/dashboard`,
+      { params: httpParams },
+    );
+  }
+
+  /**
+   * Reporte ejecutivo PDF (analítica). Respuesta binaria + nombre sugerido por el servidor.
+   */
+  downloadExecutiveReport(filters: {
+    contractId?: string;
+    from: string;
+    to: string;
+  }): Observable<{ blob: Blob; filename: string }> {
+    const httpParams: Record<string, string> = {
+      from: filters.from,
+      to: filters.to,
+    };
+    if (filters.contractId?.trim()) {
+      httpParams['contractId'] = filters.contractId.trim();
+    }
+    return this.http
+      .get(`${this.base}/purchases/analytics/report/pdf`, {
+        params: httpParams,
+        responseType: 'blob',
+        observe: 'response',
+      })
+      .pipe(
+        map((resp: HttpResponse<Blob>) => {
+          let filename = 'Reporte_Compras.pdf';
+          const cd = resp.headers.get('Content-Disposition');
+          if (cd) {
+            const quoted = /filename="([^"]+)"/.exec(cd);
+            if (quoted?.[1]) {
+              filename = quoted[1];
+            } else {
+              const star = /filename\*=UTF-8''([^;\n]+)/i.exec(cd);
+              if (star?.[1]) {
+                try {
+                  filename = decodeURIComponent(star[1]);
+                } catch {
+                  filename = star[1];
+                }
+              }
+            }
+          }
+          const body = resp.body;
+          if (!body) {
+            throw new Error('Respuesta PDF vacía');
+          }
+          return { blob: body, filename };
+        }),
+      );
+  }
+}
+
+export interface PurchasePaymentCalendarDay {
+  date: string;
+  matchedTotal: number;
+  discrepancyTotal: number;
+  /** Facturas registradas aún sin validación 3-way (vencimiento planificado). */
+  pendingTotal: number;
+  matchedCount: number;
+  discrepancyCount: number;
+  pendingCount: number;
+}
+
+export interface PurchasesAnalyticsDashboard {
+  filters: { from: string; to: string; contractId: string | null };
+  kpis: {
+    totalApprovedSpend: number;
+    pendingSignaturePurchaseOrders: number;
+    invoiceDiscrepancyRate: number;
+    invoiceDiscrepancyCount: number;
+    invoiceTotalForRate: number;
+  };
+  imputationSpend: { general: number; equipment: number; workOrder: number };
+  monthlySpend: Array<{ month: string; total: number }>;
+  topVendors: Array<{
+    vendorId: string;
+    vendorName: string;
+    vendorCode: string;
+    purchaseVolume: number;
+    avgLeadTimeDays: number | null;
+  }>;
+  criticalOrders: Array<{
+    id: string;
+    correlative: string;
+    totalAmount: number;
+    status: string;
+    requiredSignatures: number;
+    approvalsCount: number;
+    hoursWaiting: number;
+    contract: { code: string; name: string };
+  }>;
+  /** Suma de montos corregidos vía 3-way match (prevención de sobrepagos). */
+  overpaymentPrevention: number;
 }

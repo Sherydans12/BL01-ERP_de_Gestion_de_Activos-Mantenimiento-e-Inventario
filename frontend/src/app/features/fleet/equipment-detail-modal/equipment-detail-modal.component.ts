@@ -14,12 +14,15 @@ import {
 import { CommonModule, DatePipe } from '@angular/common';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import {
+  AssetCostRecord,
   Equipment,
   EquipmentAnalytics,
   MeterType,
 } from '../../../core/models/types';
 
 type TabId = 'ficha' | 'docs' | 'historial';
+
+type TimelineEventType = 'OT' | 'METER_ADJ' | 'PURCHASE';
 
 interface DocItem {
   label: string;
@@ -33,7 +36,7 @@ interface DocItem {
 
 interface TimelineEvent {
   id: string;
-  type: 'OT' | 'METER_ADJ';
+  type: TimelineEventType;
   date: string;
   title: string;
   subtitle: string;
@@ -77,6 +80,9 @@ export class EquipmentDetailModalComponent {
   equipment = computed(() => this.analytics()?.equipment ?? null);
   workOrders = computed(() => this.analytics()?.workOrders ?? []);
   meterAdjustments = computed(() => this.analytics()?.meterAdjustments ?? []);
+  assetCostRecords = computed(
+    () => this.analytics()?.assetCostRecords ?? [],
+  );
 
   meterIcon = computed(() =>
     this.equipment()?.meterType === MeterType.KILOMETERS
@@ -189,10 +195,6 @@ export class EquipmentDetailModalComponent {
   operationalStatus = computed(() => {
     const eq = this.equipment();
     if (!eq) return { label: 'Sin datos', color: 'text-muted', bgColor: 'bg-dark' };
-    const legal = this.legalStatus();
-    if (legal.label === 'VENCIDO') {
-      return { label: 'NO OPERATIVO', color: 'text-error', bgColor: 'bg-error/10' };
-    }
     return { label: 'OPERATIVO', color: 'text-success', bgColor: 'bg-success/10' };
   });
 
@@ -240,6 +242,7 @@ export class EquipmentDetailModalComponent {
   timeline = computed<TimelineEvent[]>(() => {
     const wos = this.workOrders();
     const adjs = this.meterAdjustments();
+    const costs = this.assetCostRecords();
     const events: TimelineEvent[] = [];
 
     for (const wo of wos) {
@@ -265,6 +268,23 @@ export class EquipmentDetailModalComponent {
         icon: this.meterIcon() === 'clock' ? 'clock' : 'gauge',
         color: 'text-secondary',
         meta: `${adj.oldValue} → ${adj.newValue} ${this.meterUnit()}`,
+      });
+    }
+
+    for (const rec of costs) {
+      const oc = rec.purchaseOrder?.correlative;
+      const wr = rec.warehouseReceipt?.correlative;
+      events.push({
+        id: rec.id,
+        type: 'PURCHASE',
+        date: rec.recordedAt,
+        title: oc ? `Compra externa (OC ${oc})` : 'Compra externa imputada',
+        subtitle: wr
+          ? `Recepción de bodega ${wr} — costo proporcional a lo recibido`
+          : 'Recepción de bodega — costo proporcional a lo recibido',
+        icon: 'purchase',
+        color: 'text-emerald-400',
+        meta: this.formatPurchaseCostMeta(rec),
       });
     }
 
@@ -359,5 +379,15 @@ export class EquipmentDetailModalComponent {
 
   formatNumber(value: number): string {
     return value.toLocaleString('es-CL');
+  }
+
+  private formatPurchaseCostMeta(rec: AssetCostRecord): string {
+    const n = Number(rec.amount);
+    if (!Number.isFinite(n)) return '';
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      maximumFractionDigits: 0,
+    }).format(n);
   }
 }

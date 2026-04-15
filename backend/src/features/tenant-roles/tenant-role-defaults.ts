@@ -67,13 +67,15 @@ export function resolveApprovalPolicyForUser<
     roleId: string;
     role: { name: string; baseRole: UserRole };
   },
->(policies: T[], user: { customRoleId?: string | null; role: UserRole }): T | undefined {
+>(
+  policies: T[],
+  user: { customRoleId?: string | null; role: UserRole },
+): T | undefined {
   if (user.customRoleId) {
     return policies.find((p) => p.roleId === user.customRoleId);
   }
   const mirrorName = SYSTEM_MIRROR_ROLE_NAME[user.role];
   return policies.find(
-    (p) =>
-      p.role.baseRole === user.role && p.role.name === mirrorName,
+    (p) => p.role.baseRole === user.role && p.role.name === mirrorName,
   );
 }

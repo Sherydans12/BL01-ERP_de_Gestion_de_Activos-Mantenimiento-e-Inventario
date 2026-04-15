@@ -36,6 +36,7 @@ export class WorkOrdersController {
   findAll(
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractHeader?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -44,7 +45,8 @@ export class WorkOrdersController {
     @Query('dateTo') dateTo?: string,
     @Query('equipmentId') equipmentId?: string,
   ) {
-    return this.workOrdersService.findAll(req.user, siteId, {
+    const activeContract = siteId || contractHeader;
+    return this.workOrdersService.findAll(req.user, activeContract, {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       search,

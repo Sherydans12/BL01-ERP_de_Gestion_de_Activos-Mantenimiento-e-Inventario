@@ -119,7 +119,10 @@ export class KitFormComponent implements OnInit {
         this.fleetService
           .getEquipments({
             limit: 1000,
-            contractId: currentContract !== 'ALL' ? currentContract : undefined,
+            contractId:
+              currentContract && currentContract !== 'ALL'
+                ? currentContract
+                : undefined,
           })
           .subscribe((res) => {
             this.fleet.set(res.data);

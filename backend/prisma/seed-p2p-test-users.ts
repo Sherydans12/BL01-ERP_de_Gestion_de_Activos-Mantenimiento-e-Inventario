@@ -7,7 +7,8 @@
  * Variables opcionales (.env):
  *   TENANT_CODE=TPM   (código del tenant; por defecto TPM)
  *
- * Contraseña para todos: Test1234!
+ * Contraseña por defecto: Test1234!
+ * supervisor@test.com y gerente@test.com: gacc2607
  */
 import 'dotenv/config';
 import { PrismaClient, UserRole } from '@prisma/client';
@@ -24,6 +25,12 @@ const adapter = new PrismaPg(pool as any);
 const prisma = new PrismaClient({ adapter });
 
 const PASSWORD_PLAIN = 'Test1234!';
+
+/** Contraseñas distintas del valor por defecto (resto: PASSWORD_PLAIN). */
+const PASSWORD_OVERRIDES: Record<string, string> = {
+  'supervisor@test.com': 'gacc2607',
+  'gerente@test.com': 'gacc2607',
+};
 
 const TEST_USERS: Array<{
   email: string;
@@ -72,11 +79,11 @@ async function main() {
   });
   const contractIds = contracts.map((c) => c.id);
 
-  const hashedPassword = await bcrypt.hash(PASSWORD_PLAIN, 10);
-
   console.log(`\n📌 Tenant: ${tenant.code} (${tenant.id})\n`);
 
   for (const spec of TEST_USERS) {
+    const plain = PASSWORD_OVERRIDES[spec.email] ?? PASSWORD_PLAIN;
+    const hashedPassword = await bcrypt.hash(plain, 10);
     const mirrorName = SYSTEM_MIRROR_ROLE_NAME[spec.role];
     const tenantRole = await prisma.tenantRole.findFirst({
       where: { tenantId: tenant.id, name: mirrorName },
@@ -129,7 +136,9 @@ async function main() {
     );
   }
 
-  console.log(`\n✅ Listo. Contraseña común: ${PASSWORD_PLAIN}\n`);
+  console.log(
+    `\n✅ Listo. Por defecto: ${PASSWORD_PLAIN} | supervisor/gerente: ${PASSWORD_OVERRIDES['supervisor@test.com']}\n`,
+  );
 }
 
 main()

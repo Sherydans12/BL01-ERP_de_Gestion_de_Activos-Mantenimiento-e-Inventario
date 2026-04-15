@@ -1,8 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { ActivityAction, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  buildActivityLogDetails,
+  type UnifiedActivityLayer,
+} from './activity-log-details.util';
 
-export type AuditEntityType = 'PURCHASE_ORDER' | 'REQUISITION';
+export type AuditEntityType =
+  | 'PURCHASE_ORDER'
+  | 'REQUISITION'
+  | 'PURCHASE_INVOICE';
 
 /** Devuelve solo las claves cuyo valor serializado difiere entre `before` y `after`. */
 export function pickChanged(
@@ -39,10 +46,15 @@ export class AuditService {
     action: ActivityAction;
     oldValue?: Record<string, unknown> | null;
     newValue?: Record<string, unknown> | null;
+    unified?: UnifiedActivityLayer;
     ipAddress?: string;
     userAgent?: string;
   }): Promise<void> {
-    const details = this.buildDetails(params.oldValue, params.newValue);
+    const details = buildActivityLogDetails(
+      params.oldValue,
+      params.newValue,
+      params.unified,
+    );
     await this.prisma.activityLog.create({
       data: {
         tenantId: params.tenantId,
@@ -55,44 +67,5 @@ export class AuditService {
         userAgent: params.userAgent,
       },
     });
-  }
-
-  private buildDetails(
-    oldValue?: Record<string, unknown> | null,
-    newValue?: Record<string, unknown> | null,
-  ): Prisma.InputJsonValue {
-    const out: Record<string, unknown> = {};
-    if (oldValue && Object.keys(oldValue).length > 0) {
-      out.oldValue = this.serializeJson(oldValue);
-    }
-    if (newValue && Object.keys(newValue).length > 0) {
-      out.newValue = this.serializeJson(newValue);
-    }
-    return out as Prisma.InputJsonValue;
-  }
-
-  private serializeJson(obj: Record<string, unknown>): Record<string, unknown> {
-    const o: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (v === undefined) continue;
-      o[k] = this.serializeValue(v);
-    }
-    return o;
-  }
-
-  private serializeValue(v: unknown): unknown {
-    if (v === null || v === undefined) return v;
-    if (typeof v === 'bigint') return v.toString();
-    if (typeof v === 'object' && v !== null && 'toNumber' in v) {
-      try {
-        return (v as { toNumber: () => number }).toNumber();
-      } catch {
-        return String(v);
-      }
-    }
-    if (v instanceof Date) return v.toISOString();
-    if (Array.isArray(v)) return v.map((x) => this.serializeValue(x));
-    if (typeof v === 'object') return this.serializeJson(v as Record<string, unknown>);
-    return v;
   }
 }
