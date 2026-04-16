@@ -236,13 +236,14 @@
         </button>
       </div>
     </div>
-
-    <app-quick-add-item-modal
-      [open]="quickAddOpen()"
-      [overlayInsideDialog]="true"
-      [warehouseId]="warehouseId"
-      (closed)="onQuickAddClosed()"
-      (itemCreated)="onQuickAddCreated($event)"
-    />
   </div>
+
+  <!-- Fuera del panel con overflow/max-height: el “crear artículo” usa overlay fixed a viewport. -->
+  <app-quick-add-item-modal
+    [open]="quickAddOpen()"
+    [overlayInsideDialog]="false"
+    [warehouseId]="warehouseId"
+    (closed)="onQuickAddClosed()"
+    (itemCreated)="onQuickAddCreated($event)"
+  />
 </dialog>
