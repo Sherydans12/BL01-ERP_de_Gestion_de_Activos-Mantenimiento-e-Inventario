@@ -41,6 +41,28 @@ function toInputDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+const REQ_PIPELINE_ORDER = [
+  'DRAFT',
+  'SUBMITTED',
+  'QUOTING',
+  'PENDING_APPROVAL',
+  'PARTIALLY_PURCHASED',
+  'APPROVED',
+  'REJECTED',
+  'CANCELLED',
+] as const;
+
+const REQ_PIPELINE_LABEL: Record<string, string> = {
+  DRAFT: 'Borrador',
+  SUBMITTED: 'Enviado',
+  QUOTING: 'En cotización',
+  PENDING_APPROVAL: 'Pendiente aprobación',
+  PARTIALLY_PURCHASED: 'Compra parcial',
+  APPROVED: 'Aprobado',
+  REJECTED: 'Rechazado',
+  CANCELLED: 'Anulado',
+};
+
 @Component({
   selector: 'app-purchases-dashboard',
   standalone: true,
@@ -90,6 +112,31 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
   hasBarChart = computed(() => (this.dashboard()?.topVendors.length ?? 0) > 0);
 
   hasLineChart = computed(() => (this.dashboard()?.monthlySpend.length ?? 0) > 0);
+
+  hasPipelineChart = computed(() => {
+    const p = this.dashboard()?.requisitionPipeline;
+    if (!p) return false;
+    return REQ_PIPELINE_ORDER.some((k) => (p[k] ?? 0) > 0);
+  });
+
+  partialProgressPercent = computed((): number | null => {
+    const pr = this.dashboard()?.partialRequisitionPurchaseProgress;
+    if (!pr || pr.lineItemsTotal <= 0) return null;
+    return Math.min(
+      100,
+      Math.round((100 * pr.lineItemsWithActivePo) / pr.lineItemsTotal),
+    );
+  });
+
+  partialProgressCopy = computed(() => {
+    const pr = this.dashboard()?.partialRequisitionPurchaseProgress;
+    if (!pr || pr.lineItemsTotal <= 0) return '';
+    return `${pr.lineItemsWithActivePo}/${pr.lineItemsTotal} ítems ya cuentan con orden de compra activa · ${pr.partialRequisitionCount} SRC en compra parcial`;
+  });
+
+  multiproviderAdjudicationSavings = computed(
+    () => this.dashboard()?.kpis?.multiproviderAdjudicationSavings ?? 0,
+  );
 
   /** Los filtros en pantalla coinciden con el último `load()` (mismos query params que el backend devolvió en `filters`). */
   currentQueryMatchesDashboard = computed(() => {
@@ -141,10 +188,12 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
   pieCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pieCanvas');
   barCanvas = viewChild<ElementRef<HTMLCanvasElement>>('barCanvas');
   lineCanvas = viewChild<ElementRef<HTMLCanvasElement>>('lineCanvas');
+  pipelineCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pipelineCanvas');
 
   private chartPie: Chart | null = null;
   private chartBar: Chart | null = null;
   private chartLine: Chart | null = null;
+  private chartPipeline: Chart | null = null;
 
   ngOnInit() {
     const to = new Date();
@@ -290,7 +339,8 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
     this.chartPie?.destroy();
     this.chartBar?.destroy();
     this.chartLine?.destroy();
-    this.chartPie = this.chartBar = this.chartLine = null;
+    this.chartPipeline?.destroy();
+    this.chartPie = this.chartBar = this.chartLine = this.chartPipeline = null;
   }
 
   private renderCharts(d: PurchasesAnalyticsDashboard) {
@@ -298,7 +348,8 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
     const pieEl = this.pieCanvas()?.nativeElement;
     const barEl = this.barCanvas()?.nativeElement;
     const lineEl = this.lineCanvas()?.nativeElement;
-    if (!pieEl || !barEl || !lineEl) return;
+    const pipeEl = this.pipelineCanvas()?.nativeElement;
+    if (!pieEl || !barEl || !lineEl || !pipeEl) return;
 
     const imp = d.imputationSpend;
     const pieTotal = imp.general + imp.equipment + imp.workOrder;
@@ -406,6 +457,41 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
             },
           },
           plugins: { legend: { labels: { color: '#94a3b8' } } },
+        },
+      });
+    }
+
+    const pipe = d.requisitionPipeline ?? {};
+    const labels = REQ_PIPELINE_ORDER.map(
+      (k) => REQ_PIPELINE_LABEL[k] ?? k,
+    );
+    const values = REQ_PIPELINE_ORDER.map((k) => pipe[k] ?? 0);
+    if (values.some((v) => v > 0)) {
+      this.chartPipeline = new Chart(pipeEl, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Cantidad de SRC',
+              data: values,
+              backgroundColor: REQ_PIPELINE_ORDER.map((k) =>
+                k === 'PARTIALLY_PURCHASED'
+                  ? 'rgba(6, 182, 212, 0.72)'
+                  : 'rgba(148, 163, 184, 0.55)',
+              ),
+            },
+          ],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, beginAtZero: true },
+            y: { ticks: { color: '#94a3b8' } },
+          },
+          plugins: { legend: { display: false } },
         },
       });
     }

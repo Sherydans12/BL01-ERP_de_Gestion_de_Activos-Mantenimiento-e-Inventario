@@ -17,6 +17,7 @@ const REQ_STATUS: Record<string, string> = {
   SUBMITTED: 'Enviado',
   QUOTING: 'En cotización',
   PENDING_APPROVAL: 'Pendiente de aprobación',
+  PARTIALLY_PURCHASED: 'Compra parcial',
   APPROVED: 'Aprobado',
   REJECTED: 'Rechazado',
   CANCELLED: 'Anulado',
@@ -85,6 +86,8 @@ const FIELD_LABELS: Record<string, string> = {
   unitCost: 'Precio unitario',
   quantity: 'Cantidad',
   pdfUrl: 'Documento PDF',
+  orderCorrelatives: 'Órdenes de compra (correlativos)',
+  ordersCreatedCount: 'Cantidad de OC creadas',
   paymentReference: 'Referencia de pago',
   performedByName: 'Ejecutado por',
 };
@@ -98,6 +101,13 @@ const EVENT_LABELS: Record<string, string> = {
   invoice_three_way_match_resolved: 'Factura: 3-way match OK tras corrección',
   marked_sent_to_supplier: 'Orden enviada al proveedor',
   invoice_created: 'Factura registrada',
+  split_po_orders_created: 'Órdenes de compra generadas desde el requerimiento (multiproveedor)',
+  split_po_idempotent_no_new_orders:
+    'Generación de OC desde requerimiento sin líneas nuevas (idempotente)',
+  awards_released_after_po_cancel:
+    'Adjudicaciones liberadas tras anular una orden de compra vinculada',
+  quotation_statuses_synced:
+    'Estados de cotización alineados con la adjudicación por ítem',
 };
 
 const UUID_RE =
@@ -197,7 +207,16 @@ export class ActivityTimelineComponent {
   /** Línea secundaria (tipo de operación · entidad). */
   summaryLine(log: ActivityLogEntry): string {
     let action = this.professionalActionLabel(log.action);
-    if (log.action === 'UPDATE' && log.entityType === 'PURCHASE_INVOICE') {
+    if (
+      log.action === 'UPDATE' &&
+      log.entityType === 'REQUISITION' &&
+      String(
+        (log.details?.newValue as Record<string, unknown> | undefined)?.['event'] ??
+          '',
+      ) === 'quotation_statuses_synced'
+    ) {
+      action = 'Sincronización de estados de cotización';
+    } else if (log.action === 'UPDATE' && log.entityType === 'PURCHASE_INVOICE') {
       action = 'Edición de factura';
     } else if (
       log.action === 'UPDATE' &&
@@ -307,6 +326,22 @@ export class ActivityTimelineComponent {
       if (w) return `Recepción de mercadería iniciada en «${w}»`;
     }
 
+    if (ev === 'quotation_statuses_synced' && log.entityType === 'REQUISITION') {
+      const ch = nv?.['changes'];
+      if (Array.isArray(ch)) {
+        const partial = ch.some(
+          (row: unknown) =>
+            typeof row === 'object' &&
+            row !== null &&
+            (row as Record<string, unknown>)['nextStatus'] === 'PARTIALLY_SELECTED',
+        );
+        if (partial) {
+          return 'Estado de cotizaciones actualizado (adjudicación parcial por proveedor)';
+        }
+      }
+      return 'Estado de cotizaciones sincronizado con la matriz de adjudicación';
+    }
+
     if (ev && EVENT_LABELS[ev]) {
       return EVENT_LABELS[ev];
     }
@@ -338,6 +373,22 @@ export class ActivityTimelineComponent {
     }
 
     if (log.action === 'STATUS_CHANGE' && log.entityType === 'REQUISITION') {
+      const evReq =
+        typeof nv?.['event'] === 'string' ? (nv['event'] as string) : '';
+      if (evReq === 'split_po_orders_created') {
+        const msg = nv?.['message'];
+        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+        const cors = nv?.['orderCorrelatives'];
+        if (Array.isArray(cors) && cors.length && cors.every((x) => typeof x === 'string')) {
+          return `Se generaron las órdenes de compra: ${cors.join(', ')}`;
+        }
+      }
+      if (evReq === 'split_po_idempotent_no_new_orders') {
+        return (
+          EVENT_LABELS[evReq] ??
+          'Generación de OC desde requerimiento: no había líneas nuevas pendientes.'
+        );
+      }
       if (nv && nv['selectedQuotationId']) {
         return 'Cotización elegida como ganadora; requerimiento pendiente de aprobación de la OC';
       }
@@ -411,6 +462,14 @@ export class ActivityTimelineComponent {
     }
 
     if (log.action === 'UPDATE' && log.entityType === 'REQUISITION') {
+      if (nv?.['event'] === 'awards_released_after_po_cancel') {
+        const msg = nv?.['message'];
+        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+        return (
+          EVENT_LABELS['awards_released_after_po_cancel'] ??
+          'Se liberaron adjudicaciones tras anular una OC vinculada.'
+        );
+      }
       if (nv && !nv['event'] && (nv['itemsSnapshot'] || ov?.['itemsSnapshot'])) {
         return 'Se actualizó el requerimiento (descripción, ítems o justificación)';
       }
@@ -476,7 +535,36 @@ export class ActivityTimelineComponent {
     return RECEIPT_STATUS[s] ?? s;
   }
 
+  labelQuotationStatus(v: unknown): string {
+    if (v === null || v === undefined || v === '') return '—';
+    const s = String(v);
+    const m: Record<string, string> = {
+      RECEIVED: 'Recibida',
+      SELECTED: 'Seleccionada',
+      PARTIALLY_SELECTED: 'Adjudicación parcial',
+      REJECTED: 'Rechazada',
+    };
+    return m[s] ?? s;
+  }
+
+  /** Icono «check parcial» + borde ámbar en timeline para sync con adjudicación parcial. */
+  quotationStatusesSyncVisual(log: ActivityLogEntry): 'partial' | null {
+    if (log.entityType !== 'REQUISITION' || log.action !== 'UPDATE') return null;
+    const nv = log.details?.newValue as Record<string, unknown> | undefined;
+    if (nv?.['event'] !== 'quotation_statuses_synced') return null;
+    const ch = nv['changes'];
+    if (!Array.isArray(ch)) return null;
+    const partial = ch.some(
+      (row: unknown) =>
+        typeof row === 'object' &&
+        row !== null &&
+        (row as Record<string, unknown>)['nextStatus'] === 'PARTIALLY_SELECTED',
+    );
+    return partial ? 'partial' : null;
+  }
+
   fieldLabel(key: string): string {
+    if (key === 'changes') return 'Cambios por cotización';
     return FIELD_LABELS[key] ?? this.camelToWords(key);
   }
 
@@ -527,6 +615,24 @@ export class ActivityTimelineComponent {
     if (key === 'status') {
       if (log.entityType === 'REQUISITION') return this.labelReqStatus(v);
       if (log.entityType === 'PURCHASE_ORDER') return this.labelPoStatus(v);
+    }
+
+    if (key === 'previousStatus' || key === 'nextStatus') {
+      return this.labelQuotationStatus(v);
+    }
+
+    if (key === 'changes' && Array.isArray(v)) {
+      return (v as Record<string, unknown>[])
+        .map((row, i) => {
+          const vn =
+            typeof row['vendorName'] === 'string' && String(row['vendorName']).trim()
+              ? String(row['vendorName'])
+              : 'Cotización';
+          const from = this.labelQuotationStatus(row['previousStatus']);
+          const to = this.labelQuotationStatus(row['nextStatus']);
+          return `${i + 1}. ${vn}: ${from} → ${to}`;
+        })
+        .join('\n');
     }
 
     if (key === 'orderStatus') return this.labelPoStatus(v);
@@ -621,6 +727,7 @@ export class ActivityTimelineComponent {
     if (!obj) return [];
     const priority = [
       'event',
+      'changes',
       'correlative',
       'description',
       'vendorName',

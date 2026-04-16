@@ -22,6 +22,9 @@ import type {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
+
+const attachmentFileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
 @Controller('inventory-items')
 @UseGuards(JwtAuthGuard)
@@ -94,14 +97,14 @@ export class InventoryItemsController {
   @Post(':id/attachments')
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', attachmentFileLimits))
   uploadAttachment(
     @Param('id') id: string,
     @UploadedFile() file: any,
     @Req() req: any,
   ) {
     if (!file?.buffer) {
-      throw new BadRequestException('Debe adjuntar un archivo PDF.');
+      throw new BadRequestException('Debe adjuntar un archivo.');
     }
     return this.inventoryItemsService.addAttachment(id, file, req.user);
   }

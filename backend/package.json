@@ -25,7 +25,8 @@
     "seed:load-test-items": "ts-node prisma/seed-load-test-items.ts",
     "db:clean-test-data": "ts-node prisma/clean-test-data.ts",
     "db:clean-bootstrap-tpm": "ts-node prisma/clean-and-bootstrap-tpm-users.ts",
-    "db:import-inventory-excel": "ts-node prisma/import-inventory-from-excel.ts"
+    "db:import-inventory-excel": "ts-node prisma/import-inventory-from-excel.ts",
+    "benchmark:purchase-stress": "ts-node prisma/benchmark-purchase-stress.ts"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",

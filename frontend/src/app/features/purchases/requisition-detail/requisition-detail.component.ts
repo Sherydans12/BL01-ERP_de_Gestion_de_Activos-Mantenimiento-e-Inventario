@@ -5,9 +5,11 @@ import { FormsModule } from '@angular/forms';
 import {
   PurchasesService,
   PurchaseRequisition,
+  RequisitionReconciliationSnapshot,
   PurchaseQuotation,
   QuotationItem,
   ActivityLogEntry,
+  LineAward,
 } from '../../../core/services/purchases/purchases.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
@@ -18,6 +20,12 @@ import { PurchasesPushNoticeComponent } from '../../../shared/components/purchas
 import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-modal/equipment-detail-modal.component';
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import { ActivityTimelineComponent } from '../../../shared/components/activity-timeline/activity-timeline.component';
+import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
+import { PdfService } from '../../../core/services/pdf/pdf.service';
+import { MAX_UPLOAD_FILE_BYTES } from '../../../core/constants/file-upload.constants';
+
+const PO_INACTIVE = new Set(['CANCELLED', 'REJECTED']);
 
 @Component({
   selector: 'app-requisition-detail',
@@ -32,6 +40,8 @@ import { ActivityTimelineComponent } from '../../../shared/components/activity-t
     EquipmentDetailModalComponent,
     WorkOrderDetailModalComponent,
     ActivityTimelineComponent,
+    EntityLinkComponent,
+    PurchaseDocumentsPanelComponent,
   ],
   templateUrl: './requisition-detail.component.html',
 })
@@ -42,6 +52,7 @@ export class RequisitionDetailComponent implements OnInit {
   private vendorsService = inject(VendorsService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private pdfService = inject(PdfService);
 
   requisition = signal<PurchaseRequisition | null>(null);
   isLoading = signal(true);
@@ -60,8 +71,10 @@ export class RequisitionDetailComponent implements OnInit {
   /** Elegir cotización ganadora (rechaza las demás de forma persistente). */
   showSelectWinnerModal = signal(false);
   pendingSelectWinnerQuotationId = signal<string | null>(null);
-  /** Generar OC desde la cotización ganadora. */
+  /** Generar OC desde la cotización ganadora (flujo legado). */
   showCreateOrderModal = signal(false);
+  /** Confirmar generación split (varias OC desde adjudicación por ítem). */
+  showGenerateSplitOrdersModal = signal(false);
   /** Registrar cotización definitiva. */
   showSubmitQuotationModal = signal(false);
   showCancelRequisitionModal = signal(false);
@@ -91,9 +104,27 @@ export class RequisitionDetailComponent implements OnInit {
 
   statusLabels: Record<string, string> = {
     DRAFT: 'Borrador', SUBMITTED: 'Enviado', QUOTING: 'En cotización',
-    PENDING_APPROVAL: 'Pendiente de aprobación', APPROVED: 'Aprobado',
+    PENDING_APPROVAL: 'Pendiente de aprobación',
+    PARTIALLY_PURCHASED: 'Compra parcial',
+    APPROVED: 'Aprobado',
     REJECTED: 'Rechazado', CANCELLED: 'Cancelado',
   };
+
+  statusBadgeClass: Record<string, string> = {
+    DRAFT: 'bg-zinc-500/15 text-zinc-300',
+    SUBMITTED: 'bg-sky-500/15 text-sky-300',
+    QUOTING: 'bg-indigo-500/15 text-indigo-300',
+    PENDING_APPROVAL: 'bg-amber-500/15 text-amber-300',
+    PARTIALLY_PURCHASED: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/35',
+    APPROVED: 'bg-emerald-500/15 text-emerald-300',
+    REJECTED: 'bg-red-500/15 text-red-300',
+    CANCELLED: 'bg-zinc-600/20 text-zinc-400',
+  };
+
+  /** Selección local: requisitionItemId → quotationItemId adjudicado. */
+  matrixSelection = signal<Record<string, string>>({});
+  isSavingLineAwards = signal(false);
+  isGeneratingSplitOrders = signal(false);
 
   priorityLabel(p?: string): string {
     const m: Record<string, string> = {
@@ -117,7 +148,11 @@ export class RequisitionDetailComponent implements OnInit {
   canSubmit = computed(() => this.requisition()?.status === 'DRAFT');
   canCancelRequisition = computed(() => {
     const s = this.requisition()?.status;
-    return !!s && ['DRAFT', 'SUBMITTED', 'QUOTING', 'PENDING_APPROVAL'].includes(s) && this.canManagePurchases();
+    return (
+      !!s &&
+      ['DRAFT', 'SUBMITTED', 'QUOTING', 'PENDING_APPROVAL', 'PARTIALLY_PURCHASED'].includes(s) &&
+      this.canManagePurchases()
+    );
   });
   requireExtraCancelConfirmation = computed(
     () => !this.auth.hasRole(['ADMIN', 'SUPER_ADMIN']),
@@ -151,7 +186,11 @@ export class RequisitionDetailComponent implements OnInit {
         u.role === 'SUPER_ADMIN'
       );
     }
-    if (r.status === 'QUOTING' || r.status === 'PENDING_APPROVAL') {
+    if (
+      r.status === 'QUOTING' ||
+      r.status === 'PENDING_APPROVAL' ||
+      r.status === 'PARTIALLY_PURCHASED'
+    ) {
       return this.canManagePurchases();
     }
     return false;
@@ -166,13 +205,221 @@ export class RequisitionDetailComponent implements OnInit {
   /** Agregar cotización en cotización o con ganadora aún sin OC. */
   canAddQuotation = computed(() => {
     const s = this.requisition()?.status;
-    return (s === 'QUOTING' || s === 'PENDING_APPROVAL') && this.canManagePurchases();
+    return (
+      (s === 'QUOTING' || s === 'PENDING_APPROVAL' || s === 'PARTIALLY_PURCHASED') &&
+      this.canManagePurchases()
+    );
   });
 
   canSelectWinner = computed(() => {
     const s = this.requisition()?.status;
+    if (this.hasLineAwardsSaved()) return false;
     return (s === 'QUOTING' || s === 'PENDING_APPROVAL') && this.canManagePurchases();
   });
+
+  /** Hay adjudicación por ítem persistida (matriz / split). */
+  hasLineAwardsSaved = computed(() =>
+    (this.requisition()?.items ?? []).some((i) => !!i.awardedQuotationItemId),
+  );
+
+  /** Cotizaciones ordenadas para columnas estables de la matriz. */
+  quotationsSorted = computed(() => {
+    const list = [...(this.requisition()?.quotations ?? [])];
+    list.sort((a, b) => {
+      const na = (a.vendor?.name ?? a.vendor?.code ?? '').localeCompare(
+        b.vendor?.name ?? b.vendor?.code ?? '',
+        'es',
+      );
+      if (na !== 0) return na;
+      return a.id.localeCompare(b.id);
+    });
+    return list;
+  });
+
+  /** Mini-dashboard 3-way: líneas SRC vs recepción vs factura (multiproveedor). */
+  reconciliationWidget = computed((): {
+    snap: RequisitionReconciliationSnapshot;
+    denom: number;
+    pctInProcurement: number;
+    pctReceived: number;
+    pctInvoiced: number;
+    currency: string;
+  } | null => {
+    const snap = this.requisition()?.reconciliationSnapshot;
+    if (!snap || snap.totalRequisitionLines <= 0) return null;
+    const denom = Math.max(snap.totalRequisitionLines, 1);
+    const pct = (a: number) =>
+      Math.min(100, Math.round(((a / denom) * 1000)) / 10);
+    return {
+      snap,
+      denom: snap.totalRequisitionLines,
+      pctInProcurement: pct(snap.linesInProcurement),
+      pctReceived: pct(snap.linesFullyReceived),
+      pctInvoiced: pct(snap.linesWithInvoice),
+      currency: snap.currency ?? 'CLP',
+    };
+  });
+
+  /** `sourceQuotationItemId` ya cubiertos por una OC activa del requerimiento. */
+  activePoSourceQuotationIds = computed(() => {
+    const r = this.requisition();
+    const set = new Set<string>();
+    for (const po of r?.purchaseOrders ?? []) {
+      if (PO_INACTIVE.has(po.status)) continue;
+      for (const li of po.items ?? []) {
+        if (li.sourceQuotationItemId) set.add(li.sourceQuotationItemId);
+      }
+    }
+    return set;
+  });
+
+  /** Fila bloqueada: adjudicación ya materializada en OC activa. */
+  isAwardRowLocked = (requisitionItemId: string): boolean => {
+    const it = this.requisition()?.items?.find((i) => i.id === requisitionItemId);
+    const aid = it?.awardedQuotationItemId;
+    if (!aid) return false;
+    return this.activePoSourceQuotationIds().has(aid);
+  };
+
+  /** Cambios locales respecto a lo persistido en el servidor. */
+  selectionDirty = computed(() => {
+    const r = this.requisition();
+    if (!r) return false;
+    const sel = this.matrixSelection();
+    for (const it of r.items) {
+      const local = sel[it.id] ?? null;
+      const server = it.awardedQuotationItemId ?? null;
+      if (local !== server) return true;
+    }
+    return false;
+  });
+
+  /** Suma cantidad × P.U. de la celda seleccionada (señal). */
+  totalAdjudicado = computed(() => {
+    const r = this.requisition();
+    if (!r) return 0;
+    const sel = this.matrixSelection();
+    let sum = 0;
+    for (const it of r.items) {
+      const qLineId = sel[it.id];
+      if (!qLineId) continue;
+      const line = this.findQuotationItemById(qLineId);
+      if (!line) continue;
+      sum += Number(line.unitPrice) * Number(it.quantity);
+    }
+    return sum;
+  });
+
+  /** Ítems sin oferta elegida en la matriz (y no bloqueados). */
+  hasUnassignedMatrixRows = computed(() => {
+    const r = this.requisition();
+    if (!r) return false;
+    const sel = this.matrixSelection();
+    return r.items.some((it) => !sel[it.id] && !this.isAwardRowLocked(it.id));
+  });
+
+  /** Quedan líneas adjudicadas sin OC activa (pendiente de generar o completar). */
+  hasPendingOcGeneration = computed(() => {
+    const r = this.requisition();
+    if (!r) return false;
+    const bought = this.activePoSourceQuotationIds();
+    return r.items.some(
+      (it) => !!it.awardedQuotationItemId && !bought.has(it.awardedQuotationItemId!),
+    );
+  });
+
+  canSaveLineAwards = computed(() => {
+    if (!this.canManagePurchases()) return false;
+    const s = this.requisition()?.status;
+    if (
+      !s ||
+      !['QUOTING', 'PENDING_APPROVAL', 'PARTIALLY_PURCHASED', 'APPROVED'].includes(
+        s,
+      )
+    ) {
+      return false;
+    }
+    if (!this.selectionDirty()) return false;
+    const sel = this.matrixSelection();
+    const count = Object.keys(sel).filter((k) => !!sel[k]).length;
+    return count > 0;
+  });
+
+  canGenerateSplitOrders = computed(() => {
+    if (!this.canManagePurchases()) return false;
+    if (this.selectionDirty()) return false;
+    const s = this.requisition()?.status;
+    if (!s) return false;
+    if (!this.hasPendingOcGeneration()) return false;
+    if (['QUOTING', 'PENDING_APPROVAL', 'PARTIALLY_PURCHASED'].includes(s)) {
+      return true;
+    }
+    if (s === 'APPROVED') {
+      return this.hasPendingOcGeneration();
+    }
+    return false;
+  });
+
+  /** Permite cambiar adjudicación en la matriz (no lectura). */
+  matrixInteractive = computed(() => {
+    if (!this.canManagePurchases()) return false;
+    const r = this.requisition();
+    const s = r?.status;
+    if (!s || !r) return false;
+    if (s === 'QUOTING' || s === 'PENDING_APPROVAL' || s === 'PARTIALLY_PURCHASED') {
+      return true;
+    }
+    if (s === 'APPROVED') {
+      return r.items.some((it) => !this.isAwardRowLocked(it.id));
+    }
+    return false;
+  });
+
+  poStatusLabel: Record<string, string> = {
+    DRAFT: 'Borrador',
+    PENDING_APPROVAL: 'Pendiente firma',
+    PARTIALLY_APPROVED: 'Firma parcial',
+    APPROVED: 'Aprobada',
+    REJECTED: 'Rechazada',
+    SENT: 'Enviada',
+    ORDERED: 'Pedida',
+    SENT_TO_SUPPLIER: 'Enviada (hist.)',
+    PARTIALLY_RECEIVED: 'Recepción parcial',
+    RECEIVED: 'Recibida',
+    CLOSED: 'Cerrada',
+    CANCELLED: 'Cancelada',
+  };
+
+  /** Badges para OC vinculadas (lectura rápida del avance contractual / logístico). */
+  poListStatusBadgeClass: Record<string, string> = {
+    DRAFT: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/35',
+    PENDING_APPROVAL: 'bg-amber-500/15 text-amber-200 border border-amber-500/40',
+    PARTIALLY_APPROVED: 'bg-sky-500/15 text-sky-200 border border-sky-500/35',
+    APPROVED: 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/35',
+    REJECTED: 'bg-red-500/15 text-red-200 border border-red-500/35',
+    SENT: 'bg-indigo-500/15 text-indigo-200 border border-indigo-500/35',
+    ORDERED: 'bg-indigo-500/15 text-indigo-200 border border-indigo-500/35',
+    SENT_TO_SUPPLIER: 'bg-indigo-500/12 text-indigo-200 border border-indigo-500/30',
+    PARTIALLY_RECEIVED: 'bg-cyan-500/15 text-cyan-200 border border-cyan-500/35',
+    RECEIVED: 'bg-green-500/15 text-green-200 border border-green-500/35',
+    CLOSED: 'bg-slate-500/15 text-slate-200 border border-slate-500/35',
+    CANCELLED: 'bg-zinc-600/20 text-zinc-400 border border-zinc-500/30',
+  };
+
+  downloadRequisitionPdf(): void {
+    const r = this.requisition();
+    if (!r) return;
+    this.pdfService.generatePurchaseRequisitionSummaryPdf({
+      correlative: r.correlative,
+      description: r.description,
+      status: r.status,
+      contract: r.contract,
+      subcontract: r.subcontract ?? null,
+      items: r.items,
+      quotations: r.quotations,
+      purchaseOrders: r.purchaseOrders,
+    });
+  }
 
   showQuotationForm = signal(false);
   showInlineVendorForm = signal(false);
@@ -209,7 +456,12 @@ export class RequisitionDetailComponent implements OnInit {
     if (!r) return false;
     const n = r.quotations?.length ?? 0;
     if (n > 0) return true;
-    return (r.status === 'QUOTING' || r.status === 'PENDING_APPROVAL') && this.canManagePurchases();
+    return (
+      (r.status === 'QUOTING' ||
+        r.status === 'PENDING_APPROVAL' ||
+        r.status === 'PARTIALLY_PURCHASED') &&
+      this.canManagePurchases()
+    );
   });
 
   /** Subtotal línea cotización = P.U. × cantidad del requerimiento. */
@@ -242,6 +494,7 @@ export class RequisitionDetailComponent implements OnInit {
     this.purchasesService.getRequisition(id).subscribe({
       next: (data) => {
         this.requisition.set(data);
+        this.syncMatrixSelectionFromServer(data);
         this.resetQuotationForm();
         this.isLoading.set(false);
       },
@@ -287,6 +540,125 @@ export class RequisitionDetailComponent implements OnInit {
             : undefined;
         this.notify.error(typeof msg === 'string' ? msg : 'Error al duplicar requerimiento');
         this.isDuplicating.set(false);
+      },
+    });
+  }
+
+  private syncMatrixSelectionFromServer(req: PurchaseRequisition) {
+    const m: Record<string, string> = {};
+    for (const it of req.items) {
+      if (it.awardedQuotationItemId) {
+        m[it.id] = it.awardedQuotationItemId;
+      }
+    }
+    this.matrixSelection.set(m);
+  }
+
+  findQuotationItemById(quotationItemId: string): QuotationItem | undefined {
+    for (const q of this.requisition()?.quotations ?? []) {
+      const hit = q.items?.find((li) => li.id === quotationItemId);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+
+  getQuotationLineForCell(
+    quotation: PurchaseQuotation,
+    requisitionItemId: string,
+  ): QuotationItem | undefined {
+    return quotation.items?.find(
+      (li) => li.requisitionItemId === requisitionItemId,
+    );
+  }
+
+  trackByQuotationId = (_: number, q: PurchaseQuotation) => q.id;
+  trackByReqItemId = (_: number, it: { id: string }) => it.id;
+
+  selectMatrixAward(requisitionItemId: string, quotationItemId: string) {
+    if (this.isAwardRowLocked(requisitionItemId)) return;
+    this.matrixSelection.update((prev) => ({
+      ...prev,
+      [requisitionItemId]: quotationItemId,
+    }));
+  }
+
+  matrixCellSubtotal(
+    requisitionItemId: string,
+    quotationItemId: string | undefined,
+  ): number {
+    if (!quotationItemId) return 0;
+    const line = this.findQuotationItemById(quotationItemId);
+    const it = this.requisition()?.items?.find((i) => i.id === requisitionItemId);
+    if (!line || !it) return 0;
+    return Number(line.unitPrice) * Number(it.quantity);
+  }
+
+  saveMatrixSelection() {
+    const req = this.requisition();
+    if (!req || !this.canSaveLineAwards()) return;
+    const sel = this.matrixSelection();
+    const awards: LineAward[] = Object.entries(sel)
+      .filter(([, quotationItemId]) => !!quotationItemId)
+      .map(([requisitionItemId, quotationItemId]) => ({
+        requisitionItemId,
+        quotationItemId,
+      }));
+    if (!awards.length) {
+      this.notify.warning('Seleccione al menos una oferta en la matriz');
+      return;
+    }
+    this.isSavingLineAwards.set(true);
+    this.purchasesService.saveLineAwards(req.id, awards).subscribe({
+      next: () => {
+        this.notify.success('Adjudicación por línea guardada');
+        this.load(req.id);
+        this.isSavingLineAwards.set(false);
+      },
+      error: (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al guardar adjudicación');
+        this.isSavingLineAwards.set(false);
+      },
+    });
+  }
+
+  requestGenerateSplitOrders() {
+    if (!this.canGenerateSplitOrders()) return;
+    this.showGenerateSplitOrdersModal.set(true);
+  }
+
+  cancelGenerateSplitOrders() {
+    this.showGenerateSplitOrdersModal.set(false);
+  }
+
+  confirmGenerateSplitOrders() {
+    this.showGenerateSplitOrdersModal.set(false);
+    const req = this.requisition();
+    if (!req) return;
+    this.isGeneratingSplitOrders.set(true);
+    this.purchasesService.createOrdersFromRequisition(req.id).subscribe({
+      next: (res) => {
+        const n = res.orders?.length ?? 0;
+        if (res.idempotent) {
+          this.notify.info('No había líneas nuevas que requieran OC; estado actualizado.');
+        } else if (n === 1) {
+          this.notify.success(`Orden de compra ${res.orders[0]!.correlative} creada`);
+        } else {
+          this.notify.success(`${n} órdenes de compra creadas`);
+        }
+        this.load(req.id);
+        this.isGeneratingSplitOrders.set(false);
+      },
+      error: (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al generar órdenes de compra');
+        this.isGeneratingSplitOrders.set(false);
       },
     });
   }
@@ -533,6 +905,10 @@ export class RequisitionDetailComponent implements OnInit {
     const totalAmount = this.getQuotationTotal();
     if (totalAmount <= 0) {
       this.notify.warning('El monto total debe ser mayor a cero');
+      return null;
+    }
+    if (this.quotationFile && this.quotationFile.size > MAX_UPLOAD_FILE_BYTES) {
+      this.notify.warning('El adjunto supera el máximo de 20 MB.');
       return null;
     }
     return {

@@ -42,6 +42,12 @@ export type ValuationFullReportData = {
     totalValue: number;
   }>;
   immobilizedCapital: number;
+  /** SRC activos con desglose OC / proveedor (multiproveedor). */
+  purchaseRequisitionExportRows?: Array<{
+    correlative: string;
+    status: string;
+    ocVendorDetail: string;
+  }>;
 };
 
 function formatMoney(n: number): string {
@@ -193,6 +199,34 @@ export function generateValuationFullReportPdfBuffer(
       doc.text(line, left, doc.y, { width, lineGap: 1 });
     }
 
+    const prRows = data.purchaseRequisitionExportRows ?? [];
+    if (prRows.length > 0) {
+      doc.addPage();
+      doc.fontSize(10).fillColor('#222').text('Requerimientos y OCs (compras)', left);
+      doc.moveDown(0.3);
+      doc.fontSize(7).fillColor('#555');
+      doc.text(
+        'Cada fila lista el SRC y las órdenes activas con proveedor (compra fragmentada).',
+        left,
+        doc.y,
+        { width },
+      );
+      doc.moveDown(0.5);
+      doc.fontSize(7).fillColor('#333');
+      for (const pr of prRows.slice(0, 40)) {
+        if (doc.y > doc.page.height - doc.page.margins.bottom - 36) {
+          doc.addPage();
+          doc.fontSize(7).fillColor('#333');
+        }
+        const det = pr.ocVendorDetail?.trim() || 'Sin OC activa';
+        doc.text(`${pr.correlative} · ${pr.status}: ${det}`, left, doc.y, {
+          width,
+          lineGap: 1,
+        });
+        doc.moveDown(0.35);
+      }
+    }
+
     doc.end();
   });
 }
@@ -284,6 +318,36 @@ export async function generateValuationFullReportXlsxBuffer(
       c.minStock,
       c.riskGap,
     ]);
+  }
+
+  const prRows = data.purchaseRequisitionExportRows ?? [];
+  if (prRows.length > 0) {
+    const wsPr = wb.addWorksheet('Compras SRC', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+    wsPr.columns = [
+      { header: 'Requerimiento', key: 'req', width: 16 },
+      { header: 'Estado SRC', key: 'st', width: 22 },
+      {
+        header: 'OC y proveedores (activas)',
+        key: 'detail',
+        width: 80,
+      },
+    ];
+    const h = wsPr.getRow(1);
+    h.font = { bold: true };
+    h.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0F2FE' },
+    };
+    for (const pr of prRows) {
+      wsPr.addRow({
+        req: pr.correlative,
+        st: pr.status,
+        detail: pr.ocVendorDetail || '—',
+      });
+    }
   }
 
   const buf = await wb.xlsx.writeBuffer();

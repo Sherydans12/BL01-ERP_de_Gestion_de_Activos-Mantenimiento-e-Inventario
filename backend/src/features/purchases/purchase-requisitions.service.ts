@@ -15,6 +15,14 @@ import {
   WORK_ORDER_LINK_SELECT,
 } from './purchase-asset-links.include';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import { SaveLineAwardsDto } from './dto/line-awards.dto';
+import {
+  syncPurchaseQuotationStatusesFromLineAwards,
+  type QuotationStatusChange,
+} from './purchase-quotation-status-sync.util';
+import { buildRequisitionReconciliationSnapshot } from './purchase-requisition-reconciliation.util';
+
+const PO_INACTIVE_FOR_LINK = ['CANCELLED', 'REJECTED'] as const;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -241,47 +249,80 @@ export class PurchaseRequisitionsService {
     tenantId: string,
     user?: { role?: string; allowedContracts?: string[] },
   ) {
-    const requisition = await this.prisma.purchaseRequisition.findFirst({
-      where: { id, tenantId },
-      include: {
-        requestedBy: { select: { id: true, name: true, email: true } },
-        contract: { select: { id: true, code: true, name: true } },
-        subcontract: SUBCONTRACT_SELECT,
-        equipment: EQUIPMENT_LINK_SELECT,
-        workOrder: WORK_ORDER_LINK_SELECT,
-        items: {
-          include: {
-            inventoryItem: {
-              select: { id: true, partNumber: true, name: true },
-            },
-          },
-        },
-        quotations: {
-          include: {
-            vendor: { select: { id: true, code: true, name: true } },
-            items: {
-              include: {
-                requisitionItem: {
-                  select: {
-                    id: true,
-                    description: true,
-                    quantity: true,
-                    unitOfMeasure: true,
-                    partNumber: true,
-                    itemNotes: true,
-                    inventoryItemId: true,
-                    inventoryItem: {
-                      select: { id: true, partNumber: true, name: true },
+    const [requisition, purchaseDocuments] = await Promise.all([
+      this.prisma.purchaseRequisition.findFirst({
+        where: { id, tenantId },
+        include: {
+          requestedBy: { select: { id: true, name: true, email: true } },
+          contract: { select: { id: true, code: true, name: true } },
+          subcontract: SUBCONTRACT_SELECT,
+          equipment: EQUIPMENT_LINK_SELECT,
+          workOrder: WORK_ORDER_LINK_SELECT,
+          items: {
+            include: {
+              inventoryItem: {
+                select: { id: true, partNumber: true, name: true },
+              },
+              awardedQuotationItem: {
+                include: {
+                  quotation: {
+                    select: {
+                      id: true,
+                      vendorId: true,
+                      currency: true,
+                      vendor: { select: { id: true, code: true, name: true } },
                     },
                   },
                 },
               },
             },
           },
-          orderBy: { createdAt: 'desc' },
+          purchaseOrders: {
+            select: {
+              id: true,
+              correlative: true,
+              status: true,
+              totalAmount: true,
+              currency: true,
+              quotationId: true,
+              items: { select: { sourceQuotationItemId: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+          quotations: {
+            include: {
+              vendor: { select: { id: true, code: true, name: true } },
+              items: {
+                include: {
+                  requisitionItem: {
+                    select: {
+                      id: true,
+                      description: true,
+                      quantity: true,
+                      unitOfMeasure: true,
+                      partNumber: true,
+                      itemNotes: true,
+                      inventoryItemId: true,
+                      inventoryItem: {
+                        select: { id: true, partNumber: true, name: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
         },
-      },
-    });
+      }),
+      this.prisma.purchaseDocument.findMany({
+        where: { tenantId, entity: 'REQUISITION', entityId: id },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          uploadedBy: { select: { id: true, name: true, email: true } },
+        },
+      }),
+    ]);
     if (!requisition)
       throw new NotFoundException('Requerimiento no encontrado');
 
@@ -289,7 +330,18 @@ export class PurchaseRequisitionsService {
       assertUserHasContractAccess(user, requisition.contractId);
     }
 
-    return requisition;
+    const reconciliationSnapshot = await buildRequisitionReconciliationSnapshot(
+      this.prisma,
+      tenantId,
+      requisition.id,
+      requisition.items.map((i) => ({
+        id: i.id,
+        quantity: Number(i.quantity),
+        awardedQuotationItemId: i.awardedQuotationItemId,
+      })),
+    );
+
+    return { ...requisition, reconciliationSnapshot, purchaseDocuments };
   }
 
   /**
@@ -598,8 +650,15 @@ export class PurchaseRequisitionsService {
     /** Ganadora elegida pero OC aún no generada: compras puede seguir ajustando ítems. */
     const canEditPendingWinner =
       requisition.status === 'PENDING_APPROVAL' && isPurchaser;
+    const canEditPartialPurchase =
+      requisition.status === 'PARTIALLY_PURCHASED' && isPurchaser;
 
-    if (!canEditDraft && !canEditQuoting && !canEditPendingWinner) {
+    if (
+      !canEditDraft &&
+      !canEditQuoting &&
+      !canEditPendingWinner &&
+      !canEditPartialPurchase
+    ) {
       if (requisition.status === 'QUOTING') {
         throw new ForbiddenException(
           'Solo personal de compras puede editar un requerimiento en fase de cotización',
@@ -873,8 +932,11 @@ export class PurchaseRequisitionsService {
     const linkedOrder = await this.prisma.purchaseOrder.findFirst({
       where: {
         tenantId: user.tenantId,
-        quotation: { requisitionId: id },
-        status: { notIn: ['CANCELLED', 'REJECTED'] },
+        status: { notIn: [...PO_INACTIVE_FOR_LINK] },
+        OR: [
+          { requisitionId: id },
+          { quotation: { requisitionId: id } },
+        ],
       },
       select: { id: true, correlative: true, status: true },
     });
@@ -982,7 +1044,12 @@ export class PurchaseRequisitionsService {
     const requisition = await this.findById(requisitionId, user.tenantId);
 
     if (
-      !['SUBMITTED', 'QUOTING', 'PENDING_APPROVAL'].includes(requisition.status)
+      ![
+        'SUBMITTED',
+        'QUOTING',
+        'PENDING_APPROVAL',
+        'PARTIALLY_PURCHASED',
+      ].includes(requisition.status)
     ) {
       throw new BadRequestException(
         'El requerimiento no acepta cotizaciones en su estado actual',
@@ -1080,6 +1147,157 @@ export class PurchaseRequisitionsService {
     });
 
     return quotation;
+  }
+
+  /**
+   * Adjudicación por ítem (split multiproveedor). No modifica adjudicación de líneas
+   * que ya tienen una OC activa vinculada a la cotización adjudicada previa.
+   */
+  async saveLineAwards(
+    requisitionId: string,
+    dto: SaveLineAwardsDto,
+    user: any,
+  ) {
+    const tenantId = user.tenantId;
+    const requisition = await this.findById(requisitionId, tenantId, user);
+
+    if (
+      ![
+        'QUOTING',
+        'PENDING_APPROVAL',
+        'PARTIALLY_PURCHASED',
+        'APPROVED',
+      ].includes(requisition.status)
+    ) {
+      throw new BadRequestException(
+        'Solo se puede adjudicar por línea en cotización, pendiente de aprobación, compra parcial o requerimiento cerrado con líneas aún sin OC (p. ej. ítems nuevos)',
+      );
+    }
+
+    const reqItemIds = dto.awards.map((a) => a.requisitionItemId);
+    if (new Set(reqItemIds).size !== reqItemIds.length) {
+      throw new BadRequestException(
+        'Hay ítems de requerimiento duplicados en la adjudicación',
+      );
+    }
+
+    for (const a of dto.awards) {
+      const reqItem = requisition.items.find((i) => i.id === a.requisitionItemId);
+      if (!reqItem) {
+        throw new BadRequestException(
+          `Ítem de requerimiento no pertenece a este SRC: ${a.requisitionItemId}`,
+        );
+      }
+      if (reqItem.awardedQuotationItemId) {
+        const locked = await this.prisma.purchaseOrderItem.findFirst({
+          where: {
+            sourceQuotationItemId: reqItem.awardedQuotationItemId,
+            purchaseOrder: {
+              tenantId,
+              status: { notIn: [...PO_INACTIVE_FOR_LINK] },
+              OR: [
+                { requisitionId },
+                { quotation: { requisitionId } },
+              ],
+            },
+          },
+        });
+        if (locked) {
+          throw new BadRequestException(
+            'No puede cambiar la adjudicación de una línea que ya tiene orden de compra activa',
+          );
+        }
+      }
+
+      const qi = await this.prisma.quotationItem.findFirst({
+        where: {
+          id: a.quotationItemId,
+          requisitionItemId: a.requisitionItemId,
+          quotation: { requisitionId, tenantId },
+        },
+      });
+      if (!qi) {
+        throw new BadRequestException(
+          'La línea de cotización no corresponde al ítem en este requerimiento',
+        );
+      }
+    }
+
+    const statusBefore = requisition.status;
+
+    let quotationStatusChanges: QuotationStatusChange[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const a of dto.awards) {
+        await tx.requisitionItem.update({
+          where: { id: a.requisitionItemId },
+          data: { awardedQuotationItemId: a.quotationItemId },
+        });
+      }
+
+      const itemsAfter = await tx.requisitionItem.findMany({
+        where: { requisitionId },
+        select: { awardedQuotationItemId: true },
+      });
+      const allAwarded =
+        itemsAfter.length > 0 &&
+        itemsAfter.every((i) => i.awardedQuotationItemId != null);
+
+      if (statusBefore === 'QUOTING' && allAwarded) {
+        await tx.purchaseRequisition.update({
+          where: { id: requisitionId },
+          data: { status: 'PENDING_APPROVAL' },
+        });
+      }
+
+      quotationStatusChanges = await syncPurchaseQuotationStatusesFromLineAwards(
+        tx,
+        requisitionId,
+      );
+    });
+
+    const updated = await this.findById(requisitionId, tenantId, user);
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId,
+      entityType: 'REQUISITION',
+      entityId: requisitionId,
+      action: 'UPDATE',
+      newValue: {
+        event: 'line_awards_saved',
+        awardsCount: dto.awards.length,
+        statusAfter: updated.status,
+      },
+    });
+
+    if (statusBefore === 'QUOTING' && updated.status === 'PENDING_APPROVAL') {
+      await this.audit.log({
+        userId: user.id,
+        tenantId,
+        entityType: 'REQUISITION',
+        entityId: requisitionId,
+        action: 'STATUS_CHANGE',
+        oldValue: { status: statusBefore },
+        newValue: { status: 'PENDING_APPROVAL', reason: 'all_lines_awarded' },
+      });
+    }
+
+    if (quotationStatusChanges.length) {
+      await this.audit.log({
+        userId: user.id,
+        tenantId,
+        entityType: 'REQUISITION',
+        entityId: requisitionId,
+        action: 'UPDATE',
+        newValue: {
+          event: 'quotation_statuses_synced',
+          changes: quotationStatusChanges,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async selectQuotation(requisitionId: string, quotationId: string, user: any) {

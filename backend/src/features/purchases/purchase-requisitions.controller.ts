@@ -10,12 +10,18 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PurchaseRequisitionsService } from './purchase-requisitions.service';
+import { SaveLineAwardsDto } from './dto/line-awards.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
+
+const quotationAttachmentLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
 @Controller('purchase-requisitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -86,7 +92,7 @@ export class PurchaseRequisitionsController {
 
   @Post(':id/quotations')
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
-  @UseInterceptors(FileInterceptor('attachment'))
+  @UseInterceptors(FileInterceptor('attachment', quotationAttachmentLimits))
   addQuotation(
     @Param('id') id: string,
     @Body() body: any,
@@ -105,5 +111,22 @@ export class PurchaseRequisitionsController {
     @Req() req: any,
   ) {
     return this.service.selectQuotation(id, qId, req.user);
+  }
+
+  @Post(':id/line-awards')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  saveLineAwards(
+    @Param('id') id: string,
+    @Body() body: SaveLineAwardsDto,
+    @Req() req: any,
+  ) {
+    return this.service.saveLineAwards(id, body, req.user);
   }
 }

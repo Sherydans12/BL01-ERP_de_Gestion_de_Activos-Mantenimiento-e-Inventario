@@ -60,6 +60,10 @@ export class PurchasesAnalyticsService {
       overpaymentRow,
       monthlyRows,
       vendorRows,
+      multiproviderSavings,
+      requisitionPipeline,
+      partialRequisitionPurchaseProgress,
+      requisitionPurchaseRows,
     ] = await Promise.all([
       this.prisma.purchaseOrder.aggregate({
         where: {
@@ -126,6 +130,10 @@ export class PurchasesAnalyticsService {
       this.sumOverpaymentPrevention(tenantId, from, to, contractId),
       this.monthlySpendSeries(tenantId, from, to, contractId),
       this.topVendorsWithLeadTime(tenantId, from, to, contractId),
+      this.multiproviderAdjudicationSavings(tenantId, from, to, contractId),
+      this.requisitionPipelineCounts(tenantId, contractId),
+      this.partialRequisitionLineCoverage(tenantId, contractId),
+      this.requisitionsSnapshotForReport(tenantId, from, to, contractId),
     ]);
 
     const criticalOrders = criticalOrdersRaw
@@ -160,6 +168,7 @@ export class PurchasesAnalyticsService {
         invoiceDiscrepancyRate: invoiceStats.rate,
         invoiceDiscrepancyCount: invoiceStats.discrepancyCount,
         invoiceTotalForRate: invoiceStats.totalForRate,
+        multiproviderAdjudicationSavings: multiproviderSavings,
       },
       imputationSpend: {
         general: gen,
@@ -170,7 +179,221 @@ export class PurchasesAnalyticsService {
       topVendors: vendorRows,
       criticalOrders,
       overpaymentPrevention: Number(overpaymentRow[0]?.sum ?? 0),
+      requisitionPipeline,
+      partialRequisitionPurchaseProgress,
+      requisitionPurchaseRows,
     };
+  }
+
+  /** Σ (max P.U. cotizado por ítem − P.U. adjudicado) × cantidad, SRC tocados en el período. */
+  private async multiproviderAdjudicationSavings(
+    tenantId: string,
+    from: Date,
+    to: Date,
+    contractId?: string,
+  ): Promise<number> {
+    const sumRow = async () => {
+      if (contractId) {
+        return this.prisma.$queryRaw<{ s: unknown }[]>`
+          SELECT COALESCE(SUM(
+            GREATEST(0,
+              COALESCE((
+                SELECT MAX(qi2.unit_price::numeric)
+                FROM quotation_items qi2
+                INNER JOIN purchase_quotations pq2 ON pq2.id = qi2.quotation_id
+                WHERE qi2.requisition_item_id = ri.id
+                  AND pq2.status::text <> 'REJECTED'
+              ), aw.unit_price::numeric) - aw.unit_price::numeric
+            ) * ri.quantity::double precision
+          ), 0)::numeric AS s
+          FROM requisition_items ri
+          INNER JOIN quotation_items aw ON aw.id = ri.awarded_quotation_item_id
+          INNER JOIN purchase_requisitions pr ON pr.id = ri.requisition_id
+          WHERE pr.tenant_id = ${tenantId}::uuid
+            AND pr.contract_id = ${contractId}::uuid
+            AND pr.updated_at >= ${from}
+            AND pr.updated_at <= ${to}
+            AND ri.awarded_quotation_item_id IS NOT NULL
+        `;
+      }
+      return this.prisma.$queryRaw<{ s: unknown }[]>`
+        SELECT COALESCE(SUM(
+          GREATEST(0,
+            COALESCE((
+              SELECT MAX(qi2.unit_price::numeric)
+              FROM quotation_items qi2
+              INNER JOIN purchase_quotations pq2 ON pq2.id = qi2.quotation_id
+              WHERE qi2.requisition_item_id = ri.id
+                AND pq2.status::text <> 'REJECTED'
+            ), aw.unit_price::numeric) - aw.unit_price::numeric
+          ) * ri.quantity::double precision
+        ), 0)::numeric AS s
+        FROM requisition_items ri
+        INNER JOIN quotation_items aw ON aw.id = ri.awarded_quotation_item_id
+        INNER JOIN purchase_requisitions pr ON pr.id = ri.requisition_id
+        WHERE pr.tenant_id = ${tenantId}::uuid
+          AND pr.updated_at >= ${from}
+          AND pr.updated_at <= ${to}
+          AND ri.awarded_quotation_item_id IS NOT NULL
+      `;
+    };
+    const rows = await sumRow();
+    return Number(rows[0]?.s ?? 0);
+  }
+
+  private async requisitionPipelineCounts(
+    tenantId: string,
+    contractId?: string,
+  ): Promise<Record<string, number>> {
+    const rows = await this.prisma.purchaseRequisition.groupBy({
+      by: ['status'],
+      where: { tenantId, ...(contractId ? { contractId } : {}) },
+      _count: { _all: true },
+    });
+    return Object.fromEntries(
+      rows.map((r) => [r.status, r._count._all]),
+    ) as Record<string, number>;
+  }
+
+  private async partialRequisitionLineCoverage(
+    tenantId: string,
+    contractId?: string,
+  ): Promise<{
+    partialRequisitionCount: number;
+    lineItemsTotal: number;
+    lineItemsWithActivePo: number;
+  }> {
+    const partialReqs = await this.prisma.purchaseRequisition.findMany({
+      where: {
+        tenantId,
+        status: 'PARTIALLY_PURCHASED',
+        ...(contractId ? { contractId } : {}),
+      },
+      select: {
+        id: true,
+        items: {
+          select: {
+            awardedQuotationItemId: true,
+          },
+        },
+      },
+    });
+    let lineItemsTotal = 0;
+    let lineItemsWithActivePo = 0;
+    const reqIds = partialReqs.map((r) => r.id);
+    const awardPairs = partialReqs.flatMap((pr) =>
+      pr.items
+        .filter((i) => i.awardedQuotationItemId)
+        .map((i) => ({
+          reqId: pr.id,
+          awardId: i.awardedQuotationItemId as string,
+        })),
+    );
+    const awardIds = [...new Set(awardPairs.map((p) => p.awardId))];
+    if (awardIds.length && reqIds.length) {
+      const hits = await this.prisma.purchaseOrderItem.findMany({
+        where: {
+          sourceQuotationItemId: { in: awardIds },
+          purchaseOrder: {
+            tenantId,
+            status: { notIn: ['CANCELLED', 'REJECTED'] },
+            OR: [
+              { requisitionId: { in: reqIds } },
+              { quotation: { requisitionId: { in: reqIds } } },
+            ],
+          },
+        },
+        select: {
+          sourceQuotationItemId: true,
+          purchaseOrder: {
+            select: {
+              requisitionId: true,
+              quotation: { select: { requisitionId: true } },
+            },
+          },
+        },
+      });
+      const covered = new Set<string>();
+      for (const h of hits) {
+        const aid = h.sourceQuotationItemId;
+        if (!aid) continue;
+        const rid =
+          h.purchaseOrder.requisitionId ??
+          h.purchaseOrder.quotation?.requisitionId;
+        if (rid) covered.add(`${rid}|${aid}`);
+      }
+      for (const pr of partialReqs) {
+        for (const it of pr.items) {
+          lineItemsTotal++;
+          if (
+            it.awardedQuotationItemId &&
+            covered.has(`${pr.id}|${it.awardedQuotationItemId}`)
+          ) {
+            lineItemsWithActivePo++;
+          }
+        }
+      }
+    } else {
+      for (const pr of partialReqs) {
+        lineItemsTotal += pr.items.length;
+      }
+    }
+    return {
+      partialRequisitionCount: partialReqs.length,
+      lineItemsTotal,
+      lineItemsWithActivePo,
+    };
+  }
+
+  private async requisitionsSnapshotForReport(
+    tenantId: string,
+    from: Date,
+    to: Date,
+    contractId?: string,
+  ): Promise<
+    Array<{
+      correlative: string;
+      status: string;
+      ocLines: string[];
+    }>
+  > {
+    const rows = await this.prisma.purchaseRequisition.findMany({
+      where: {
+        tenantId,
+        updatedAt: { gte: from, lte: to },
+        ...(contractId ? { contractId } : {}),
+        status: { notIn: ['DRAFT', 'CANCELLED'] },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 35,
+      select: {
+        correlative: true,
+        status: true,
+        purchaseOrders: {
+          where: { status: { notIn: ['CANCELLED', 'REJECTED'] } },
+          select: {
+            correlative: true,
+            status: true,
+            quotation: {
+              select: {
+                vendor: { select: { name: true, code: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      correlative: r.correlative,
+      status: r.status,
+      ocLines: r.purchaseOrders.map((po) => {
+        const vn =
+          po.quotation?.vendor?.name ??
+          po.quotation?.vendor?.code ??
+          'Proveedor';
+        return `${po.correlative} · ${vn} · ${po.status}`;
+      }),
+    }));
   }
 
   private async invoiceDiscrepancyStats(

@@ -18,15 +18,18 @@ import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { StorageService } from '../../common/storage/storage.service';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import { PurchaseDocumentsService } from './purchase-documents.service';
+import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
+
+const invoiceFileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
 @Controller('purchase-invoices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PurchaseInvoicesController {
   constructor(
     private readonly service: PurchaseInvoicesService,
-    private readonly storageService: StorageService,
+    private readonly documents: PurchaseDocumentsService,
   ) {}
 
   /**
@@ -83,7 +86,7 @@ export class PurchaseInvoicesController {
 
   @Post()
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
-  @UseInterceptors(FileInterceptor('pdf'))
+  @UseInterceptors(FileInterceptor('pdf', invoiceFileLimits))
   async create(
     @Body()
     body: {
@@ -98,12 +101,14 @@ export class PurchaseInvoicesController {
       taxAmount?: string | number | null;
       pdfUrl?: string;
     },
-    @UploadedFile() file: any,
+    @UploadedFile() file:
+      | { buffer: Buffer; originalname: string; mimetype: string }
+      | undefined,
     @Req() req: any,
   ) {
     let pdfUrl: string | null | undefined = body.pdfUrl;
     if (file) {
-      pdfUrl = await this.storageService.uploadFile(file, 'purchase-invoices');
+      pdfUrl = null;
     }
     const total =
       typeof body.totalAmount === 'string'
@@ -125,7 +130,7 @@ export class PurchaseInvoicesController {
         : typeof body.taxAmount === 'string'
           ? parseFloat(body.taxAmount)
           : body.taxAmount;
-    return this.service.create(
+    const created = await this.service.create(
       {
         purchaseOrderId: body.purchaseOrderId,
         vendorId: body.vendorId,
@@ -139,11 +144,27 @@ export class PurchaseInvoicesController {
       },
       req.user,
     );
+    if (file?.buffer?.length) {
+      await this.documents.upload(
+        req.user.tenantId,
+        req.user.id,
+        'PURCHASE_INVOICE',
+        created.id,
+        {
+          buffer: file.buffer,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+        },
+        req.user,
+      );
+      return this.service.findByIdForApi(created.id, req.user);
+    }
+    return created;
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
-  @UseInterceptors(FileInterceptor('pdf'))
+  @UseInterceptors(FileInterceptor('pdf', invoiceFileLimits))
   async update(
     @Param('id') id: string,
     @Body()
@@ -156,12 +177,14 @@ export class PurchaseInvoicesController {
       taxAmount?: string | number | null;
       pdfUrl?: string | null;
     },
-    @UploadedFile() file: any,
+    @UploadedFile() file:
+      | { buffer: Buffer; originalname: string; mimetype: string }
+      | undefined,
     @Req() req: any,
   ) {
     let pdfUrl: string | null | undefined = body.pdfUrl;
     if (file) {
-      pdfUrl = await this.storageService.uploadFile(file, 'purchase-invoices');
+      pdfUrl = null;
     }
     const total =
       body.totalAmount !== undefined
@@ -185,7 +208,7 @@ export class PurchaseInvoicesController {
           : typeof body.taxAmount === 'string'
             ? parseFloat(body.taxAmount)
             : body.taxAmount;
-    return this.service.update(
+    const updated = await this.service.update(
       id,
       {
         invoiceNumber: body.invoiceNumber,
@@ -198,6 +221,22 @@ export class PurchaseInvoicesController {
       },
       req.user,
     );
+    if (file?.buffer?.length) {
+      await this.documents.upload(
+        req.user.tenantId,
+        req.user.id,
+        'PURCHASE_INVOICE',
+        id,
+        {
+          buffer: file.buffer,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+        },
+        req.user,
+      );
+      return this.service.findByIdForApi(id, req.user);
+    }
+    return updated;
   }
 
   @Post(':id/validate')

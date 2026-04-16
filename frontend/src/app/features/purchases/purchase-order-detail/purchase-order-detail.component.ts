@@ -24,6 +24,7 @@ import { ItemPickerRow } from '../../../core/services/inventory-items/inventory-
 import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-modal/equipment-detail-modal.component';
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
 
 @Component({
   selector: 'app-purchase-order-detail',
@@ -41,6 +42,7 @@ import { EntityLinkComponent } from '../../../shared/components/entity-link/enti
     EquipmentDetailModalComponent,
     WorkOrderDetailModalComponent,
     EntityLinkComponent,
+    PurchaseDocumentsPanelComponent,
   ],
   templateUrl: './purchase-order-detail.component.html',
 })

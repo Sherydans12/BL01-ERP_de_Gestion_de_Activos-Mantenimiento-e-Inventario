@@ -38,6 +38,18 @@ export class PurchaseOrdersController {
     );
   }
 
+  @Post('from-requisition/:requisitionId')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  createOrdersFromRequisition(
+    @Param('requisitionId') requisitionId: string,
+    @Req() req: any,
+  ) {
+    return this.service.createOrdersFromRequisition(
+      requisitionId,
+      req.user,
+    );
+  }
+
   @Get(':id/logs')
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
   findActivityLogs(@Param('id') id: string, @Req() req: any) {

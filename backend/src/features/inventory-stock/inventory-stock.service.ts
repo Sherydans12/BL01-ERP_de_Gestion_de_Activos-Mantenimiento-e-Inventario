@@ -127,6 +127,118 @@ export class InventoryStockService {
     return out;
   }
 
+  private poStatusForSupplyTooltip(st: string): string {
+    const m: Record<string, string> = {
+      DRAFT: 'Borrador',
+      PENDING_APPROVAL: 'Pendiente firma',
+      PARTIALLY_APPROVED: 'Firma parcial',
+      APPROVED: 'Aprobada',
+      SENT: 'En camino',
+      ORDERED: 'En camino',
+      SENT_TO_SUPPLIER: 'En camino',
+      PARTIALLY_RECEIVED: 'Recepción parcial',
+      RECEIVED: 'Recibida',
+      CLOSED: 'Cerrada',
+      CANCELLED: 'Anulada',
+      REJECTED: 'Rechazada',
+    };
+    return m[st] ?? st;
+  }
+
+  /**
+   * Texto para bodega: REQ, cantidades en OC activa vs pendiente de adjudicación/OC.
+   */
+  private async linkedPurchaseTooltipText(
+    tenantId: string,
+    requisitionId: string,
+    inventoryItemId: string,
+  ): Promise<string> {
+    const req = await this.prisma.purchaseRequisition.findFirst({
+      where: { id: requisitionId, tenantId },
+      select: {
+        correlative: true,
+        items: {
+          where: { inventoryItemId },
+          select: {
+            quantity: true,
+            awardedQuotationItemId: true,
+          },
+        },
+      },
+    });
+    if (!req) return 'Requerimiento vinculado (sin detalle)';
+    if (req.items.length === 0) {
+      return `${req.correlative}: sin líneas de este artículo en el SRC`;
+    }
+    const awardIds = [
+      ...new Set(
+        req.items
+          .map((i) => i.awardedQuotationItemId)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    const hits =
+      awardIds.length > 0
+        ? await this.prisma.purchaseOrderItem.findMany({
+            where: {
+              sourceQuotationItemId: { in: awardIds },
+              purchaseOrder: {
+                tenantId,
+                OR: [
+                  { requisitionId },
+                  { quotation: { requisitionId } },
+                ],
+                status: { notIn: ['CANCELLED', 'REJECTED'] },
+              },
+            },
+            select: {
+              quantity: true,
+              sourceQuotationItemId: true,
+              purchaseOrder: {
+                select: { correlative: true, status: true },
+              },
+            },
+          })
+        : [];
+    const bestByAward = new Map<
+      string,
+      { correlative: string; status: string; qty: number }
+    >();
+    for (const h of hits) {
+      if (!h.sourceQuotationItemId) continue;
+      const qty = Number(h.quantity);
+      const cur = bestByAward.get(h.sourceQuotationItemId);
+      if (!cur || qty > cur.qty) {
+        bestByAward.set(h.sourceQuotationItemId, {
+          correlative: h.purchaseOrder.correlative,
+          status: h.purchaseOrder.status,
+          qty,
+        });
+      }
+    }
+    const parts: string[] = [];
+    for (const it of req.items) {
+      const qn = Number(it.quantity);
+      const qtyTxt =
+        Number.isInteger(qn) && Math.abs(qn - Math.round(qn)) < 1e-9
+          ? String(Math.round(qn))
+          : qn.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+      if (!it.awardedQuotationItemId) {
+        parts.push(`${qtyTxt} uds pendientes de adjudicar`);
+        continue;
+      }
+      const po = bestByAward.get(it.awardedQuotationItemId);
+      if (po) {
+        parts.push(
+          `${qtyTxt} uds en ${po.correlative} (${this.poStatusForSupplyTooltip(po.status)})`,
+        );
+      } else {
+        parts.push(`${qtyTxt} uds adjudicadas, sin OC activa`);
+      }
+    }
+    return `${req.correlative}: ${parts.join('; ')}`;
+  }
+
   /**
    * Ítems con minStock > 0 y cantidad ≤ minStock (tenant completo).
    * Cantidad sugerida: cubrir déficit hasta el mínimo + cobertura de ~30 días según
@@ -207,6 +319,29 @@ export class InventoryStockService {
       consumptionMap.set(key, Number(c._sum.quantity ?? 0));
     }
 
+    const tooltipKeys = [
+      ...new Set(
+        alerts
+          .map((a) => {
+            const lr = reqByItemId.get(a.itemId);
+            return lr ? `${lr.id}|${a.itemId}` : '';
+          })
+          .filter((k): k is string => k.length > 0),
+      ),
+    ];
+    const tooltipMap = new Map<string, string>();
+    await Promise.all(
+      tooltipKeys.map(async (k) => {
+        const sep = k.indexOf('|');
+        const rid = k.slice(0, sep);
+        const iid = k.slice(sep + 1);
+        tooltipMap.set(
+          k,
+          await this.linkedPurchaseTooltipText(tenantId, rid, iid),
+        );
+      }),
+    );
+
     return alerts.map((s) => {
       const targetOptimal = s.maxStock > 0 ? s.maxStock : s.minStock;
       const key = `${s.warehouseId}:${s.itemId}`;
@@ -216,6 +351,8 @@ export class InventoryStockService {
       /** Déficit al mínimo + cobertura ~30 días (mismo valor que 1 mes de consumo medio). */
       const suggestedOrderQty = shortfallToMin + avgMonthlyConsumption;
 
+      const lr = reqByItemId.get(s.itemId) ?? null;
+      const tipKey = lr ? `${lr.id}|${s.itemId}` : '';
       return {
         id: s.id,
         quantity: s.quantity,
@@ -233,7 +370,8 @@ export class InventoryStockService {
         suggestedOrderQty,
         warehouse: s.warehouse,
         item: this.ensureItemDescription(s.item),
-        linkedRequisition: reqByItemId.get(s.itemId) ?? null,
+        linkedRequisition: lr,
+        linkedPurchaseSummary: tipKey ? (tooltipMap.get(tipKey) ?? null) : null,
       };
     });
   }

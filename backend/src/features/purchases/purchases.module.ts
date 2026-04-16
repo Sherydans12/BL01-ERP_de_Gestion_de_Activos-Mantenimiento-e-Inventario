@@ -15,6 +15,9 @@ import { PurchaseInvoicesController } from './purchase-invoices.controller';
 import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { PurchasesAnalyticsController } from './purchases-analytics.controller';
 import { PurchasesAnalyticsService } from './purchases-analytics.service';
+import { UsersModule } from '../users/users.module';
+import { PurchaseDocumentsController } from './purchase-documents.controller';
+import { PurchaseDocumentsService } from './purchase-documents.service';
 
 @Module({
   imports: [
@@ -22,6 +25,7 @@ import { PurchasesAnalyticsService } from './purchases-analytics.service';
     AuditModule,
     NotificationsModule,
     InventoryStockModule,
+    UsersModule,
   ],
   controllers: [
     PurchaseSettingsController,
@@ -30,6 +34,7 @@ import { PurchasesAnalyticsService } from './purchases-analytics.service';
     WarehouseReceiptsController,
     PurchaseInvoicesController,
     PurchasesAnalyticsController,
+    PurchaseDocumentsController,
   ],
   providers: [
     PurchaseSettingsService,
@@ -38,6 +43,7 @@ import { PurchasesAnalyticsService } from './purchases-analytics.service';
     WarehouseReceiptsService,
     PurchaseInvoicesService,
     PurchasesAnalyticsService,
+    PurchaseDocumentsService,
   ],
   exports: [
     PurchaseOrdersService,

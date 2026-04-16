@@ -34,6 +34,12 @@
           </button>
         </div>
 
+        <app-purchase-documents-panel
+          entity="PURCHASE_ORDER"
+          [entityId]="order()!.id"
+          [title]="'Adjuntos de la orden de compra'"
+        />
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
       <div class="rounded-xl border border-border/70 bg-surface p-4 shadow-sm">
         <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted mb-3">Datos del proveedor</h3>
@@ -462,6 +468,14 @@
         <p class="text-sm text-muted mb-4">
           Conciliación entre monto de la OC, valor recepcionado en bodega y monto de la factura del proveedor (margen en configuración de compras).
         </p>
+
+        @if (order()!.purchaseInvoice) {
+          <app-purchase-documents-panel
+            entity="PURCHASE_INVOICE"
+            [entityId]="order()!.purchaseInvoice!.id"
+            [title]="'Adjuntos de la factura'"
+          />
+        }
 
         @if (order()!.purchaseInvoice && (order()!.purchaseInvoice!.status === 'MATCHED' || order()!.purchaseInvoice!.status === 'PAID')) {
           <div class="rounded-xl border-2 border-emerald-500/45 bg-emerald-500/10 px-5 py-4 mb-6">

@@ -14,6 +14,8 @@ import { PurchasesPushNoticeComponent } from '../../../shared/components/purchas
 import { ActivityTimelineComponent } from '../../../shared/components/activity-timeline/activity-timeline.component';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { MAX_UPLOAD_FILE_BYTES } from '../../../core/constants/file-upload.constants';
+import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
 
 @Component({
   selector: 'app-purchase-invoice-form',
@@ -26,6 +28,7 @@ import { AuthService } from '../../../core/services/auth/auth.service';
     PurchasesPushNoticeComponent,
     ActivityTimelineComponent,
     ConfirmModalComponent,
+    PurchaseDocumentsPanelComponent,
   ],
   templateUrl: './purchase-invoice-form.component.html',
 })
@@ -154,6 +157,12 @@ export class PurchaseInvoiceFormComponent implements OnInit {
   onFileChange(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
+    if (file && file.size > MAX_UPLOAD_FILE_BYTES) {
+      this.notify.error('El archivo supera el máximo de 20 MB.');
+      input.value = '';
+      this.pdfFile.set(null);
+      return;
+    }
     this.pdfFile.set(file ?? null);
   }
 

@@ -161,6 +161,46 @@
       </div>
     </div>
 
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div class="rounded-xl border border-cyan-500/35 bg-cyan-500/[0.06] p-4">
+        <h2 class="text-lg font-semibold text-main mb-1">Ahorro por adjudicación multiproveedor</h2>
+        <p class="text-xs text-muted mb-3">
+          Suma estimada (max P.U. cotizado − P.U. adjudicado) × cantidad, en SRC con movimiento en el período.
+        </p>
+        <p class="text-2xl font-bold font-mono text-cyan-300 mt-1">
+          {{ multiproviderAdjudicationSavings() | clpCurrency }}
+        </p>
+      </div>
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <h2 class="text-lg font-semibold text-main mb-1">Compras parciales (en curso)</h2>
+        @if (partialProgressPercent() != null) {
+          <p class="text-sm text-main mb-3 leading-snug">{{ partialProgressCopy() }}</p>
+          <div class="h-3 rounded-full bg-dark overflow-hidden border border-border/80">
+            <div
+              class="h-full bg-cyan-500/85 transition-all duration-300"
+              [style.width.%]="partialProgressPercent()!"
+            ></div>
+          </div>
+        } @else {
+          <p class="text-sm text-muted">Sin requerimientos en compra parcial en el alcance del contrato actual.</p>
+        }
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-border bg-surface p-4 mb-6">
+      <h2 class="text-lg font-semibold text-main mb-1">Pipeline de requerimientos</h2>
+      <p class="text-xs text-muted mb-3">Conteo de SRC por estado (incluye compra parcial). Alcance: contrato seleccionado o todos.</p>
+      <div class="h-72 relative">
+        <canvas #pipelineCanvas class="w-full h-full" [class.opacity-0]="!hasPipelineChart()" [class.pointer-events-none]="!hasPipelineChart()"></canvas>
+        @if (!hasPipelineChart()) {
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4 border border-dashed border-border rounded-lg bg-dark/20">
+            <span class="text-3xl mb-2" aria-hidden="true">📋</span>
+            <p class="text-sm text-muted">Sin requerimientos registrados en el alcance actual.</p>
+          </div>
+        }
+      </div>
+    </div>
+
     @if (canSeeFinancialSavings() && savingsVariation(); as savings) {
       <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 mb-6">
         <h2 class="text-lg font-semibold text-main mb-1">Ahorro y variación de precios</h2>

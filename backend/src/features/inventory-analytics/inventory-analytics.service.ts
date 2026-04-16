@@ -314,6 +314,32 @@ export class InventoryAnalyticsService {
       0,
     );
 
+    const purchaseRequisitionExportRows =
+      await this.prisma.purchaseRequisition.findMany({
+        where: {
+          tenantId,
+          status: { notIn: ['DRAFT', 'CANCELLED'] },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+        select: {
+          correlative: true,
+          status: true,
+          purchaseOrders: {
+            where: { status: { notIn: ['CANCELLED', 'REJECTED'] } },
+            select: {
+              correlative: true,
+              status: true,
+              quotation: {
+                select: {
+                  vendor: { select: { name: true, code: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
     return {
       generatedAt,
       lines,
@@ -324,6 +350,21 @@ export class InventoryAnalyticsService {
       criticalItems,
       deadStockItems,
       immobilizedCapital,
+      purchaseRequisitionExportRows: purchaseRequisitionExportRows.map(
+        (r) => ({
+          correlative: r.correlative,
+          status: r.status,
+          ocVendorDetail: r.purchaseOrders
+            .map((po) => {
+              const vn =
+                po.quotation?.vendor?.name ??
+                po.quotation?.vendor?.code ??
+                '—';
+              return `${po.correlative} — ${vn} — ${po.status}`;
+            })
+            .join(' | '),
+        }),
+      ),
     };
   }
 
@@ -346,20 +387,30 @@ export class InventoryAnalyticsService {
       }[]
     >(Prisma.sql`
       WITH receipt_base AS (
-        SELECT
+        SELECT DISTINCT ON (wr.id)
           wr.id AS receipt_id,
-          q.vendor_id,
+          COALESCE(q.vendor_id, fb.vendor_id) AS vendor_id,
           po.sent_at,
           wr.received_at,
-          q.delivery_days
+          COALESCE(q.delivery_days, fb.delivery_days) AS delivery_days
         FROM warehouse_receipts wr
         INNER JOIN purchase_orders po ON po.id = wr.purchase_order_id
-        INNER JOIN purchase_quotations q ON q.id = po.quotation_id
+        LEFT JOIN purchase_quotations q ON q.id = po.quotation_id
+        LEFT JOIN LATERAL (
+          SELECT pq.vendor_id, pq.delivery_days
+          FROM purchase_order_items poi
+          INNER JOIN quotation_items qi ON qi.id = poi.source_quotation_item_id
+          INNER JOIN purchase_quotations pq ON pq.id = qi.quotation_id
+          WHERE poi.purchase_order_id = po.id
+          ORDER BY poi.id ASC
+          LIMIT 1
+        ) fb ON TRUE
         WHERE po.tenant_id = ${tenantId}::uuid
           AND po.sent_at IS NOT NULL
           AND wr.received_at IS NOT NULL
           AND wr.received_at >= ${from}
           AND wr.received_at <= ${to}
+          AND COALESCE(q.vendor_id, fb.vendor_id) IS NOT NULL
       )
       SELECT
         v.id AS vendor_id,

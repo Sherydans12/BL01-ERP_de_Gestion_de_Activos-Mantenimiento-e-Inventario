@@ -9,7 +9,20 @@ export type PurchasesAnalyticsDashboardPdfData = {
     invoiceDiscrepancyRate: number;
     invoiceDiscrepancyCount: number;
     invoiceTotalForRate: number;
+    /** Σ (max P.U. cotizado − adjudicado) × cantidad en SRC del período. */
+    multiproviderAdjudicationSavings?: number;
   };
+  requisitionPipeline?: Record<string, number>;
+  partialRequisitionPurchaseProgress?: {
+    partialRequisitionCount: number;
+    lineItemsTotal: number;
+    lineItemsWithActivePo: number;
+  };
+  requisitionPurchaseRows?: Array<{
+    correlative: string;
+    status: string;
+    ocLines: string[];
+  }>;
   imputationSpend: { general: number; equipment: number; workOrder: number };
   monthlySpend: Array<{ month: string; total: number }>;
   topVendors: Array<{
@@ -153,6 +166,61 @@ export function generatePurchasesAnalyticsReportPdfBuffer(
       leadAvg != null ? `${leadAvg} días` : '—',
     );
     doc.y = boxY + kpiH + 16;
+
+    const mpSave = data.kpis.multiproviderAdjudicationSavings ?? 0;
+    doc
+      .fontSize(10)
+      .fillColor('#0f766e')
+      .text(
+        `Ahorro por adjudicación multiproveedor (SRC actualizados en el período): ${formatClp(mpSave)}`,
+        left,
+        doc.y,
+        { width },
+      );
+    doc.moveDown(0.4);
+    doc
+      .fontSize(8)
+      .fillColor('#666666')
+      .text(
+        'Estimación: por cada ítem adjudicado se compara el precio unitario máximo cotizado frente al adjudicado, multiplicado por la cantidad solicitada.',
+        left,
+        doc.y,
+        { width },
+      );
+    doc.moveDown(0.8);
+
+    const part = data.partialRequisitionPurchaseProgress;
+    if (part && part.lineItemsTotal > 0) {
+      doc
+        .fontSize(10)
+        .fillColor('#0c4a6e')
+        .text(
+          `Compras parciales: ${part.lineItemsWithActivePo} / ${part.lineItemsTotal} líneas de ítem con OC activa ` +
+            `(${part.partialRequisitionCount} SRC en estado compra parcial).`,
+          left,
+          doc.y,
+          { width },
+        );
+      doc.moveDown(0.6);
+    }
+
+    const rowsReq = data.requisitionPurchaseRows ?? [];
+    if (rowsReq.length > 0) {
+      doc.fontSize(11).fillColor('#111111').text('Requerimientos — OC y proveedor', {
+        underline: true,
+      });
+      doc.moveDown(0.4);
+      doc.fontSize(8).fillColor('#333333');
+      for (const r of rowsReq.slice(0, 28)) {
+        const ocText =
+          r.ocLines.length > 0 ? r.ocLines.join(' · ') : 'Sin OC activa';
+        doc.text(`• ${r.correlative} (${r.status}): ${ocText}`, {
+          width,
+        });
+        doc.moveDown(0.35);
+      }
+      doc.moveDown(0.5);
+    }
 
     doc.fontSize(12).text('Distribución del gasto por imputación', {
       underline: true,

@@ -14,7 +14,8 @@
           [ngClass]="{
             'border-emerald-500/50 bg-emerald-500/15': log.action === 'CREATE',
             'border-sky-500/50 bg-sky-500/15': log.action === 'SIGNATURE',
-            'border-amber-500/50 bg-amber-500/15': log.action === 'UPDATE' || log.action === 'STATUS_CHANGE',
+            'border-amber-500/50 bg-amber-500/15': (log.action === 'UPDATE' || log.action === 'STATUS_CHANGE') && quotationStatusesSyncVisual(log) !== 'partial',
+            'border-amber-400/60 bg-amber-500/20 ring-1 ring-amber-400/35': quotationStatusesSyncVisual(log) === 'partial',
             'border-violet-500/50 bg-violet-500/15': log.action === 'SYSTEM_UPDATE',
             'border-red-500/50 bg-red-500/15': log.action === 'DELETE'
           }"
@@ -29,9 +30,16 @@
               </svg>
             }
             @case ('UPDATE') {
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-              </svg>
+              @if (quotationStatusesSyncVisual(log) === 'partial') {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-amber-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h8" opacity="0.45"/>
+                </svg>
+              } @else {
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+              }
             }
             @case ('STATUS_CHANGE') {
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">

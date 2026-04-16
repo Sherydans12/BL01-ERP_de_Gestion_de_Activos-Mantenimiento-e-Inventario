@@ -344,6 +344,7 @@ model User {
   activityLogs            ActivityLog[]
   pushSubscriptions       PushSubscription[]
   inventoryTransfersCreated InventoryTransfer[] @relation("InventoryTransferCreatedBy")
+  purchaseDocumentsUploaded PurchaseDocument[]
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -389,6 +390,7 @@ model Tenant {
   pushSubscriptions     PushSubscription[]
   inventoryItemAttachments InventoryItemAttachment[]
   inventoryTransfers    InventoryTransfer[]
+  purchaseDocuments     PurchaseDocument[]
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -902,6 +904,7 @@ model PurchaseRequisition {
   workOrder       WorkOrder?          @relation("RequisitionWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
   items           RequisitionItem[]
   quotations      PurchaseQuotation[]
+  purchaseOrders  PurchaseOrder[]
 
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])
@@ -921,10 +924,13 @@ model RequisitionItem {
   quantity        Float
   unitOfMeasure   String              @map("unit_of_measure") @db.VarChar(20)
   estimatedCost   Decimal?            @map("estimated_cost") @db.Decimal(18, 2)
+  /// Línea de cotización adjudicada para compra (split multiproveedor).
+  awardedQuotationItemId String?     @map("awarded_quotation_item_id") @db.Uuid
 
-  requisition     PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
-  inventoryItem   InventoryItem?      @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-  quotationItems  QuotationItem[]
+  requisition            PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  inventoryItem          InventoryItem?      @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  quotationItems         QuotationItem[]
+  awardedQuotationItem   QuotationItem?      @relation("RequisitionItemAward", fields: [awardedQuotationItemId], references: [id], onDelete: SetNull)
 
   @@map("requisition_items")
 }
@@ -949,7 +955,7 @@ model PurchaseQuotation {
   requisition     PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
   vendor          Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   items           QuotationItem[]
-  purchaseOrder   PurchaseOrder?
+  purchaseOrders  PurchaseOrder[]
 
   @@map("purchase_quotations")
 }
@@ -962,8 +968,10 @@ model QuotationItem {
   brand             String?           @db.VarChar(100)
   notes             String?           @db.VarChar(255)
 
-  quotation         PurchaseQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  requisitionItem   RequisitionItem   @relation(fields: [requisitionItemId], references: [id], onDelete: Restrict)
+  quotation                    PurchaseQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  requisitionItem              RequisitionItem   @relation(fields: [requisitionItemId], references: [id], onDelete: Restrict)
+  requisitionItemsWithThisAward RequisitionItem[] @relation("RequisitionItemAward")
+  purchaseOrderLines           PurchaseOrderItem[]
 
   @@map("quotation_items")
 }
@@ -974,7 +982,9 @@ model PurchaseOrder {
   tenantId           String              @map("tenant_id") @db.Uuid
   contractId         String              @map("contract_id") @db.Uuid
   subcontractId      String?             @map("subcontract_id") @db.Uuid
-  quotationId        String?             @unique @map("quotation_id") @db.Uuid
+  /// Trazabilidad directa 1:N requerimiento → órdenes de compra (split multiproveedor).
+  requisitionId      String?             @map("requisition_id") @db.Uuid
+  quotationId        String?             @map("quotation_id") @db.Uuid
   correlative        String              @db.VarChar(30)
   status             PurchaseOrderStatus @default(DRAFT)
   totalAmount        Decimal             @map("total_amount") @db.Decimal(18, 2)
@@ -997,6 +1007,7 @@ model PurchaseOrder {
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contract           Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
   subcontract        Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  requisition        PurchaseRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
   quotation          PurchaseQuotation?  @relation(fields: [quotationId], references: [id], onDelete: SetNull)
   equipment          Equipment?          @relation("OrderEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
   workOrder          WorkOrder?          @relation("OrderWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
@@ -1009,6 +1020,7 @@ model PurchaseOrder {
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])
   @@index([tenantId, workOrderId])
+  @@index([tenantId, requisitionId])
   @@map("purchase_orders")
 }
 
@@ -1019,11 +1031,15 @@ model PurchaseOrderItem {
   description     String         @db.VarChar(255)
   quantity        Float
   unitCost        Decimal        @map("unit_cost") @db.Decimal(18, 2)
+  /// Línea de cotización origen (idempotencia split y trazabilidad; IVA por OC en factura asociada).
+  sourceQuotationItemId String?  @map("source_quotation_item_id") @db.Uuid
 
-  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-  receiptItems    ReceiptItem[]
+  purchaseOrder        PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItem        InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  sourceQuotationItem  QuotationItem? @relation(fields: [sourceQuotationItemId], references: [id], onDelete: SetNull)
+  receiptItems         ReceiptItem[]
 
+  @@index([sourceQuotationItemId])
   @@map("purchase_order_items")
 }
 
@@ -1123,6 +1139,32 @@ model PurchaseInvoice {
   @@map("purchase_invoices")
 }
 
+/// Adjuntos unificados (REQ, OC, factura): clave en storage + metadatos (migración R2-ready).
+model PurchaseDocument {
+  id           String                 @id @default(uuid()) @db.Uuid
+  tenantId     String                 @map("tenant_id") @db.Uuid
+  entity       PurchaseDocumentEntity
+  entityId     String                 @map("entity_id") @db.Uuid
+  storageKey   String                 @map("storage_key") @db.VarChar(500)
+  originalName String                 @map("original_name") @db.VarChar(255)
+  mimeType     String                 @map("mime_type") @db.VarChar(120)
+  sizeBytes    Int                    @map("size_bytes")
+  uploadedById String                 @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime               @default(now()) @map("created_at")
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, entity, entityId])
+  @@map("purchase_documents")
+}
+
+enum PurchaseDocumentEntity {
+  REQUISITION
+  PURCHASE_ORDER
+  PURCHASE_INVOICE
+}
+
 // ==========================================
 // ENUMS: MÓDULO DE COMPRAS
 // ==========================================
@@ -1138,6 +1180,8 @@ enum RequisitionStatus {
   SUBMITTED
   QUOTING
   PENDING_APPROVAL
+  /// Al menos una línea ya tiene OC activa; puede faltar cobertura de otras líneas.
+  PARTIALLY_PURCHASED
   APPROVED
   REJECTED
   CANCELLED
@@ -1152,6 +1196,8 @@ enum RequisitionPriority {
 enum QuotationStatus {
   RECEIVED
   SELECTED
+  /// Al menos una línea de esta cotización fue adjudicada; quedan líneas del proveedor sin compra en este SRC.
+  PARTIALLY_SELECTED
   REJECTED
 }
 

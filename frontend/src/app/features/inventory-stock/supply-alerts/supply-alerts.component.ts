@@ -27,6 +27,8 @@ export interface SupplyAlertRow {
   };
   /** Requerimiento abierto reciente que incluye este artículo (si existe). */
   linkedRequisition?: { id: string; correlative: string } | null;
+  /** Detalle OC / adjudicación para tooltip (multiproveedor). */
+  linkedPurchaseSummary?: string | null;
 }
 
 @Component({

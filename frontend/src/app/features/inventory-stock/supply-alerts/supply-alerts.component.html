@@ -16,7 +16,7 @@
         (click)="forceRefresh()"
         class="px-4 py-2 text-xs font-mono rounded-lg border border-border text-muted hover:text-main hover:bg-dark"
       >
-        🔄 Actualizar
+        Actualizar
       </button>
       <button
         type="button"
@@ -116,7 +116,10 @@
                 <td class="py-3 px-4 text-center font-mono font-bold text-primary">
                   {{ r.suggestedOrderQty | number: "1.0-2" }}
                 </td>
-                <td class="py-3 px-4 text-xs">
+                <td
+                  class="py-3 px-4 text-xs max-w-[14rem]"
+                  [attr.title]="r.linkedPurchaseSummary || null"
+                >
                   @if (r.linkedRequisition) {
                     <app-entity-link
                       kind="REQ"
@@ -124,6 +127,11 @@
                       [label]="r.linkedRequisition.correlative"
                       variant="badge"
                     />
+                    @if (r.linkedPurchaseSummary) {
+                      <p class="text-[10px] text-muted mt-1 leading-snug line-clamp-2 cursor-help">
+                        {{ r.linkedPurchaseSummary }}
+                      </p>
+                    }
                   } @else {
                     <span class="text-muted font-mono text-[11px]">—</span>
                   }

@@ -38,6 +38,14 @@
           </svg>
           {{ isDuplicating() ? 'Duplicando...' : 'Duplicar' }}
         </button>
+        <button type="button" (click)="downloadRequisitionPdf()"
+                class="inline-flex items-center gap-1.5 px-4 py-2 border border-border text-main font-medium rounded-lg hover:bg-dark/80 transition-colors"
+                title="Descargar PDF resumen (compra fragmentada vs. ganadora única)">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          PDF resumen
+        </button>
         @if (canEditRequisition()) {
           <a [routerLink]="['/app/compras/requerimientos', requisition()!.id, 'edit']"
              class="inline-flex items-center px-4 py-2 border border-border text-main font-medium rounded-lg hover:bg-dark/80 transition-colors">
@@ -66,10 +74,10 @@
             {{ isStartingQuotation() ? 'Iniciando...' : 'Iniciar Cotización' }}
           </button>
         }
-        @if (winnerQuotation() && requisition()!.status === 'PENDING_APPROVAL') {
+        @if (winnerQuotation() && requisition()!.status === 'PENDING_APPROVAL' && !hasLineAwardsSaved()) {
           <button type="button" (click)="requestCreateOrder()" [disabled]="isCreatingOrder()"
                   class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ isCreatingOrder() ? 'Generando OC...' : 'Generar Orden de Compra' }}
+            {{ isCreatingOrder() ? 'Generando OC...' : 'Generar OC (ganadora única)' }}
           </button>
         }
       </div>
@@ -78,7 +86,10 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div class="bg-surface rounded-xl border border-border p-4">
         <p class="text-xs text-muted uppercase tracking-wider mb-1">Estado</p>
-        <p class="text-main font-semibold">{{ statusLabels[requisition()!.status] || requisition()!.status }}</p>
+        <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
+              [ngClass]="statusBadgeClass[requisition()!.status] || 'bg-border/30 text-muted'">
+          {{ statusLabels[requisition()!.status] || requisition()!.status }}
+        </span>
       </div>
       <div class="bg-surface rounded-xl border border-border p-4">
         <p class="text-xs text-muted uppercase tracking-wider mb-1">Solicitante</p>
@@ -97,6 +108,64 @@
         }
       </div>
     </div>
+
+    @if (reconciliationWidget(); as rw) {
+      <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-sm font-semibold text-main">Estado de recepción y pago</h2>
+            <p class="text-xs text-muted mt-1 max-w-2xl">
+              Avance por líneas del requerimiento: cobertura con OC activa, recepción completa en bodega y factura de proveedor registrada por OC. Útil cuando varios proveedores avanzan a distinto ritmo.
+            </p>
+          </div>
+          @if (rw.snap.budgetExceeded) {
+            <div class="shrink-0 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-100 max-w-md">
+              <p class="font-semibold text-red-200">Alerta: facturación sobre monto adjudicado</p>
+              <p class="mt-1 leading-snug">
+                Suma facturas <span class="font-mono">{{ rw.snap.invoicesTotal | clpCurrency:rw.currency }}</span>
+                vs adjudicado en matriz <span class="font-mono">{{ rw.snap.adjudicatedMatrixTotal | clpCurrency:rw.currency }}</span>.
+                Revise extras no pactados o IVA / neto en facturas.
+              </p>
+            </div>
+          }
+        </div>
+        <div class="space-y-4">
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-muted">Ítems con OC activa</span>
+              <span class="font-mono text-main">{{ rw.snap.linesInProcurement }} / {{ rw.denom }}</span>
+            </div>
+            <div class="h-2 rounded-full bg-dark overflow-hidden border border-border/40">
+              <div class="h-2 rounded-full bg-indigo-500/90 transition-all" [style.width.%]="rw.pctInProcurement"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-muted">Ítems con recepción completa</span>
+              <span class="font-mono text-main">{{ rw.snap.linesFullyReceived }} / {{ rw.denom }}</span>
+            </div>
+            <div class="h-2 rounded-full bg-dark overflow-hidden border border-border/40">
+              <div class="h-2 rounded-full bg-emerald-500/90 transition-all" [style.width.%]="rw.pctReceived"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-muted">Ítems con factura registrada (OC)</span>
+              <span class="font-mono text-main">{{ rw.snap.linesWithInvoice }} / {{ rw.denom }}</span>
+            </div>
+            <div class="h-2 rounded-full bg-dark overflow-hidden border border-border/40">
+              <div class="h-2 rounded-full bg-violet-500/90 transition-all" [style.width.%]="rw.pctInvoiced"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    <app-purchase-documents-panel
+      entity="REQUISITION"
+      [entityId]="requisition()!.id"
+      [title]="'Adjuntos del requerimiento'"
+    />
 
     <div class="bg-surface rounded-xl border border-border p-4 mb-6">
       <h2 class="text-sm font-semibold text-main mb-3">Información de imputación</h2>
@@ -168,7 +237,8 @@
     </div>
 
     @if (showQuotationsSection()) {
-      <div class="bg-surface rounded-xl border border-border overflow-hidden mb-6">
+      <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_minmax(280px,22rem)] xl:items-start">
+      <div class="bg-surface rounded-xl border border-border overflow-hidden min-w-0">
         <div class="px-4 py-3 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 class="text-lg font-semibold text-main">Cuadro Comparativo de Cotizaciones</h2>
           @if (canAddQuotation()) {
@@ -236,7 +306,8 @@
               </div>
               <div>
                 <label class="block text-xs text-muted uppercase tracking-wider mb-1">Adjunto (opcional)</label>
-                <input type="file" accept=".pdf,image/*"
+                <p class="text-[11px] text-muted mb-1">Máximo 20MB. Todos los formatos permitidos.</p>
+                <input type="file"
                        (change)="quotationFile = $any($event.target).files?.[0] ?? null"
                        class="w-full text-sm text-muted file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-primary/20 file:text-primary" />
               </div>
@@ -294,7 +365,7 @@
           </div>
         }
 
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto border-t border-border">
           <table class="w-full">
             <thead>
               <tr class="border-b border-border">
@@ -303,7 +374,7 @@
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Plazo (días)</th>
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Estado</th>
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Adjunto</th>
-                <th class="px-4 py-3"></th>
+                <th class="px-4 py-3 text-xs font-medium text-muted uppercase text-right">Ganadora única</th>
               </tr>
             </thead>
             <tbody>
@@ -317,14 +388,16 @@
                   </td>
                 </tr>
               } @else {
-                @for (q of requisition()!.quotations!; track q.id) {
-                  <tr class="border-b border-border/50" [ngClass]="{'bg-green-500/5': q.isWinner}">
+                @for (q of quotationsSorted(); track trackByQuotationId($index, q)) {
+                  <tr class="border-b border-border/50" [ngClass]="{'bg-green-500/5': q.isWinner, 'bg-amber-500/5': q.status === 'PARTIALLY_SELECTED'}">
                     <td class="px-4 py-3 text-sm text-main font-medium">{{ q.vendor?.name }}</td>
                     <td class="px-4 py-3 text-sm text-main font-mono">{{ q.totalAmount | clpCurrency:q.currency }}</td>
                     <td class="px-4 py-3 text-sm text-muted">{{ q.deliveryDays || '—' }}</td>
                     <td class="px-4 py-3">
                       @if (q.isWinner) {
                         <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400">Ganadora</span>
+                      } @else if (q.status === 'PARTIALLY_SELECTED') {
+                        <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300">Adjudicación parcial</span>
                       } @else if (q.status === 'REJECTED') {
                         <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400">Rechazada</span>
                       } @else {
@@ -333,7 +406,7 @@
                     </td>
                     <td class="px-4 py-3 text-sm">
                       @if (q.attachmentUrl) {
-                        <a [href]="q.attachmentUrl" target="_blank" class="text-primary hover:text-primary/80 inline-flex items-center gap-1">
+                        <a [href]="q.attachmentUrl" target="_blank" rel="noopener noreferrer" class="text-primary hover:text-primary/80 inline-flex items-center gap-1">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                           PDF
                         </a>
@@ -343,7 +416,9 @@
                     </td>
                     <td class="px-4 py-3 text-right">
                       @if (canSelectWinner() && !q.isWinner && (requisition()!.status === 'PENDING_APPROVAL' || q.status !== 'REJECTED')) {
-                        <button type="button" (click)="requestSelectWinner(q.id)" class="text-sm font-medium text-primary hover:text-primary/80">Seleccionar ganadora</button>
+                        <button type="button" (click)="requestSelectWinner(q.id)" class="text-sm font-medium text-primary hover:text-primary/80">Seleccionar</button>
+                      } @else {
+                        <span class="text-muted text-xs">—</span>
                       }
                     </td>
                   </tr>
@@ -354,74 +429,131 @@
         </div>
 
         @if ((requisition()!.quotations?.length ?? 0) > 0) {
-          <div class="border-t border-border px-4 py-4 space-y-5 bg-dark/15">
-            <div>
-              <h3 class="text-sm font-semibold text-main">Detalle por línea (comparativo)</h3>
-              <p class="text-xs text-muted mt-1">Precio unitario, subtotal y condiciones por cada ítem del requerimiento.</p>
+          <div class="border-t border-border px-2 sm:px-4 py-4 bg-dark/15">
+            <div class="px-2 mb-3">
+              <h3 class="text-sm font-semibold text-main">Matriz de adjudicación por ítem</h3>
+              <p class="text-xs text-muted mt-1">Una oferta por fila. Precios de cotización (base); IVA por factura asociada a cada OC.</p>
             </div>
-            @for (q of requisition()!.quotations!; track q.id) {
-              <div class="rounded-xl border border-border/60 overflow-hidden"
-                   [ngClass]="{'ring-1 ring-green-500/25': q.isWinner}">
-                <div class="px-4 py-2.5 bg-dark/50 border-b border-border/50 flex flex-wrap items-center justify-between gap-2">
-                  <div class="flex flex-wrap items-center gap-2 min-w-0">
-                    <span class="font-medium text-main truncate">{{ q.vendor?.code }} — {{ q.vendor?.name }}</span>
-                    @if (q.isWinner) {
-                      <span class="inline-flex shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/10 text-green-400">Ganadora</span>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm min-w-[720px]">
+                <thead>
+                  <tr class="border-b border-border bg-dark/50">
+                    <th class="text-left px-2 py-2 text-[10px] uppercase text-muted sticky left-0 z-10 bg-dark/95 border-r border-border/50 min-w-[10rem]">Ítem</th>
+                    @for (q of quotationsSorted(); track trackByQuotationId($index, q)) {
+                      <th class="text-center px-1 py-2 min-w-[7.5rem] border-l border-border/40 align-bottom">
+                        <div class="text-[9px] text-muted uppercase tracking-wide leading-tight">Proveedor</div>
+                        <div class="font-medium text-main text-xs truncate max-w-[7rem] mx-auto" [title]="q.vendor?.name ?? ''">{{ q.vendor?.code }}</div>
+                      </th>
                     }
-                  </div>
-                  <span class="text-xs text-muted font-mono shrink-0">Total {{ q.totalAmount | clpCurrency:q.currency }}</span>
-                </div>
-                @if (q.items.length === 0) {
-                  <p class="px-4 py-3 text-sm text-muted">Sin líneas de detalle en esta cotización.</p>
-                } @else {
-                  <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted">
-                          <th class="px-3 py-2 min-w-[11rem]">Descripción solicitada</th>
-                          <th class="px-3 py-2 whitespace-nowrap">Nº parte</th>
-                          <th class="px-3 py-2 whitespace-nowrap">Cant. / U.M.</th>
-                          <th class="px-3 py-2 whitespace-nowrap text-right">P.U.</th>
-                          <th class="px-3 py-2 whitespace-nowrap text-right">Subtotal</th>
-                          <th class="px-3 py-2 whitespace-nowrap">Marca</th>
-                          <th class="px-3 py-2 min-w-[7rem]">Notas cotización</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        @for (line of q.items; track line.id) {
-                          <tr class="border-b border-border/40 last:border-0 align-top"
-                              [ngClass]="{'bg-green-500/5': q.isWinner}">
-                            <td class="px-3 py-2.5 text-main">
-                              <span>{{ line.requisitionItem?.description || '—' }}</span>
-                              @if (line.requisitionItem?.inventoryItem) {
-                                <p class="text-xs text-primary/90 mt-1">
-                                  Inv.: {{ line.requisitionItem!.inventoryItem!.partNumber }} — {{ line.requisitionItem!.inventoryItem!.name }}
-                                </p>
-                              }
-                              @if (line.requisitionItem?.itemNotes?.trim()) {
-                                <p class="text-xs text-muted mt-1 whitespace-pre-wrap">{{ line.requisitionItem!.itemNotes }}</p>
-                              }
-                            </td>
-                            <td class="px-3 py-2.5 text-muted whitespace-nowrap">{{ line.requisitionItem?.partNumber?.trim() || '—' }}</td>
-                            <td class="px-3 py-2.5 font-mono whitespace-nowrap">
-                              {{ line.requisitionItem?.quantity ?? '—' }}
-                              <span class="text-muted font-sans">{{ line.requisitionItem?.unitOfMeasure }}</span>
-                            </td>
-                            <td class="px-3 py-2.5 text-right font-mono">{{ line.unitPrice | clpCurrency:q.currency }}</td>
-                            <td class="px-3 py-2.5 text-right font-mono text-main">{{ quotationLineSubtotal(line) | clpCurrency:q.currency }}</td>
-                            <td class="px-3 py-2.5 text-muted">{{ line.brand?.trim() || '—' }}</td>
-                            <td class="px-3 py-2.5 text-muted whitespace-pre-wrap break-words max-w-[18rem]">{{ line.notes?.trim() || '—' }}</td>
-                          </tr>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of requisition()!.items; track trackByReqItemId($index, item)) {
+                    <tr class="border-b border-border/50">
+                      <td class="px-2 py-2 align-top sticky left-0 z-[1] bg-surface border-r border-border/50 max-w-[14rem]">
+                        <p class="text-main font-medium text-xs leading-snug">{{ item.description }}</p>
+                        <p class="text-[10px] text-muted font-mono mt-0.5">{{ item.quantity }} {{ item.unitOfMeasure }}</p>
+                        @if (isAwardRowLocked(item.id)) {
+                          <span class="inline-flex mt-1 px-1.5 py-0.5 rounded text-[9px] bg-zinc-500/25 text-zinc-400">En OC</span>
                         }
-                      </tbody>
-                    </table>
-                  </div>
-                }
+                      </td>
+                      @for (q of quotationsSorted(); track trackByQuotationId($index, q)) {
+                        <td class="px-1 py-1 align-top border-l border-border/30 text-center">
+                          @let line = getQuotationLineForCell(q, item.id);
+                          @if (line) {
+                            @let selected = matrixSelection()[item.id] === line.id;
+                            <div class="rounded-lg py-2 px-1 transition-colors"
+                                 [ngClass]="{
+                                   'ring-2 ring-green-500/60 bg-green-500/10': selected,
+                                   'hover:bg-dark/40 ring-1 ring-border/50': !selected && matrixInteractive() && !isAwardRowLocked(item.id),
+                                   'opacity-70': !matrixInteractive() || isAwardRowLocked(item.id)
+                                 }">
+                              <p class="font-mono text-xs text-main">{{ line.unitPrice | clpCurrency:q.currency }}</p>
+                              <p class="text-[10px] text-muted">{{ matrixCellSubtotal(item.id, line.id) | clpCurrency:q.currency }}</p>
+                              @if (matrixInteractive() && !isAwardRowLocked(item.id)) {
+                                <label class="inline-flex flex-col items-center gap-1 mt-1 cursor-pointer">
+                                  <input type="radio" class="accent-primary h-3.5 w-3.5"
+                                         [name]="'award-' + item.id"
+                                         [checked]="selected"
+                                         (change)="selectMatrixAward(item.id, line.id)" />
+                                  <span class="text-[9px] px-1.5 py-0.5 rounded-full"
+                                        [ngClass]="selected ? 'bg-green-500/25 text-green-300' : 'text-muted'">
+                                    {{ selected ? 'Adjudicado' : 'Elegir' }}
+                                  </span>
+                                </label>
+                              } @else if (selected) {
+                                <span class="text-[9px] mt-1 inline-block px-1.5 py-0.5 rounded-full bg-green-500/25 text-green-300">Adjudicado</span>
+                              }
+                            </div>
+                          } @else {
+                            <div class="rounded-lg py-3 px-1 bg-dark/25 text-muted text-[10px]">N/A</div>
+                          }
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if ((requisition()!.purchaseOrders?.length ?? 0) > 0) {
+              <div class="mt-6 px-2 border-t border-border/60 pt-4">
+                <h3 class="text-sm font-semibold text-main mb-1">Órdenes de compra vinculadas</h3>
+                <p class="text-[11px] text-muted mb-3">Monto total y estado de cada OC: presupuesto ya comprometido o en firma / envío.</p>
+                <ul class="space-y-3">
+                  @for (po of requisition()!.purchaseOrders!; track po.id) {
+                    <li class="rounded-lg border border-border/60 bg-dark/25 px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                        <app-entity-link kind="PO" [id]="po.id" [label]="po.correlative" variant="badge" />
+                        <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                              [ngClass]="poListStatusBadgeClass[po.status] || 'bg-dark/50 text-muted border-border/50'">
+                          {{ poStatusLabel[po.status] || po.status }}
+                        </span>
+                      </div>
+                      <div class="text-right sm:min-w-[8.5rem]">
+                        <p class="text-[9px] uppercase tracking-wide text-muted leading-none mb-0.5">Total OC</p>
+                        <p class="text-sm font-mono font-semibold text-primary">{{ po.totalAmount | clpCurrency:po.currency }}</p>
+                      </div>
+                    </li>
+                  }
+                </ul>
               </div>
             }
           </div>
         }
       </div>
+
+      <aside class="xl:sticky xl:top-4 rounded-xl border border-border bg-dark/35 p-4 space-y-4 self-start shadow-sm">
+        <h3 class="text-sm font-semibold text-main">Resumen adjudicación</h3>
+        <div>
+          <p class="text-[10px] uppercase text-muted tracking-wide">Total adjudicado (selección actual)</p>
+          <p class="text-xl font-mono font-semibold text-primary mt-1">{{ totalAdjudicado() | clpCurrency:'CLP' }}</p>
+        </div>
+        @if (hasUnassignedMatrixRows()) {
+          <p class="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/35 rounded-lg px-2 py-2 leading-snug">
+            Hay ítems sin proveedor asignado en la matriz.
+          </p>
+        }
+        @if (selectionDirty()) {
+          <p class="text-xs text-sky-300/95 border border-sky-500/30 bg-sky-500/10 rounded-lg px-2 py-2">Cambios sin guardar en el servidor.</p>
+        }
+        <div class="flex flex-col gap-2">
+          <button type="button"
+                  (click)="saveMatrixSelection()"
+                  [disabled]="!canSaveLineAwards() || isSavingLineAwards()"
+                  class="w-full px-3 py-2.5 rounded-lg bg-primary text-black text-sm font-medium disabled:opacity-45 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors">
+            {{ isSavingLineAwards() ? 'Guardando…' : 'Guardar selección' }}
+          </button>
+          <button type="button"
+                  (click)="requestGenerateSplitOrders()"
+                  [disabled]="!canGenerateSplitOrders() || isGeneratingSplitOrders()"
+                  class="w-full px-3 py-2.5 rounded-lg border border-green-500/45 text-green-300 text-sm font-medium hover:bg-green-500/10 disabled:opacity-45 disabled:cursor-not-allowed transition-colors">
+            {{ isGeneratingSplitOrders() ? 'Generando…' : 'Generar órdenes de compra' }}
+          </button>
+        </div>
+        <p class="text-[10px] text-muted leading-relaxed">Guarde la selección antes de generar OCs. Con requerimiento aprobado solo podrá generar si quedan líneas adjudicadas sin OC activa.</p>
+      </aside>
+    </div>
     }
 
     <section class="bg-surface rounded-xl border border-border p-6 mt-8">
@@ -480,6 +612,18 @@
   [confirmDelayMs]="1000"
   (confirm)="confirmCreateOrder()"
   (cancel)="cancelCreateOrder()"
+/>
+
+<app-confirm-modal
+  [isOpen]="showGenerateSplitOrdersModal()"
+  title="Generar órdenes de compra (split)"
+  message="Se crearán una o más órdenes de compra agrupadas por proveedor según la adjudicación por ítem ya guardada. Las líneas que ya tienen OC activa se omiten. Se abrirá el flujo de firmas por cada OC nueva. ¿Desea continuar?"
+  confirmText="Generar OCs"
+  cancelText="Cancelar"
+  [isDanger]="true"
+  [confirmDelayMs]="1000"
+  (confirm)="confirmGenerateSplitOrders()"
+  (cancel)="cancelGenerateSplitOrders()"
 />
 
 <app-confirm-modal

@@ -65,6 +65,16 @@ type InvoiceEntity = Prisma.PurchaseInvoiceGetPayload<{
 export type PurchaseInvoiceApi = InvoiceEntity & {
   hasDiscrepancy: boolean;
   discrepancyReason: string;
+  /** Adjuntos unificados (PDF, imágenes, etc.). */
+  purchaseDocuments?: Array<{
+    id: string;
+    storageKey: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    createdAt: Date;
+    uploadedBy: { id: string; name: string; email: string | null };
+  }>;
 };
 
 @Injectable()
@@ -347,9 +357,23 @@ export class PurchaseInvoicesService {
     id: string,
     user: { tenantId: string; role?: string; allowedContracts?: string[] },
   ): Promise<PurchaseInvoiceApi> {
-    const inv = await this.loadInvoiceEntity(id, user.tenantId);
+    const [inv, purchaseDocuments] = await Promise.all([
+      this.loadInvoiceEntity(id, user.tenantId),
+      this.prisma.purchaseDocument.findMany({
+        where: {
+          tenantId: user.tenantId,
+          entity: 'PURCHASE_INVOICE',
+          entityId: id,
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          uploadedBy: { select: { id: true, name: true, email: true } },
+        },
+      }),
+    ]);
     assertUserHasContractAccess(user, inv.purchaseOrder.contractId);
-    return this.attachInvoiceMeta(inv, user.tenantId);
+    const meta = await this.attachInvoiceMeta(inv, user.tenantId);
+    return { ...meta, purchaseDocuments };
   }
 
   /**

@@ -68,4 +68,27 @@ export class AuditService {
       },
     });
   }
+
+  /** Inserción masiva (p. ej. varias OC en un split) sin N+1. */
+  async logMany(
+    entries: Array<Parameters<AuditService['log']>[0]>,
+  ): Promise<void> {
+    if (!entries.length) return;
+    await this.prisma.activityLog.createMany({
+      data: entries.map((params) => ({
+        tenantId: params.tenantId,
+        userId: params.userId,
+        entityType: params.entityType,
+        entityId: params.entityId,
+        action: params.action,
+        details: buildActivityLogDetails(
+          params.oldValue,
+          params.newValue,
+          params.unified,
+        ),
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
+      })),
+    });
+  }
 }

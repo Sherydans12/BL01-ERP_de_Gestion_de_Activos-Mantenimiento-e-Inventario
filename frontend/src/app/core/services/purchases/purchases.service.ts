@@ -3,6 +3,12 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { Observable, throwError } from 'rxjs';
 import { map } from 'rxjs/operators';
+
+export interface CreateOrdersFromRequisitionResult {
+  orders: PurchaseOrder[];
+  requisitionStatus: string;
+  idempotent?: boolean;
+}
 import { HttpResponse } from '@angular/common/http';
 import type {
   CreateRequisitionPayload,
@@ -37,6 +43,34 @@ export interface ApprovalPolicy {
   role?: { id: string; name: string; baseRole: string };
 }
 
+/** Payload adjudicación por ítem (split multiproveedor). */
+export interface LineAward {
+  requisitionItemId: string;
+  quotationItemId: string;
+}
+
+/** OC vinculada al requerimiento (listado en detalle SRC). */
+export interface RequisitionLinkedPurchaseOrder {
+  id: string;
+  correlative: string;
+  status: string;
+  totalAmount: number;
+  currency: string;
+  quotationId?: string | null;
+  items?: Array<{ sourceQuotationItemId?: string | null }>;
+}
+
+export interface RequisitionReconciliationSnapshot {
+  totalRequisitionLines: number;
+  linesInProcurement: number;
+  linesFullyReceived: number;
+  linesWithInvoice: number;
+  adjudicatedMatrixTotal: number;
+  invoicesTotal: number;
+  currency: string | null;
+  budgetExceeded: boolean;
+}
+
 export interface PurchaseRequisition {
   id: string;
   correlative: string;
@@ -54,11 +88,14 @@ export interface PurchaseRequisition {
   workOrder?: PurchaseWorkOrderLink | null;
   items: RequisitionItem[];
   quotations?: PurchaseQuotation[];
+  purchaseOrders?: RequisitionLinkedPurchaseOrder[];
   requestedBy?: { id: string; name: string; email: string };
   contract?: { id: string; code: string; name: string };
   subcontract?: { id: string; code: string; name: string };
   createdAt: string;
   _count?: { items: number; quotations: number };
+  /** Avance 3-way agregado (varias OC / facturas). */
+  reconciliationSnapshot?: RequisitionReconciliationSnapshot;
 }
 
 export interface RequisitionItem {
@@ -73,6 +110,18 @@ export interface RequisitionItem {
   /** Notas / especificación opcional */
   itemNotes?: string | null;
   inventoryItem?: { id: string; partNumber: string; name: string };
+  /** Línea de cotización adjudicada (persistida vía saveLineAwards). */
+  awardedQuotationItemId?: string | null;
+  awardedQuotationItem?: {
+    id: string;
+    unitPrice: number;
+    quotation?: {
+      id: string;
+      vendorId: string;
+      currency: string;
+      vendor?: { id: string; code: string; name: string };
+    };
+  } | null;
 }
 
 export interface PurchaseQuotation {
@@ -201,6 +250,7 @@ export interface PurchaseOrderItem {
   unitCost: number;
   inventoryItemId?: string;
   inventoryItem?: { id: string; partNumber: string; name: string; isInventory?: boolean };
+  sourceQuotationItemId?: string | null;
 }
 
 export interface PurchaseOrderApproval {
@@ -390,6 +440,32 @@ export class PurchasesService {
   selectQuotation(requisitionId: string, quotationId: string): Observable<PurchaseQuotation> {
     return this.http.post<PurchaseQuotation>(
       `${this.base}/purchase-requisitions/${requisitionId}/quotations/${quotationId}/select`, {},
+    );
+  }
+
+  /**
+   * Persiste adjudicación por ítem (split multiproveedor).
+   * El backend devuelve el requerimiento actualizado; aquí se expone como void para simplificar el consumo.
+   */
+  saveLineAwards(
+    requisitionId: string,
+    awards: LineAward[],
+  ): Observable<void> {
+    return this.http
+      .post<PurchaseRequisition>(
+        `${this.base}/purchase-requisitions/${requisitionId}/line-awards`,
+        { awards },
+      )
+      .pipe(map(() => undefined));
+  }
+
+  /** Genera una o más OC agrupadas por cotización (transacción atómica en backend). */
+  createOrdersFromRequisition(
+    requisitionId: string,
+  ): Observable<CreateOrdersFromRequisitionResult> {
+    return this.http.post<CreateOrdersFromRequisitionResult>(
+      `${this.base}/purchase-orders/from-requisition/${requisitionId}`,
+      {},
     );
   }
 
@@ -656,6 +732,7 @@ export interface PurchasesAnalyticsDashboard {
     invoiceDiscrepancyRate: number;
     invoiceDiscrepancyCount: number;
     invoiceTotalForRate: number;
+    multiproviderAdjudicationSavings: number;
   };
   imputationSpend: { general: number; equipment: number; workOrder: number };
   monthlySpend: Array<{ month: string; total: number }>;
@@ -678,4 +755,18 @@ export interface PurchasesAnalyticsDashboard {
   }>;
   /** Suma de montos corregidos vía 3-way match (prevención de sobrepagos). */
   overpaymentPrevention: number;
+  /** Conteo de SRC por estado (instantáneo, alcance contrato). */
+  requisitionPipeline: Record<string, number>;
+  /** Líneas de SRC en «compra parcial» con OC activa vs total de líneas. */
+  partialRequisitionPurchaseProgress: {
+    partialRequisitionCount: number;
+    lineItemsTotal: number;
+    lineItemsWithActivePo: number;
+  };
+  /** SRC recientes en el período con desglose OC/proveedor. */
+  requisitionPurchaseRows: Array<{
+    correlative: string;
+    status: string;
+    ocLines: string[];
+  }>;
 }
