@@ -48,9 +48,9 @@ const HEADER_CANDIDATES = {
     'descripcion de elemento',
     'nombre del elemento',
   ],
+  /** SKU interno ERP (columna típica "ID de Inventario"). */
+  inventoryCode: ['id de inventario', 'id inventario', 'codigo inventario', 'código inventario'],
   partNumber: [
-    'id de inventario',
-    'id inventario',
     'codigo',
     'código',
     'cod',
@@ -58,6 +58,8 @@ const HEADER_CANDIDATES = {
     'numero de parte',
     'n° parte',
     'n parte',
+    'part number',
+    'p/n',
   ],
   stock: [
     'cantidad en existencias',
@@ -82,7 +84,17 @@ const HEADER_CANDIDATES = {
     'tipo sae',
   ],
   brand: ['marca/modelo', 'marca', 'modelo'],
-  sector: ['sector', 'ubicacion', 'ubicación', 'bodega'],
+  sector: ['sector', 'bodega'],
+  /** Ubicación física en bodega (pasillo/estante); si falta, se puede derivar del sector en import Insumos. */
+  stockLocation: [
+    'ubicacion',
+    'ubicación',
+    'localizacion',
+    'localización',
+    'pasillo',
+    'estante',
+    'coordenada',
+  ],
   contract: ['contrato'],
   category: ['categoria', 'categoría', 'familia', 'grupo'],
   // sin "unidad" suelto para evitar colisión con "precio por unidad"
@@ -709,7 +721,15 @@ export async function importInsumosMantencionFromExcel(
     brand: string | null,
     categoryId: string,
     uomId: string,
+    inventoryCode: string | null,
   ): Promise<string> {
+    if (inventoryCode) {
+      const bySku = await prisma.inventoryItem.findFirst({
+        where: { tenantId, inventoryCode },
+        select: { id: true },
+      });
+      if (bySku) return bySku.id;
+    }
     const existing = await prisma.inventoryItem.findFirst({
       where: { tenantId, partNumber },
       select: { id: true },
@@ -721,6 +741,7 @@ export async function importInsumosMantencionFromExcel(
         id: randomUUID(),
         tenantId,
         qrCode: `INV:${randomUUID()}`,
+        inventoryCode,
         partNumber,
         name: name.slice(0, 150),
         description: description?.trim() || null,
@@ -748,7 +769,8 @@ export async function importInsumosMantencionFromExcel(
     uomId: string;
     quantity: number;
     unitCost: Prisma.Decimal;
-    shelfLocation?: string | null;
+    inventoryCode?: string | null;
+    location?: string | null;
     detailNote: string;
   }) {
     const itemId = await ensureItem(
@@ -758,6 +780,7 @@ export async function importInsumosMantencionFromExcel(
       opts.brand,
       opts.categoryId,
       opts.uomId,
+      opts.inventoryCode ?? null,
     );
 
     const prev = await prisma.itemStock.findUnique({
@@ -779,14 +802,14 @@ export async function importInsumosMantencionFromExcel(
       update: {
         quantity: newQty,
         unitCost: opts.unitCost,
-        shelfLocation: opts.shelfLocation?.slice(0, 50) ?? null,
+        location: opts.location?.slice(0, 120) ?? null,
       },
       create: {
         warehouseId: opts.warehouseId,
         itemId,
         quantity: newQty,
         unitCost: opts.unitCost,
-        shelfLocation: opts.shelfLocation?.slice(0, 50) ?? null,
+        location: opts.location?.slice(0, 120) ?? null,
       },
     });
     if (!prev) stockRecordsCreated += 1;
@@ -839,6 +862,8 @@ export async function importInsumosMantencionFromExcel(
     const sectorKey = getColumnKey(sample, HEADER_CANDIDATES.sector);
     const contractKey = getColumnKey(sample, HEADER_CANDIDATES.contract);
     const unitCostKey = getColumnKey(sample, HEADER_CANDIDATES.unitCost);
+    const invCodeKey = getColumnKey(sample, HEADER_CANDIDATES.inventoryCode);
+    const stockLocKey = getColumnKey(sample, HEADER_CANDIDATES.stockLocation);
 
     if (!itemKey || !stockKey) {
       console.warn(
@@ -859,6 +884,10 @@ export async function importInsumosMantencionFromExcel(
         if (!name) continue;
         const brand = brandKey ? normalizeText(row[brandKey]) : '';
         const rawPart = partKey ? normalizeText(row[partKey]) : '';
+        const rawInvCode = invCodeKey ? normalizeText(row[invCodeKey]) : '';
+        const inventoryCodeExcel = rawInvCode
+          ? normalizeInventoryCode(rawInvCode).slice(0, 60)
+          : null;
         const sectorRaw = sectorKey ? normalizeText(row[sectorKey]) : '';
         const sector = sectorRaw || 'SIN UBICACIÓN';
         const whCode = `BOD-IM-${slugWarehouseSegment(sector, 36)}`.slice(
@@ -887,6 +916,9 @@ export async function importInsumosMantencionFromExcel(
 
         const unitCost = new Prisma.Decimal(0).toDecimalPlaces(2);
 
+        const binLoc =
+          (stockLocKey ? normalizeText(row[stockLocKey]) : '') || sectorRaw;
+
         await recordLine({
           warehouseId: warehouse.id,
           sheetLabel: sheetName,
@@ -898,7 +930,8 @@ export async function importInsumosMantencionFromExcel(
           uomId: defaultUom.id,
           quantity: qty,
           unitCost,
-          shelfLocation: null,
+          inventoryCode: inventoryCodeExcel,
+          location: binLoc ? binLoc.slice(0, 120) : null,
           detailNote: `Sector=${sector}`,
         });
       }
@@ -947,6 +980,12 @@ export async function importInsumosMantencionFromExcel(
           tipo || obs || 'GEN',
         );
 
+        const rawInvCode = invCodeKey ? normalizeText(row[invCodeKey]) : '';
+        const inventoryCodeExcel = rawInvCode
+          ? normalizeInventoryCode(rawInvCode).slice(0, 60)
+          : null;
+        const locRaw = stockLocKey ? normalizeText(row[stockLocKey]) : '';
+
         const unitCost = new Prisma.Decimal(0).toDecimalPlaces(2);
 
         await recordLine({
@@ -960,6 +999,8 @@ export async function importInsumosMantencionFromExcel(
           uomId: uom.id,
           quantity: qty,
           unitCost,
+          inventoryCode: inventoryCodeExcel,
+          location: locRaw ? locRaw.slice(0, 120) : null,
           detailNote: `Contrato=${contractCode}`,
         });
       }
@@ -999,6 +1040,12 @@ export async function importInsumosMantencionFromExcel(
           desc || obs || 'GEN',
         );
 
+        const rawInvCode = invCodeKey ? normalizeText(row[invCodeKey]) : '';
+        const inventoryCodeExcel = rawInvCode
+          ? normalizeInventoryCode(rawInvCode).slice(0, 60)
+          : null;
+        const locRaw = stockLocKey ? normalizeText(row[stockLocKey]) : '';
+
         const rawPrice = unitCostKey ? row[unitCostKey] : null;
         const parsed = parseNumber(rawPrice);
         const unitCostNumber = parsed != null && parsed >= 0 ? parsed : 0;
@@ -1018,6 +1065,8 @@ export async function importInsumosMantencionFromExcel(
           uomId: defaultUom.id,
           quantity: qty,
           unitCost,
+          inventoryCode: inventoryCodeExcel,
+          location: locRaw ? locRaw.slice(0, 120) : null,
           detailNote: 'Pañol herramientas',
         });
       }

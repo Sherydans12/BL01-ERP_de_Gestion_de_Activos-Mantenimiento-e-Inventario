@@ -139,6 +139,9 @@ export class StockDashboardComponent implements OnInit {
 
   showAdjustModal = signal(false);
   adjustStockRow = signal<any | null>(null);
+  /** Edición rápida de ubicación en fila (id de item_stock). */
+  editingLocationStockId = signal<string | null>(null);
+  locationDraft = signal('');
   showAdjustmentConfirmModal = signal(false);
   adjustmentConfirmSummary = signal('');
   adjustmentRiskLevel = signal<'info' | 'warning' | 'danger'>('warning');
@@ -156,6 +159,7 @@ export class StockDashboardComponent implements OnInit {
       newPhysical: [0, [Validators.required, Validators.min(0)]],
       minStock: [0, [Validators.required, Validators.min(0)]],
       maxStock: [0, [Validators.required, Validators.min(0)]],
+      location: [''],
       reason: ['CONTEO', Validators.required],
       comment: ['', [Validators.required, Validators.minLength(2)]],
     });
@@ -286,6 +290,7 @@ export class StockDashboardComponent implements OnInit {
       newPhysical: row.quantity,
       minStock: Number(row.minStock ?? 0),
       maxStock: Number(row.maxStock ?? 0),
+      location: row.location ?? '',
       reason: 'CONTEO',
       comment: '',
     });
@@ -330,6 +335,9 @@ export class StockDashboardComponent implements OnInit {
     const minChanged = Number(v.minStock) !== Number(row.minStock ?? 0);
     const maxChanged = Number(v.maxStock) !== Number(row.maxStock ?? 0);
     const stockChanged = Math.abs(diff) >= 1e-9;
+    const locChanged =
+      String(v.location ?? '').trim() !==
+      String(row.location ?? '').trim();
 
     if (Number(v.maxStock) > 0 && Number(v.maxStock) < Number(v.minStock)) {
       this.notificationService.error(
@@ -338,9 +346,9 @@ export class StockDashboardComponent implements OnInit {
       return;
     }
 
-    if (!stockChanged && !minChanged && !maxChanged) {
+    if (!stockChanged && !minChanged && !maxChanged && !locChanged) {
       this.notificationService.info(
-        'No hay cambios por aplicar en stock ni en umbrales.',
+        'No hay cambios por aplicar en stock, umbrales ni ubicación.',
       );
       return;
     }
@@ -357,6 +365,9 @@ export class StockDashboardComponent implements OnInit {
       pieces.push(
         `umbrales: mínimo ${Number(v.minStock)} / máximo ${Number(v.maxStock)}`,
       );
+    }
+    if (locChanged) {
+      pieces.push(`ubicación: "${String(v.location ?? '').trim() || '—'}"`);
     }
     this.adjustmentConfirmSummary.set(
       `Se aplicarán cambios: ${pieces.join(' | ')}. ¿Proceder?`,
@@ -385,6 +396,9 @@ export class StockDashboardComponent implements OnInit {
     const minChanged = Number(v.minStock) !== Number(row.minStock ?? 0);
     const maxChanged = Number(v.maxStock) !== Number(row.maxStock ?? 0);
     const stockChanged = Math.abs(diff) >= 1e-9;
+    const locChanged =
+      String(v.location ?? '').trim() !==
+      String(row.location ?? '').trim();
 
     if (Number(v.maxStock) > 0 && Number(v.maxStock) < Number(v.minStock)) {
       this.notificationService.error(
@@ -394,12 +408,19 @@ export class StockDashboardComponent implements OnInit {
     }
 
     const requests: Observable<unknown>[] = [];
-    if (minChanged || maxChanged) {
+    if (minChanged || maxChanged || locChanged) {
+      const payload: {
+        minStock?: number;
+        maxStock?: number;
+        location?: string | null;
+      } = {};
+      if (minChanged) payload.minStock = Number(v.minStock);
+      if (maxChanged) payload.maxStock = Number(v.maxStock);
+      if (locChanged) {
+        payload.location = String(v.location ?? '').trim() || null;
+      }
       requests.push(
-        this.stockService.updateStockLevels(wh, row.item.id, {
-          minStock: Number(v.minStock),
-          maxStock: Number(v.maxStock),
-        }),
+        this.stockService.updateStockLevels(wh, row.item.id, payload),
       );
     }
 
@@ -572,9 +593,36 @@ export class StockDashboardComponent implements OnInit {
       minStock: 0,
       maxStock: 0,
       unitCost: row.unitCost,
-      shelfLocation: row.shelfLocation,
+      location: row.location,
       item: row.item,
       bin: row.bin,
+    });
+  }
+
+  startEditLocation(s: { id: string; location?: string | null }) {
+    this.editingLocationStockId.set(s.id);
+    this.locationDraft.set(String(s.location ?? '').trim());
+  }
+
+  cancelEditLocation() {
+    this.editingLocationStockId.set(null);
+    this.locationDraft.set('');
+  }
+
+  saveEditLocation(s: { id: string; item: { id: string } }) {
+    const wh = this.selectedWarehouseId();
+    if (!wh) return;
+    const v = this.locationDraft().trim();
+    this.stockService.updateStockLevels(wh, s.item.id, { location: v || null }).subscribe({
+      next: () => {
+        this.notificationService.success('Ubicación actualizada.');
+        this.cancelEditLocation();
+        this.loadStock(wh);
+      },
+      error: (err) =>
+        this.notificationService.error(
+          err.error?.message || 'No se pudo guardar la ubicación.',
+        ),
     });
   }
 

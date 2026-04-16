@@ -573,6 +573,9 @@ model InventoryItem {
   id              String        @id @default(uuid()) @db.Uuid
   tenantId        String        @map("tenant_id") @db.Uuid
 
+  /// SKU interno ERP (opcional; si no se informa, se autogenera p. ej. INV-00001).
+  inventoryCode   String?       @map("inventory_code") @db.VarChar(60)
+
   /// Payload estable para QR / pistola (típicamente INV:<uuid>).
   qrCode          String        @map("qr_code") @db.VarChar(120)
   partNumber      String        @map("part_number") @db.VarChar(50)
@@ -602,7 +605,9 @@ model InventoryItem {
 
   @@unique([tenantId, partNumber])
   @@unique([tenantId, qrCode])
+  @@unique([tenantId, inventoryCode])
   @@index([tenantId, qrCode])
+  @@index([tenantId, inventoryCode])
   @@map("inventory_items")
 }
 
@@ -637,7 +642,8 @@ model ItemStock {
   unitCost        Decimal?      @map("unit_cost") @db.Decimal(18, 4)
   minStock        Float         @default(0) @map("min_stock")
   maxStock        Float         @default(0) @map("max_stock")
-  shelfLocation   String?       @map("shelf_location") @db.VarChar(50) 
+  /// Ubicación física en esta bodega (pasillo/estante; independiente por bodega).
+  location        String?       @map("location") @db.VarChar(120)
 
   warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   item            InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)

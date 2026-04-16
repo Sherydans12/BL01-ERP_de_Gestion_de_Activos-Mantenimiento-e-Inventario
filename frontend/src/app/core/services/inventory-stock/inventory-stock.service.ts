@@ -81,7 +81,7 @@ export class InventoryStockService {
   updateStockLevels(
     warehouseId: string,
     itemId: string,
-    data: { minStock?: number; maxStock?: number },
+    data: { minStock?: number; maxStock?: number; location?: string | null },
   ): Observable<any> {
     return this.http.put<any>(
       `${this.apiUrl}/warehouse/${warehouseId}/item/${itemId}/levels`,

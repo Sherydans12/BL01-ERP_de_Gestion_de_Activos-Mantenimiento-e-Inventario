@@ -21,7 +21,7 @@ export interface PendingRegularizationRowDto {
   unitCost: number | null;
   physicalShortageQty: number;
   debtValue: number;
-  shelfLocation: string | null;
+  location: string | null;
   bin: { id: string; code: string } | null;
   item: {
     id: string;
@@ -157,7 +157,7 @@ export class PendingRegularizationModalComponent implements OnChanges {
   locationLabel(row: PendingRegularizationRowDto): string {
     const parts: string[] = [];
     if (row.bin?.code) parts.push(`Rack/Bin ${row.bin.code}`);
-    if (row.shelfLocation?.trim()) parts.push(row.shelfLocation.trim());
+    if (row.location?.trim()) parts.push(row.location.trim());
     return parts.length ? parts.join(' · ') : '—';
   }
 

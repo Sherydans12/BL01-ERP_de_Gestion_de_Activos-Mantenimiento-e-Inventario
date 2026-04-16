@@ -59,7 +59,7 @@
             [ngModel]="searchText"
             (ngModelChange)="onSearchInput($event)"
             (keydown)="onSearchKeydown($event)"
-            placeholder="Nombre, Nº de parte, QR o descripción…"
+            placeholder="Cód. inventario, Nº de parte, QR o nombre…"
             class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main outline-none focus:border-primary/60"
             autocomplete="off"
           />
@@ -125,6 +125,7 @@
           class="sticky top-0 z-10 border-b border-border bg-dark font-mono text-[10px] uppercase tracking-wider text-muted"
         >
           <tr>
+            <th class="px-4 py-2">Cód. inv.</th>
             <th class="px-4 py-2">Nº parte</th>
             <th class="px-4 py-2">Nombre</th>
             <th class="hidden px-4 py-2 md:table-cell">Categoría</th>
@@ -139,14 +140,14 @@
           [class.opacity-50]="loading() && rows().length > 0"
           [class.pointer-events-none]="loading() && rows().length > 0"
         >
-          @if (loading() && rows().length === 0) {
+            @if (loading() && rows().length === 0) {
             @for (_ of [1, 2, 3, 4, 5, 6]; track _) {
-              <tr appSkeletonRow [columnCount]="warehouseId ? 4 : 3"></tr>
+              <tr appSkeletonRow [columnCount]="warehouseId ? 5 : 4"></tr>
             }
           } @else if (!loading() && rows().length === 0) {
             <tr>
               <td
-                [attr.colspan]="warehouseId ? 4 : 3"
+                [attr.colspan]="warehouseId ? 5 : 4"
                 class="px-4 py-10 text-center font-mono text-xs text-muted"
               >
                 @if (
@@ -165,6 +166,9 @@
                 class="cursor-pointer transition-colors hover:bg-primary/5"
                 (click)="pick(row)"
               >
+                <td class="px-4 py-2.5 font-mono text-xs text-emerald-400/90">
+                  {{ row.inventoryCode?.trim() || "—" }}
+                </td>
                 <td class="px-4 py-2.5 font-mono text-xs text-primary">
                   {{ row.partNumber }}
                 </td>

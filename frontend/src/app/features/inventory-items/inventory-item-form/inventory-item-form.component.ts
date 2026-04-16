@@ -77,6 +77,7 @@ export class InventoryItemFormComponent implements OnInit {
 
   constructor() {
     this.itemForm = this.fb.group({
+      inventoryCode: [''],
       partNumber: ['', Validators.required],
       name: ['', Validators.required],
       description: [''],
@@ -350,6 +351,7 @@ export class InventoryItemFormComponent implements OnInit {
           item.unitOfMeasure?.id ??
           (typeof item.unitOfMeasureId === 'string' ? item.unitOfMeasureId : '');
         const base = {
+          inventoryCode: (item as { inventoryCode?: string | null }).inventoryCode ?? '',
           partNumber: item.partNumber,
           name: item.name,
           description: item.description,
@@ -400,7 +402,8 @@ export class InventoryItemFormComponent implements OnInit {
     }
 
     const raw = this.itemForm.value;
-    const payload = {
+    const sku = String(raw.inventoryCode ?? '').trim();
+    const payload: Record<string, unknown> = {
       partNumber: raw.partNumber,
       name: raw.name,
       description: raw.description,
@@ -409,6 +412,11 @@ export class InventoryItemFormComponent implements OnInit {
       brand: raw.brand,
       isSerialized: raw.isSerialized,
     };
+    if (sku) {
+      payload['inventoryCode'] = sku;
+    } else if (this.mode === 'EDITING') {
+      payload['inventoryCode'] = '';
+    }
 
     if (this.mode === 'CREATING') {
       this.inventoryItemsService.createItem(payload).subscribe({

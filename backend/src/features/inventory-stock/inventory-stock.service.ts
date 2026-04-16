@@ -29,6 +29,8 @@ export interface PerformReturnDto {
 export interface UpdateStockLevelsDto {
   minStock?: number;
   maxStock?: number;
+  /** Ubicación física en esta bodega (pasillo/estante). */
+  location?: string | null;
 }
 
 @Injectable()
@@ -521,9 +523,10 @@ export class InventoryStockService {
 
     const hasMin = dto.minStock !== undefined && dto.minStock !== null;
     const hasMax = dto.maxStock !== undefined && dto.maxStock !== null;
-    if (!hasMin && !hasMax) {
+    const hasLocation = dto.location !== undefined;
+    if (!hasMin && !hasMax && !hasLocation) {
       throw new BadRequestException(
-        'Debe indicar al menos stock mínimo o stock máximo.',
+        'Debe indicar stock mínimo/máximo y/o ubicación en bodega.',
       );
     }
 
@@ -548,16 +551,29 @@ export class InventoryStockService {
           itemId,
         },
       },
-      select: { quantity: true, unitCost: true, minStock: true, maxStock: true },
+      select: {
+        quantity: true,
+        unitCost: true,
+        minStock: true,
+        maxStock: true,
+        location: true,
+      },
     });
 
     const finalMin = minStock ?? current?.minStock ?? 0;
     const finalMax = maxStock ?? current?.maxStock ?? 0;
-    if (finalMax > 0 && finalMax < finalMin) {
-      throw new BadRequestException(
-        'El stock máximo no puede ser menor que el stock mínimo.',
-      );
+    if (hasMin || hasMax) {
+      if (finalMax > 0 && finalMax < finalMin) {
+        throw new BadRequestException(
+          'El stock máximo no puede ser menor que el stock mínimo.',
+        );
+      }
     }
+
+    const loc =
+      dto.location !== undefined
+        ? (dto.location?.trim() ? dto.location.trim().slice(0, 120) : null)
+        : undefined;
 
     return this.prisma.itemStock.upsert({
       where: {
@@ -569,6 +585,7 @@ export class InventoryStockService {
       update: {
         minStock: minStock ?? undefined,
         maxStock: maxStock ?? undefined,
+        ...(loc !== undefined ? { location: loc } : {}),
       },
       create: {
         warehouseId,
@@ -577,6 +594,9 @@ export class InventoryStockService {
         unitCost: current?.unitCost ?? 0,
         minStock: finalMin,
         maxStock: finalMax,
+        ...(loc !== undefined
+          ? { location: loc }
+          : {}),
       },
     });
   }
@@ -671,7 +691,7 @@ export class InventoryStockService {
         ),
         physicalShortageQty,
         debtValue: this.isMechanic(user) ? 0 : debtValue,
-        shelfLocation: s.shelfLocation,
+        location: s.location,
         bin: s.bin,
         item: this.ensureItemDescription(s.item),
       };

@@ -717,14 +717,16 @@ export class InventoryAnalyticsService {
         where: {
           tenantId,
           OR: searchTerms.flatMap((term) => [
+            {
+              inventoryCode: { contains: term, mode: 'insensitive' as const },
+            },
             { partNumber: { contains: term, mode: 'insensitive' as const } },
             { qrCode: { contains: term, mode: 'insensitive' as const } },
             { name: { contains: term, mode: 'insensitive' as const } },
           ]),
         },
-        select: { id: true, partNumber: true, name: true },
-        take: 6,
-        orderBy: { partNumber: 'asc' },
+        select: { id: true, partNumber: true, name: true, inventoryCode: true },
+        take: 48,
       }),
       this.prisma.warehouse.findMany({
         where: {
@@ -774,12 +776,46 @@ export class InventoryAnalyticsService {
         title: `Equipo ${code} · ${eq.brand} ${eq.model}`.trim(),
       });
     }
-    for (const item of docRows[4]) {
+    const itemRankForGlobal = (
+      normQuery: string,
+      item: {
+        partNumber: string;
+        name: string;
+        inventoryCode: string | null;
+      },
+    ): number => {
+      const ic = (item.inventoryCode ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const pn = item.partNumber.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (normQuery.length < 2) return 0;
+      if (ic && ic === normQuery) return 100;
+      if (ic && ic.startsWith(normQuery)) return 85;
+      if (ic && ic.includes(normQuery)) return 72;
+      if (pn && pn === normQuery) return 68;
+      if (pn && pn.startsWith(normQuery)) return 55;
+      if (pn && pn.includes(normQuery)) return 45;
+      return 20;
+    };
+
+    const normForItems =
+      normalizedNoPrefix || normalized || q.replace(/[^A-Z0-9]/gi, '');
+    const itemsSorted = [...docRows[4]]
+      .map((item) => ({
+        item,
+        r: itemRankForGlobal(normForItems.toUpperCase(), item),
+      }))
+      .sort((a, b) => b.r - a.r)
+      .slice(0, 6)
+      .map((x) => x.item);
+
+    for (const item of itemsSorted) {
+      const sku = item.inventoryCode?.trim();
       results.push({
         kind: 'ITEM',
         id: item.id,
-        code: item.partNumber,
-        title: `Repuesto ${item.partNumber} · ${item.name}`,
+        code: sku || item.partNumber,
+        title: sku
+          ? `Repuesto ${sku} · P/N ${item.partNumber} · ${item.name}`
+          : `Repuesto ${item.partNumber} · ${item.name}`,
       });
     }
     for (const wh of docRows[5]) {

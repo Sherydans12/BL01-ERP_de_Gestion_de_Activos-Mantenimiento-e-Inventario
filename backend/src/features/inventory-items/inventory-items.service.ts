@@ -9,6 +9,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
 
+const INV_SKU_DOC_TYPE = 'INV_SKU';
+const INV_SKU_PREFIX = 'INV';
+
 const ITEM_CATEGORY_SELECT = {
   id: true,
   name: true,
@@ -30,6 +33,8 @@ const ITEM_CATALOG_ORDER_BY: Prisma.InventoryItemOrderByWithRelationInput[] = [
 ];
 
 export interface CreateInventoryItemDto {
+  /** SKU interno; vacío en alta → autogenerado (INV-00001). */
+  inventoryCode?: string;
   partNumber: string;
   name: string;
   description?: string;
@@ -60,6 +65,16 @@ export class InventoryItemsService {
     private readonly sequenceService: SequenceService,
     private readonly storageService: StorageService,
   ) {}
+
+  private sortRowsBySearchIdOrder<T extends { id: string }>(
+    rows: T[],
+    orderedIds: string[],
+  ): T[] {
+    const rank = new Map(orderedIds.map((id, i) => [id, i]));
+    return [...rows].sort(
+      (a, b) => (rank.get(a.id) ?? 999_999) - (rank.get(b.id) ?? 999_999),
+    );
+  }
 
   private isMechanic(user: { role?: string } | null | undefined): boolean {
     return user?.role === 'MECHANIC';
@@ -102,13 +117,24 @@ export class InventoryItemsService {
       FROM inventory_items i
       WHERE i.tenant_id = ${tenantId}::uuid
         AND (
-          i.name ILIKE ${pat} ESCAPE '\\'
+          (i.inventory_code IS NOT NULL AND i.inventory_code ILIKE ${pat} ESCAPE '\\')
+          OR i.name ILIKE ${pat} ESCAPE '\\'
           OR i.part_number ILIKE ${pat} ESCAPE '\\'
           OR COALESCE(i.description, '') ILIKE ${pat} ESCAPE '\\'
           OR i.qr_code ILIKE ${pat} ESCAPE '\\'
           OR TRIM(i.part_number) = TRIM(${trimmed})
+          OR (i.inventory_code IS NOT NULL AND TRIM(i.inventory_code) = TRIM(${trimmed}))
           OR TRIM(i.qr_code) = TRIM(${trimmed})
         )
+      ORDER BY
+        CASE
+          WHEN i.inventory_code IS NOT NULL AND TRIM(i.inventory_code) = TRIM(${trimmed}) THEN 0
+          WHEN i.inventory_code IS NOT NULL AND i.inventory_code ILIKE ${pat} ESCAPE '\\' THEN 1
+          WHEN TRIM(i.part_number) = TRIM(${trimmed}) THEN 2
+          WHEN i.part_number ILIKE ${pat} ESCAPE '\\' THEN 3
+          ELSE 4
+        END,
+        i.name ASC
     `);
     return rows.map((r) => r.id);
   }
@@ -160,19 +186,45 @@ export class InventoryItemsService {
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 25));
     const q = opts.search?.trim();
-    let searchIds: string[] | undefined;
-    if (q) {
-      searchIds = await this.searchInventoryItemIdsPgTrgm(tenantId, q);
-      if (searchIds.length === 0) {
-        return { data: [], total: 0, page, pageSize };
-      }
-    }
-    const where = await this.buildInventoryItemWhere(tenantId, {
-      categoryId: opts.categoryId,
-      searchIds,
-    });
     const skip = (page - 1) * pageSize;
 
+    if (q) {
+      const orderedSearchIds = await this.searchInventoryItemIdsPgTrgm(
+        tenantId,
+        q,
+      );
+      if (orderedSearchIds.length === 0) {
+        return { data: [], total: 0, page, pageSize };
+      }
+      const where = await this.buildInventoryItemWhere(tenantId, {
+        categoryId: opts.categoryId,
+        searchIds: orderedSearchIds,
+      });
+      const matching = await this.prisma.inventoryItem.findMany({
+        where,
+        select: { id: true },
+      });
+      const idSet = new Set(matching.map((r) => r.id));
+      const orderedFiltered = orderedSearchIds.filter((id) => idSet.has(id));
+      const total = orderedFiltered.length;
+      const pageIds = orderedFiltered.slice(skip, skip + pageSize);
+      if (pageIds.length === 0) {
+        return { data: [], total, page, pageSize };
+      }
+      const rawData = await this.prisma.inventoryItem.findMany({
+        where: { id: { in: pageIds } },
+        include: {
+          itemCategory: { select: ITEM_CATEGORY_SELECT },
+          unitOfMeasure: { select: UOM_SELECT },
+        },
+      });
+      const data = this.sortRowsBySearchIdOrder(rawData, pageIds);
+      return { data, total, page, pageSize };
+    }
+
+    const where = await this.buildInventoryItemWhere(tenantId, {
+      categoryId: opts.categoryId,
+    });
     const [data, total] = await Promise.all([
       this.prisma.inventoryItem.findMany({
         where,
@@ -264,23 +316,7 @@ export class InventoryItemsService {
     const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 20));
 
     const q = opts.search?.trim();
-    let searchIds: string[] | undefined;
-    if (q) {
-      searchIds = await this.searchInventoryItemIdsPgTrgm(tenantId, q);
-      if (searchIds.length === 0) {
-        return {
-          data: [],
-          total: 0,
-          page,
-          pageSize,
-        };
-      }
-    }
-
-    const where = await this.buildInventoryItemWhere(tenantId, {
-      categoryId: opts.categoryId,
-      searchIds,
-    });
+    const skip = (page - 1) * pageSize;
 
     let warehouseIdForStock: string | undefined;
     if (opts.warehouseId?.trim()) {
@@ -293,8 +329,6 @@ export class InventoryItemsService {
       }
     }
 
-    const skip = (page - 1) * pageSize;
-
     const include: Prisma.InventoryItemInclude = {
       itemCategory: { select: ITEM_CATEGORY_SELECT },
       unitOfMeasure: { select: UOM_SELECT },
@@ -306,16 +340,66 @@ export class InventoryItemsService {
       };
     }
 
-    const [rows, total] = await Promise.all([
-      this.prisma.inventoryItem.findMany({
+    let rows: Array<
+      Prisma.InventoryItemGetPayload<{ include: typeof include }>
+    >;
+    let total: number;
+
+    if (q) {
+      const orderedSearchIds = await this.searchInventoryItemIdsPgTrgm(
+        tenantId,
+        q,
+      );
+      if (orderedSearchIds.length === 0) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          pageSize,
+        };
+      }
+      const where = await this.buildInventoryItemWhere(tenantId, {
+        categoryId: opts.categoryId,
+        searchIds: orderedSearchIds,
+      });
+      const matching = await this.prisma.inventoryItem.findMany({
         where,
-        skip,
-        take: pageSize,
-        orderBy: ITEM_CATALOG_ORDER_BY,
+        select: { id: true },
+      });
+      const idSet = new Set(matching.map((r) => r.id));
+      const orderedFiltered = orderedSearchIds.filter((id) => idSet.has(id));
+      total = orderedFiltered.length;
+      const pageIds = orderedFiltered.slice(skip, skip + pageSize);
+      if (pageIds.length === 0) {
+        return {
+          data: [],
+          total,
+          page,
+          pageSize,
+        };
+      }
+      rows = await this.prisma.inventoryItem.findMany({
+        where: { id: { in: pageIds } },
         include,
-      }),
-      this.prisma.inventoryItem.count({ where }),
-    ]);
+      });
+      rows = this.sortRowsBySearchIdOrder(rows, pageIds);
+    } else {
+      const where = await this.buildInventoryItemWhere(tenantId, {
+        categoryId: opts.categoryId,
+      });
+      const [r, t] = await Promise.all([
+        this.prisma.inventoryItem.findMany({
+          where,
+          skip,
+          take: pageSize,
+          orderBy: ITEM_CATALOG_ORDER_BY,
+          include,
+        }),
+        this.prisma.inventoryItem.count({ where }),
+      ]);
+      rows = r;
+      total = t;
+    }
 
     return {
       data: rows.map((item) => {
@@ -335,6 +419,7 @@ export class InventoryItemsService {
         return {
           id: row.id,
           qrCode: row.qrCode,
+          inventoryCode: row.inventoryCode,
           partNumber: row.partNumber,
           name: row.name,
           description: row.description,
@@ -376,7 +461,7 @@ export class InventoryItemsService {
     await this.assertLeafCategory(dto.categoryId, user.tenantId);
     await this.assertUnitOfMeasure(dto.unitOfMeasureId, user.tenantId);
 
-    const existing = await this.prisma.inventoryItem.findUnique({
+    const existingPn = await this.prisma.inventoryItem.findUnique({
       where: {
         tenantId_partNumber: {
           tenantId: user.tenantId,
@@ -385,35 +470,62 @@ export class InventoryItemsService {
       },
     });
 
-    if (existing) {
+    if (existingPn) {
       throw new BadRequestException(
         'Ya existe un artículo con este Número de Parte.',
       );
     }
 
-    const id = randomUUID();
-    const qrCode = `INV:${id}`;
+    const requestedSku = dto.inventoryCode?.trim();
+    if (requestedSku) {
+      const dupSku = await this.prisma.inventoryItem.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          inventoryCode: requestedSku,
+        },
+      });
+      if (dupSku) {
+        throw new BadRequestException(
+          'Ya existe un artículo con este Código de Inventario.',
+        );
+      }
+    }
 
-    return this.prisma.inventoryItem.create({
-      data: {
-        id,
-        qrCode,
-        tenantId: user.tenantId,
-        partNumber: dto.partNumber,
-        name: dto.name,
-        description: dto.description,
-        categoryId: dto.categoryId,
-        unitOfMeasureId: dto.unitOfMeasureId,
-        brand: dto.brand,
-        isSerialized: dto.isSerialized ?? false,
-        isInventory: dto.isInventory ?? true,
-        isAsset: dto.isAsset ?? false,
-        isConsumable: dto.isConsumable ?? true,
-      },
-      include: {
-        itemCategory: { select: ITEM_CATEGORY_SELECT },
-        unitOfMeasure: { select: UOM_SELECT },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const inventoryCode =
+        requestedSku ||
+        (await this.sequenceService.getNextCorrelative(
+          user.tenantId,
+          INV_SKU_DOC_TYPE,
+          INV_SKU_PREFIX,
+          tx,
+        ));
+
+      const id = randomUUID();
+      const qrCode = `INV:${id}`;
+
+      return tx.inventoryItem.create({
+        data: {
+          id,
+          qrCode,
+          tenantId: user.tenantId,
+          inventoryCode,
+          partNumber: dto.partNumber,
+          name: dto.name,
+          description: dto.description,
+          categoryId: dto.categoryId,
+          unitOfMeasureId: dto.unitOfMeasureId,
+          brand: dto.brand,
+          isSerialized: dto.isSerialized ?? false,
+          isInventory: dto.isInventory ?? true,
+          isAsset: dto.isAsset ?? false,
+          isConsumable: dto.isConsumable ?? true,
+        },
+        include: {
+          itemCategory: { select: ITEM_CATEGORY_SELECT },
+          unitOfMeasure: { select: UOM_SELECT },
+        },
+      });
     });
   }
 
@@ -431,7 +543,7 @@ export class InventoryItemsService {
     await this.assertLeafCategory(dto.categoryId, user.tenantId);
     await this.assertUnitOfMeasure(dto.unitOfMeasureId, user.tenantId);
 
-    const existing = await this.prisma.inventoryItem.findFirst({
+    const existingPn = await this.prisma.inventoryItem.findFirst({
       where: {
         tenantId: user.tenantId,
         partNumber: dto.partNumber,
@@ -439,15 +551,34 @@ export class InventoryItemsService {
       },
     });
 
-    if (existing) {
+    if (existingPn) {
       throw new BadRequestException(
         'El Número de Parte ya está siendo usado por otro artículo.',
       );
     }
 
+    const skuIn = dto.inventoryCode?.trim();
+    if (skuIn) {
+      const existingSku = await this.prisma.inventoryItem.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          inventoryCode: skuIn,
+          id: { not: id },
+        },
+      });
+      if (existingSku) {
+        throw new BadRequestException(
+          'El Código de Inventario ya está siendo usado por otro artículo.',
+        );
+      }
+    }
+
     return this.prisma.inventoryItem.update({
       where: { id },
       data: {
+        ...(dto.inventoryCode !== undefined
+          ? { inventoryCode: skuIn || null }
+          : {}),
         partNumber: dto.partNumber,
         name: dto.name,
         description: dto.description,
@@ -491,6 +622,12 @@ export class InventoryItemsService {
           'AUTO',
           tx,
         );
+        const inventoryCode = await this.sequenceService.getNextCorrelative(
+          user.tenantId,
+          INV_SKU_DOC_TYPE,
+          INV_SKU_PREFIX,
+          tx,
+        );
 
         const id = randomUUID();
         const qrCode = `INV:${id}`;
@@ -500,6 +637,7 @@ export class InventoryItemsService {
             id,
             qrCode,
             tenantId: user.tenantId,
+            inventoryCode,
             partNumber,
             name: dto.name.trim(),
             categoryId: dto.categoryId,
@@ -510,6 +648,7 @@ export class InventoryItemsService {
           select: {
             id: true,
             qrCode: true,
+            inventoryCode: true,
             partNumber: true,
             name: true,
             categoryId: true,
@@ -829,14 +968,16 @@ export class InventoryItemsService {
     const searchIds = await this.searchInventoryItemIdsPgTrgm(tenantId, q);
     if (searchIds.length === 0) return [];
 
+    const pageIds = searchIds.slice(0, 15);
     const where = await this.buildInventoryItemWhere(tenantId, {
-      searchIds,
+      searchIds: pageIds,
     });
 
-    return this.prisma.inventoryItem.findMany({
+    const rows = await this.prisma.inventoryItem.findMany({
       where,
       select: {
         id: true,
+        inventoryCode: true,
         partNumber: true,
         name: true,
         unitOfMeasure: { select: UOM_SELECT },
@@ -847,9 +988,8 @@ export class InventoryItemsService {
         isAsset: true,
         isConsumable: true,
       },
-      orderBy: ITEM_CATALOG_ORDER_BY,
-      take: 15,
     });
+    return this.sortRowsBySearchIdOrder(rows, pageIds);
   }
 
   async remove(id: string, user: any) {
