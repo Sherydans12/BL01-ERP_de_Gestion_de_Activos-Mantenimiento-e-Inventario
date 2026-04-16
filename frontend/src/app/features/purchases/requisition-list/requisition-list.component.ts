@@ -22,6 +22,8 @@ export class RequisitionListComponent {
   requisitions = signal<PurchaseRequisition[]>([]);
   isLoading = signal(false);
   statusFilter = signal('');
+  /** Si false, oculta SRC en CLOSED salvo que el filtro sea «Cerrado». */
+  showClosedInList = signal(false);
 
   statusLabels: Record<string, string> = {
     DRAFT: 'Borrador',
@@ -32,6 +34,7 @@ export class RequisitionListComponent {
     APPROVED: 'Aprobado',
     REJECTED: 'Rechazado',
     CANCELLED: 'Cancelado',
+    CLOSED: 'Cerrado (completo)',
   };
 
   statusColors: Record<string, string> = {
@@ -43,13 +46,20 @@ export class RequisitionListComponent {
     APPROVED: 'bg-green-500/10 text-green-400',
     REJECTED: 'bg-red-500/10 text-red-400',
     CANCELLED: 'bg-red-500/10 text-red-400',
+    CLOSED: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/30',
   };
 
   filteredRequisitions = computed(() => {
     const status = this.statusFilter();
-    return status
-      ? this.requisitions().filter(r => r.status === status)
-      : this.requisitions();
+    let rows = this.requisitions();
+    if (!status) {
+      if (!this.showClosedInList()) {
+        rows = rows.filter((r) => r.status !== 'CLOSED');
+      }
+    } else {
+      rows = rows.filter((r) => r.status === status);
+    }
+    return rows;
   });
 
   constructor() {

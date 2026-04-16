@@ -47,6 +47,15 @@
       <p class="text-sm text-muted mt-1">
         Complete los datos técnicos del mantenimiento.
       </p>
+      @if (mode !== "CREATING" && otId && otForm.get("warehouseId")?.value) {
+        <a
+          routerLink="/app/inventario/stock"
+          [queryParams]="{ devolverOt: otId }"
+          class="inline-flex items-center gap-1.5 mt-2 text-xs font-mono text-primary hover:underline"
+        >
+          Devolver material a bodega (desde esta OT)
+        </a>
+      }
     </div>
   </div>
 

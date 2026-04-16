@@ -10,17 +10,29 @@
     </a>
   </div>
 
-  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6 flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-center">
     <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)"
-            class="px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none">
-      <option value="">Todos los estados</option>
+            class="px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none min-w-[14rem]">
+      <option value="">Todos los estados (activos)</option>
       <option value="DRAFT">Borrador</option>
       <option value="SUBMITTED">Enviado</option>
       <option value="QUOTING">En Cotización</option>
       <option value="PENDING_APPROVAL">Pendiente Aprobación</option>
       <option value="PARTIALLY_PURCHASED">Compra parcial</option>
       <option value="APPROVED">Aprobado</option>
+      <option value="REJECTED">Rechazado</option>
+      <option value="CANCELLED">Cancelado</option>
+      <option value="CLOSED">Cerrado (completo)</option>
     </select>
+    <label class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+      <input
+        type="checkbox"
+        [ngModel]="showClosedInList()"
+        (ngModelChange)="showClosedInList.set($event)"
+        class="rounded border-border bg-dark text-primary focus:ring-primary/40"
+      />
+      <span>Mostrar cerrados en «Todos»</span>
+    </label>
   </div>
 
   @if (isLoading()) {

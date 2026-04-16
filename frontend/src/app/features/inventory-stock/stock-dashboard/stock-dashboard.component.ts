@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   OnInit,
@@ -10,6 +11,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -17,7 +19,9 @@ import {
   Validators,
   ReactiveFormsModule,
 } from '@angular/forms';
-import { forkJoin, Observable } from 'rxjs';
+import { Subject, forkJoin, Observable, debounceTime } from 'rxjs';
+import { finalize } from 'rxjs/operators';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import {
@@ -36,6 +40,7 @@ import { PendingRegularizationModalComponent } from '../pending-regularization-m
 import type { PendingRegularizationRowDto } from '../pending-regularization-modal/pending-regularization-modal.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 
 @Component({
   selector: 'app-stock-dashboard',
@@ -43,6 +48,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    RouterLink,
     SkeletonRowComponent,
     GlobalItemPickerComponent,
     PendingRegularizationModalComponent,
@@ -53,6 +59,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
 })
 export class StockDashboardComponent implements OnInit {
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
   private stockService = inject(InventoryStockService);
   private warehousesService = inject(WarehousesService);
   private itemsService = inject(InventoryItemsService);
@@ -61,6 +68,9 @@ export class StockDashboardComponent implements OnInit {
   private analyticsService = inject(InventoryAnalyticsService);
   private exportService = inject(ExportService);
   private pdfService = inject(PdfService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private workOrdersService = inject(WorkOrdersService);
   private fb = inject(FormBuilder);
 
   warehouses = signal<any[]>([]);
@@ -73,8 +83,25 @@ export class StockDashboardComponent implements OnInit {
   subcategories = signal<ItemCategory[]>([]);
   selectedFamilyId = signal<string>('');
   selectedSubcategoryId = signal<string>('');
+  /** Filtro de texto sobre ubicación física (consulta al backend con ILIKE). */
+  locationSearch = signal('');
+  /** Solo filas en o bajo el umbral mínimo (según stock disponible). */
+  stockStatusFilter = signal<'all' | 'critical'>('all');
+  private locationFilterReload$ = new Subject<void>();
   pendingRegularizationCount = signal<number>(0);
   pendingRegModalOpen = signal(false);
+
+  iraLoading = signal(false);
+  iraReport = signal<{
+    periodDays: number;
+    numerator: number;
+    denominator: number;
+    iraPercent: number | null;
+    note: string;
+  } | null>(null);
+
+  /** OT para selector en devolución a bodega. */
+  workOrdersForReturn = signal<any[]>([]);
 
   valuationLoading = signal(false);
   masterReportBusy = signal(false);
@@ -89,7 +116,8 @@ export class StockDashboardComponent implements OnInit {
     return Math.max(...rows.map((r) => r.totalValue), 1);
   });
 
-  filteredStockItems = computed(() => {
+  /** Familia / subcategoría (sin filtro “solo críticos”). */
+  familyFilteredStockItems = computed(() => {
     const items = this.stockItems();
     const sub = this.selectedSubcategoryId();
     const fam = this.selectedFamilyId();
@@ -107,6 +135,14 @@ export class StockDashboardComponent implements OnInit {
     return items;
   });
 
+  filteredStockItems = computed(() => {
+    let rows = this.familyFilteredStockItems();
+    if (this.stockStatusFilter() === 'critical') {
+      rows = rows.filter((s: any) => this.isAvailabilityCritical(s));
+    }
+    return rows;
+  });
+
   totalItemCount = computed(() => this.filteredStockItems().length);
 
   totalStockValue = computed(() =>
@@ -117,13 +153,15 @@ export class StockDashboardComponent implements OnInit {
   );
 
   lowStockAlerts = computed(() =>
-    this.filteredStockItems().filter(
-      (s: any) => s.minStock > 0 && s.quantity <= s.minStock,
+    this.familyFilteredStockItems().filter((s: any) =>
+      this.isAvailabilityCritical(s),
     ),
   );
 
   /** Filas placeholder para skeleton de tabla. */
   readonly tableSkeletonRows = Array.from({ length: 8 }, (_, i) => i);
+
+  physicalCountPdfBusy = signal(false);
 
   showTransactionModal = signal(false);
   showItemPicker = signal(false);
@@ -146,14 +184,63 @@ export class StockDashboardComponent implements OnInit {
   adjustmentConfirmSummary = signal('');
   adjustmentRiskLevel = signal<'info' | 'warning' | 'danger'>('warning');
 
+  kardexModalOpen = signal(false);
+  kardexLoading = signal(false);
+  kardexRows = signal<any[]>([]);
+  kardexContext = signal<{
+    partNumber: string;
+    name: string;
+    warehouseLabel: string;
+  } | null>(null);
+  kardexDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('kardexDialog');
+
+  /** Ubicación/saldo actual al elegir ítem en movimiento IN/OUT. */
+  transactionStockHint = signal<{
+    location: string | null;
+    quantityOnHand: number;
+  } | null>(null);
+
+  reservationsModalOpen = signal(false);
+  reservationsLoading = signal(false);
+  reservationRows = signal<
+    Array<{
+      id: string;
+      quantity: number;
+      reservedAt: string;
+      workOrder: {
+        id: string;
+        correlative: string;
+        responsible: string | null;
+        status: string;
+      };
+    }>
+  >([]);
+  reservationContext = signal<{ partNumber: string; name: string } | null>(
+    null,
+  );
+  reservationsDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('reservationsDialog');
+
   constructor() {
     this.transactionForm = this.fb.group({
-      type: ['IN', Validators.required],
-      itemId: ['', Validators.required],
+      /** Operación de almacén (mapea a IN/OUT o navega a transferencias). */
+      movementKind: ['PURCHASE_IN', Validators.required],
+      itemId: [''],
+      workOrderId: [''],
       quantity: [1, [Validators.required, Validators.min(0.01)]],
       unitCost: [0], // Solo para ingresos
       notes: [''],
     });
+
+    this.transactionForm
+      .get('movementKind')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((k) => {
+        if (k === 'RETURN_OT') {
+          this.loadWorkOrdersForReturn();
+        }
+      });
 
     this.adjustmentForm = this.fb.group({
       newPhysical: [0, [Validators.required, Validators.min(0)]],
@@ -174,6 +261,8 @@ export class StockDashboardComponent implements OnInit {
         this.selectedFamilyId.set('');
         this.selectedSubcategoryId.set('');
         this.subcategories.set([]);
+        this.locationSearch.set('');
+        this.stockStatusFilter.set('all');
         this.loadInventoryValuation();
         this.refreshPendingCount();
       },
@@ -182,6 +271,13 @@ export class StockDashboardComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.locationFilterReload$
+      .pipe(debounceTime(350), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        const w = this.selectedWarehouseId();
+        if (w) this.loadStock(w);
+      });
+
     this.itemsService.getCategoryFamilies().subscribe({
       next: (rows) => this.families.set(rows),
       error: () => {},
@@ -190,6 +286,13 @@ export class StockDashboardComponent implements OnInit {
       next: (count) => this.pendingRegularizationCount.set(count),
       error: () => this.pendingRegularizationCount.set(0),
     });
+  }
+
+  onLocationSearchInput(value: string) {
+    this.locationSearch.set(value);
+    if (this.selectedWarehouseId()) {
+      this.locationFilterReload$.next();
+    }
   }
 
   canSeeValuationReport(): boolean {
@@ -294,6 +397,7 @@ export class StockDashboardComponent implements OnInit {
       reason: 'CONTEO',
       comment: '',
     });
+    this.syncAdjustmentCommentValidators('CONTEO');
     this.showAdjustModal.set(true);
     afterNextRender(
       () => {
@@ -319,6 +423,36 @@ export class StockDashboardComponent implements OnInit {
   onAdjustDialogClose() {
     this.showAdjustModal.set(false);
     this.adjustStockRow.set(null);
+  }
+
+  private syncAdjustmentCommentValidators(reason: string) {
+    const c = this.adjustmentForm.get('comment');
+    if (!c) return;
+    if (reason === 'MERMAS' || reason === 'DANO') {
+      c.setValidators([
+        Validators.required,
+        Validators.minLength(15),
+      ]);
+    } else {
+      c.setValidators([
+        Validators.required,
+        Validators.minLength(2),
+      ]);
+    }
+    c.updateValueAndValidity({ emitEvent: false });
+  }
+
+  onAdjustmentReasonChange(event: Event) {
+    const reason = (event.target as HTMLSelectElement).value;
+    this.syncAdjustmentCommentValidators(reason);
+  }
+
+  adjustmentCommentHint(): string {
+    const r = this.adjustmentForm.get('reason')?.value;
+    if (r === 'MERMAS' || r === 'DANO') {
+      return 'Obligatorio: mínimo 15 caracteres (pérdida/daño auditable).';
+    }
+    return 'Obligatorio para auditoría (mín. 2 caracteres).';
   }
 
   submitAdjustment() {
@@ -464,33 +598,6 @@ export class StockDashboardComponent implements OnInit {
     return Math.round((value / max) * 100);
   }
 
-  isStockRowCritical(s: {
-    quantity: number;
-    minStock: number;
-  }): boolean {
-    return s.minStock > 0 && s.quantity <= s.minStock && s.quantity === 0;
-  }
-
-  isStockRowLow(s: { quantity: number; minStock: number }): boolean {
-    return (
-      s.minStock > 0 &&
-      s.quantity <= s.minStock &&
-      s.quantity > 0
-    );
-  }
-
-  stockRowClasses(s: { quantity: number; minStock: number }): string {
-    const base =
-      'hover:bg-dark/40 transition-colors border-l-4 border-solid ';
-    if (this.isStockRowCritical(s)) {
-      return `${base} bg-red-950/30 border-red-500`;
-    }
-    if (this.isStockRowLow(s)) {
-      return `${base} bg-amber-950/25 border-amber-500`;
-    }
-    return `${base} border-transparent`;
-  }
-
   itemDescriptionLabel(item: {
     description?: string | null;
     name?: string | null;
@@ -540,6 +647,8 @@ export class StockDashboardComponent implements OnInit {
     this.selectedFamilyId.set('');
     this.selectedSubcategoryId.set('');
     this.subcategories.set([]);
+    this.locationSearch.set('');
+    this.stockStatusFilter.set('all');
     if (wId) {
       this.loadStock(wId);
     } else {
@@ -550,16 +659,51 @@ export class StockDashboardComponent implements OnInit {
 
   loadStock(warehouseId: string) {
     this.stockLoading.set(true);
-    this.stockService.getStockByWarehouse(warehouseId).subscribe({
+    const loc = this.locationSearch().trim();
+    this.stockService
+      .getStockByWarehouse(warehouseId, loc ? { location: loc } : undefined)
+      .subscribe({
       next: (data) => {
         this.stockItems.set(data);
         this.stockLoading.set(false);
         this.refreshPendingCount();
+        this.loadInventoryRecordAccuracy(warehouseId);
       },
       error: () => {
         this.notificationService.error('Error al cargar stock');
         this.stockLoading.set(false);
       },
+    });
+  }
+
+  loadInventoryRecordAccuracy(warehouseId: string) {
+    this.iraLoading.set(true);
+    this.stockService
+      .getInventoryRecordAccuracy({ warehouseId })
+      .subscribe({
+        next: (r) => {
+          this.iraReport.set(r);
+          this.iraLoading.set(false);
+        },
+        error: () => {
+          this.iraReport.set(null);
+          this.iraLoading.set(false);
+        },
+      });
+  }
+
+  loadWorkOrdersForReturn() {
+    const cid = this.authService.currentContractId();
+    const req$ =
+      cid && cid !== 'ALL'
+        ? this.workOrdersService.getWorkOrdersForContract(cid, {
+            limit: 400,
+          })
+        : this.workOrdersService.getWorkOrdersFiltered({ limit: 400 });
+    req$.subscribe({
+      next: (res: { data: any[] }) =>
+        this.workOrdersForReturn.set(res.data ?? []),
+      error: () => this.workOrdersForReturn.set([]),
     });
   }
 
@@ -626,20 +770,62 @@ export class StockDashboardComponent implements OnInit {
     });
   }
 
+  downloadPhysicalCountSheetPdf() {
+    const wh = this.selectedWarehouseId();
+    if (!wh) {
+      this.notificationService.info('Selecciona una bodega primero.');
+      return;
+    }
+    this.physicalCountPdfBusy.set(true);
+    this.stockService
+      .downloadPhysicalCountSheet(wh)
+      .pipe(finalize(() => this.physicalCountPdfBusy.set(false)))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'hoja-conteo-fisico.pdf';
+          a.rel = 'noopener';
+          a.click();
+          URL.revokeObjectURL(url);
+          this.notificationService.success('Hoja de conteo físico generada.');
+        },
+        error: () =>
+          this.notificationService.error(
+            'No se pudo generar la hoja de conteo físico.',
+          ),
+      });
+  }
+
   openTransactionModal() {
     if (!this.selectedWarehouseId()) {
       this.notificationService.info('Selecciona una bodega primero.');
       return;
     }
+    const devolverOt =
+      this.route.snapshot.queryParamMap.get('devolverOt')?.trim() || '';
     this.transactionForm.reset({
-      type: 'IN',
+      movementKind: devolverOt ? 'RETURN_OT' : 'PURCHASE_IN',
       quantity: 1,
       unitCost: 0,
       itemId: '',
+      workOrderId: devolverOt,
       notes: '',
     });
+    if (devolverOt) {
+      this.loadWorkOrdersForReturn();
+    }
     this.transactionItemPreview.set(null);
+    this.transactionStockHint.set(null);
     this.showTransactionModal.set(true);
+    if (devolverOt) {
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { devolverOt: null },
+        queryParamsHandling: 'merge',
+      });
+    }
     afterNextRender(
       () => {
         const el = this.transactionDialog()?.nativeElement;
@@ -662,6 +848,7 @@ export class StockDashboardComponent implements OnInit {
 
   onTransactionDialogClose() {
     this.showTransactionModal.set(false);
+    this.transactionStockHint.set(null);
   }
 
   onTransactionItemPicked(row: ItemPickerRow) {
@@ -671,6 +858,15 @@ export class StockDashboardComponent implements OnInit {
       name: row.name,
     });
     this.showItemPicker.set(false);
+    const wh = this.selectedWarehouseId();
+    if (wh) {
+      this.stockService.getStockPosition(wh, row.id).subscribe({
+        next: (pos) => this.transactionStockHint.set(pos),
+        error: () => this.transactionStockHint.set(null),
+      });
+    } else {
+      this.transactionStockHint.set(null);
+    }
   }
 
   onTransactionItemPickerClosed() {
@@ -678,26 +874,275 @@ export class StockDashboardComponent implements OnInit {
   }
 
   submitTransaction() {
+    const wh = this.selectedWarehouseId();
+    if (!wh) return;
+
+    const raw = this.transactionForm.getRawValue();
+    const kind = raw.movementKind as string;
+
+    if (kind === 'TRANSFER') {
+      this.closeTransactionModal();
+      this.router.navigate(['/app/inventario/transferencias'], {
+        queryParams: { origen: wh },
+      });
+      return;
+    }
+
+    if (kind === 'RETURN_OT') {
+      const wo = String(raw.workOrderId ?? '').trim();
+      if (!wo) {
+        this.notificationService.error('Seleccione la orden de trabajo de origen.');
+        return;
+      }
+      if (!raw.itemId) {
+        this.notificationService.error('Seleccione un artículo del catálogo.');
+        return;
+      }
+      if (this.transactionForm.invalid) {
+        this.transactionForm.markAllAsTouched();
+        return;
+      }
+      this.stockService
+        .performReturn({
+          warehouseId: wh,
+          itemId: raw.itemId,
+          quantity: raw.quantity,
+          workOrderId: wo,
+          notes: raw.notes || undefined,
+        })
+        .subscribe({
+          next: () => {
+            this.notificationService.success('Devolución a bodega registrada.');
+            this.closeTransactionModal();
+            this.loadStock(wh);
+          },
+          error: (err) =>
+            this.notificationService.error(
+              err.error?.message || 'No se pudo registrar la devolución.',
+            ),
+        });
+      return;
+    }
+
+    if (!raw.itemId) {
+      this.transactionForm.markAllAsTouched();
+      this.notificationService.error('Seleccione un artículo del catálogo.');
+      return;
+    }
+
     if (this.transactionForm.invalid) {
       this.transactionForm.markAllAsTouched();
       return;
     }
 
+    const type = kind === 'PURCHASE_IN' ? 'IN' : 'OUT';
     const payload = {
-      ...this.transactionForm.value,
-      warehouseId: this.selectedWarehouseId(),
+      warehouseId: wh,
+      itemId: raw.itemId,
+      type,
+      quantity: raw.quantity,
+      unitCost: raw.unitCost,
+      notes: raw.notes,
     };
 
     this.stockService.performTransaction(payload).subscribe({
       next: () => {
         this.notificationService.success('Movimiento registrado exitosamente.');
         this.closeTransactionModal();
-        this.loadStock(this.selectedWarehouseId()); // Recargar tabla + pending count
+        this.loadStock(wh);
       },
       error: (err) =>
         this.notificationService.error(
           err.error?.message || 'Error en la transacción.',
         ),
     });
+  }
+
+  /** Stock disponible = físico − reservado (OT no cerradas). */
+  stockAvailable(s: {
+    quantity: number;
+    reservedQuantity?: number;
+    availableQuantity?: number;
+  }): number {
+    if (s.availableQuantity != null && Number.isFinite(s.availableQuantity)) {
+      return s.availableQuantity;
+    }
+    const phys = Number(s.quantity ?? 0);
+    const res = Number(s.reservedQuantity ?? 0);
+    return phys - res;
+  }
+
+  /** Por debajo o en el mínimo (alerta de reposición según disponible). */
+  isAvailabilityCritical(s: {
+    minStock: number;
+    quantity: number;
+    reservedQuantity?: number;
+    availableQuantity?: number;
+  }): boolean {
+    const min = Number(s.minStock ?? 0);
+    if (min <= 0) return false;
+    return this.stockAvailable(s) <= min;
+  }
+
+  private approxEq(a: number, b: number): boolean {
+    return Math.abs(a - b) < 1e-6;
+  }
+
+  stockRowClasses(s: {
+    quantity: number;
+    minStock: number;
+    reservedQuantity?: number;
+    availableQuantity?: number;
+  }): string {
+    const base =
+      'hover:bg-dark/40 transition-colors border-l-4 border-solid ';
+    const min = Number(s.minStock ?? 0);
+    if (min <= 0) {
+      return `${base} border-transparent`;
+    }
+    const avail = this.stockAvailable(s);
+    if (avail < min) {
+      return `${base} bg-red-950/30 border-red-500`;
+    }
+    if (this.approxEq(avail, min)) {
+      return `${base} bg-amber-950/25 border-amber-500`;
+    }
+    return `${base} bg-emerald-950/20 border-emerald-600/80`;
+  }
+
+  openKardexModal(row: {
+    item: { partNumber?: string; name?: string; id: string };
+  }) {
+    const wh = this.selectedWarehouseId();
+    if (!wh) return;
+    const w = this.warehouses().find((x) => x.id === wh);
+    this.kardexContext.set({
+      partNumber: String(row.item?.partNumber ?? ''),
+      name: String(row.item?.name ?? ''),
+      warehouseLabel: w
+        ? `${w.code} — ${w.name}`
+        : wh,
+    });
+    this.kardexModalOpen.set(true);
+    this.kardexLoading.set(true);
+    this.kardexRows.set([]);
+    this.stockService
+      .getTransactionsByWarehouse(wh, { itemId: row.item.id })
+      .subscribe({
+        next: (rows) => {
+          this.kardexRows.set(rows ?? []);
+          this.kardexLoading.set(false);
+        },
+        error: () => {
+          this.kardexRows.set([]);
+          this.kardexLoading.set(false);
+          this.notificationService.error('No se pudo cargar el kardex.');
+        },
+      });
+    afterNextRender(
+      () => {
+        const el = this.kardexDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  closeKardexModal() {
+    const el = this.kardexDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.onKardexDialogClose();
+    }
+  }
+
+  onKardexDialogClose() {
+    this.kardexModalOpen.set(false);
+    this.kardexContext.set(null);
+    this.kardexRows.set([]);
+  }
+
+  openReservationsModal(row: {
+    item: { id: string; partNumber?: string; name?: string };
+  }) {
+    const wh = this.selectedWarehouseId();
+    if (!wh || !row?.item?.id) return;
+    this.reservationContext.set({
+      partNumber: String(row.item.partNumber ?? ''),
+      name: String(row.item.name ?? ''),
+    });
+    this.reservationsModalOpen.set(true);
+    this.reservationsLoading.set(true);
+    this.reservationRows.set([]);
+    this.stockService.listStockReservations(wh, row.item.id).subscribe({
+      next: (rows) => {
+        this.reservationRows.set(rows ?? []);
+        this.reservationsLoading.set(false);
+      },
+      error: () => {
+        this.reservationRows.set([]);
+        this.reservationsLoading.set(false);
+        this.notificationService.error(
+          'No se pudo cargar el desglose de reservas.',
+        );
+      },
+    });
+    afterNextRender(
+      () => {
+        const el = this.reservationsDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  closeReservationsModal() {
+    const el = this.reservationsDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.onReservationsDialogClose();
+    }
+  }
+
+  onReservationsDialogClose() {
+    this.reservationsModalOpen.set(false);
+    this.reservationContext.set(null);
+    this.reservationRows.set([]);
+  }
+
+  canSubmitMovement(): boolean {
+    const kind = this.transactionForm.get('movementKind')?.value;
+    if (kind === 'TRANSFER') return true;
+    const itemId = this.transactionForm.get('itemId')?.value;
+    if (kind === 'RETURN_OT') {
+      const wo = String(this.transactionForm.get('workOrderId')?.value ?? '').trim();
+      return (
+        !!itemId &&
+        !!wo &&
+        this.transactionForm.get('quantity')?.valid === true
+      );
+    }
+    return this.transactionForm.valid && !!itemId;
+  }
+
+  transactionTypeLabel(type: string | undefined): string {
+    const m: Record<string, string> = {
+      IN: 'Entrada manual',
+      OUT: 'Salida manual',
+      ADJUST: 'Ajuste',
+      RETURN: 'Devolución',
+      PURCHASE_RECEIPT: 'Recepción compra',
+      WORK_ORDER_ISSUE: 'Consumo OT',
+      WORK_ORDER_RETURN: 'Devolución desde OT',
+      TRANSFER_OUT: 'Transferencia salida',
+      TRANSFER_IN: 'Transferencia ingreso',
+    };
+    return m[String(type ?? '').toUpperCase()] ?? String(type ?? '—');
   }
 }

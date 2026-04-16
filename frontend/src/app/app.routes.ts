@@ -210,11 +210,17 @@ export const routes: Routes = [
         pathMatch: 'prefix',
       },
       {
-        path: 'stock',
+        path: 'inventario/stock',
         loadComponent: () =>
           import('./features/inventory-stock/stock-dashboard/stock-dashboard.component').then(
             (m) => m.StockDashboardComponent,
           ),
+        data: { pageTitle: 'Control de Stock' },
+      },
+      {
+        path: 'stock',
+        redirectTo: 'inventario/stock',
+        pathMatch: 'full',
       },
       {
         path: 'inventario/valorizacion',

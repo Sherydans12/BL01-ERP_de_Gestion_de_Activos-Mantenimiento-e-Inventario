@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Req,
+  StreamableFile,
 } from '@nestjs/common';
 import { InventoryStockService } from './inventory-stock.service';
 import type {
@@ -28,6 +29,17 @@ export class InventoryStockController {
     return this.inventoryStockService.getSupplyAlerts(req.user);
   }
 
+  /** IRA: exactitud de inventario (ajustes por conteo vs stock, últimos 30 días). */
+  @Get('inventory-record-accuracy')
+  getInventoryRecordAccuracy(
+    @Req() req: any,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    return this.inventoryStockService.getInventoryRecordAccuracy(req.user, {
+      warehouseId: warehouseId?.trim() || undefined,
+    });
+  }
+
   /** Auditoría: saldos negativos o con marca de regularización pendiente (paginado). */
   @Get('warehouse/:warehouseId/pending-regularization')
   getPendingRegularizationPage(
@@ -46,21 +58,76 @@ export class InventoryStockController {
     );
   }
 
-  // Obtener todo el stock de una bodega específica
-  @Get('warehouse/:warehouseId')
-  getStock(@Param('warehouseId') warehouseId: string, @Req() req: any) {
-    return this.inventoryStockService.getStockByWarehouse(
+  /** Ubicación y saldo actual para un ítem en bodega (movimientos manuales). */
+  @Get('warehouse/:warehouseId/item/:itemId/stock-position')
+  getStockPosition(
+    @Param('warehouseId') warehouseId: string,
+    @Param('itemId') itemId: string,
+    @Req() req: any,
+  ) {
+    return this.inventoryStockService.getStockPosition(
       warehouseId,
+      itemId,
       req.user,
     );
   }
 
-  // Obtener el historial (Kárdex) de una bodega
+  /** Desglose de reservas de stock (OT) para un ítem en bodega. */
+  @Get('warehouse/:warehouseId/item/:itemId/reservations')
+  listStockReservations(
+    @Param('warehouseId') warehouseId: string,
+    @Param('itemId') itemId: string,
+    @Req() req: any,
+  ) {
+    return this.inventoryStockService.listStockReservationsForItem(
+      warehouseId,
+      itemId,
+      req.user,
+    );
+  }
+
+  // Obtener todo el stock de una bodega específica
+  @Get('warehouse/:warehouseId')
+  getStock(
+    @Param('warehouseId') warehouseId: string,
+    @Req() req: any,
+    @Query('location') location?: string,
+  ) {
+    return this.inventoryStockService.getStockByWarehouse(
+      warehouseId,
+      req.user,
+      { location: location?.trim() || undefined },
+    );
+  }
+
+  /** Hoja de conteo físico (PDF ciego: sin stock sistema). */
+  @Get('warehouse/:warehouseId/physical-count-sheet/pdf')
+  async physicalCountSheetPdf(
+    @Param('warehouseId') warehouseId: string,
+    @Req() req: any,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } =
+      await this.inventoryStockService.buildPhysicalCountSheetPdf(
+        req.user,
+        warehouseId,
+      );
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+    });
+  }
+
+  // Obtener el historial (Kárdex) de una bodega (opcional: filtrar por ítem)
   @Get('warehouse/:warehouseId/transactions')
-  getTransactions(@Param('warehouseId') warehouseId: string, @Req() req: any) {
+  getTransactions(
+    @Param('warehouseId') warehouseId: string,
+    @Req() req: any,
+    @Query('itemId') itemId?: string,
+  ) {
     return this.inventoryStockService.getTransactionsByWarehouse(
       warehouseId,
       req.user,
+      { itemId: itemId?.trim() || undefined },
     );
   }
 

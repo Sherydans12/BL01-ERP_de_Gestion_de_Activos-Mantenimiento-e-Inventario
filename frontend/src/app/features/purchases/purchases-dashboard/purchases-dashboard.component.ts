@@ -50,6 +50,7 @@ const REQ_PIPELINE_ORDER = [
   'APPROVED',
   'REJECTED',
   'CANCELLED',
+  'CLOSED',
 ] as const;
 
 const REQ_PIPELINE_LABEL: Record<string, string> = {
@@ -61,6 +62,7 @@ const REQ_PIPELINE_LABEL: Record<string, string> = {
   APPROVED: 'Aprobado',
   REJECTED: 'Rechazado',
   CANCELLED: 'Anulado',
+  CLOSED: 'Cerrado (completo)',
 };
 
 @Component({
@@ -91,6 +93,8 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
   contractId = signal('');
   dateFrom = signal('');
   dateTo = signal('');
+  /** true = embudo analítico incluye SRC en estado CLOSED (historial). */
+  pipelineIncludeClosed = signal(false);
 
   /** Texto del contrato aplicado al dashboard (filtro). */
   selectedContractDisplay = computed(() => {
@@ -147,6 +151,10 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
     if (cid !== loadedCid) return false;
     const fromQ = new Date(this.dateFrom()).toISOString();
     const toQ = new Date(this.dateTo() + 'T23:59:59.999').toISOString();
+    const backendExcludesClosed = d.filters.excludeClosedRequisitions !== false;
+    if (backendExcludesClosed !== !this.pipelineIncludeClosed()) {
+      return false;
+    }
     return d.filters.from === fromQ && d.filters.to === toQ;
   });
 
@@ -226,6 +234,7 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
         from: new Date(this.dateFrom()).toISOString(),
         to: new Date(this.dateTo() + 'T23:59:59.999').toISOString(),
         ...(cid ? { contractId: cid } : {}),
+        excludeClosedRequisitions: !this.pipelineIncludeClosed(),
       })
       .subscribe({
         next: (data) => {

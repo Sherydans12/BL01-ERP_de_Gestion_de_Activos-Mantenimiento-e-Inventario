@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
@@ -15,6 +16,10 @@ import {
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 import { PO_STATUSES_ALLOW_WAREHOUSE_RECEIPT } from './po-receipt-eligible-statuses';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
+import {
+  requisitionIdFromPurchaseOrder,
+  tryAutoCloseRequisitionIfFullyReconciled,
+} from './purchase-requisition-auto-close.util';
 
 function calculateCPP(
   currentQty: number,
@@ -74,6 +79,8 @@ const RECEIPT_DETAIL_INCLUDE = {
 
 @Injectable()
 export class WarehouseReceiptsService {
+  private readonly logger = new Logger(WarehouseReceiptsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequenceService: SequenceService,
@@ -558,6 +565,30 @@ export class WarehouseReceiptsService {
         directExpenseItems: skippedDirectExpense,
       },
     });
+
+    const poLink = await this.prisma.purchaseOrder.findFirst({
+      where: { id: receipt.purchaseOrderId, tenantId: user.tenantId },
+      select: {
+        requisitionId: true,
+        quotation: { select: { requisitionId: true } },
+      },
+    });
+    const reqId = requisitionIdFromPurchaseOrder(poLink);
+    if (reqId) {
+      const actorId = user.id || user.sub;
+      if (actorId) {
+        void tryAutoCloseRequisitionIfFullyReconciled(
+          this.prisma,
+          user.tenantId,
+          reqId,
+          String(actorId),
+        ).catch((e) =>
+          this.logger.warn(
+            `Auto-cierre SRC tras recepción de bodega: ${String(e)}`,
+          ),
+        );
+      }
+    }
 
     const skippedTotal = skippedNoLink + skippedDirectExpense;
     const messages: string[] = [];

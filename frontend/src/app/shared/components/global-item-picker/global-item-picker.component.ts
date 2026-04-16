@@ -313,6 +313,7 @@ export class GlobalItemPickerComponent
       },
       stockQuantity: this.warehouseId ? 0 : null,
       stockUnitCost: null,
+      stockLocation: null,
     };
     this.quickAddOpen.set(false);
     this.itemPicked.emit(row);

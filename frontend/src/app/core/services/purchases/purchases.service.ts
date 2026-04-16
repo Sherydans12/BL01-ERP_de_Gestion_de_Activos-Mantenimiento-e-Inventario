@@ -65,6 +65,8 @@ export interface RequisitionReconciliationSnapshot {
   linesInProcurement: number;
   linesFullyReceived: number;
   linesWithInvoice: number;
+  adjudicatedLineCount: number;
+  allAdjudicatedLinesFullyReconciled: boolean;
   adjudicatedMatrixTotal: number;
   invoicesTotal: number;
   currency: string | null;
@@ -652,11 +654,16 @@ export class PurchasesService {
     contractId?: string;
     from?: string;
     to?: string;
+    /** false = incluir SRC cerrados en el embudo (historial). */
+    excludeClosedRequisitions?: boolean;
   }): Observable<PurchasesAnalyticsDashboard> {
     const httpParams: Record<string, string> = {};
     if (params?.contractId) httpParams['contractId'] = params.contractId;
     if (params?.from) httpParams['from'] = params.from;
     if (params?.to) httpParams['to'] = params.to;
+    if (params?.excludeClosedRequisitions === false) {
+      httpParams['excludeClosedRequisitions'] = 'false';
+    }
     return this.http.get<PurchasesAnalyticsDashboard>(
       `${this.base}/purchases/analytics/dashboard`,
       { params: httpParams },
@@ -725,7 +732,12 @@ export interface PurchasePaymentCalendarDay {
 }
 
 export interface PurchasesAnalyticsDashboard {
-  filters: { from: string; to: string; contractId: string | null };
+  filters: {
+    from: string;
+    to: string;
+    contractId: string | null;
+    excludeClosedRequisitions?: boolean;
+  };
   kpis: {
     totalApprovedSpend: number;
     pendingSignaturePurchaseOrders: number;

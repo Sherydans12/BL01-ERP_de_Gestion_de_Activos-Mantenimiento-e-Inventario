@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
+import { generatePhysicalCountSheetPdfBuffer } from './physical-count-sheet-pdf.generator';
 
 export interface PerformTransactionDto {
   warehouseId: string;
@@ -378,15 +379,26 @@ export class InventoryStockService {
     });
   }
 
-  async getStockByWarehouse(warehouseId: string, user: any) {
+  async getStockByWarehouse(
+    warehouseId: string,
+    user: any,
+    opts?: { location?: string },
+  ) {
     const tenantId = user.tenantId as string;
     const warehouse = await this.prisma.warehouse.findFirst({
       where: { id: warehouseId, tenantId },
     });
     if (!warehouse) throw new NotFoundException('Bodega no encontrada');
 
+    const loc = opts?.location?.trim();
+    const where: Prisma.ItemStockWhereInput = { warehouseId };
+    if (loc) {
+      /** Coincidencia parcial sin distinguir mayúsculas (PostgreSQL: ILIKE). */
+      where.location = { contains: loc, mode: 'insensitive' };
+    }
+
     const rows = await this.prisma.itemStock.findMany({
-      where: { warehouseId },
+      where,
       include: {
         item: {
           include: {
@@ -407,23 +419,144 @@ export class InventoryStockService {
       orderBy: { item: { name: 'asc' } },
     });
 
+    const reservedAgg = await this.prisma.stockReservation.groupBy({
+      by: ['itemId'],
+      where: { warehouseId },
+      _sum: { quantity: true },
+    });
+    const reservedByItemId = new Map(
+      reservedAgg.map((a) => [a.itemId, a._sum.quantity ?? 0]),
+    );
+
     const itemIds = [...new Set(rows.map((r) => r.itemId))];
     const reqByItemId = await this.mapLatestRequisitionsByItemIds(
       tenantId,
       itemIds,
     );
 
-    return rows.map((r) => ({
-      ...r,
-      unitCost: this.maskCostValue(user, r.unitCost != null ? Number(r.unitCost) : null),
-      item: this.ensureItemDescription(r.item),
-      linkedRequisition: reqByItemId.get(r.itemId) ?? null,
-    }));
+    return rows.map((r) => {
+      const reservedQuantity = reservedByItemId.get(r.itemId) ?? 0;
+      const physicalQuantity = r.quantity;
+      const availableQuantity = physicalQuantity - reservedQuantity;
+      return {
+        ...r,
+        reservedQuantity,
+        availableQuantity,
+        unitCost: this.maskCostValue(
+          user,
+          r.unitCost != null ? Number(r.unitCost) : null,
+        ),
+        item: this.ensureItemDescription(r.item),
+        linkedRequisition: reqByItemId.get(r.itemId) ?? null,
+      };
+    });
   }
 
-  async getTransactionsByWarehouse(warehouseId: string, user: any) {
+  /**
+   * Enriquece transacciones con datos para trazabilidad (recepción/OC, OT).
+   */
+  private async enrichTransactionsTrace<
+    T extends {
+      type: TransactionType;
+      referenceId: string | null;
+      referenceType: string | null;
+    },
+  >(rows: T[], tenantId: string): Promise<Array<T & { trace?: Record<string, unknown> }>> {
+    const receiptIds = [
+      ...new Set(
+        rows
+          .filter((r) => r.type === 'PURCHASE_RECEIPT' && r.referenceId)
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    const receiptMap = new Map<
+      string,
+      {
+        id: string;
+        correlative: string;
+        purchaseOrder: { id: string; correlative: string };
+      }
+    >();
+    if (receiptIds.length > 0) {
+      const recs = await this.prisma.warehouseReceipt.findMany({
+        where: { id: { in: receiptIds }, tenantId },
+        select: {
+          id: true,
+          correlative: true,
+          purchaseOrder: { select: { id: true, correlative: true } },
+        },
+      });
+      for (const r of recs) {
+        receiptMap.set(r.id, {
+          id: r.id,
+          correlative: r.correlative,
+          purchaseOrder: r.purchaseOrder,
+        });
+      }
+    }
+
+    const woIds = [
+      ...new Set(
+        rows
+          .filter((r) => r.referenceId && r.referenceType === 'WORK_ORDER')
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    const woMap = new Map<
+      string,
+      { id: string; correlative: string; responsible: string | null }
+    >();
+    if (woIds.length > 0) {
+      const wos = await this.prisma.workOrder.findMany({
+        where: { id: { in: woIds }, tenantId },
+        select: { id: true, correlative: true, responsible: true },
+      });
+      for (const w of wos) {
+        woMap.set(w.id, w);
+      }
+    }
+
+    return rows.map((row) => {
+      const trace: Record<string, unknown> = {};
+      if (row.type === 'PURCHASE_RECEIPT' && row.referenceId) {
+        const rc = receiptMap.get(row.referenceId);
+        if (rc) {
+          trace.warehouseReceipt = {
+            id: rc.id,
+            correlative: rc.correlative,
+          };
+          trace.purchaseOrder = rc.purchaseOrder;
+        }
+      }
+      if (row.referenceType === 'WORK_ORDER' && row.referenceId) {
+        const wo = woMap.get(row.referenceId);
+        if (wo) {
+          trace.workOrder = wo;
+        }
+      }
+      return {
+        ...row,
+        ...(Object.keys(trace).length ? { trace } : {}),
+      };
+    });
+  }
+
+  async getTransactionsByWarehouse(
+    warehouseId: string,
+    user: any,
+    opts?: { itemId?: string },
+  ) {
+    const tenantId = user.tenantId as string;
+    const where: Prisma.InventoryTransactionWhereInput = {
+      warehouseId,
+      warehouse: { tenantId },
+    };
+    if (opts?.itemId) {
+      where.itemId = opts.itemId;
+    }
+
     const rows = await this.prisma.inventoryTransaction.findMany({
-      where: { warehouseId, warehouse: { tenantId: user.tenantId } },
+      where,
       include: {
         item: {
           select: {
@@ -438,11 +571,96 @@ export class InventoryStockService {
         user: { select: { name: true, email: true } },
       },
       orderBy: { date: 'desc' },
-      take: 100,
+      take: opts?.itemId ? 500 : 100,
     });
-    return rows.map((row) => ({
+    const enriched = await this.enrichTransactionsTrace(rows, tenantId);
+    return enriched.map((row) => ({
       ...row,
       item: this.ensureItemDescription(row.item),
+    }));
+  }
+
+  /** Ubicación y cantidad actual en bodega (para movimientos IN/OUT). */
+  async getStockPosition(
+    warehouseId: string,
+    itemId: string,
+    user: any,
+  ): Promise<{ location: string | null; quantityOnHand: number }> {
+    const tenantId = user.tenantId as string;
+    const wh = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, tenantId },
+      select: { id: true },
+    });
+    if (!wh) {
+      throw new NotFoundException('Bodega no encontrada.');
+    }
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { id: true },
+    });
+    if (!item) {
+      throw new NotFoundException('Artículo no encontrado.');
+    }
+    const st = await this.prisma.itemStock.findUnique({
+      where: {
+        warehouseId_itemId: { warehouseId, itemId },
+      },
+      select: { location: true, quantity: true },
+    });
+    const loc = st?.location?.trim();
+    return {
+      location: loc ? loc : null,
+      quantityOnHand: st?.quantity ?? 0,
+    };
+  }
+
+  /** Reservas activas (OT no cerrada; al cerrar se eliminan filas). */
+  async listStockReservationsForItem(
+    warehouseId: string,
+    itemId: string,
+    user: any,
+  ) {
+    const tenantId = user.tenantId as string;
+    const wh = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, tenantId },
+      select: { id: true },
+    });
+    if (!wh) {
+      throw new NotFoundException('Bodega no encontrada.');
+    }
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { id: true },
+    });
+    if (!item) {
+      throw new NotFoundException('Artículo no encontrado.');
+    }
+
+    const rows = await this.prisma.stockReservation.findMany({
+      where: { warehouseId, itemId },
+      include: {
+        workOrder: {
+          select: {
+            id: true,
+            correlative: true,
+            responsible: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      quantity: r.quantity,
+      reservedAt: r.createdAt,
+      workOrder: {
+        id: r.workOrder.id,
+        correlative: r.workOrder.correlative,
+        responsible: r.workOrder.responsible,
+        status: r.workOrder.status,
+      },
     }));
   }
 
@@ -832,9 +1050,88 @@ export class InventoryStockService {
   }
 
   /**
-   * Devolución (RETURN) atómica vinculada a una OT.
+   * Inventory Record Accuracy (IRA), últimos 30 días: ajustes por conteo vs stock sistema.
+   * IRA = (1 - sum|delta conteo| / sum stock) × 100
+   */
+  async getInventoryRecordAccuracy(
+    user: any,
+    opts?: { warehouseId?: string },
+  ): Promise<{
+    periodDays: number;
+    numerator: number;
+    denominator: number;
+    iraPercent: number | null;
+    note: string;
+  }> {
+    const tenantId = user.tenantId as string;
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const whereAdj: Prisma.InventoryTransactionWhereInput = {
+      warehouse: { tenantId },
+      type: 'ADJUST',
+      referenceType: 'INVENTORY_ADJUSTMENT',
+      date: { gte: since },
+      notes: {
+        contains: 'Ajuste [Error de conteo]',
+        mode: 'insensitive',
+      },
+    };
+    if (opts?.warehouseId) {
+      whereAdj.warehouseId = opts.warehouseId;
+    }
+
+    const adjustments = await this.prisma.inventoryTransaction.findMany({
+      where: whereAdj,
+      select: { quantity: true },
+    });
+
+    const numerator = adjustments.reduce(
+      (s, t) => s + Math.abs(Number(t.quantity)),
+      0,
+    );
+
+    const whereStock: Prisma.ItemStockWhereInput = {
+      warehouse: { tenantId },
+    };
+    if (opts?.warehouseId) {
+      whereStock.warehouseId = opts.warehouseId;
+    }
+
+    const agg = await this.prisma.itemStock.aggregate({
+      where: whereStock,
+      _sum: { quantity: true },
+    });
+    const denominator = Math.max(0, Number(agg._sum.quantity ?? 0));
+
+    if (denominator < 1e-9) {
+      return {
+        periodDays: 30,
+        numerator,
+        denominator,
+        iraPercent: null,
+        note:
+          'Sin stock en sistema en el alcance seleccionado; no se puede calcular IRA.',
+      };
+    }
+
+    const raw = (1 - numerator / denominator) * 100;
+    const iraPercent = Math.round(Math.max(0, Math.min(100, raw)) * 100) / 100;
+
+    return {
+      periodDays: 30,
+      numerator,
+      denominator,
+      iraPercent,
+      note:
+        'Basado en ajustes por conteo (últimos 30 días) y suma de stock físico en sistema.',
+    };
+  }
+
+  /**
+   * Devolución a bodega (WORK_ORDER_RETURN) atómica vinculada a una OT.
    * Valida que la cantidad devuelta no exceda la consumida originalmente.
-   * Usa el unitCost original de la salida para proteger el CPP.
+   * Incrementa cantidad sin modificar unit_cost (CPP vigente inalterado).
    */
   async performReturn(dto: PerformReturnDto, user: any) {
     if (dto.quantity <= 0) {
@@ -878,7 +1175,7 @@ export class InventoryStockService {
             itemId: dto.itemId,
             referenceId: dto.workOrderId,
             referenceType: 'WORK_ORDER',
-            type: 'RETURN',
+            type: { in: ['RETURN', 'WORK_ORDER_RETURN'] },
           },
         });
 
@@ -925,10 +1222,10 @@ export class InventoryStockService {
           },
         });
 
-        // 5. Registrar transacción RETURN
+        // 5. Registrar devolución a bodega (no recalcula CPP: solo incrementa cantidad)
         const transaction = await tx.inventoryTransaction.create({
           data: {
-            type: 'RETURN',
+            type: 'WORK_ORDER_RETURN',
             quantity: dto.quantity,
             previousStock: previousQty,
             newStock: newQty,
@@ -968,5 +1265,57 @@ export class InventoryStockService {
         timeout: 60_000,
       },
     );
+  }
+
+  /** PDF de conteo físico a ciegas (sin saldo sistema), ordenado por ubicación. */
+  async buildPhysicalCountSheetPdf(
+    user: any,
+    warehouseId: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const tenantId = user.tenantId as string;
+    const wh = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, tenantId },
+      select: { code: true, name: true },
+    });
+    if (!wh) {
+      throw new NotFoundException('Bodega no encontrada.');
+    }
+
+    const stocks = await this.prisma.itemStock.findMany({
+      where: { warehouseId, warehouse: { tenantId } },
+      select: {
+        location: true,
+        item: {
+          select: {
+            inventoryCode: true,
+            partNumber: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    const pdfRows = stocks.map((r) => {
+      const rawDesc =
+        r.item.description?.trim() || r.item.name?.trim() || '—';
+      const description =
+        rawDesc.length > 120 ? `${rawDesc.slice(0, 117)}…` : rawDesc;
+      return {
+        inventoryCode: (r.item.inventoryCode ?? '').trim() || '—',
+        partNumber: (r.item.partNumber ?? '').trim() || '—',
+        description,
+        location: (r.location ?? '').trim(),
+      };
+    });
+
+    const buffer = await generatePhysicalCountSheetPdfBuffer({
+      warehouseCode: wh.code,
+      warehouseName: wh.name,
+      generatedAt: new Date(),
+      rows: pdfRows,
+    });
+    const safe = `${wh.code}-conteo-fisico`.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    return { buffer, filename: `${safe}.pdf` };
   }
 }

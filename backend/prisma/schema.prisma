@@ -675,6 +675,11 @@ model InventoryTransaction {
   item            InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Restrict)
   user            User            @relation(fields: [userId], references: [id], onDelete: Restrict)
 
+  /// Listados/kardex por bodega y rango temporal (tenant vía warehouse).
+  @@index([warehouseId, date])
+  @@index([date])
+  /// Filtros por tipo de movimiento (rol análogo a «estado» en otras tablas).
+  @@index([type, date])
   @@map("inventory_transactions")
 }
 
@@ -683,6 +688,8 @@ enum TransactionType {
   OUT     
   ADJUST  
   RETURN
+  /** Devolución a bodega de material despachado a una OT (trazabilidad explícita). */
+  WORK_ORDER_RETURN
   PURCHASE_RECEIPT
   WORK_ORDER_ISSUE
   TRANSFER_OUT
@@ -790,6 +797,7 @@ model StockReservation {
   itemId        String        @map("item_id") @db.Uuid
   warehouseId   String        @map("warehouse_id") @db.Uuid
   quantity      Float
+  createdAt     DateTime      @default(now()) @map("created_at")
 
   workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -915,6 +923,8 @@ model PurchaseRequisition {
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])
   @@index([tenantId, workOrderId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
   @@map("purchase_requisitions")
 }
 
@@ -1027,6 +1037,8 @@ model PurchaseOrder {
   @@index([tenantId, equipmentId])
   @@index([tenantId, workOrderId])
   @@index([tenantId, requisitionId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
   @@map("purchase_orders")
 }
 
@@ -1191,6 +1203,8 @@ enum RequisitionStatus {
   APPROVED
   REJECTED
   CANCELLED
+  /// Recepción y factura completas para todas las líneas adjudicadas (cierre contable del SRC).
+  CLOSED
 }
 
 enum RequisitionPriority {

@@ -3,11 +3,18 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
+import {
+  generateInventoryItemLabelPdfBuffer,
+  type InventoryLabelQrMode,
+  type InventoryLabelSize,
+} from './inventory-item-label-pdf.generator';
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 const INV_SKU_PREFIX = 'INV';
@@ -64,6 +71,7 @@ export class InventoryItemsService {
     private readonly prisma: PrismaService,
     private readonly sequenceService: SequenceService,
     private readonly storageService: StorageService,
+    private readonly config: ConfigService,
   ) {}
 
   private sortRowsBySearchIdOrder<T extends { id: string }>(
@@ -336,7 +344,7 @@ export class InventoryItemsService {
     if (warehouseIdForStock) {
       include.stocks = {
         where: { warehouseId: warehouseIdForStock },
-        select: { quantity: true, unitCost: true },
+        select: { quantity: true, unitCost: true, location: true, minStock: true },
       };
     }
 
@@ -401,18 +409,50 @@ export class InventoryItemsService {
       total = t;
     }
 
+    let reservedByItemId = new Map<string, number>();
+    if (warehouseIdForStock && rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      const reservedAgg = await this.prisma.stockReservation.groupBy({
+        by: ['itemId'],
+        where: {
+          warehouseId: warehouseIdForStock,
+          itemId: { in: ids },
+        },
+        _sum: { quantity: true },
+      });
+      reservedByItemId = new Map(
+        reservedAgg.map((a) => [a.itemId, a._sum.quantity ?? 0]),
+      );
+    }
+
     return {
       data: rows.map((item) => {
         const row = item as typeof item & {
-          stocks?: { quantity: number; unitCost: unknown }[];
+          stocks?: {
+            quantity: number;
+            unitCost: unknown;
+            minStock?: number;
+          }[];
         };
         const stocks = row.stocks;
         let stockQuantity: number | null = null;
         let stockUnitCost: number | null = null;
+        let stockLocation: string | null = null;
+        let stockCritical = false;
         if (warehouseIdForStock) {
           stockQuantity = stocks?.length ? stocks[0].quantity : 0;
           const uc = stocks?.length ? stocks[0].unitCost : null;
           stockUnitCost = uc !== null && uc !== undefined ? Number(uc) : null;
+          const rawLoc = stocks?.length ? stocks[0].location : null;
+          stockLocation =
+            rawLoc != null && String(rawLoc).trim()
+              ? String(rawLoc).trim()
+              : null;
+          const minS = stocks?.length ? Number(stocks[0].minStock ?? 0) : 0;
+          const reserved = reservedByItemId.get(row.id) ?? 0;
+          const physical = Number(stockQuantity ?? 0);
+          const available = physical - reserved;
+          stockCritical = minS > 0 && available < minS;
         } else {
           stockUnitCost = null;
         }
@@ -429,6 +469,8 @@ export class InventoryItemsService {
           itemCategory: row.itemCategory,
           stockQuantity,
           stockUnitCost: this.maskPickerCostByRole(user, stockUnitCost),
+          stockLocation,
+          stockCritical,
         };
       }),
       total,
@@ -447,6 +489,62 @@ export class InventoryItemsService {
     });
     if (!item) throw new NotFoundException('Artículo no encontrado');
     return item;
+  }
+
+  /**
+   * PDF de etiqueta térmica con QR (URL al detalle en la webapp o JSON { id, sku }).
+   */
+  async getItemLabelPdf(
+    id: string,
+    user: any,
+    options: { qr: InventoryLabelQrMode; size: InventoryLabelSize },
+  ): Promise<{ stream: Readable; filename: string }> {
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: {
+        id: true,
+        inventoryCode: true,
+        partNumber: true,
+        name: true,
+      },
+    });
+    if (!item) throw new NotFoundException('Artículo no encontrado');
+
+    const frontendRaw =
+      this.config.get<string>('FRONTEND_URL')?.trim() || '';
+    const base = frontendRaw.replace(/\/$/, '');
+
+    let qrPayload: string;
+    if (options.qr === 'json') {
+      qrPayload = JSON.stringify({
+        id: item.id,
+        sku: item.inventoryCode ?? '',
+      });
+    } else if (base) {
+      qrPayload = `${base}/app/articulos/${item.id}`;
+    } else {
+      qrPayload = JSON.stringify({
+        id: item.id,
+        sku: item.inventoryCode ?? '',
+      });
+    }
+
+    const buffer = await generateInventoryItemLabelPdfBuffer({
+      inventoryCode: item.inventoryCode,
+      partNumber: item.partNumber,
+      name: item.name,
+      qrPayload,
+      size: options.size,
+    });
+
+    const safeSku =
+      item.inventoryCode?.replace(/[^\w.-]+/g, '_') || item.id.slice(0, 8);
+    const filename = `etiqueta-${safeSku}.pdf`;
+
+    return {
+      stream: Readable.from(buffer),
+      filename,
+    };
   }
 
   async create(dto: CreateInventoryItemDto, user: any) {

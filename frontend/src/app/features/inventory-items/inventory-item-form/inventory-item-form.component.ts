@@ -269,55 +269,43 @@ export class InventoryItemFormComponent implements OnInit {
     this.ledgerOtModalId.set(null);
   }
 
-  async printItemLabel() {
-    const payload =
-      this.itemQrCode() ??
-      String(this.itemForm.get('partNumber')?.value ?? '').trim();
-    if (!payload) {
-      this.notificationService.error('Sin código para etiqueta.');
+  printItemLabel() {
+    const id = this.itemId;
+    if (!id) {
+      this.notificationService.error('Guarde el artículo antes de imprimir la etiqueta.');
       return;
     }
-    const partNumber = String(this.itemForm.get('partNumber')?.value ?? '');
-    const name = String(this.itemForm.get('name')?.value ?? '');
-    try {
-      const QRCode = (await import('qrcode')).default;
-      const dataUrl = await QRCode.toDataURL(payload, {
-        width: 200,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-      });
-      const w = window.open('', '_blank', 'width=420,height=560');
-      if (!w) {
-        this.notificationService.error(
-          'Permita ventanas emergentes para imprimir la etiqueta.',
-        );
-        return;
-      }
-      const esc = (s: string) =>
-        s
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/"/g, '&quot;');
-      w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiqueta ${esc(partNumber)}</title>
-        <style>
-          body { font-family: system-ui, sans-serif; padding: 16px; text-align: center; color: #111; }
-          .pn { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 700; margin-top: 12px; }
-          .nm { font-size: 11px; color: #444; margin-top: 6px; max-width: 320px; margin-left: auto; margin-right: auto; }
-          img { display: block; margin: 0 auto; }
-        </style></head><body>
-        <img src="${dataUrl}" width="200" height="200" alt="QR" />
-        <div class="pn">${esc(partNumber)}</div>
-        <div class="nm">${esc(name)}</div>
-        <p style="font-size:9px;color:#888;margin-top:12px">${esc(payload)}</p>
-        </body></html>`);
-      w.document.close();
-      w.onload = () => {
-        w.focus();
-        w.print();
-      };
-    } catch {
-      this.notificationService.error('No se pudo generar el código QR.');
-    }
+    this.inventoryItemsService.getItemLabelPdf(id).subscribe({
+      next: (blob) => {
+        if (!blob?.size) {
+          this.notificationService.error('No se pudo generar la etiqueta.');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const w = window.open(url, '_blank');
+        if (!w) {
+          URL.revokeObjectURL(url);
+          this.notificationService.error(
+            'Permita ventanas emergentes para imprimir la etiqueta.',
+          );
+          return;
+        }
+        const revokeLater = () => URL.revokeObjectURL(url);
+        w.addEventListener('beforeunload', revokeLater);
+        setTimeout(() => {
+          try {
+            w.focus();
+            w.print();
+          } catch {
+            /* el visor PDF puede manejar la impresión manualmente */
+          }
+        }, 400);
+        setTimeout(revokeLater, 120_000);
+      },
+      error: () => {
+        this.notificationService.error('No se pudo generar la etiqueta PDF.');
+      },
+    });
   }
 
   parseAdjustmentNotes(notes: string | null): { reason: string; comment: string } {

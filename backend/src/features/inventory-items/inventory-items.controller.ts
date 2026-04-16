@@ -12,6 +12,7 @@ import {
   Req,
   UploadedFile,
   UseInterceptors,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InventoryItemsService } from './inventory-items.service';
@@ -138,6 +139,29 @@ export class InventoryItemsController {
     return this.inventoryItemsService.findItemLedger(id, req.user, {
       page: parseNum(page),
       pageSize: parseNum(pageSize),
+    });
+  }
+
+  /**
+   * Etiqueta térmica PDF con QR.
+   * @param qr `url` (defecto): enlace al detalle si hay FRONTEND_URL; si no, JSON. `json`: siempre JSON.
+   * @param size `100x50` (mm, defecto) o `50x25`.
+   */
+  @Get(':id/label')
+  async getItemLabel(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('qr') qr?: string,
+    @Query('size') size?: string,
+  ): Promise<StreamableFile> {
+    const { stream, filename } =
+      await this.inventoryItemsService.getItemLabelPdf(id, req.user, {
+        qr: qr === 'json' ? 'json' : 'url',
+        size: size === '50x25' ? '50x25' : '100x50',
+      });
+    return new StreamableFile(stream, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${filename}"`,
     });
   }
 

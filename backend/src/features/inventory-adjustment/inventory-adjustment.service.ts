@@ -27,6 +27,9 @@ const REASON_LABEL: Record<AdjustmentReasonCode, string> = {
   DANO: 'Daño',
 };
 
+/** Para MERMAS/DANO se exige explicación auditable (no basta un comentario de un carácter). */
+const LOSS_DAMAGE_COMMENT_MIN_LEN = 15;
+
 @Injectable()
 export class InventoryAdjustmentService {
   constructor(
@@ -49,6 +52,14 @@ export class InventoryAdjustmentService {
     const comment = dto.comment?.trim();
     if (!comment?.length) {
       throw new BadRequestException('El comentario del ajuste es obligatorio.');
+    }
+    if (
+      (dto.reason === 'MERMAS' || dto.reason === 'DANO') &&
+      comment.length < LOSS_DAMAGE_COMMENT_MIN_LEN
+    ) {
+      throw new BadRequestException(
+        `Para merma o daño debe registrar una explicación detallada en el comentario (mínimo ${LOSS_DAMAGE_COMMENT_MIN_LEN} caracteres).`,
+      );
     }
     if (!ADJUSTMENT_REASON_CODES.includes(dto.reason)) {
       throw new BadRequestException('Motivo de ajuste no válido.');

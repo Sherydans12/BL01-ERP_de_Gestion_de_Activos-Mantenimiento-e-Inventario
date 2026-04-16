@@ -11,13 +11,30 @@ export class InventoryStockService {
   private apiUrl = `${environment.apiUrl}/inventory-stock`;
   private adjustmentsUrl = `${environment.apiUrl}/inventory-adjustments`;
 
-  getStockByWarehouse(warehouseId: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}/warehouse/${warehouseId}`);
+  getStockByWarehouse(
+    warehouseId: string,
+    opts?: { location?: string },
+  ): Observable<any[]> {
+    let params = new HttpParams();
+    if (opts?.location?.trim()) {
+      params = params.set('location', opts.location.trim());
+    }
+    return this.http.get<any[]>(`${this.apiUrl}/warehouse/${warehouseId}`, {
+      params,
+    });
   }
 
-  getTransactionsByWarehouse(warehouseId: string): Observable<any[]> {
+  getTransactionsByWarehouse(
+    warehouseId: string,
+    opts?: { itemId?: string },
+  ): Observable<any[]> {
+    let params = new HttpParams();
+    if (opts?.itemId?.trim()) {
+      params = params.set('itemId', opts.itemId.trim());
+    }
     return this.http.get<any[]>(
       `${this.apiUrl}/warehouse/${warehouseId}/transactions`,
+      { params },
     );
   }
 
@@ -68,6 +85,35 @@ export class InventoryStockService {
     return this.http.post<any>(`${this.apiUrl}/return`, data);
   }
 
+  /** IRA (últimos 30 días): ajustes por conteo vs stock en sistema. */
+  /** PDF de conteo físico ciego (sin stock sistema). */
+  downloadPhysicalCountSheet(warehouseId: string): Observable<Blob> {
+    return this.http.get(
+      `${this.apiUrl}/warehouse/${warehouseId}/physical-count-sheet/pdf`,
+      { responseType: 'blob' },
+    );
+  }
+
+  getInventoryRecordAccuracy(opts?: { warehouseId?: string }): Observable<{
+    periodDays: number;
+    numerator: number;
+    denominator: number;
+    iraPercent: number | null;
+    note: string;
+  }> {
+    let params = new HttpParams();
+    if (opts?.warehouseId?.trim()) {
+      params = params.set('warehouseId', opts.warehouseId.trim());
+    }
+    return this.http.get<{
+      periodDays: number;
+      numerator: number;
+      denominator: number;
+      iraPercent: number | null;
+      note: string;
+    }>(`${this.apiUrl}/inventory-record-accuracy`, { params });
+  }
+
   createPhysicalAdjustment(data: {
     warehouseId: string;
     itemId: string;
@@ -87,5 +133,45 @@ export class InventoryStockService {
       `${this.apiUrl}/warehouse/${warehouseId}/item/${itemId}/levels`,
       data,
     );
+  }
+
+  getStockPosition(
+    warehouseId: string,
+    itemId: string,
+  ): Observable<{ location: string | null; quantityOnHand: number }> {
+    return this.http.get<{ location: string | null; quantityOnHand: number }>(
+      `${this.apiUrl}/warehouse/${warehouseId}/item/${itemId}/stock-position`,
+    );
+  }
+
+  listStockReservations(
+    warehouseId: string,
+    itemId: string,
+  ): Observable<
+    Array<{
+      id: string;
+      quantity: number;
+      reservedAt: string;
+      workOrder: {
+        id: string;
+        correlative: string;
+        responsible: string | null;
+        status: string;
+      };
+    }>
+  > {
+    return this.http.get<
+      Array<{
+        id: string;
+        quantity: number;
+        reservedAt: string;
+        workOrder: {
+          id: string;
+          correlative: string;
+          responsible: string | null;
+          status: string;
+        };
+      }>
+    >(`${this.apiUrl}/warehouse/${warehouseId}/item/${itemId}/reservations`);
   }
 }

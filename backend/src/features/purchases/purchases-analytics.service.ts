@@ -31,6 +31,8 @@ export class PurchasesAnalyticsService {
       contractId?: string;
       from?: string;
       to?: string;
+      /** Por defecto true: el embudo no cuenta SRC en estado CLOSED (historial). */
+      excludeClosedRequisitions?: boolean;
     },
   ) {
     const to = query.to ? new Date(query.to) : new Date();
@@ -38,6 +40,7 @@ export class PurchasesAnalyticsService {
       ? new Date(query.from)
       : new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
     const contractId = query.contractId;
+    const excludeClosedRequisitions = query.excludeClosedRequisitions !== false;
 
     const poBase: Prisma.PurchaseOrderWhereInput = {
       tenantId,
@@ -131,7 +134,11 @@ export class PurchasesAnalyticsService {
       this.monthlySpendSeries(tenantId, from, to, contractId),
       this.topVendorsWithLeadTime(tenantId, from, to, contractId),
       this.multiproviderAdjudicationSavings(tenantId, from, to, contractId),
-      this.requisitionPipelineCounts(tenantId, contractId),
+      this.requisitionPipelineCounts(
+        tenantId,
+        contractId,
+        excludeClosedRequisitions,
+      ),
       this.partialRequisitionLineCoverage(tenantId, contractId),
       this.requisitionsSnapshotForReport(tenantId, from, to, contractId),
     ]);
@@ -161,6 +168,7 @@ export class PurchasesAnalyticsService {
         from: from.toISOString(),
         to: to.toISOString(),
         contractId: contractId ?? null,
+        excludeClosedRequisitions,
       },
       kpis: {
         totalApprovedSpend: Number(totalApprovedSpend._sum.totalAmount ?? 0),
@@ -244,10 +252,15 @@ export class PurchasesAnalyticsService {
   private async requisitionPipelineCounts(
     tenantId: string,
     contractId?: string,
+    excludeClosed = true,
   ): Promise<Record<string, number>> {
     const rows = await this.prisma.purchaseRequisition.groupBy({
       by: ['status'],
-      where: { tenantId, ...(contractId ? { contractId } : {}) },
+      where: {
+        tenantId,
+        ...(contractId ? { contractId } : {}),
+        ...(excludeClosed ? { status: { not: 'CLOSED' } } : {}),
+      },
       _count: { _all: true },
     });
     return Object.fromEntries(

@@ -53,6 +53,7 @@ export class PurchasesAnalyticsController {
     @Query('contractId') contractId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('excludeClosedRequisitions') excludeClosedRequisitions?: string,
   ) {
     if (contractId) {
       assertUserHasContractAccess(req.user, contractId);
@@ -61,6 +62,7 @@ export class PurchasesAnalyticsController {
       contractId,
       from,
       to,
+      excludeClosedRequisitions: excludeClosedRequisitions !== 'false',
     });
   }
 }

@@ -10,6 +10,10 @@ import { assertUserHasContractAccess } from './purchase-contract-access.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService, pickChanged } from '../../common/audit/audit.service';
 import { buildActivityLogDetails } from '../../common/audit/activity-log-details.util';
+import {
+  requisitionIdFromPurchaseOrder,
+  tryAutoCloseRequisitionIfFullyReconciled,
+} from './purchase-requisition-auto-close.util';
 
 const PO_STATUSES_ALLOW_INVOICE = [
   'APPROVED',
@@ -580,6 +584,25 @@ export class PurchaseInvoicesService {
     }
 
     const enriched = await this.attachInvoiceMeta(updated, tenantId);
+
+    const poLink = await this.prisma.purchaseOrder.findFirst({
+      where: { id: invoice.purchaseOrderId, tenantId },
+      select: {
+        requisitionId: true,
+        quotation: { select: { requisitionId: true } },
+      },
+    });
+    const rid = requisitionIdFromPurchaseOrder(poLink);
+    if (rid) {
+      void tryAutoCloseRequisitionIfFullyReconciled(
+        this.prisma,
+        tenantId,
+        rid,
+        userId,
+      ).catch((e) =>
+        this.logger.warn(`Auto-cierre SRC tras factura/3-way: ${String(e)}`),
+      );
+    }
 
     return {
       ...enriched,

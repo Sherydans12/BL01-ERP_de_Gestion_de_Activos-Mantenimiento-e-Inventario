@@ -1852,6 +1852,8 @@ export class PurchaseOrdersService {
         id: true,
         status: true,
         contractId: true,
+        currency: true,
+        totalAmount: true,
         requiredSignatures: true,
         approvals: { select: { level: true } },
       },
@@ -1907,6 +1909,20 @@ export class PurchaseOrdersService {
     const vendorList = summary.vendorNames.length
       ? summary.vendorNames.join(', ')
       : '—';
+    const byCurrency = new Map<string, number>();
+    for (const o of orders) {
+      const cur = (o.currency ?? 'CLP').trim() || 'CLP';
+      byCurrency.set(
+        cur,
+        (byCurrency.get(cur) ?? 0) + Number(o.totalAmount ?? 0),
+      );
+    }
+    const aggTotals = [...byCurrency.entries()]
+      .map(
+        ([c, v]) =>
+          `${c} ${v.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`,
+      )
+      .join(' · ');
     const title =
       n === 1
         ? '1 orden de compra pendiente de firma'
@@ -1917,7 +1933,7 @@ export class PurchaseOrdersService {
       n === 1 ? 'orden de compra' : 'órdenes de compra'
     } para el requerimiento ${
       summary.requisitionCorrelative
-    }. Proveedores involucrados: ${vendorList}. OC: ${correlatives.join(', ')}.`;
+    }. Proveedores involucrados: ${vendorList}. OC: ${correlatives.join(', ')}. Monto total agregado (${n} OC): ${aggTotals}.`;
 
     const data: Record<string, string> = {
       type: 'PURCHASE_ORDER_BATCH_PENDING_SIGNATURE',

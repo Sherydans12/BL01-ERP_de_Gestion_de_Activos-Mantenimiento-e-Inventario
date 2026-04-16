@@ -1,6 +1,14 @@
 <div class="space-y-6">
   <!-- Cabecera -->
   <div class="flex flex-col gap-4 pb-2 border-b border-border/50">
+    <nav
+      class="flex flex-wrap items-center gap-1 text-[10px] font-mono text-muted uppercase tracking-wider"
+      aria-label="Miga de pan"
+    >
+      <span>Inventario</span>
+      <span class="text-border">/</span>
+      <span class="text-main">Control de Stock</span>
+    </nav>
     <div
       class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"
     >
@@ -45,13 +53,26 @@
         </div>
       </div>
       @if (selectedWarehouseId()) {
-        <button
-          type="button"
-          (click)="openTransactionModal()"
-          class="shrink-0 inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-lg transition-colors"
-        >
-          + REGISTRAR MOVIMIENTO
-        </button>
+        <div class="flex flex-wrap gap-2 shrink-0 justify-end">
+          <button
+            type="button"
+            (click)="downloadPhysicalCountSheetPdf()"
+            [disabled]="physicalCountPdfBusy()"
+            class="inline-flex items-center justify-center border border-border bg-surface hover:bg-dark/80 text-main font-mono text-sm py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+          >
+            @if (physicalCountPdfBusy()) {
+              <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2" aria-hidden="true"></span>
+            }
+            Hoja de conteo físico
+          </button>
+          <button
+            type="button"
+            (click)="openTransactionModal()"
+            class="inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-lg transition-colors"
+          >
+            Nuevo movimiento
+          </button>
+        </div>
       }
     </div>
 
@@ -125,6 +146,41 @@
               @for (c of subcategories(); track c.id) {
                 <option [value]="c.id">{{ c.name }}</option>
               }
+            </select>
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="min-w-[min(100%,14rem)] w-full sm:flex-1 sm:max-w-sm">
+          <label
+            class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1"
+            >Ubicación (pasillo / estante)</label
+          >
+          <input
+            type="text"
+            [value]="locationSearch()"
+            (input)="onLocationSearchInput($any($event.target).value)"
+            placeholder="Ej: Pasillo 3"
+            autocomplete="off"
+            class="w-full bg-surface border border-border text-main rounded-lg px-3 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm font-mono placeholder:text-muted/60"
+          />
+        </div>
+        <div class="min-w-[min(100%,12rem)] w-full sm:w-auto sm:max-w-[14rem]">
+          <label
+            class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1"
+            >Estado</label
+          >
+          <div class="relative group">
+            <select
+              [value]="stockStatusFilter()"
+              (change)="stockStatusFilter.set($any($event.target).value)"
+              class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm"
+            >
+              <option value="all">Todos</option>
+              <option value="critical">Solo críticos (≤ mín.)</option>
             </select>
             <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,7 +300,7 @@
   }
 
   @if (selectedWarehouseId()) {
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
       <div class="bg-surface border border-border rounded-xl p-4">
         <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Artículos</p>
         <p class="text-2xl font-bold text-main font-mono mt-1">{{ totalItemCount() }}</p>
@@ -267,6 +323,33 @@
         <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Regularizaciones</p>
         <p class="text-2xl font-bold font-mono mt-1" [class]="pendingRegularizationCount() > 0 ? 'text-error' : 'text-emerald-400'">{{ pendingRegularizationCount() }}</p>
       </div>
+      <div
+        class="bg-surface border border-primary/30 rounded-xl p-4"
+        title="Basado en ajustes por conteo (últimos 30 días) frente al stock en sistema en esta bodega."
+      >
+        <p class="text-[10px] font-mono text-muted uppercase tracking-wider">
+          IRA (exactitud)
+        </p>
+        @if (iraLoading()) {
+          <p class="text-sm text-muted font-mono animate-pulse mt-1">Calculando…</p>
+        } @else {
+          @if (iraReport(); as ira) {
+            @if (ira.iraPercent != null) {
+              <p class="text-2xl font-bold font-mono mt-1 text-primary">
+                {{ ira.iraPercent | number: "1.0-2" }}%
+              </p>
+              <p class="text-[10px] text-muted mt-1 leading-snug">
+                Σ|ajuste| {{ ira.numerator | number: "1.0-2" }} / stock sist.
+                {{ ira.denominator | number: "1.0-2" }}
+              </p>
+            } @else {
+              <p class="text-sm text-muted font-mono mt-1">{{ ira.note }}</p>
+            }
+          } @else {
+            <p class="text-sm text-muted font-mono mt-1">—</p>
+          }
+        }
+      </div>
     </div>
 
     @if (lowStockAlerts().length > 0) {
@@ -277,7 +360,7 @@
         <p class="text-xs text-error">
           {{ lowStockAlerts().length }} artículo(s) bajo stock mínimo:
           @for (a of lowStockAlerts().slice(0, 5); track a.id) {
-            <strong>{{ a.item.partNumber }}</strong> ({{ a.quantity }}/{{ a.minStock }}){{ $last ? '' : ', ' }}
+            <strong>{{ a.item.partNumber }}</strong> (disp. {{ stockAvailable(a) | number:'1.0-2' }} / mín. {{ a.minStock }}){{ $last ? '' : ', ' }}
           }
           @if (lowStockAlerts().length > 5) { <span>y {{ lowStockAlerts().length - 5 }} más...</span> }
         </p>
@@ -302,8 +385,14 @@
             <th class="py-3 px-6 border-b border-border text-left hidden lg:table-cell">Req. compra</th>
             <th class="py-3 px-6 border-b border-border text-left hidden md:table-cell">Ubicación</th>
             <th class="py-3 px-6 border-b border-border">Categoría</th>
-            <th class="py-3 px-6 border-b border-border text-center">
-              Stock Actual
+            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
+              Físico
+            </th>
+            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
+              Reservado
+            </th>
+            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
+              Disponible
             </th>
             <th class="py-3 px-6 border-b border-border text-right">
               Costo Unit. (CPP)
@@ -311,11 +400,9 @@
             <th class="py-3 px-6 border-b border-border text-right">
               Valor Total
             </th>
-            @if (canAdjustStock()) {
-              <th class="py-3 px-4 border-b border-border text-center w-28">
-                Acciones
-              </th>
-            }
+            <th class="py-3 px-4 border-b border-border text-center w-36">
+              Acciones
+            </th>
           </tr>
         </thead>
         <tbody class="text-sm text-muted divide-y divide-border/50">
@@ -323,18 +410,35 @@
             @for (_ of tableSkeletonRows; track $index) {
               <tr
                 appSkeletonRow
-                [columnCount]="canAdjustStock() ? 8 : 7"
+                [columnCount]="10"
               ></tr>
             }
+          } @else if (!stockLoading() && stockItems().length === 0) {
+            <tr>
+              <td
+                colspan="10"
+                class="py-12 text-center text-muted font-mono text-sm"
+              >
+                @if (locationSearch().trim()) {
+                  No hay artículos con esa ubicación en esta bodega. Pruebe otro texto o borre el filtro.
+                } @else {
+                  No hay stock registrado en esta bodega. Registre una entrada.
+                }
+              </td>
+            </tr>
           } @else if (
             filteredStockItems().length === 0 && stockItems().length > 0
           ) {
             <tr>
               <td
-                [attr.colspan]="canAdjustStock() ? 8 : 7"
+                colspan="10"
                 class="py-12 text-center text-muted font-mono text-sm"
               >
-                No hay artículos en esta bodega para la familia / subcategoría seleccionada.
+                @if (stockStatusFilter() === 'critical') {
+                  No hay posiciones críticas (disponible ≤ mínimo) con los filtros actuales.
+                } @else {
+                  No hay artículos en esta bodega para la familia / subcategoría seleccionada.
+                }
               </td>
             </tr>
           } @else {
@@ -424,11 +528,32 @@
                   }
                   {{ s.item.itemCategory?.name || "—" }}
                 </td>
-                <td class="py-4 px-6 text-center">
+                <td class="py-4 px-3 text-center align-middle">
                   <span
-                    class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border"
+                    class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border text-xs"
                   >
-                    {{ s.quantity }} {{ s.item.unitOfMeasure?.abbreviation ?? "—" }}
+                    {{ s.quantity | number:'1.0-4' }} {{ s.item.unitOfMeasure?.abbreviation ?? "—" }}
+                  </span>
+                </td>
+                <td class="py-4 px-3 text-center align-middle">
+                  <button
+                    type="button"
+                    (click)="openReservationsModal(s)"
+                    class="group inline-flex items-center justify-center gap-1 font-mono text-xs text-amber-200/90 bg-dark/80 px-2 py-1 rounded border border-border/80 hover:border-primary/50 hover:bg-dark transition-colors max-w-full"
+                    title="Ver quién retiene stock (OT)"
+                  >
+                    <span>{{ (s.reservedQuantity ?? 0) | number:'1.0-4' }}</span>
+                    <svg class="w-3.5 h-3.5 shrink-0 text-muted group-hover:text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </button>
+                </td>
+                <td class="py-4 px-3 text-center align-middle">
+                  <span
+                    class="font-mono font-semibold text-xs px-2 py-1 rounded border border-emerald-500/25 bg-emerald-950/20 text-emerald-200"
+                    [title]="'Disponible = físico − reservado'"
+                  >
+                    {{ stockAvailable(s) | number:'1.0-4' }}
                   </span>
                 </td>
                 <td class="py-4 px-6 text-right font-mono">
@@ -445,25 +570,25 @@
                     $ ****
                   }
                 </td>
-                @if (canAdjustStock()) {
-                  <td class="py-4 px-4 text-center">
+                <td class="py-4 px-3 text-center align-top">
+                  <div class="flex flex-col gap-1.5 items-stretch">
                     <button
                       type="button"
-                      (click)="openAdjustModal(s)"
-                      class="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                      (click)="openKardexModal(s)"
+                      class="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded border border-border text-muted hover:text-main hover:bg-dark"
                     >
-                      Ajustar
+                      Ver kardex
                     </button>
-                  </td>
-                }
-              </tr>
-            } @empty {
-              <tr>
-                <td
-                  [attr.colspan]="canAdjustStock() ? 8 : 7"
-                  class="py-12 text-center text-muted font-mono text-sm"
-                >
-                  No hay stock registrado en esta bodega. Registre una entrada.
+                    @if (canAdjustStock()) {
+                      <button
+                        type="button"
+                        (click)="openAdjustModal(s)"
+                        class="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                      >
+                        Ajustar stock
+                      </button>
+                    }
+                  </div>
                 </td>
               </tr>
             }
@@ -512,7 +637,7 @@
           class="p-4 border-b border-border flex justify-between items-center bg-dark"
         >
           <h3 class="font-bold text-main font-mono">
-            Movimiento de Inventario
+            Operación de almacén
           </h3>
           <button
             (click)="closeTransactionModal()"
@@ -541,107 +666,197 @@
         >
           <div>
             <label class="block text-xs font-medium text-muted mb-1"
-              >Tipo de Movimiento</label
+              >Tipo de movimiento</label
             >
-            <div class="flex gap-2">
-              <label class="flex-1 cursor-pointer">
+            <div class="grid grid-cols-1 gap-2">
+              <label class="cursor-pointer">
                 <input
                   type="radio"
-                  formControlName="type"
-                  value="IN"
+                  formControlName="movementKind"
+                  value="PURCHASE_IN"
                   class="peer sr-only"
                 />
                 <div
-                  class="text-center py-2 text-xs font-mono rounded border border-border peer-checked:bg-primary/20 peer-checked:text-primary peer-checked:border-primary transition-all"
+                  class="text-center py-2.5 text-xs font-mono rounded border border-border peer-checked:bg-primary/20 peer-checked:text-primary peer-checked:border-primary transition-all"
                 >
-                  ENTRADA (IN)
+                  Entrada por compra
                 </div>
               </label>
-              <label class="flex-1 cursor-pointer">
+              <label class="cursor-pointer">
                 <input
                   type="radio"
-                  formControlName="type"
-                  value="OUT"
+                  formControlName="movementKind"
+                  value="FIELD_OUT"
                   class="peer sr-only"
                 />
                 <div
-                  class="text-center py-2 text-xs font-mono rounded border border-border peer-checked:bg-error/20 peer-checked:text-error peer-checked:border-error transition-all"
+                  class="text-center py-2.5 text-xs font-mono rounded border border-border peer-checked:bg-error/15 peer-checked:text-error peer-checked:border-error transition-all"
                 >
-                  SALIDA (OUT)
+                  Salida a terreno
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input
+                  type="radio"
+                  formControlName="movementKind"
+                  value="TRANSFER"
+                  class="peer sr-only"
+                />
+                <div
+                  class="text-center py-2.5 text-xs font-mono rounded border border-border peer-checked:bg-amber-950/40 peer-checked:text-amber-200 peer-checked:border-amber-500/50 transition-all"
+                >
+                  Transferencia entre bodegas
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input
+                  type="radio"
+                  formControlName="movementKind"
+                  value="RETURN_OT"
+                  class="peer sr-only"
+                />
+                <div
+                  class="text-center py-2.5 text-xs font-mono rounded border border-border peer-checked:bg-emerald-950/35 peer-checked:text-emerald-200 peer-checked:border-emerald-500/60 transition-all"
+                >
+                  Devolución desde OT
                 </div>
               </label>
             </div>
+            <p class="text-[10px] text-muted mt-2 leading-relaxed">
+              Entrada y salida registran movimiento en <strong>esta</strong> bodega. La devolución reingresa material despachado a una OT (sin cambiar el CPP). Transferencia abre el flujo de traslado.
+            </p>
           </div>
 
-          <div>
-            <label class="block text-xs font-medium text-muted mb-1"
-              >Artículo (Catálogo Maestro de Artículos)</label
-            >
-            <input type="hidden" formControlName="itemId" />
-            @if (transactionItemPreview(); as prev) {
-              <div
-                class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-dark/50"
+          @if (transactionForm.get('movementKind')?.value === 'RETURN_OT') {
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1"
+                >Orden de trabajo (origen del despacho)</label
               >
-                <div class="flex-1 min-w-0 font-mono text-sm text-main">
-                  <span class="text-primary">{{ prev.partNumber }}</span>
-                  <span class="text-muted mx-1">—</span>
-                  <span>{{ prev.name }}</span>
+              <div class="relative group">
+                <select
+                  formControlName="workOrderId"
+                  class="w-full bg-dark border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 cursor-pointer appearance-none font-mono"
+                >
+                  <option value="">— Seleccionar OT —</option>
+                  @for (wo of workOrdersForReturn(); track wo.id) {
+                    <option [value]="wo.id">
+                      {{ wo.correlative || wo.id }} · {{ wo.status || "—" }}
+                    </option>
+                  }
+                </select>
+                <div
+                  class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
                 </div>
+              </div>
+            </div>
+          }
+
+          @if (transactionForm.get('movementKind')?.value !== 'TRANSFER') {
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1"
+                >Artículo (Catálogo Maestro de Artículos)</label
+              >
+              <input type="hidden" formControlName="itemId" />
+              @if (transactionItemPreview(); as prev) {
+                <div
+                  class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-dark/50"
+                >
+                  <div class="flex-1 min-w-0 font-mono text-sm text-main">
+                    <span class="text-primary">{{ prev.partNumber }}</span>
+                    <span class="text-muted mx-1">—</span>
+                    <span>{{ prev.name }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    (click)="showItemPicker.set(true)"
+                    class="shrink-0 text-xs font-mono px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              } @else {
                 <button
                   type="button"
                   (click)="showItemPicker.set(true)"
-                  class="shrink-0 text-xs font-mono px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                  class="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-border text-sm text-muted hover:border-primary/50 hover:text-main transition-colors"
                 >
-                  Cambiar
+                  Buscar artículo en el Catálogo Maestro de Artículos…
                 </button>
-              </div>
-            } @else {
-              <button
-                type="button"
-                (click)="showItemPicker.set(true)"
-                class="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-border text-sm text-muted hover:border-primary/50 hover:text-main transition-colors"
-              >
-                Buscar artículo en el Catálogo Maestro de Artículos…
-              </button>
-            }
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-medium text-muted mb-1"
-                >Cantidad</label
-              >
-              <input
-                type="number"
-                formControlName="quantity"
-                class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
-              />
+              }
             </div>
-            @if (transactionForm.get("type")?.value === "IN") {
+
+            @if (transactionStockHint(); as hint) {
+              <div
+                class="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs space-y-1"
+              >
+                <p class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Referencia en esta bodega
+                </p>
+                <p class="text-main">
+                  <span class="text-muted">Ubicación:</span>
+                  <span class="font-mono font-semibold ml-1">{{
+                    hint.location?.trim() ? hint.location : "— (sin registrar)"
+                  }}</span>
+                </p>
+                <p class="text-muted font-mono">
+                  Saldo actual en estante:
+                  <span class="text-main">{{ hint.quantityOnHand | number:'1.0-4' }}</span>
+                </p>
+              </div>
+            }
+
+            <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-medium text-muted mb-1"
-                  >Costo Unitario ($)</label
+                  >Cantidad</label
                 >
                 <input
                   type="number"
-                  formControlName="unitCost"
+                  formControlName="quantity"
                   class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
                 />
               </div>
-            }
-          </div>
+              @if (transactionForm.get('movementKind')?.value === 'PURCHASE_IN') {
+                <div>
+                  <label class="block text-xs font-medium text-muted mb-1"
+                    >Costo Unitario ($)</label
+                  >
+                  <input
+                    type="number"
+                    formControlName="unitCost"
+                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                  />
+                </div>
+              } @else if (transactionForm.get('movementKind')?.value === 'RETURN_OT') {
+                <div class="text-[10px] text-muted font-mono self-end pb-2 leading-snug">
+                  El costo promedio no se modifica; se recupera al mismo valor de salida.
+                </div>
+              }
+            </div>
 
-          <div>
-            <label class="block text-xs font-medium text-muted mb-1"
-              >Notas / Referencia</label
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1"
+                >Notas / Referencia</label
+              >
+              <input
+                type="text"
+                formControlName="notes"
+                class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
+                placeholder="Ej: Factura #1234, retiro para faena…"
+              />
+            </div>
+          } @else {
+            <div
+              class="rounded-lg border border-amber-500/25 bg-amber-950/15 px-3 py-3 text-xs text-amber-100/90 font-mono"
             >
-            <input
-              type="text"
-              formControlName="notes"
-              class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
-              placeholder="Ej: Factura #1234, Ingreso inicial..."
-            />
-          </div>
+              Las transferencias se gestionan en la pantalla dedicada. Se
+              preseleccionará la bodega origen según la vista actual.
+            </div>
+          }
 
           <div class="pt-4 flex justify-end gap-3">
             <button
@@ -653,10 +868,14 @@
             </button>
             <button
               type="submit"
-              [disabled]="transactionForm.invalid"
+              [disabled]="!canSubmitMovement()"
               class="bg-primary text-dark px-6 py-2 text-sm font-bold font-mono rounded disabled:opacity-50"
             >
-              PROCESAR
+              @if (transactionForm.get('movementKind')?.value === 'TRANSFER') {
+                Ir a transferencias
+              } @else {
+                Registrar
+              }
             </button>
           </div>
         </form>
@@ -683,7 +902,7 @@
             class="p-4 border-b border-border flex justify-between items-center bg-dark"
           >
             <h3 class="font-bold text-main font-mono text-sm">
-              Ajuste de inventario físico
+              Corrección de inventario
             </h3>
             <button
               type="button"
@@ -808,10 +1027,11 @@
                 >
                 <select
                   formControlName="reason"
+                  (change)="onAdjustmentReasonChange($event)"
                   class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
                 >
-                  <option value="MERMAS">Mermas</option>
-                  <option value="CONTEO">Error de conteo</option>
+                  <option value="CONTEO">Ajuste por inventario (conteo / hallazgo)</option>
+                  <option value="MERMAS">Merma o pérdida</option>
                   <option value="DANO">Daño</option>
                 </select>
               </div>
@@ -826,6 +1046,7 @@
                   class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary resize-none"
                   placeholder="Describa el hallazgo (obligatorio para auditoría)."
                 ></textarea>
+                <p class="text-[10px] text-muted mt-1">{{ adjustmentCommentHint() }}</p>
               </div>
 
               <div class="pt-2 flex justify-end gap-3">
@@ -846,6 +1067,215 @@
               </div>
             </form>
           }
+        </div>
+      </div>
+    </dialog>
+  }
+
+  @if (kardexModalOpen()) {
+    <dialog
+      #kardexDialog
+      class="dialog-native-shell animate-fade-in [&::backdrop]:bg-black/80 [&::backdrop]:backdrop-blur-sm"
+      (close)="onKardexDialogClose()"
+    >
+      <div
+        class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+        (click)="closeKardexModal()"
+      >
+        <div
+          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+          (click)="$event.stopPropagation()"
+        >
+          <div
+            class="p-4 border-b border-border flex justify-between items-center bg-dark shrink-0"
+          >
+            <div class="min-w-0 pr-2">
+              <h3 class="font-bold text-main font-mono text-sm">Kardex del ítem</h3>
+              @if (kardexContext(); as k) {
+                <p class="text-[11px] text-muted font-mono truncate mt-1">
+                  {{ k.warehouseLabel }}
+                </p>
+                <p class="text-xs text-primary font-mono font-bold truncate">
+                  {{ k.partNumber }}
+                  <span class="text-muted font-normal"> — {{ k.name }}</span>
+                </p>
+              }
+            </div>
+            <button
+              type="button"
+              (click)="closeKardexModal()"
+              class="text-muted hover:text-error transition-colors shrink-0"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="p-4 overflow-y-auto flex-1 min-h-0">
+            @if (kardexLoading()) {
+              <p class="text-sm text-muted font-mono text-center py-8">Cargando movimientos…</p>
+            } @else if (kardexRows().length === 0) {
+              <p class="text-sm text-muted font-mono text-center py-8">
+                Sin movimientos registrados para este ítem en esta bodega.
+              </p>
+            } @else {
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="text-muted font-mono uppercase tracking-wider border-b border-border">
+                    <th class="py-2 pr-2">Fecha</th>
+                    <th class="py-2 pr-2 min-w-[11rem]">Movimiento / trazabilidad</th>
+                    <th class="py-2 pr-2 text-right">Cant.</th>
+                    <th class="py-2 pr-2 text-right">Saldo ant.</th>
+                    <th class="py-2 text-right">Saldo nuevo</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border/40 text-main">
+                  @for (t of kardexRows(); track t.id) {
+                    <tr class="align-top">
+                      <td class="py-2 pr-2 font-mono whitespace-nowrap">
+                        {{ t.date | date: "short" }}
+                      </td>
+                      <td class="py-2 pr-2">
+                        <div class="text-muted">{{ transactionTypeLabel(t.type) }}</div>
+                        @if ($any(t).trace?.warehouseReceipt && $any(t).trace?.purchaseOrder) {
+                          <div class="mt-1 flex flex-wrap gap-1 items-center">
+                            <app-entity-link
+                              kind="WR"
+                              [id]="$any(t).trace.warehouseReceipt.id"
+                              [label]="$any(t).trace.warehouseReceipt.correlative"
+                              variant="badge"
+                            />
+                            <app-entity-link
+                              kind="PO"
+                              [id]="$any(t).trace.purchaseOrder.id"
+                              [label]="$any(t).trace.purchaseOrder.correlative"
+                              variant="badge"
+                            />
+                          </div>
+                        }
+                        @if ($any(t).trace?.workOrder) {
+                          <a
+                            [routerLink]="['/app/ots', $any(t).trace.workOrder.id]"
+                            class="inline-block mt-1 text-[11px] text-primary hover:underline font-mono"
+                          >
+                            OT {{ $any(t).trace.workOrder.correlative }}
+                            @if ($any(t).trace.workOrder.responsible) {
+                              <span class="text-muted">
+                                · {{ $any(t).trace.workOrder.responsible }}</span
+                              >
+                            }
+                          </a>
+                        }
+                        @if (t.type === 'ADJUST' && t.notes) {
+                          <div
+                            class="mt-1.5 rounded border border-amber-500/35 bg-amber-950/25 px-2 py-1.5 text-[11px] text-amber-50/95 font-mono leading-snug"
+                          >
+                            <span
+                              class="text-[10px] uppercase tracking-wide text-amber-400/90 block mb-0.5"
+                              >Nota de auditoría</span
+                            >
+                            <div class="whitespace-pre-wrap">{{ t.notes }}</div>
+                          </div>
+                        }
+                      </td>
+                      <td class="py-2 pr-2 text-right font-mono">
+                        {{ t.quantity | number: "1.0-4" }}
+                      </td>
+                      <td class="py-2 pr-2 text-right font-mono text-muted">
+                        {{ t.previousStock | number: "1.0-4" }}
+                      </td>
+                      <td class="py-2 text-right font-mono">
+                        {{ t.newStock | number: "1.0-4" }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </div>
+        </div>
+      </div>
+    </dialog>
+  }
+
+  @if (reservationsModalOpen()) {
+    <dialog
+      #reservationsDialog
+      class="dialog-native-shell animate-fade-in [&::backdrop]:bg-black/80 [&::backdrop]:backdrop-blur-sm"
+      (close)="onReservationsDialogClose()"
+    >
+      <div
+        class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+        (click)="closeReservationsModal()"
+      >
+        <div
+          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          (click)="$event.stopPropagation()"
+        >
+          <div
+            class="p-4 border-b border-border flex justify-between items-center bg-dark shrink-0"
+          >
+            <div class="min-w-0 pr-2">
+              <h3 class="font-bold text-main font-mono text-sm">Stock reservado (OT)</h3>
+              @if (reservationContext(); as rc) {
+                <p class="text-xs text-primary font-mono font-bold truncate mt-1">
+                  {{ rc.partNumber }}
+                  <span class="text-muted font-normal"> — {{ rc.name }}</span>
+                </p>
+              }
+            </div>
+            <button
+              type="button"
+              (click)="closeReservationsModal()"
+              class="text-muted hover:text-error transition-colors shrink-0"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="p-4 overflow-y-auto flex-1 min-h-0">
+            @if (reservationsLoading()) {
+              <p class="text-sm text-muted font-mono text-center py-8">Cargando reservas…</p>
+            } @else if (reservationRows().length === 0) {
+              <p class="text-sm text-muted font-mono text-center py-8">
+                No hay reservas activas para este ítem en esta bodega.
+              </p>
+            } @else {
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="text-muted font-mono uppercase tracking-wider border-b border-border">
+                    <th class="py-2 pr-2">OT</th>
+                    <th class="py-2 pr-2">Mecánico / responsable</th>
+                    <th class="py-2 pr-2 text-right">Cantidad</th>
+                    <th class="py-2 text-right">Reserva</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border/40 text-main">
+                  @for (r of reservationRows(); track r.id) {
+                    <tr>
+                      <td class="py-2 pr-2">
+                        <a
+                          [routerLink]="['/app/ots', r.workOrder.id]"
+                          class="text-primary font-mono hover:underline"
+                          >{{ r.workOrder.correlative }}</a
+                        >
+                      </td>
+                      <td class="py-2 pr-2 text-muted">
+                        {{ r.workOrder.responsible?.trim() ? r.workOrder.responsible : "—" }}
+                      </td>
+                      <td class="py-2 pr-2 text-right font-mono">
+                        {{ r.quantity | number: "1.0-4" }}
+                      </td>
+                      <td class="py-2 text-right font-mono text-muted whitespace-nowrap">
+                        {{ r.reservedAt | date: "short" }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </div>
         </div>
       </div>
     </dialog>

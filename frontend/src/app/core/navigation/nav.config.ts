@@ -137,7 +137,11 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ICONS.adjustments,
         roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
       },
-      { label: 'Control de Stock', route: '/app/stock', icon: ICONS.chartBar },
+      {
+        label: 'Control de Stock',
+        route: '/app/inventario/stock',
+        icon: ICONS.chartBar,
+      },
       {
         label: 'Abastecimiento',
         route: '/app/inventario/abastecimiento',

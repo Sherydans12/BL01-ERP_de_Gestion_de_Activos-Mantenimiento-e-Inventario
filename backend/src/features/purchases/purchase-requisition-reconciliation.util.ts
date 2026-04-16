@@ -5,6 +5,10 @@ export type RequisitionReconciliationSnapshot = {
   linesInProcurement: number;
   linesFullyReceived: number;
   linesWithInvoice: number;
+  /** Líneas con adjudicación (award). */
+  adjudicatedLineCount: number;
+  /** Todas las líneas adjudicadas tienen OC, recepción completa y factura vinculada a la OC. */
+  allAdjudicatedLinesFullyReconciled: boolean;
   adjudicatedMatrixTotal: number;
   invoicesTotal: number;
   currency: string | null;
@@ -52,7 +56,10 @@ export async function buildRequisitionReconciliationSnapshot(
   const pos = await prisma.purchaseOrder.findMany({
     where: {
       tenantId,
-      requisitionId,
+      OR: [
+        { requisitionId },
+        { quotation: { requisitionId } },
+      ],
       status: { notIn: [...PO_INACTIVE] },
     },
     select: {
@@ -138,6 +145,19 @@ export async function buildRequisitionReconciliationSnapshot(
     procurementReqLines.has(id),
   ).length;
 
+  const adjudicatedLineIds = items
+    .filter((i) => i.awardedQuotationItemId != null)
+    .map((i) => i.id);
+  const adjudicatedLineCount = adjudicatedLineIds.length;
+  const allAdjudicatedLinesFullyReconciled =
+    adjudicatedLineCount > 0 &&
+    adjudicatedLineIds.every(
+      (lineId) =>
+        procurementReqLines.has(lineId) &&
+        receivedReqLines.has(lineId) &&
+        invoicedReqLines.has(lineId),
+    );
+
   const budgetExceeded =
     adjudicatedMatrixTotal > 0 &&
     invoicesTotal > adjudicatedMatrixTotal + 0.01;
@@ -147,6 +167,8 @@ export async function buildRequisitionReconciliationSnapshot(
     linesInProcurement,
     linesFullyReceived,
     linesWithInvoice,
+    adjudicatedLineCount,
+    allAdjudicatedLinesFullyReconciled,
     adjudicatedMatrixTotal,
     invoicesTotal,
     currency,

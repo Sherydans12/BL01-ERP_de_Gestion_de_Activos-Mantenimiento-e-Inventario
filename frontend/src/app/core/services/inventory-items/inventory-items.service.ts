@@ -53,6 +53,10 @@ export interface ItemPickerRow {
   stockQuantity: number | null;
   /** CPP en la bodega del contexto; solo cuando el picker envía `warehouseId`. */
   stockUnitCost?: number | null;
+  /** Ubicación física registrada en esa bodega (pasillo/estante), si existe. */
+  stockLocation?: string | null;
+  /** true si disponible (físico − reservado) está por debajo del mínimo en esa bodega. */
+  stockCritical?: boolean;
 }
 
 export interface ItemPickerPage {
@@ -179,6 +183,24 @@ export class InventoryItemsService {
 
   getItem(id: string): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
+  }
+
+  /** PDF de etiqueta térmica (GET /inventory-items/:id/label). */
+  getItemLabelPdf(
+    id: string,
+    params?: { qr?: 'url' | 'json'; size?: '50x25' | '100x50' },
+  ): Observable<Blob> {
+    let p = new HttpParams();
+    if (params?.qr) {
+      p = p.set('qr', params.qr);
+    }
+    if (params?.size) {
+      p = p.set('size', params.size);
+    }
+    return this.http.get(`${this.apiUrl}/${id}/label`, {
+      params: p,
+      responseType: 'blob',
+    });
   }
 
   /** Kardex paginado del artículo. */

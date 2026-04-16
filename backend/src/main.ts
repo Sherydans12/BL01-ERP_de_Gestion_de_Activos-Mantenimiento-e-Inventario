@@ -1,11 +1,35 @@
 import { NestFactory } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as path from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
+
+  const uploadLogger = new Logger('Storage');
+  const storageDriver = (
+    configService.get<string>('STORAGE_DRIVER') || 'local'
+  ).toLowerCase();
+  const uploadPathCfg = configService.get<string>('UPLOAD_PATH') || './uploads';
+  if (storageDriver === 'local') {
+    const abs = path.isAbsolute(uploadPathCfg)
+      ? uploadPathCfg
+      : path.join(process.cwd(), uploadPathCfg);
+    try {
+      fs.mkdirSync(abs, { recursive: true });
+      fs.accessSync(abs, fs.constants.W_OK);
+    } catch {
+      uploadLogger.warn(
+        `UPLOAD_PATH "${abs}" no es escribible o no pudo crearse. ` +
+          `Adjuntos (hasta 20 MB) pueden fallar. Revise permisos y que el volumen Docker monte esta ruta ` +
+          `(p. ej. UPLOAD_PATH=/uploads y volumen nombrado en /uploads). STORAGE_DRIVER=${storageDriver}.`,
+      );
+    }
+  }
 
   if (configService.get<string>('TRUST_PROXY') === '1') {
     const expressApp = app.getHttpAdapter().getInstance();

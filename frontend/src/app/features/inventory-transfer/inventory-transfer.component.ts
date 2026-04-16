@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService } from '../../core/services/auth/auth.service';
 import { InventoryTransferRow, InventoryTransferService } from '../../core/services/inventory-transfer/inventory-transfer.service';
@@ -38,6 +39,7 @@ export class InventoryTransferComponent implements OnInit {
   private transferService = inject(InventoryTransferService);
   private warehousesService = inject(WarehousesService);
   private notificationService = inject(NotificationService);
+  private route = inject(ActivatedRoute);
 
   readonly transferWarningMessage =
     'Advertencia de impacto financiero: esta acción afectará la valorización del inventario entre bodegas y quedará registrada para auditoría.';
@@ -91,6 +93,10 @@ export class InventoryTransferComponent implements OnInit {
       next: (rows) => {
         this.warehouses.set(rows);
         this.warehousesLoading.set(false);
+        const origen = this.route.snapshot.queryParamMap.get('origen');
+        if (origen && rows.some((w) => w.id === origen)) {
+          this.transferForm.patchValue({ originWarehouseId: origen });
+        }
       },
       error: () => {
         this.warehouses.set([]);

@@ -108,6 +108,7 @@ export class RequisitionDetailComponent implements OnInit {
     PARTIALLY_PURCHASED: 'Compra parcial',
     APPROVED: 'Aprobado',
     REJECTED: 'Rechazado', CANCELLED: 'Cancelado',
+    CLOSED: 'Cerrado (completo)',
   };
 
   statusBadgeClass: Record<string, string> = {
@@ -119,6 +120,7 @@ export class RequisitionDetailComponent implements OnInit {
     APPROVED: 'bg-emerald-500/15 text-emerald-300',
     REJECTED: 'bg-red-500/15 text-red-300',
     CANCELLED: 'bg-zinc-600/20 text-zinc-400',
+    CLOSED: 'bg-zinc-500/15 text-zinc-200 border border-zinc-500/35',
   };
 
   /** Selección local: requisitionItemId → quotationItemId adjudicado. */

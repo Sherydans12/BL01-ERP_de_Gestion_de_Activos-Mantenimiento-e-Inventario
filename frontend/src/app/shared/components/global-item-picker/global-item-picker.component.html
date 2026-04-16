@@ -174,6 +174,21 @@
                 </td>
                 <td class="px-4 py-2.5 text-main">
                   <div class="font-medium">{{ row.name }}</div>
+                  @if (warehouseId && row.stockLocation) {
+                    <div
+                      class="mt-1 inline-flex max-w-md items-center rounded border border-primary/25 bg-primary/5 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary"
+                      [title]="'Ubicación en bodega: ' + row.stockLocation"
+                    >
+                      Ubic. {{ row.stockLocation }}
+                    </div>
+                  }
+                  @if (warehouseId && row.stockCritical) {
+                    <div
+                      class="mt-1 rounded border border-error/35 bg-error/10 px-2 py-1 font-mono text-[10px] leading-snug text-error"
+                    >
+                      Stock crítico: priorizar para OTs de emergencia
+                    </div>
+                  }
                   @if (row.description) {
                     <div
                       class="mt-0.5 max-w-md line-clamp-2 text-[11px] text-muted"
