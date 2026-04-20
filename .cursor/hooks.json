@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "node .cursor/hooks/mem-session-start.mjs"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node .cursor/hooks/mem-session-end.mjs"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "node .cursor/hooks/mem-after-agent-response.mjs"
+      }
+    ]
+  }
+}

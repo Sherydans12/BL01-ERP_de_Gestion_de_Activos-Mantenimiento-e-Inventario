@@ -8,7 +8,9 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 [claude-mem](https://github.com/thedotmack/claude-mem) es de **Claude Code**; en Cursor **no** hay el mismo pipeline automático (capturar → comprimir → inyectar). Sí podés replicar el **objetivo** con reglas + docs en git y un ritual corto.
 
-**Guía detallada (paridad, ritual, prompts):** [flujo-memoria-cursor.md](flujo-memoria-cursor.md).
+**Guía detallada (paridad, ritual, prompts, hooks):** [flujo-memoria-cursor.md](flujo-memoria-cursor.md).
+
+**Hooks automáticos:** `.cursor/hooks.json` + `.cursor/hooks/mem-*.mjs` — al abrir un chat se inyectan extractos; tras cada respuesta del agente y al cerrar la sesión se escribe `sesiones-auto.log.md` (local, gitignored; ver [sesiones-auto.README.md](sesiones-auto.README.md)).
 
 Resumen: **`AGENTS.md`**, **`.cursor/rules/`**, **`docs/agentes/`** (`decisiones.md`, `glosario.md`), **@archivos** en chats críticos, y **Memoria de Cursor** solo para preferencias personales (no sustituye la doc del equipo).
 

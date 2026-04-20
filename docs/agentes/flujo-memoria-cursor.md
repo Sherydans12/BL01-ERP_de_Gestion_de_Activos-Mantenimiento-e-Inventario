@@ -10,12 +10,12 @@ En **Cursor** no existe el mismo plugin. Lo que sí podés replicar es el **resu
 
 | claude-mem | Este repo (BL01) ahora |
 |------------|-------------------------|
-| Captura automática de la sesión | **No.** Nadie graba cada turno solo por abrir Cursor. |
-| Compresión con IA de sesiones largas | **No automático.** Podés pedir al agente un resumen y guardarlo vos. |
-| Inyección en el siguiente chat | **Parcial:** las reglas `.cursor/rules/*.mdc` y `AGENTS.md` entran en contexto según Cursor; **no** sustituyen un “resumen de ayer” salvo que esté escrito en `docs/agentes/`. |
+| Captura automática de la sesión | **Parcial (local):** hook `afterAgentResponse` + `sessionEnd` appendean JSONL en `docs/agentes/sesiones-auto.log.md` (no va a git; ver `sesiones-auto.README.md`). |
+| Compresión con IA de sesiones largas | **No en background.** Podés pedir al agente un resumen y guardarlo en `decisiones.md`. |
+| Inyección en el siguiente chat | **Sí (local + equipo):** hook `sessionStart` inyecta `additional_context` con colas de `decisiones.md`, `glosario.md` y el log local; además reglas `.cursor/rules/*.mdc` y `AGENTS.md`. |
 | Memoria estable en git | **Sí** — `AGENTS.md`, `decisiones.md`, `glosario.md`, ADRs (`ecc-adr`), skills ECC. |
 
-**Conclusión:** replicamos la **intención** (memoria de equipo y del producto), no el **pipeline automático** de claude-mem.
+**Conclusión:** replicamos **captura + inyección** en cada máquina con hooks; la **compresión semántica** tipo claude-mem sigue siendo manual (prompts de abajo) o futura integración externa.
 
 ---
 
@@ -58,9 +58,18 @@ Alineá esta tarea con ecc-api-design y ecc-security-review además de tpm-arqui
 
 ---
 
-## Opcional: acercarse a la “captura” automática
+## Automatización con hooks (incluida en el repo)
 
-- **Hooks de Cursor** (evento al terminar comando o agente): podrían appendear un timestamp a `docs/agentes/sesiones.log.md`. Eso **no** comprime con IA; solo deja rastro. Configuración fuera de este repo (Cursor → Hooks).
-- **Memoria de Cursor** (preferencias del usuario): útil para *vos*, no reemplaza `decisiones.md` para el equipo.
+Archivos: **`.cursor/hooks.json`** y **`.cursor/hooks/mem-*.mjs`**.
 
-Si más adelante Anthropic u otra herramienta ofrece claude-mem o similar **dentro de Cursor**, se puede sumar sin tocar la lógica del ERP: este flujo sigue siendo la capa en **git**.
+| Evento | Qué hace |
+|--------|-----------|
+| `sessionStart` | Devuelve `additional_context` con extractos de `decisiones.md`, `glosario.md` y `sesiones-auto.log.md`. |
+| `afterAgentResponse` | Appendea una línea JSON (timestamp, tamaño, preview del mensaje del asistente). Rota el archivo si supera ~200 KB. |
+| `sessionEnd` | Appendea metadatos de cierre (`session_id`, `reason`, `duration_ms`, …). |
+
+**Requisitos:** `node` disponible en el PATH del proceso de Cursor (normal en este proyecto). Si los hooks no aparecen, reiniciá Cursor y revisá la pestaña **Hooks** / el canal de salida **Hooks**.
+
+**Memoria compartida entre devs:** seguí usando **`decisiones.md`** con commits; el log automático es **por máquina** (gitignored).
+
+**Memoria de Cursor** (preferencias del usuario): útil para *vos*, no reemplaza `decisiones.md` para el equipo.

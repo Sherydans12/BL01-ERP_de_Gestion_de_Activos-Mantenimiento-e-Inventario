@@ -41,7 +41,7 @@ Fase actual descrita en el README raíz: **D — Hardening y lógica EAM**.
 
 Mantén acuerdos, glosario de negocio y notas de sesión en:
 
-**[`docs/agentes/`](docs/agentes/README.md)** — ritual memoria / paridad con claude-mem: [`docs/agentes/flujo-memoria-cursor.md`](docs/agentes/flujo-memoria-cursor.md).
+**[`docs/agentes/`](docs/agentes/README.md)** — ritual memoria / paridad con claude-mem: [`docs/agentes/flujo-memoria-cursor.md`](docs/agentes/flujo-memoria-cursor.md). **Hooks:** `.cursor/hooks.json` (memoria automática local al usar el agente en Cursor).
 
 Convención sugerida:
 
