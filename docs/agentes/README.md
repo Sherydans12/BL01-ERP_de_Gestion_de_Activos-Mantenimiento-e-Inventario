@@ -52,6 +52,8 @@ Es un **ecosistema grande** (plugins/agents/skills orientados a varios harness).
 | `ecc-postgres-patterns` | `skills/postgres-patterns` (basada en Supabase) | Índices, SQL, tuning; Prisma + tenant siguen mandando. |
 | `ecc-adr` | `skills/architecture-decision-records` | ADRs opcionales en `docs/adr/`; notas ligeras en `decisiones.md`. |
 | `ecc-codebase-onboarding` | `skills/codebase-onboarding` | Onboarding del repo; salida preferida hacia `AGENTS.md`. |
+| `ecc-api-design` | `skills/api-design` | Diseño REST para Nest; usar junto a `ecc-security-review`. |
+| `ecc-security-review` | `skills/security-review` | Revisión seguridad en auth, APIs, uploads, secretos. |
 
 `tpm-arquitectura.mdc` sección 8 enlaza estos skills. Prioridad de **siguientes imports** sugeridos: [repos-externos.md](repos-externos.md#1-everything-claude-code).
 

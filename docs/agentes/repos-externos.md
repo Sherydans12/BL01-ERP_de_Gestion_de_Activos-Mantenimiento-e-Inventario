@@ -16,13 +16,13 @@ Referencia de los repos que te interesaban: qué aportan al **TPM / BL01**, qué
 | `ecc-postgres-patterns` | `skills/postgres-patterns` | Postgres/SQL; Prisma + tenant mandan. |
 | `ecc-adr` | `skills/architecture-decision-records` | ADRs en `docs/adr/` (opcional) + notas en `decisiones.md`. |
 | `ecc-codebase-onboarding` | `skills/codebase-onboarding` | “Onboarding” del repo; salida hacia `AGENTS.md` / docs. |
+| `ecc-api-design` | `skills/api-design` | REST / contratos Nest; coherente con `ecc-security-review`. |
+| `ecc-security-review` | `skills/security-review` | Auth, input, secretos, uploads, APIs. |
 
 ### Muy útiles si los copiás después (no están vendados)
 
 | Carpeta `skills/` | Para qué en BL01 |
 |-------------------|------------------|
-| **`api-design`** | Contratos REST, paginación, errores, versionado — encaja con Nest controllers. |
-| **`security-review`** | Checklist al tocar auth, uploads, secretos, endpoints nuevos. |
 | **`e2e-testing`** | Patrones **Playwright**; solo si adoptás E2E con Playwright (hoy Angular suele usar Karma/Jasmine o Cypress). |
 | **`docker-patterns`** | Refinar `docker-compose`, salud de Postgres, límites. |
 | **`deployment-patterns`** | Complemento a `DEPLOY-COOLIFY.md` si ampliás despliegue. |
@@ -97,7 +97,7 @@ El monorepo completo (agents, hooks, plugins de otras herramientas): ruido y con
 
 | Repo | Estado práctico |
 |------|------------------|
-| everything-claude-code | Cuatro skills ECC en proyecto; **siguiente importación típica:** `api-design`, luego `security-review`. |
+| everything-claude-code | Seis skills ECC en proyecto (`nestjs`, `postgres`, `adr`, `onboarding`, **`api-design`**, **`security-review`**). **Siguiente típica:** `docker-patterns` o `e2e-testing` según roadmap. |
 | ui-ux-pro-max-skill | Skill principal ya copiado; sub-skills opcionales. |
 | claude-mem | Cubierto por docs + reglas + ADR; sin instalar en Cursor. |
 | n8n-mcp | Solo si usás n8n + MCP en Cursor. |
