@@ -40,12 +40,22 @@ Cursor descubre skills por el `description` del frontmatter de `SKILL.md`. Para 
 
 Repositorio: [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code).
 
-Es un **ecosistema grande** (plugins/agents/skills orientados a varios harness). En Cursor no instaláis el plugin de Claude Code tal cual; lo útil es **extraer piezas**:
+Es un **ecosistema grande** (plugins/agents/skills orientados a varios harness). En Cursor no instaláis el plugin de Claude Code tal cual; lo útil es **extraer piezas**.
 
-- Reglas o fragmentos que encajen con **NestJS** / seguridad / tests → adaptarlos a `.cursor/rules/*.mdc` propias (concisas).
-- Skills concretos → copiar solo los que necesitéis a `.cursor/skills/<nombre>/` y revisar que no asuman comandos exclusivos de Claude Code.
+### Ya integrado en este repo (adaptado a BL01)
 
-**Siguiente paso sugerido (cuando tengas tiempo):** clonar ese repo en una carpeta temporal, buscar en `skills/` términos como `nestjs`, `prisma`, `security` o `tdd`, leer 1–2 skills que encajen con BL01 y copiar solo esos `SKILL.md` (y referencias relativas) a `.cursor/skills/<nombre>/`, ajustando el frontmatter `description` si hace falta.
+| Skill en `.cursor/skills/` | Origen ECC | Uso |
+|---------------------------|------------|-----|
+| `ecc-nestjs-patterns` | `skills/nestjs-patterns` | Nest genérico; **no** pisa `tpm-arquitectura.mdc` ni `src/features/`. |
+| `ecc-postgres-patterns` | `skills/postgres-patterns` (basada en Supabase) | Índices, SQL, tuning; Prisma + tenant siguen mandando. |
+
+`tpm-arquitectura.mdc` sección 8 enlaza estos skills.
+
+### Añadir más skills ECC
+
+1. Clonar en carpeta temporal (no commitear el clon): `git clone --depth 1 https://github.com/affaan-m/everything-claude-code.git temp-everything-claude-code` (está en `.gitignore`).
+2. Elegir carpeta bajo `skills/<nombre>/SKILL.md`.
+3. Copiar a `.cursor/skills/ecc-<nombre>/SKILL.md`, añadir preámbulo BL01 (prioridad vs `tpm-arquitectura.mdc`) y ajustar `name` / `description` del frontmatter.
 
 Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 

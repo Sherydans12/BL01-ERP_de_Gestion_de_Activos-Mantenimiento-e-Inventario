@@ -97,3 +97,8 @@ Definidos en `frontend/tailwind.config.js` y `frontend/src/styles.scss`. **Prefe
 ## 7. UI/UX PRO MAX (skill del proyecto)
 
 Para tareas de **aspecto, jerarquía visual, accesibilidad o patrones UX** (no solo tokens TPM), usá el skill **`ui-ux-pro-max`** en `.cursor/skills/ui-ux-pro-max/SKILL.md`. **No contradigas** la sección 5 de este archivo (tokens y shell industrial); el skill aporta criterios generales (contraste, formularios, animación, etc.).
+
+## 8. Patrones ECC (everything-claude-code, adaptados)
+
+- **`ecc-nestjs-patterns`:** patrones Nest genéricos (DTOs, guards, pipes, tests). **Subordinado** a las secciones 2–3 de este archivo y a `backend/src/features/`.
+- **`ecc-postgres-patterns`:** índices, tipos SQL, tuning. **Subordinado** a Prisma y al modelo multi-tenant; RLS de ejemplo no implica que el ERP use RLS en Postgres.

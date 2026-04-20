@@ -13,6 +13,7 @@ Fase actual descrita en el README raíz: **D — Hardening y lógica EAM**.
 - **Arquitectura y estilo de código:** `.cursor/rules/tpm-arquitectura.mdc` (siempre activa).
 - **Contexto e índice de docs:** `.cursor/rules/erp-bl01-context.mdc` (siempre activa).
 - **Stub legacy:** `.agents/rules/tpm-arquitectura.md` solo apunta al `.mdc`; editar siempre el `.mdc`.
+- **Skills ECC (Nest + Postgres):** `.cursor/skills/ecc-nestjs-patterns/`, `.cursor/skills/ecc-postgres-patterns/` (derivados de everything-claude-code; ver `docs/agentes/README.md`).
 
 ## Stack
 
