@@ -15,3 +15,6 @@ Thumbs.db
 
 # Logs de despliegue
 *.log
+
+# Clon temporal al actualizar skills de terceros
+temp-ui-ux-pro-max-skill/

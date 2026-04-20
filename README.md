@@ -21,6 +21,12 @@ Funcionalidades principales:
 | Backend     | NestJS 11                           |
 | Base de datos | PostgreSQL 16 (Docker), Prisma   |
 
+## Desarrollo con IA (Cursor)
+
+- Índice y convenciones para el asistente: [AGENTS.md](AGENTS.md).
+- Reglas siempre activas: `.cursor/rules/` (`tpm-arquitectura.mdc`, `erp-bl01-context.mdc`).
+- Memoria de equipo (decisiones, glosario): [docs/agentes/](docs/agentes/README.md).
+
 ## Requisitos
 
 - Node.js 20 LTS o superior
