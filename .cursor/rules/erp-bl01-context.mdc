@@ -27,6 +27,18 @@ Seguí **`.cursor/rules/tpm-arquitectura.mdc`** (persona, tenant/site, NestJS, A
 
 No hay captura automática de sesión como en claude-mem. Si el usuario pide **“guardar sesión”**, **“resumí para memoria”** o cerrar una tarea grande, proponé un **apéndice breve** para `docs/agentes/decisiones.md` (o ADR vía `ecc-adr` si aplica). Guía: **`docs/agentes/flujo-memoria-cursor.md`**.
 
-## UI (Angular)
+## Skills ECC y UI — cuándo abrir el `SKILL.md`
 
-Para trabajo visual/UX, el equipo puede usar el skill **ui-ux-pro-max-skill** si está instalado en `.cursor/skills/` o en `~/.cursor/skills/`; si el usuario no lo menciona, pedí confirmación antes de asumir un rediseño grande.
+**No** inyectes el texto entero de cada skill en cada mensaje (consume contexto). Sí: cuando la tarea encaje, **usá la herramienta de lectura** sobre el `SKILL.md` indicado y seguí sus reglas **sin contradecir** `tpm-arquitectura.mdc`.
+
+| Situación | Abrí |
+|-----------|--------|
+| Nest genérico (módulos, DTOs, guards, pipes, tests) | `.cursor/skills/ecc-nestjs-patterns/SKILL.md` |
+| SQL, índices, tipos, tuning PostgreSQL | `.cursor/skills/ecc-postgres-patterns/SKILL.md` |
+| Diseño REST (rutas, status, paginación, errores, versionado) | `.cursor/skills/ecc-api-design/SKILL.md` |
+| Seguridad (auth, secretos, uploads, endpoints sensibles) | `.cursor/skills/ecc-security-review/SKILL.md` |
+| UI/UX visual o patrones (accesibilidad, layout, jerarquía) | `.cursor/skills/ui-ux-pro-max/SKILL.md` |
+| Registrar decisión de arquitectura (ADR) | `.cursor/skills/ecc-adr/SKILL.md` |
+| Explicar / mapear el repo (onboarding) | `.cursor/skills/ecc-codebase-onboarding/SKILL.md` |
+
+Cambios de **API nuevas o expuestas**: conviene **api-design** + **security-review**. **Angular:** `ui-ux-pro-max` complementa la **sección 5** de `tpm-arquitectura.mdc` (tokens / shell industrial); pedí confirmación antes de un rediseño grande si el usuario no lo pidió.
