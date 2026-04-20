@@ -2,6 +2,8 @@
 
 Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben usar además de `AGENTS.md` en la raíz. Cuanto más mantengáis estos archivos, más estables serán los chats nuevos.
 
+**Mapa de repos externos** (claude-mem, ui-ux, n8n-mcp, LightRAG, everything-claude-code): [repos-externos.md](repos-externos.md).
+
 ## Equivalente a claude-mem en Cursor
 
 [claude-mem](https://github.com/thedotmack/claude-mem) está pensado para **Claude Code**, no para Cursor.
@@ -48,8 +50,10 @@ Es un **ecosistema grande** (plugins/agents/skills orientados a varios harness).
 |---------------------------|------------|-----|
 | `ecc-nestjs-patterns` | `skills/nestjs-patterns` | Nest genérico; **no** pisa `tpm-arquitectura.mdc` ni `src/features/`. |
 | `ecc-postgres-patterns` | `skills/postgres-patterns` (basada en Supabase) | Índices, SQL, tuning; Prisma + tenant siguen mandando. |
+| `ecc-adr` | `skills/architecture-decision-records` | ADRs opcionales en `docs/adr/`; notas ligeras en `decisiones.md`. |
+| `ecc-codebase-onboarding` | `skills/codebase-onboarding` | Onboarding del repo; salida preferida hacia `AGENTS.md`. |
 
-`tpm-arquitectura.mdc` sección 8 enlaza estos skills.
+`tpm-arquitectura.mdc` sección 8 enlaza estos skills. Prioridad de **siguientes imports** sugeridos: [repos-externos.md](repos-externos.md#1-everything-claude-code).
 
 ### Añadir más skills ECC
 

@@ -21,6 +21,7 @@ description: >-
 3. Confirmar supuestos contra `README.md` (raíz) y el `schema.prisma` relevante.
 4. Mantener consistencia con guards JWT, roles y patrones de transacción ya usados en el feature más cercano.
 5. Para backend Nest o SQL/índices, los skills **`ecc-nestjs-patterns`** y **`ecc-postgres-patterns`** complementan (no reemplazan) `tpm-arquitectura.mdc`.
+6. Para **decisiones de arquitectura** o **onboarding** del repo: skills **`ecc-adr`**, **`ecc-codebase-onboarding`**; mapa de pendientes en `docs/agentes/repos-externos.md`.
 
 ## UI/UX
 

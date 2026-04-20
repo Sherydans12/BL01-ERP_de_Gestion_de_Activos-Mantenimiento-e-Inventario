@@ -102,3 +102,7 @@ Para tareas de **aspecto, jerarquía visual, accesibilidad o patrones UX** (no s
 
 - **`ecc-nestjs-patterns`:** patrones Nest genéricos (DTOs, guards, pipes, tests). **Subordinado** a las secciones 2–3 de este archivo y a `backend/src/features/`.
 - **`ecc-postgres-patterns`:** índices, tipos SQL, tuning. **Subordinado** a Prisma y al modelo multi-tenant; RLS de ejemplo no implica que el ERP use RLS en Postgres.
+- **`ecc-adr`:** formato ADR y flujo para `docs/adr/`; las notas rápidas siguen en `docs/agentes/decisiones.md`.
+- **`ecc-codebase-onboarding`:** reconocimiento del repo y guía de onboarding; en BL01 preferir enriquecer **`AGENTS.md`** antes que crear `CLAUDE.md` salvo petición explícita.
+
+Mapa de repos y pendientes: **`docs/agentes/repos-externos.md`**.
