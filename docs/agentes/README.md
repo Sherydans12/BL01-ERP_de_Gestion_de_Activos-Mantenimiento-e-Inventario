@@ -6,17 +6,11 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 ## Equivalente a claude-mem en Cursor
 
-[claude-mem](https://github.com/thedotmack/claude-mem) está pensado para **Claude Code**, no para Cursor.
+[claude-mem](https://github.com/thedotmack/claude-mem) es de **Claude Code**; en Cursor **no** hay el mismo pipeline automático (capturar → comprimir → inyectar). Sí podés replicar el **objetivo** con reglas + docs en git y un ritual corto.
 
-En Cursor podéis lograr el mismo objetivo (“memoria de proyecto”) con:
+**Guía detallada (paridad, ritual, prompts):** [flujo-memoria-cursor.md](flujo-memoria-cursor.md).
 
-1. **`AGENTS.md`** (raíz) — índice siempre visible para el agente si lo referenciáis o si tenéis reglas que lo citan.
-2. **`.cursor/rules/`** — reglas del proyecto (ya incluida una regla que apunta aquí).
-3. **Esta carpeta `docs/agentes/`** — decisiones, glosario, notas de integración.
-4. **Memoria de Cursor** (funciones del producto) — para preferencias globales vuestro; no sustituye la documentación en git.
-5. **@Archivos en el chat** — adjuntar `AGENTS.md` o un doc concreto cuando el contexto sea crítico.
-
-Recomendación: tras decisiones importantes en un chat, **copiar un párrafo a `decisiones.md`** antes de cerrar.
+Resumen: **`AGENTS.md`**, **`.cursor/rules/`**, **`docs/agentes/`** (`decisiones.md`, `glosario.md`), **@archivos** en chats críticos, y **Memoria de Cursor** solo para preferencias personales (no sustituye la doc del equipo).
 
 ## ui-ux-pro-max-skill
 

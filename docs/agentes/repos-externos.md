@@ -63,8 +63,9 @@ El monorepo completo (agents, hooks, plugins de otras herramientas): ruido y con
 ### Equivalente en este proyecto
 
 - `AGENTS.md`, `.cursor/rules/`, `docs/agentes/decisiones.md`, skill `ecc-adr` para decisiones fuertes.
+- Guía explícita ritual + prompts: **[flujo-memoria-cursor.md](flujo-memoria-cursor.md)** (qué replica y qué no de claude-mem).
 
-**Falta solo hábito:** después de decisiones importantes, una línea en `decisiones.md` o un ADR en `docs/adr/`.
+**Hábito:** tras sesiones importantes, apéndice breve en `decisiones.md` o ADR en `docs/adr/`.
 
 ---
 

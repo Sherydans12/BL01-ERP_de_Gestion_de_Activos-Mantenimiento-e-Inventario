@@ -23,6 +23,10 @@ Seguí **`.cursor/rules/tpm-arquitectura.mdc`** (persona, tenant/site, NestJS, A
 - No introduzcas dependencias o patrones que contradigan el código ya establecido en el mismo módulo; alineá con servicios y DTOs vecinos.
 - Documentación nueva de equipo o de “memoria de proyecto”: preferí **`docs/agentes/`** y enlazá desde ahí en lugar de dispersar notas sueltas.
 
+## Memoria tipo claude-mem (Cursor)
+
+No hay captura automática de sesión como en claude-mem. Si el usuario pide **“guardar sesión”**, **“resumí para memoria”** o cerrar una tarea grande, proponé un **apéndice breve** para `docs/agentes/decisiones.md` (o ADR vía `ecc-adr` si aplica). Guía: **`docs/agentes/flujo-memoria-cursor.md`**.
+
 ## UI (Angular)
 
 Para trabajo visual/UX, el equipo puede usar el skill **ui-ux-pro-max-skill** si está instalado en `.cursor/skills/` o en `~/.cursor/skills/`; si el usuario no lo menciona, pedí confirmación antes de asumir un rediseño grande.
