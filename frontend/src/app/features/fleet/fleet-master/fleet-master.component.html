@@ -591,6 +591,66 @@
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
+              Información técnica
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div>
+                <label for="vin" class="block text-sm text-muted mb-1"
+                  >VIN / Chasis</label
+                >
+                <input
+                  type="text"
+                  id="vin"
+                  formControlName="vin"
+                  class="w-full bg-dark border border-border text-main font-mono uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  placeholder="Opcional"
+                />
+              </div>
+              <div>
+                <label for="engineNumber" class="block text-sm text-muted mb-1"
+                  >N° motor</label
+                >
+                <input
+                  type="text"
+                  id="engineNumber"
+                  formControlName="engineNumber"
+                  class="w-full bg-dark border border-border text-main font-mono uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  placeholder="Opcional"
+                />
+              </div>
+              <div>
+                <label for="serialNumber" class="block text-sm text-muted mb-1"
+                  >N° de serie</label
+                >
+                <input
+                  type="text"
+                  id="serialNumber"
+                  formControlName="serialNumber"
+                  class="w-full bg-dark border border-border text-main font-mono uppercase rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  placeholder="Opcional"
+                />
+              </div>
+              <div>
+                <label for="year" class="block text-sm text-muted mb-1"
+                  >Año modelo</label
+                >
+                <input
+                  type="number"
+                  id="year"
+                  formControlName="year"
+                  min="1950"
+                  max="2100"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  placeholder="Ej: 2022"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
+            >
               Operación y mantenimiento
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -765,10 +825,7 @@
               </div>
               <div>
                 <label for="soapExp" class="block text-sm text-muted mb-1"
-                  >Vencimiento seguro obligatorio
-                  @if (!isEditMode) {
-                    <span class="text-primary">*</span>
-                  }</label
+                  >Vencimiento seguro obligatorio (SOAP)</label
                 >
                 <input
                   type="date"

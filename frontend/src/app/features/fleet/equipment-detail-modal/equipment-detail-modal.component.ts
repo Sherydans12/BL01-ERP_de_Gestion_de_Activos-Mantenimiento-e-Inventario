@@ -288,7 +288,7 @@ export class EquipmentDetailModalComponent {
         subtitle: `${wo.maintenanceType} — ${wo.category.replace(/_/g, ' ')}`,
         icon: 'tool',
         color: wo.maintenanceType === 'PREVENTIVO' ? 'text-primary' : 'text-warning',
-        meta: `${wo.initialMeter} → ${wo.finalMeter} ${this.meterUnit()}`,
+        meta: `${wo.initialMeter} → ${wo.finalMeter != null ? wo.finalMeter : '—'} ${this.meterUnit()}`,
       });
     }
 

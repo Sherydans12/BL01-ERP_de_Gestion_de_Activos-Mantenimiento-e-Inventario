@@ -142,6 +142,7 @@ export class FleetMasterComponent implements OnInit {
     // Identificación Extendida
     vin: [''],
     engineNumber: [''],
+    serialNumber: [''],
     year: [null],
 
     // Operación y Mantenimiento
@@ -291,9 +292,7 @@ export class FleetMasterComponent implements OnInit {
       subcontractId: '',
     });
 
-    this.equipmentForm
-      .get('soapExp')
-      ?.setValidators([Validators.required]);
+    this.equipmentForm.get('soapExp')?.clearValidators();
     this.equipmentForm.get('soapExp')?.updateValueAndValidity();
 
     // Si hay un contrato global, bloqueamos el campo para que no pueda cambiarlo
@@ -334,6 +333,7 @@ export class FleetMasterComponent implements OnInit {
       currentMeter: eq.currentMeter,
       vin: eq.vin,
       engineNumber: eq.engineNumber,
+      serialNumber: eq.serialNumber,
       year: eq.year,
       fuelType: eq.fuelType,
       driveType: eq.driveType,
@@ -525,6 +525,7 @@ export class FleetMasterComponent implements OnInit {
       currentMeter: 'Medidor Actual',
       vin: 'VIN',
       engineNumber: 'N° Motor',
+      serialNumber: 'N° Serie',
       year: 'Año',
       techReviewExp: 'Vence RT',
       circPermitExp: 'Vence P. Circ',
