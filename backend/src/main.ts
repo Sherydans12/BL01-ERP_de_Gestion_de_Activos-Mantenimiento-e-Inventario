@@ -1,12 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
 
@@ -29,6 +30,7 @@ async function bootstrap() {
           `(p. ej. UPLOAD_PATH=/uploads y volumen nombrado en /uploads). STORAGE_DRIVER=${storageDriver}.`,
       );
     }
+    app.useStaticAssets(abs, { prefix: '/uploads/' });
   }
 
   if (configService.get<string>('TRUST_PROXY') === '1') {

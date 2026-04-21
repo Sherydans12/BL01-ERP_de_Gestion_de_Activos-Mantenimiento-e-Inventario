@@ -7,13 +7,15 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { UsersModule } from '../users/users.module';
 import { CaptchaService } from './captcha.service';
+import { AuthAuditModule } from './auth-audit.module';
+import { UserSessionModule } from './user-session.module';
 
 @Module({
   imports: [
     PrismaModule,
-    UsersModule,
+    AuthAuditModule,
+    UserSessionModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -31,6 +33,6 @@ import { CaptchaService } from './captcha.service';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, CaptchaService],
-  exports: [AuthService],
+  exports: [AuthService, AuthAuditModule],
 })
 export class AuthModule {}

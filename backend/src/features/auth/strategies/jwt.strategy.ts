@@ -3,12 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { UserSessionService } from '../user-session.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    private readonly userSessions: UserSessionService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -27,10 +29,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Usuario no válido o inactivo.');
     }
 
+    const jti =
+      typeof payload.jti === 'string' && payload.jti.length > 0
+        ? payload.jti
+        : undefined;
+    await this.userSessions.assertSessionValid(user.id, jti);
+    void this.userSessions.touchLastActive(user.id, jti);
+
     // Retornamos el usuario inyectando el array plano de allowedContracts
     return {
       ...user,
       allowedContracts: user.contractAccess.map((access) => access.contractId),
+      jti,
     };
   }
 }
