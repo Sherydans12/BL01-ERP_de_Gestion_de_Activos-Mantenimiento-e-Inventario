@@ -60,12 +60,6 @@ export class EquipmentsService {
       }
     }
 
-    if (!data.soapExp) {
-      throw new BadRequestException(
-        'La fecha de vencimiento del seguro obligatorio es obligatoria.',
-      );
-    }
-
     const userId = user.id || user.sub;
     if (!userId) {
       throw new BadRequestException('Usuario no válido para auditoría de medidor.');

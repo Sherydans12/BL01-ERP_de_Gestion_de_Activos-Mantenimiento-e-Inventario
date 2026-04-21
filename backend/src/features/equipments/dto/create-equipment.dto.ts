@@ -55,6 +55,10 @@ export class CreateEquipmentDto {
   @IsOptional()
   engineNumber?: string;
 
+  @IsString()
+  @IsOptional()
+  serialNumber?: string;
+
   @IsInt()
   @IsOptional()
   year?: number;

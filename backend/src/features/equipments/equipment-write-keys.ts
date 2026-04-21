@@ -16,6 +16,7 @@ export const EQUIPMENT_WRITABLE_KEYS = [
   'currentMeter',
   'vin',
   'engineNumber',
+  'serialNumber',
   'year',
   'fuelType',
   'driveType',
