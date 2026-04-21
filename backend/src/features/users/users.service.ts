@@ -2,12 +2,37 @@ import {
   Injectable,
   BadRequestException,
   ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailerService } from '@nestjs-modules/mailer';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
+import { StorageService } from '../../common/storage/storage.service';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
+import {
+  MAX_USER_AVATAR_BYTES,
+  USER_AVATAR_MIME_TYPES,
+  USER_AVATAR_STORAGE_FOLDER,
+} from './user-avatar.constants';
+import { AuthAuditService } from '../auth/auth-audit.service';
+import type { LoginRequestMeta } from '../auth/auth-request.util';
+import { UserSessionService } from '../auth/user-session.service';
+
+const meSelect = {
+  id: true,
+  email: true,
+  name: true,
+  firstName: true,
+  lastName: true,
+  phone: true,
+  avatarUrl: true,
+  role: true,
+  customRoleId: true,
+  customRole: { select: { id: true, name: true, baseRole: true } },
+} as const;
 
 @Injectable()
 export class UsersService {
@@ -15,7 +40,197 @@ export class UsersService {
     private prisma: PrismaService,
     private mailerService: MailerService,
     private config: ConfigService,
+    private readonly storage: StorageService,
+    private readonly authAudit: AuthAuditService,
+    private readonly userSessions: UserSessionService,
   ) {}
+
+  /** Convierte `/uploads/user-avatars/...` en clave interna de StorageService. */
+  private avatarPublicUrlToStorageKey(publicUrl: string | null): string | null {
+    if (!publicUrl) return null;
+    const prefix = '/uploads/';
+    if (!publicUrl.startsWith(prefix)) return null;
+    return publicUrl.slice(prefix.length);
+  }
+
+  private buildDisplayName(
+    first: string | null | undefined,
+    last: string | null | undefined,
+    legacyName: string,
+  ): string {
+    const combined = [first?.trim(), last?.trim()].filter(Boolean).join(' ');
+    return combined.trim() || legacyName;
+  }
+
+  private assertPasswordPolicy(pw: string) {
+    if (pw.length < 8) {
+      throw new BadRequestException(
+        'La nueva contraseña debe tener al menos 8 caracteres',
+      );
+    }
+    if (!/[A-Za-zÁÉÍÓÚÜáéíóúüÑñ]/.test(pw) || !/[0-9]/.test(pw)) {
+      throw new BadRequestException(
+        'La nueva contraseña debe incluir al menos una letra y un número',
+      );
+    }
+  }
+
+  mapMeRow(u: {
+    id: string;
+    email: string;
+    name: string;
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    avatarUrl: string | null;
+    role: string;
+    customRoleId: string | null;
+    customRole: { id: string; name: string; baseRole: string } | null;
+  }) {
+    return {
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      phone: u.phone,
+      avatarUrl: u.avatarUrl,
+      role: u.role,
+      customRoleId: u.customRoleId,
+      customRoleName: u.customRole?.name ?? null,
+    };
+  }
+
+  async getMe(userId: string) {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: meSelect,
+    });
+    if (!u) throw new BadRequestException('Usuario no encontrado');
+    return this.mapMeRow(u);
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('Usuario no encontrado');
+
+    if (dto.removeAvatar) {
+      const key = this.avatarPublicUrlToStorageKey(user.avatarUrl);
+      if (key) {
+        try {
+          await this.storage.deleteFile(key);
+        } catch {
+          /* archivo ausente o clave inválida */
+        }
+      }
+    }
+
+    const nextPhone =
+      dto.phone !== undefined
+        ? dto.phone === null || dto.phone === ''
+          ? null
+          : String(dto.phone).trim()
+        : user.phone;
+
+    const data: Prisma.UserUpdateInput = {
+      phone: nextPhone,
+    };
+
+    if (dto.firstName !== undefined) data.firstName = dto.firstName.trim() || null;
+    if (dto.lastName !== undefined) data.lastName = dto.lastName.trim() || null;
+    if (dto.removeAvatar) data.avatarUrl = null;
+
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      data.name = this.buildDisplayName(
+        dto.firstName !== undefined ? dto.firstName.trim() || null : user.firstName,
+        dto.lastName !== undefined ? dto.lastName.trim() || null : user.lastName,
+        user.name,
+      );
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: meSelect,
+    });
+    return this.mapMeRow(updated);
+  }
+
+  async uploadAvatar(
+    userId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Archivo requerido');
+    }
+    if (file.buffer.length > MAX_USER_AVATAR_BYTES) {
+      throw new BadRequestException('La imagen no puede superar 2 MB');
+    }
+    if (!USER_AVATAR_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Formato no permitido (JPG, PNG o WebP)');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('Usuario no encontrado');
+
+    const oldKey = this.avatarPublicUrlToStorageKey(user.avatarUrl);
+    if (oldKey) {
+      try {
+        await this.storage.deleteFile(oldKey);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const meta = await this.storage.uploadWithMeta(file, USER_AVATAR_STORAGE_FOLDER);
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: meta.publicUrl },
+      select: meSelect,
+    });
+    return this.mapMeRow(updated);
+  }
+
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+    meta?: LoginRequestMeta,
+  ) {
+    this.assertPasswordPolicy(newPassword);
+    const dbUser = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!dbUser) throw new BadRequestException('Usuario no encontrado');
+    const ok = await bcrypt.compare(oldPassword, dbUser.password);
+    if (!ok) {
+      throw new UnauthorizedException('La contraseña actual no es correcta');
+    }
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed },
+    });
+    await this.userSessions.invalidateAllForUser(userId);
+    if (meta) {
+      const geo = await this.authAudit.lookupGeo(meta.clientIp);
+      try {
+        await this.authAudit.recordPasswordChange({
+          userId: dbUser.id,
+          email: dbUser.email,
+          ip: (meta.clientIp || '').slice(0, 64),
+          userAgent: (meta.userAgent || '').slice(0, 512),
+          city: geo.city,
+          country: geo.country,
+        });
+      } catch {
+        /* no bloquear cambio de clave */
+      }
+    }
+    return { success: true, message: 'Contraseña actualizada correctamente' };
+  }
+
+  getMyLoginActivity(userId: string) {
+    return this.authAudit.getRecentLoginSuccesses(userId, 5);
+  }
 
   async create(
     data: {
