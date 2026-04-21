@@ -29,6 +29,7 @@ model Equipment {
   // Identificación Extendida
   vin                   String?     @db.VarChar(50)
   engineNumber          String?     @map("engine_number") @db.VarChar(50)
+  serialNumber          String?     @map("serial_number") @db.VarChar(80)
   year                  Int?
 
   // Operación y Mantenimiento (Evolucionado)
@@ -118,22 +119,23 @@ model WorkOrder {
   responsible       String?           @db.VarChar(100)
   
   initialMeter      Int               @map("initial_meter")
-  finalMeter        Int               @map("final_meter")
+  /** Opcional hasta que supervisor complete horómetro al cierre o edición. */
+  finalMeter        Int?              @map("final_meter")
   description       String            @db.Text
   
   hasBacklog        Boolean           @default(false) @map("has_backlog")
-
-  // —— Formulario operacional (Excel) ——
-  maintenanceOrderNumber  String?   @map("maintenance_order_number") @db.VarChar(80)
 
   detentionStartedAt     DateTime?  @map("detention_started_at")
   detentionEndedAt       DateTime?  @map("detention_ended_at")
   detentionInitialMeter  Int?       @map("detention_initial_meter")
   detentionFinalMeter    Int?       @map("detention_final_meter")
 
-  mechanicAttentionDate     DateTime? @map("mechanic_attention_date") @db.Date
-  mechanicAttentionFromTime String?   @map("mechanic_attention_from_time") @db.VarChar(8)
-  mechanicAttentionToTime   String?   @map("mechanic_attention_to_time") @db.VarChar(8)
+  /** Ventana de atención mecánica (datetime local → UTC). */
+  mechanicAttentionStartedAt DateTime? @map("mechanic_attention_started_at")
+  mechanicAttentionEndedAt   DateTime? @map("mechanic_attention_ended_at")
+
+  /** Cantidad de técnicos (HH = HM × personnelQuantity al cierre). */
+  personnelQuantity Int @default(1) @map("personnel_quantity")
 
   clientAttributedStart  DateTime?  @map("client_attributed_start")
   clientAttributedEnd    DateTime?  @map("client_attributed_end")
@@ -752,7 +754,9 @@ model InventoryItem {
   categoryId       String         @map("category_id") @db.Uuid
   unitOfMeasureId  String         @map("unit_of_measure_id") @db.Uuid
   brand            String?        @db.VarChar(50)
-  
+  /// Equipos / marcas / modelos compatibles (texto libre para cruce con flota).
+  compatibilityInfo String?     @map("compatibility_info") @db.Text
+
   isSerialized    Boolean       @default(false) @map("is_serialized")
   isInventory     Boolean       @default(true)  @map("is_inventory")
   isAsset         Boolean       @default(false) @map("is_asset")
