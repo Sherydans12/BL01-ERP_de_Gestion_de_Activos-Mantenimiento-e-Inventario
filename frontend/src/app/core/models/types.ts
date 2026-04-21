@@ -54,6 +54,8 @@ export interface Equipment {
 
   // Mantenimiento y Vencimientos (DateTime transformado a string ISO)
   maintenanceFrequency?: number;
+  /** Override del intervalo PM (horas o km según meterType). Si null, usa reglas por tipo (`pm-interval.ts`). */
+  pmIntervalOverride?: number | null;
   lastMaintenanceDate?: string;
   lastMaintenanceMeter?: number;
   lastMaintenanceType?: string;
@@ -105,6 +107,80 @@ export interface WorkOrder {
   systems?: any[];
 }
 
+export type MeterLogSource = 'OT' | 'MANUAL' | 'TELEMETRY';
+
+/** Historial unificado de lecturas / cambios de medidor (maestro + OT + telemetría). */
+export interface EquipmentMeterLog {
+  id: string;
+  equipmentId?: string;
+  oldValue: string | number;
+  newValue: string | number;
+  source: MeterLogSource;
+  sourceId?: string | null;
+  date: string;
+  user?: { name?: string; email?: string };
+  /** Solo si source === OT y el backend resolvió la OT */
+  workOrderCorrelative?: string | null;
+}
+
+/** Fila del tablero de captura masiva de horómetro (`GET /equipments/meter-capture-board`). */
+export interface MeterCaptureBoardRow {
+  id: string;
+  internalId: string;
+  displayName: string;
+  type: string;
+  currentMeter: number;
+  meterType: MeterType;
+  lastReadingAt: string | null;
+  contractCode: string | null;
+  subcontractCode: string | null;
+}
+
+export interface MeterCaptureBoardResponse {
+  limit: number;
+  data: MeterCaptureBoardRow[];
+}
+
+export type MeterBulkSyncErrorCode =
+  | 'READING_LOWER_THAN_CURRENT'
+  | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN';
+
+export interface MeterBulkSyncErrorItem {
+  equipmentId: string;
+  error: MeterBulkSyncErrorCode;
+  /** Medidor actual en BD cuando `error === READING_LOWER_THAN_CURRENT`. */
+  serverValue?: number;
+}
+
+export interface MeterBulkSyncAppliedItem {
+  equipmentId: string;
+  internalId: string;
+  from: number;
+  to: number;
+}
+
+export interface MeterBulkSyncResponse {
+  successCount: number;
+  unchangedCount: number;
+  errors: MeterBulkSyncErrorItem[];
+  applied: MeterBulkSyncAppliedItem[];
+}
+
+/** Respuesta ligera para widget OT / caché offline */
+export interface EquipmentMeterSnapshot {
+  equipmentId: string;
+  currentMeter: number;
+  meterType: MeterType;
+  internalId: string;
+  lastLog: {
+    date: string;
+    source: MeterLogSource;
+    sourceId: string | null;
+    otCorrelative: string | null;
+    userName: string | null;
+  } | null;
+}
+
 // Ajustes de Medidor (Horómetro/Odómetro)
 export interface MeterAdjustment {
   id: string;
@@ -137,6 +213,8 @@ export interface EquipmentAnalytics {
   meterAdjustments: MeterAdjustment[];
   /** Costos por compras externas imputados al activo (recepciones de OC con equipo). */
   assetCostRecords?: AssetCostRecord[];
+  /** Bitácora cronológica de medidor (valor acumulado por evento). */
+  meterLogs?: EquipmentMeterLog[];
 }
 
 // Usuario (Payload Auth)

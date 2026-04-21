@@ -1,12 +1,31 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { MailerService } from '@nestjs-modules/mailer';
+import { ConfigService } from '@nestjs/config';
+import { StorageService } from '../../common/storage/storage.service';
+import { AuthAuditService } from '../auth/auth-audit.service';
 
 describe('UsersService', () => {
   let service: UsersService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [UsersService],
+      providers: [
+        UsersService,
+        { provide: PrismaService, useValue: {} },
+        { provide: MailerService, useValue: { sendMail: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: StorageService, useValue: {} },
+        {
+          provide: AuthAuditService,
+          useValue: {
+            lookupGeo: jest.fn().mockResolvedValue({ city: '', country: '' }),
+            recordPasswordChange: jest.fn(),
+            getRecentLoginSuccesses: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<UsersService>(UsersService);

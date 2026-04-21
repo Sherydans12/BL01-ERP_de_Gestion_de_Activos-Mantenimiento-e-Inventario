@@ -2,7 +2,13 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
-import { Equipment, EquipmentAnalytics } from '../../models/types';
+import {
+  Equipment,
+  EquipmentAnalytics,
+  EquipmentMeterSnapshot,
+  MeterCaptureBoardResponse,
+  MeterBulkSyncResponse,
+} from '../../models/types';
 
 export interface PaginatedEquipments {
   data: Equipment[];
@@ -64,6 +70,50 @@ export class FleetService {
   getEquipmentAnalytics(id: string): Observable<EquipmentAnalytics> {
     return this.http.get<EquipmentAnalytics>(
       `${this.apiUrl}/${id}/analytics`,
+    );
+  }
+
+  getEquipmentMeterSnapshot(id: string): Observable<EquipmentMeterSnapshot> {
+    return this.http.get<EquipmentMeterSnapshot>(
+      `${this.apiUrl}/${id}/meter-snapshot`,
+    );
+  }
+
+  getMeterCaptureBoard(
+    params?: { type?: string; search?: string; limit?: number },
+    options?: { contractId?: string | null },
+  ): Observable<MeterCaptureBoardResponse> {
+    let httpParams = new HttpParams();
+    if (params?.type) httpParams = httpParams.set('type', params.type);
+    if (params?.search) httpParams = httpParams.set('search', params.search);
+    if (params?.limit)
+      httpParams = httpParams.set('limit', String(params.limit));
+
+    let headers = new HttpHeaders();
+    const c = options?.contractId;
+    if (c) {
+      headers = headers.set('x-contract-id', c);
+    }
+
+    return this.http.get<MeterCaptureBoardResponse>(
+      `${this.apiUrl}/meter-capture-board`,
+      { params: httpParams, headers },
+    );
+  }
+
+  bulkSyncMeterReadings(
+    body: { items: { equipmentId: string; newReading: number }[] },
+    options?: { contractId?: string | null },
+  ): Observable<MeterBulkSyncResponse> {
+    let headers = new HttpHeaders();
+    const c = options?.contractId;
+    if (c) {
+      headers = headers.set('x-contract-id', c);
+    }
+    return this.http.post<MeterBulkSyncResponse>(
+      `${this.apiUrl}/meter-readings/bulk-sync`,
+      body,
+      { headers },
     );
   }
 
