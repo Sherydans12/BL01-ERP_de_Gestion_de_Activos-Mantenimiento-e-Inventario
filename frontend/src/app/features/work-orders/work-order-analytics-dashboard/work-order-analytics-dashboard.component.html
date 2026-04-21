@@ -1,0 +1,479 @@
+<div class="p-6 max-w-7xl mx-auto">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-main">Confiabilidad y analítica OT</h1>
+      <p class="text-sm text-muted mt-1 max-w-2xl">
+        Indicadores calculados con <span class="text-main font-medium">órdenes de trabajo cerradas</span> en el rango de fechas
+        (detención, impacto en disponibilidad, sistemas intervenidos). La proyección PM usa el maestro de flota.
+      </p>
+      <p class="text-sm font-medium text-main mt-2">
+        Contrato actual: <span class="text-primary">{{ selectedContractDisplay() }}</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+    <div class="flex flex-col lg:flex-row lg:flex-wrap gap-4 lg:items-end">
+      <div class="flex flex-col sm:flex-row gap-4 flex-1">
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1">Desde</label>
+          <input
+            type="date"
+            [ngModel]="dateFrom()"
+            (ngModelChange)="dateFrom.set($event)"
+            class="px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1">Hasta</label>
+          <input
+            type="date"
+            [ngModel]="dateTo()"
+            (ngModelChange)="dateTo.set($event)"
+            class="px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div class="min-w-[200px]">
+          <label class="block text-xs font-medium text-muted mb-1">Contrato</label>
+          <select
+            [ngModel]="contractId()"
+            (ngModelChange)="contractId.set($event)"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none"
+          >
+            <option value="">Todos los contratos</option>
+            @for (c of contracts(); track c.id) {
+              <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 items-end shrink-0 w-full lg:w-auto justify-stretch lg:justify-end">
+        @if (canExportMonthlyPdf()) {
+          <div class="flex flex-wrap gap-2 items-end border border-border rounded-lg px-3 py-2 bg-dark/40">
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">PDF mes</label>
+              <input
+                type="number"
+                min="1"
+                max="12"
+                [ngModel]="pdfMonth()"
+                (ngModelChange)="pdfMonth.set(+$event)"
+                class="w-16 px-2 py-2 bg-dark border border-border rounded-lg text-main text-sm"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Año</label>
+              <input
+                type="number"
+                min="2020"
+                max="2100"
+                [ngModel]="pdfYear()"
+                (ngModelChange)="pdfYear.set(+$event)"
+                class="w-24 px-2 py-2 bg-dark border border-border rounded-lg text-main text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              (click)="exportMonthlyPdf()"
+              [disabled]="isExportingPdf()"
+              class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-border bg-surface text-main text-sm font-medium hover:bg-dark/50 hover:border-primary/40 disabled:opacity-50 shrink-0 mt-5 sm:mt-0"
+            >
+              @if (isExportingPdf()) {
+                <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent shrink-0" aria-hidden="true"></span>
+              }
+              <span>{{ isExportingPdf() ? 'Generando…' : 'PDF mensual' }}</span>
+            </button>
+          </div>
+        }
+        <button
+          type="button"
+          (click)="load()"
+          class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 shrink-0"
+        >
+          Aplicar filtros
+        </button>
+      </div>
+    </div>
+    <p class="text-xs text-muted mt-3">
+      El PDF mensual consolida KPIs y costos (repuestos/fluidos desde asset cost + HH × tarifa configurada en servidor).
+      Visible para supervisores y administradores.
+    </p>
+  </div>
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-16">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+    </div>
+  } @else if (!dashboard()) {
+    <p class="text-muted text-center py-12">Sin datos para el período.</p>
+  } @else {
+    @let d = dashboard()!;
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-xs text-muted uppercase tracking-wide">Disponibilidad flota (PA)</p>
+          <div class="relative shrink-0" data-analytics-help>
+            <button
+              type="button"
+              class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              [attr.aria-expanded]="openInfoPanel() === 'pa'"
+              aria-controls="analytics-help-pa"
+              (click)="toggleInfoPanel('pa', $event)"
+              aria-label="Información sobre disponibilidad física"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            @if (openInfoPanel() === 'pa') {
+              <div
+                id="analytics-help-pa"
+                role="tooltip"
+                class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                (click)="$event.stopPropagation()"
+              >
+                {{ paFormulaTooltip }}
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-2xl font-semibold text-main mt-1">
+          {{ d.kpis.fleetAvailabilityPct != null ? (d.kpis.fleetAvailabilityPct | number: '1.1-1') + ' %' : '—' }}
+        </p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-xs text-muted uppercase tracking-wide">MTTR <span class="normal-case text-[10px] text-muted/80">(reparación media)</span></p>
+          <div class="relative shrink-0" data-analytics-help>
+            <button
+              type="button"
+              class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              [attr.aria-expanded]="openInfoPanel() === 'mttr'"
+              aria-controls="analytics-help-mttr"
+              (click)="toggleInfoPanel('mttr', $event)"
+              aria-label="Qué es MTTR"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            @if (openInfoPanel() === 'mttr') {
+              <div
+                id="analytics-help-mttr"
+                role="tooltip"
+                class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                (click)="$event.stopPropagation()"
+              >
+                {{ mttrTooltip }}
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-2xl font-semibold text-main mt-1">
+          {{ d.kpis.mttrHours != null ? (d.kpis.mttrHours | number: '1.1-1') + ' h' : '—' }}
+        </p>
+        <p class="text-xs text-muted mt-1">{{ d.kpis.correctiveOtCountForMttr }} OT correctivas en el cálculo</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-xs text-muted uppercase tracking-wide">MTBF <span class="normal-case text-[10px] text-muted/80">(entre fallas)</span></p>
+          <div class="relative shrink-0" data-analytics-help>
+            <button
+              type="button"
+              class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              [attr.aria-expanded]="openInfoPanel() === 'mtbf'"
+              aria-controls="analytics-help-mtbf"
+              (click)="toggleInfoPanel('mtbf', $event)"
+              aria-label="Qué es MTBF"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            @if (openInfoPanel() === 'mtbf') {
+              <div
+                id="analytics-help-mtbf"
+                role="tooltip"
+                class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                (click)="$event.stopPropagation()"
+              >
+                {{ mtbfTooltip }}
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-2xl font-semibold text-main mt-1">
+          {{ d.kpis.mtbfHours != null ? (d.kpis.mtbfHours | number: '1.1-1') + ' h' : '—' }}
+        </p>
+        <p class="text-xs text-muted mt-1">{{ d.kpis.unplannedFailureIntervalsForMtbf }} intervalos entre eventos</p>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-xs text-muted uppercase tracking-wide">Horas detención PA</p>
+          <div class="relative shrink-0" data-analytics-help>
+            <button
+              type="button"
+              class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              [attr.aria-expanded]="openInfoPanel() === 'downtime'"
+              aria-controls="analytics-help-downtime"
+              (click)="toggleInfoPanel('downtime', $event)"
+              aria-label="Qué son las horas de detención con impacto en disponibilidad"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            @if (openInfoPanel() === 'downtime') {
+              <div
+                id="analytics-help-downtime"
+                role="tooltip"
+                class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                (click)="$event.stopPropagation()"
+              >
+                {{ downtimeTooltip }}
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-2xl font-semibold text-main mt-1">
+          {{ d.kpis.downtimeImpactHoursSi | number: '1.1-1' }} h
+        </p>
+        <p class="text-xs text-muted mt-1">Solo OT con «impacto disponibilidad = Sí»</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <h2 class="text-lg font-semibold text-main">Disponibilidad por equipo</h2>
+          <div class="relative shrink-0 mt-0.5" data-analytics-help>
+            <button
+              type="button"
+              class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              [attr.aria-expanded]="openInfoPanel() === 'availChart'"
+              aria-controls="analytics-help-avail-chart"
+              (click)="toggleInfoPanel('availChart', $event)"
+              aria-label="Información sobre este gráfico"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            @if (openInfoPanel() === 'availChart') {
+              <div
+                id="analytics-help-avail-chart"
+                role="tooltip"
+                class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                (click)="$event.stopPropagation()"
+              >
+                {{ availChartTooltip }}
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-xs text-muted mb-4">Escala horizontal: % de disponibilidad estimada; orden: peor primero.</p>
+        <div class="relative h-80 w-full">
+          <canvas #availCanvas></canvas>
+        </div>
+      </div>
+      <div class="bg-surface rounded-xl border border-border p-4">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <h2 class="text-lg font-semibold text-main">Pareto — sistemas intervenidos</h2>
+          <div class="relative shrink-0 mt-0.5" data-analytics-help>
+            <button
+              type="button"
+              class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              [attr.aria-expanded]="openInfoPanel() === 'paretoChart'"
+              aria-controls="analytics-help-pareto-chart"
+              (click)="toggleInfoPanel('paretoChart', $event)"
+              aria-label="Información sobre el pareto"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            @if (openInfoPanel() === 'paretoChart') {
+              <div
+                id="analytics-help-pareto-chart"
+                role="tooltip"
+                class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                (click)="$event.stopPropagation()"
+              >
+                {{ paretoChartTooltip }}
+              </div>
+            }
+          </div>
+        </div>
+        <p class="text-xs text-muted mb-4">Barras = cantidad de OT que intervinieron cada sistema.</p>
+        <div class="relative h-80 w-full">
+          <canvas #paretoCanvas></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-surface rounded-xl border border-border p-4 mb-8 max-w-xl">
+      <div class="flex items-start justify-between gap-2 mb-1">
+        <h2 class="text-lg font-semibold text-main">Programado vs no programado</h2>
+        <div class="relative shrink-0 mt-0.5" data-analytics-help>
+          <button
+            type="button"
+            class="inline-flex rounded-full p-1 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            [attr.aria-expanded]="openInfoPanel() === 'programmedChart'"
+            aria-controls="analytics-help-programmed-chart"
+            (click)="toggleInfoPanel('programmedChart', $event)"
+            aria-label="Información sobre programado vs no programado"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          @if (openInfoPanel() === 'programmedChart') {
+            <div
+              id="analytics-help-programmed-chart"
+              role="tooltip"
+              class="absolute right-0 top-full z-[95] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+              (click)="$event.stopPropagation()"
+            >
+              {{ programmedChartTooltip }}
+            </div>
+          }
+        </div>
+      </div>
+      <p class="text-xs text-muted mb-4">Proporción de OT cerradas por tipo de categoría.</p>
+      <div class="relative h-64 w-full">
+        <canvas #programmedCanvas></canvas>
+      </div>
+    </div>
+
+    <div class="bg-surface rounded-xl border border-border">
+      <div class="p-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-main">Próximos servicios (proyección PM)</h2>
+        <p class="text-xs text-muted mt-1 max-w-3xl">
+          Orden: menor unidades restantes hasta el próximo servicio (horas o km según medidor del equipo).
+        </p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-border text-left text-muted">
+              <th class="px-4 py-3 font-medium">Equipo</th>
+              <th class="px-4 py-3 font-medium">Marca / modelo</th>
+              <th class="px-4 py-3 font-medium">Medidor</th>
+              <th class="px-4 py-3 font-medium">Actual</th>
+              <th class="px-4 py-3 font-medium">Próximo</th>
+              <th class="px-4 py-3 font-medium">Restante</th>
+              <th class="px-4 py-3 font-medium">
+                <span class="inline-flex items-center gap-1">
+                  Fuente intervalo
+                  <span class="relative inline-flex shrink-0" data-analytics-help>
+                    <button
+                      type="button"
+                      class="inline-flex rounded-full p-0.5 text-muted transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      [attr.aria-expanded]="openInfoPanel() === 'pmSource'"
+                      aria-controls="analytics-help-pm-source"
+                      (click)="toggleInfoPanel('pmSource', $event)"
+                      aria-label="Qué significa fuente del intervalo"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                    @if (openInfoPanel() === 'pmSource') {
+                      <div
+                        id="analytics-help-pm-source"
+                        role="tooltip"
+                        class="absolute bottom-full right-0 z-[95] mb-1 w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-main shadow-xl"
+                        (click)="$event.stopPropagation()"
+                      >
+                        {{ pmSourceColumnTooltip }}
+                      </div>
+                    }
+                  </span>
+                </span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of projectedSorted(); track row.equipmentId) {
+              <tr class="border-b border-border/80 text-main hover:bg-dark/30">
+                <td class="px-4 py-2 font-mono">{{ row.internalId }}</td>
+                <td class="px-4 py-2">{{ projectedEquipmentLabel(row) }}</td>
+                <td class="px-4 py-2 text-muted">{{ row.meterType }}</td>
+                <td class="px-4 py-2">{{ row.currentMeter }}</td>
+                <td class="px-4 py-2">{{ row.nextDueMeter }}</td>
+                <td class="px-4 py-2">{{ row.remainingUnits }}</td>
+                <td class="px-4 py-2 text-muted">{{ row.intervalSourceLabel }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-muted">Sin equipos en alcance.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <footer class="mt-12 pt-6 border-t border-border flex flex-col items-center gap-3">
+    <button
+      type="button"
+      (click)="metricsGuideOpen.set(true); closeInfoPanel()"
+      class="text-sm text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+    >
+      Abrir guía ampliada (MTTR, MTBF y más)
+    </button>
+    <p class="text-xs text-muted text-center max-w-xl">
+      Hacé clic en el icono ⓘ junto a cada indicador o gráfico para ver una explicación breve.
+    </p>
+  </footer>
+
+  @if (metricsGuideOpen()) {
+    <div
+      class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="metrics-guide-title"
+      (click)="metricsGuideOpen.set(false)"
+    >
+      <div
+        class="bg-surface border border-border rounded-2xl max-w-lg w-full p-6 shadow-xl"
+        (click)="$event.stopPropagation()"
+      >
+        <h2 id="metrics-guide-title" class="text-lg font-semibold text-main mb-4">
+          Guía de métricas
+        </h2>
+        <div class="space-y-4 text-sm text-main leading-relaxed">
+          <p>
+            <span class="font-semibold text-primary">Disponibilidad (PA)</span>:
+            proporción estimada del tiempo en que la flota no está en detención por OT que marcaron impacto en disponibilidad.
+            Ver fórmula exacta en el ícono ⓘ del KPI superior.
+          </p>
+          <p>
+            <span class="font-semibold text-primary">MTTR</span> (Mean Time To Repair — tiempo medio de reparación):
+            en este tablero es el <strong>promedio de horas de detención</strong> de las OT
+            <strong>correctivas</strong> cerradas en el período (ventana entre inicio y fin de detención,
+            recortada al rango de fechas).
+          </p>
+          <p>
+            <span class="font-semibold text-primary">MTBF</span> (Mean Time Between Failures — tiempo medio entre fallas):
+            aquí se aproxima como el <strong>promedio de tiempo entre inicios de detención</strong> de OT
+            <strong>no programadas</strong> (correctiva o reactiva), por equipo y luego agregado.
+            Sirve como indicador de intervalo entre eventos de falla declarados.
+          </p>
+          <p class="text-xs text-muted">
+            Si MTTR o MTBF muestran «—», suele ser porque no hay OT suficientes del tipo requerido en el período.
+          </p>
+        </div>
+        <button
+          type="button"
+          (click)="metricsGuideOpen.set(false)"
+          class="mt-6 w-full sm:w-auto px-4 py-2 rounded-lg bg-primary text-white font-medium hover:bg-primary/90"
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  }
+</div>

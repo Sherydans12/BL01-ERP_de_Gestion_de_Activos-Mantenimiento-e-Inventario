@@ -1,815 +1,691 @@
-<div class="max-w-5xl mx-auto space-y-6 pb-10">
-  <div class="flex items-center gap-4">
+<div class="max-w-5xl mx-auto space-y-6 pb-12">
+  <div class="flex items-start gap-4">
     <a
       routerLink="/app/ots"
-      class="p-2 bg-surface border border-border rounded hover:bg-dark transition-colors text-muted hover:text-primary"
+      class="ot-back-icon shrink-0"
+      aria-label="Volver al listado"
     >
-      <svg
-        class="w-5 h-5"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M10 19l-7-7m0 0l7-7m-7 7h18"
-        ></path>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
       </svg>
     </a>
-    <div>
-      <h2
-        class="text-2xl font-bold text-main tracking-tight flex items-center gap-2"
-      >
+    <div class="flex-1 min-w-0">
+      <h2 class="text-2xl font-bold text-main tracking-tight flex flex-wrap items-center gap-2">
         <span class="text-primary font-mono">&lt;OT&gt;</span>
         @if (mode === "CREATING") {
-          Nueva Intervención
+          Nueva orden de trabajo
         } @else {
-          Orden de Trabajo:
-          <span class="text-muted font-mono">#{{ otId }}</span>
+          OT <span class="text-muted font-mono truncate">#{{ otId }}</span>
         }
-
         @if (currentStatus === "CLOSED") {
-          <span
-            class="ml-3 text-xs font-mono px-2 py-1 rounded-full border border-success/30 bg-success/10 text-success uppercase"
-          >
-            CERRADA (HISTÓRICO)
-          </span>
-        } @else if (currentStatus === "IN_PROGRESS") {
-          <span
-            class="ml-3 text-xs font-mono px-2 py-1 rounded-full border border-[#00E5FF]/30 bg-[#00E5FF]/10 text-[#00E5FF] uppercase"
-          >
-            EN PROGRESO
-          </span>
+          <span class="text-xs font-mono px-2 py-1 rounded-full border border-success/30 bg-success/10 text-success uppercase">cerrada</span>
         }
       </h2>
       <p class="text-sm text-muted mt-1">
-        Complete los datos técnicos del mantenimiento.
+        Formulario operacional (Excel). Inventario/repuestos quedó en la pestaña «Legacy».
       </p>
-      @if (mode !== "CREATING" && otId && otForm.get("warehouseId")?.value) {
+      @if (otId && currentStatus !== "CLOSED" && otForm.get("warehouseId")?.value) {
         <a
           routerLink="/app/inventario/stock"
           [queryParams]="{ devolverOt: otId }"
-          class="inline-flex items-center gap-1.5 mt-2 text-xs font-mono text-primary hover:underline"
+          class="inline-flex text-xs font-mono text-primary hover:underline mt-2"
+          >Devolver material a bodega (desde esta OT)</a
         >
-          Devolver material a bodega (desde esta OT)
-        </a>
       }
+
+      <div class="ot-tab-rail mt-4" role="tablist" aria-label="Secciones del formulario OT">
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="tab() === 'datos'"
+          (click)="tab.set('datos')"
+          class="ot-tab-pill"
+          [class.ot-tab-pill--active]="tab() === 'datos'"
+          [class.ot-tab-pill--idle]="tab() !== 'datos'"
+        >
+          Datos OT
+        </button>
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="tab() === 'backlog'"
+          (click)="tab.set('backlog')"
+          class="ot-tab-pill"
+          [class.ot-tab-pill--active]="tab() === 'backlog'"
+          [class.ot-tab-pill--idle]="tab() !== 'backlog'"
+        >
+          Backlog
+        </button>
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="tab() === 'legacy'"
+          (click)="tab.set('legacy')"
+          class="ot-tab-pill inline-flex items-center gap-2"
+          [class.ot-tab-pill--active]="tab() === 'legacy'"
+          [class.ot-tab-pill--idle]="tab() !== 'legacy'"
+        >
+          <span>Legacy · inventario</span>
+          @if (partsArray.length > 0) {
+            <span
+              class="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-primary/25 px-1.5 py-0.5 text-[10px] font-mono font-semibold leading-none text-primary ring-1 ring-primary/35"
+              >{{ partsArray.length }}</span
+            >
+          }
+        </button>
+      </div>
     </div>
   </div>
 
-  <form [formGroup]="otForm" (ngSubmit)="onSubmit()" class="space-y-6">
-    <div class="bg-surface border border-border rounded-xl shadow-lg p-6">
-      <h3
-        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
-      >
-        1. Equipo y Condiciones
-      </h3>
-
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div class="md:col-span-2">
-          <label class="block text-sm font-medium text-muted mb-1"
-            >Equipo a intervenir <span class="text-error">*</span></label
-          >
-          <select
-            formControlName="equipmentId"
-            class="w-full bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <option value="" disabled selected>Seleccione...</option>
-            @for (eq of fleet(); track eq.id) {
-              <option [value]="eq.id">
-                {{ eq.internalId }}
-              </option>
-            }
-          </select>
-          @if (selectedEquipmentForOt(); as eq) {
-            <div
-              class="mt-1.5 text-xs text-muted uppercase tracking-wide font-mono"
+  @if (tab() === "datos") {
+    <form [formGroup]="otForm" (ngSubmit)="savePrimary()" class="space-y-6">
+      <!-- Identificación -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Identificación de la orden
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-muted mb-1">Equipo <span class="text-red-400">*</span></label>
+            <select
+              formControlName="equipmentId"
+              class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
             >
-              {{ eq.brand }} {{ eq.model }}
-            </div>
-          }
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-muted mb-1"
-            >Categoría <span class="text-error">*</span></label
-          >
-          <select
-            formControlName="category"
-            class="w-full bg-dark border border-border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
-          >
-            <option value="PROGRAMADA">Programadas</option>
-            <option value="NO_PROGRAMADA_CORRECTIVA">
-              No programadas Correctiva
-            </option>
-            <option value="NO_PROGRAMADA_REACTIVA">
-              No programada Reactiva
-            </option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-muted mb-1"
-            >Tipo de Mantenimiento <span class="text-error">*</span></label
-          >
-          <select
-            formControlName="maintenanceType"
-            class="w-full bg-dark border border-border text-main font-medium rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
-          >
-            <option value="PREVENTIVO">Preventivo</option>
-            <option value="CORRECTIVO">Correctivo</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div>
-          <label class="block text-sm font-medium text-muted mb-1"
-            >{{ meterLabel() }} Inicial <span class="text-error">*</span></label
-          >
-          <input
-            type="number"
-            formControlName="initialMeter"
-            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
-            placeholder="Ej: 15400"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-muted mb-1"
-            >{{ meterLabel() }} Final <span class="text-error">*</span></label
-          >
-          <input
-            type="number"
-            formControlName="finalMeter"
-            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary font-mono"
-            placeholder="Ej: 15405"
-          />
-          @if (
-            otForm.get("finalMeter")?.hasError("min") &&
-            otForm.get("finalMeter")?.touched
-          ) {
-            <p class="text-error text-[10px] font-mono mt-1">
-              El valor final debe ser mayor o igual al inicial.
+              <option value="">Seleccionar…</option>
+              @for (eq of fleet(); track eq.id) {
+                <option [value]="eq.id">{{ eq.internalId }} · {{ eq.brand }} {{ eq.model }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-muted mb-1">Modelo</label>
+            <p class="text-sm text-muted font-mono pt-2">
+              {{ selectedEquipment()?.model ?? "—" }}
             </p>
-          }
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-muted mb-1"
-            >Mecánico Responsable <span class="text-error">*</span></label
-          >
-          <input
-            type="text"
-            formControlName="responsible"
-            class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary uppercase"
-            placeholder="Ej: JUAN PEREZ"
-          />
-        </div>
-      </div>
-
-      @if (otForm.get("equipmentId")?.value && warehouses().length > 0) {
-        <div class="border-t border-border pt-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label
-                class="block text-sm font-medium text-muted mb-1 flex items-center gap-1"
-              >
-                <svg
-                  class="w-4 h-4 text-primary"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                  ></path>
-                </svg>
-                Bodega de Origen
-                @if (partsArray.length > 0) {
-                  <span class="text-error text-[10px] ml-1"
-                    >(Requerida para descontar stock)</span
-                  >
-                } @else {
-                  <span class="text-muted text-[10px] ml-1"
-                    >(Opcional al crear)</span
-                  >
-                }
-              </label>
-              <select
-                formControlName="warehouseId"
-                [class.border-error]="
-                  partsArray.length > 0 && !otForm.get('warehouseId')?.value
-                "
-                class="w-full bg-dark border text-muted rounded-md px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 transition-colors"
-                [ngClass]="{
-                  'border-border': !(
-                    partsArray.length > 0 && !otForm.get('warehouseId')?.value
-                  ),
-                }"
-              >
-                <option value="">Sin bodega asignada</option>
-                @for (wh of warehouses(); track wh.id) {
-                  <option [value]="wh.id">
-                    {{ wh.code }} - {{ wh.name }}
-                    @if (wh.location) {
-                      ({{ wh.location }})
-                    }
-                  </option>
-                }
-              </select>
-            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-muted mb-1">N° OT</label>
+            <p class="text-sm text-muted font-mono">{{ mode === "CREATING" ? "(se asigna al guardar)" : otId }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-muted mb-1">N° OM</label>
+            <input
+              formControlName="maintenanceOrderNumber"
+              class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 text-sm outline-none focus:border-primary uppercase font-mono"
+              placeholder="Ej: OM-2026-014"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-muted mb-1">N° equipo</label>
+            <p class="text-sm text-muted font-mono pt-2">{{ selectedEquipment()?.internalId ?? "—" }}</p>
           </div>
         </div>
-      }
-    </div>
+      </section>
 
-    @if (otForm.get("category")?.value === "PROGRAMADA") {
-      <div
-        class="bg-surface border border-border rounded-xl shadow-lg p-6 animate-in"
-      >
-        <h3
-          class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
+      @if (selectedEquipment()) {
+        <section
+          class="bg-surface border border-border rounded-xl p-6 shadow-lg border-primary/20"
+          aria-label="Última medición del equipo"
         >
-          Pauta de Mantenimiento (Checklist)
-        </h3>
-        <div formArrayName="tasks" class="space-y-2">
-          @for (taskCtrl of tasksArray.controls; track $index) {
-            <div
-              [formGroupName]="$index"
-              class="flex items-start gap-4 p-3 bg-dark/40 rounded border border-border hover:border-primary/30 transition-colors"
-            >
-              <div class="pt-1">
+          <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2 mb-4">
+            Última medición
+          </h3>
+          @if (meterSnapshotLoading()) {
+            <div class="flex items-center gap-3 text-sm text-muted">
+              <div
+                class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"
+              ></div>
+              Sincronizando medidor…
+            </div>
+          } @else {
+            @if (meterSnapshot(); as snap) {
+              <div class="flex flex-wrap items-end gap-4 justify-between">
+                <div>
+                  <p class="text-[10px] uppercase text-muted tracking-wider mb-1">
+                    Medidor actual ({{ snap.meterType === "KILOMETERS" ? "km" : "hrs" }})
+                  </p>
+                  <p class="text-3xl font-mono font-bold text-primary tabular-nums">
+                    {{ snap.currentMeter | number }}
+                  </p>
+                </div>
+                <div class="flex flex-col items-start gap-2 min-w-0">
+                  @if (snap.lastLog) {
+                    <span class="text-xs text-muted font-mono">
+                      Último registro:
+                      {{ snap.lastLog.date | date: "yyyy-MM-dd HH:mm" }}
+                    </span>
+                    @if (snap.lastLog.userName) {
+                      <span class="text-[11px] text-muted"
+                        >Usuario: {{ snap.lastLog.userName }}</span
+                      >
+                    }
+                  } @else {
+                    <span class="text-xs text-muted">Sin entradas en bitácora aún.</span>
+                  }
+                  <span
+                    class="inline-flex items-center rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-mono font-semibold text-primary"
+                  >
+                    {{ meterSourceBadge() }}
+                  </span>
+                </div>
+              </div>
+            } @else {
+              <p class="text-sm text-muted">No se pudo cargar el snapshot del medidor.</p>
+            }
+          }
+        </section>
+      }
+
+      <!-- Panel PM opcional -->
+      @if (selectedEquipment(); as eq) {
+        <div class="rounded-xl border border-border bg-dark/40 overflow-hidden">
+          <button
+            type="button"
+            (click)="pmPanelOpen.set(!pmPanelOpen())"
+            class="w-full flex justify-between items-center px-4 py-3 text-left text-xs font-mono uppercase tracking-wider text-muted hover:text-main"
+          >
+            Contexto PM del equipo (opcional)
+            <span class="text-primary">{{ pmPanelOpen() ? "−" : "+" }}</span>
+          </button>
+          @if (pmPanelOpen()) {
+            <div class="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm border-t border-border pt-4">
+              <div>
+                <span class="text-muted text-[10px] uppercase">Descripción</span>
+                <p class="text-main">{{ eq.type }} · {{ eq.brand }} {{ eq.model }}</p>
+              </div>
+              <div>
+                <span class="text-muted text-[10px] uppercase">Última fecha PM</span>
+                <p class="text-main font-mono">{{ eq.lastMaintenanceDate ? (eq.lastMaintenanceDate | date: "yyyy-MM-dd") : "—" }}</p>
+              </div>
+              <div>
+                <span class="text-muted text-[10px] uppercase">Intervalo PM</span>
+                <p class="text-main font-mono">
+                  {{ pmPreview()?.interval ?? "—" }}
+                  {{ eq.meterType === "KILOMETERS" ? " km" : " hrs" }}
+                </p>
+                @if (pmPreview()?.source; as src) {
+                  <p class="text-[10px] text-muted mt-0.5">{{ pmSourceLabel(src) }}</p>
+                }
+              </div>
+              <div>
+                <span class="text-muted text-[10px] uppercase">Estimado próxima mant.</span>
+                <p class="text-main font-mono">{{ pmPreview()?.nextDueMeter ?? "—" }}</p>
+              </div>
+              <div>
+                <span class="text-muted text-[10px] uppercase">{{ meterLabel() }} hasta próxima PM</span>
+                <p class="text-main font-mono">{{ pmPreview()?.remainingUnits ?? "—" }}</p>
+              </div>
+              <div>
+                <span class="text-muted text-[10px] uppercase">Última OT cerrada</span>
+                @if (lastClosedOt(); as lo) {
+                  <a class="text-primary hover:underline font-mono text-sm" [routerLink]="['/app/ots', lo.id]">{{ lo.correlative }}</a>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs text-muted mb-1">Ciclo PM (1–4)</label>
                 <input
-                  type="checkbox"
-                  formControlName="isCompleted"
-                  class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50"
+                  formControlName="pmCycleNumber"
+                  type="number"
+                  min="1"
+                  max="4"
+                  class="w-32 bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
                 />
               </div>
-              <div class="flex-1">
-                <p class="text-sm font-medium text-main">
-                  {{ taskCtrl.get("description")?.value }}
-                </p>
-                <div class="flex gap-4 mt-2">
-                  <input
-                    type="text"
-                    formControlName="observation"
-                    class="flex-1 bg-dark border border-border/50 text-xs px-2 py-1 rounded outline-none focus:border-primary text-muted"
-                    placeholder="Observaciones (Opcional)"
-                  />
-                  <input
-                    type="number"
-                    formControlName="measurement"
-                    class="w-24 bg-dark border border-border/50 text-xs px-2 py-1 rounded outline-none focus:border-primary font-mono text-muted"
-                    placeholder="Valor"
-                  />
-                </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Tiempos -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Tiempos y detención del equipo
+        </h3>
+        <p class="text-[11px] text-muted font-mono">Detención real</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-muted mb-1">Inicio (fecha y hora)</label>
+            <input type="datetime-local" formControlName="detentionStartedAt" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Final (fecha y hora)</label>
+            <input type="datetime-local" formControlName="detentionEndedAt" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">{{ meterLabel() }} inicial <span class="text-red-400">*</span></label>
+            <input type="number" formControlName="detentionInitialMeter" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">{{ meterLabel() }} final <span class="text-red-400">*</span></label>
+            <input type="number" formControlName="detentionFinalMeter" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+          </div>
+        </div>
+
+        <p class="text-[11px] text-muted font-mono pt-2">Atención mecánica</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs text-muted mb-1">Fecha de atención</label>
+            <input type="date" formControlName="mechanicAttentionDate" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Hora desde</label>
+            <input type="time" formControlName="mechanicAttentionFromTime" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Hora hasta</label>
+            <input type="time" formControlName="mechanicAttentionToTime" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+        </div>
+
+        <p class="text-[11px] text-muted font-mono pt-2">Horas atribuibles a cliente</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs text-muted mb-1">Desde</label>
+            <input type="datetime-local" formControlName="clientAttributedStart" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Hasta</label>
+            <input type="datetime-local" formControlName="clientAttributedEnd" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div class="md:col-span-1">
+            <label class="block text-xs text-muted mb-1">Motivo</label>
+            <input formControlName="clientAttributedReason" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Clasificación -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Condiciones y clasificación
+        </h3>
+        <div>
+          <span class="block text-xs text-muted mb-2">Afecta disponibilidad</span>
+          <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Afecta disponibilidad">
+            @for (opt of availabilityOptions; track opt.v) {
+              <button
+                type="button"
+                role="radio"
+                [attr.aria-checked]="otForm.get('affectsAvailability')?.value === opt.v"
+                (click)="otForm.patchValue({ affectsAvailability: opt.v }); otForm.get('affectsAvailability')?.markAsTouched()"
+                class="tpm-choice-chip tpm-choice-chip--inline"
+                [class.tpm-choice-chip--active]="otForm.get('affectsAvailability')?.value === opt.v"
+              >
+                {{ opt.l }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div>
+          <span class="block text-xs text-muted mb-2">Tipo de OT (multi) <span class="text-red-400">*</span></span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            @for (c of classificationOptions; track c.id) {
+              <button
+                type="button"
+                role="checkbox"
+                [attr.aria-checked]="isTagChecked(c.id)"
+                (click)="toggleClassification(c.id, !isTagChecked(c.id))"
+                class="tpm-choice-chip"
+                [class.tpm-choice-chip--active]="isTagChecked(c.id)"
+              >
+                {{ c.label }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs text-muted mb-1">Ubicación del equipo</label>
+            <select formControlName="workLocation" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary">
+              <option value="TALLER">En taller</option>
+              <option value="TERRENO">En terreno</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">HM (horómetro)</label>
+            <input formControlName="metricHm" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">HH (horas hombre)</label>
+            <input formControlName="metricHh" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Turno</label>
+            <select formControlName="workShift" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary">
+              <option value="DIA">Día</option>
+              <option value="NOCHE">Noche</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Diagnóstico -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Diagnóstico y ejecución técnica
+        </h3>
+        <div>
+          <label class="block text-xs text-muted mb-1">Información / solicitud inicial</label>
+          <textarea formControlName="initialRequestDescription" rows="3" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"></textarea>
+        </div>
+
+        <div formGroupName="intervention">
+          <span class="block text-xs text-muted mb-2">Sistema intervenido</span>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            @for (key of ["electric", "mechanical", "hydraulic", "pneumatic", "structural", "wheels", "others"]; track key) {
+              <label class="flex items-center gap-2 text-xs text-main cursor-pointer">
+                <input type="checkbox" [formControlName]="key" class="accent-primary" />
+                {{ interventionLabel(key) }}
+              </label>
+            }
+          </div>
+          <label class="block text-xs text-muted mt-3 mb-1">Subniveles / códigos (11.0–16.0), separados por coma</label>
+          <input formControlName="sublevelsText" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" placeholder="11.2, 14.0, …" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-muted mb-1">Síntomas</label>
+          <textarea formControlName="symptomsText" rows="2" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Causa</label>
+          <textarea formControlName="causeText" rows="2" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Descripción del trabajo realizado <span class="text-red-400">*</span></label>
+          <textarea formControlName="workPerformedDescription" rows="4" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"></textarea>
+        </div>
+      </section>
+
+      <!-- Fluidos por compartimiento -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Rellenos y consumos de fluidos
+        </h3>
+        <p class="text-[11px] text-muted">Complete solo las filas que apliquen.</p>
+
+        <div
+          class="rounded-xl border border-border bg-surface/50 p-4 mb-4 space-y-2"
+        >
+          <p class="text-[11px] text-muted leading-relaxed">
+            Para vincular fluidos al catálogo y CPP debe elegirse la <span class="text-main font-medium">bodega de origen</span> del contrato del equipo (la misma que usará al descontar repuestos al cerrar).
+          </p>
+          @if (!selectedEquipment()) {
+            <p class="text-xs text-warning">Seleccione el equipo en «Identificación de la orden» para cargar bodegas.</p>
+          } @else if (warehouses().length === 0) {
+            <p class="text-xs text-warning">
+              No hay bodegas disponibles para el contrato de este equipo. Revise la asignación del activo o cree una bodega en inventario.
+            </p>
+          } @else {
+            <label class="block text-xs font-medium text-muted">Bodega (catálogo / stock)</label>
+            <select
+              [formControl]="warehouseIdControl"
+              class="w-full md:max-w-md bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main outline-none focus:border-primary"
+            >
+              <option value="">Seleccionar bodega…</option>
+              @for (wh of warehouses(); track wh.id) {
+                <option [value]="wh.id">{{ wh.code }} — {{ wh.name }}</option>
+              }
+            </select>
+          }
+        </div>
+
+        <div formArrayName="compartmentRows" class="space-y-3">
+          @for (row of compartmentRowsArray.controls; track $index; let i = $index) {
+            <div [formGroupName]="i" class="grid grid-cols-1 md:grid-cols-12 gap-2 items-end bg-dark/40 border border-border rounded-lg p-3">
+              <div class="md:col-span-2">
+                <span class="text-[10px] text-muted uppercase">{{ fluidLabelForRow(row.get("compartment")?.value) }}</span>
               </div>
-              @if (mode !== "READONLY") {
+              <div class="md:col-span-3">
+                <label class="text-[10px] text-muted">Tipo aceite / fluido</label>
+                <input formControlName="fluidType" class="w-full bg-dark border border-border rounded-lg px-2 py-1.5 text-sm outline-none focus:border-primary" />
+              </div>
+              <div class="md:col-span-2 flex flex-col gap-1">
+                <label class="text-[10px] text-muted">Catálogo</label>
                 <button
                   type="button"
-                  (click)="removeCustomTask($index)"
-                  class="mt-1 text-error hover:text-red-400 transition-colors"
-                  title="Eliminar tarea"
+                  (click)="openFluidPicker(i)"
+                  class="text-xs font-mono min-h-[2rem] w-full rounded-lg border-2 border-primary/60 text-primary bg-dark/40 px-2 py-1.5 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 >
-                  <svg
-                    class="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    ></path>
-                  </svg>
+                  Vincular…
                 </button>
-              }
-            </div>
-          }
-        </div>
-        @if (mode !== "READONLY") {
-          <button
-            type="button"
-            (click)="addCustomTask()"
-            class="mt-4 text-xs font-mono text-primary hover:text-main transition-colors"
-          >
-            + AGREGAR TAREA EXTRA
-          </button>
-        }
-      </div>
-
-      <div
-        class="bg-surface border border-border rounded-xl shadow-lg p-6 animate-in mt-6"
-      >
-        <div
-          class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-border pb-4 mb-4 gap-4"
-        >
-          <div>
-            <h3 class="text-sm font-mono text-primary uppercase tracking-wider">
-              Insumos y materiales utilizados
-            </h3>
-            <p class="text-[10px] text-muted font-mono mt-1">
-              Ingresa manual o carga un Kit PM. Vincula al catálogo para
-              descontar stock automáticamente.
-            </p>
-          </div>
-          <div class="flex items-center gap-3 w-full md:w-auto">
-            @if (mode !== "READONLY") {
-              <select
-                (change)="applyKit($event)"
-                class="bg-dark/80 border border-primary/30 text-primary text-xs font-mono rounded px-3 py-1.5 outline-none focus:border-primary w-full md:w-64"
-              >
-                <option value="" selected>Seleccionar Pauta / Kit PM...</option>
-                @for (kit of pmKits(); track kit.id) {
-                  <option [value]="kit.id">
-                    {{ kit.code }} - {{ kit.name }}
-                  </option>
-                }
-              </select>
-              <button
-                type="button"
-                (click)="addPartRow()"
-                class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1.5 px-3 rounded transition-colors whitespace-nowrap"
-              >
-                + AGREGAR ÍTEM
-              </button>
-            }
-          </div>
-        </div>
-
-        @if (linkedPurchaseRequisitions().length > 0 || linkedPurchaseOrders().length > 0) {
-          <div class="mb-4 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5">
-            <p class="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">
-              Compras vinculadas a esta OT
-            </p>
-            <div class="flex flex-wrap gap-3 items-center">
-              @for (r of linkedPurchaseRequisitions(); track r.id) {
-                <app-entity-link kind="REQ" [id]="r.id" [label]="r.correlative" variant="badge" />
-              }
-              @for (po of linkedPurchaseOrders(); track po.id) {
-                <app-entity-link kind="PO" [id]="po.id" [label]="po.correlative" variant="badge" />
-              }
-            </div>
-          </div>
-        }
-
-        <div formArrayName="parts" class="space-y-3">
-          @for (
-            partCtrl of partsArray.controls;
-            track $index;
-            let partIndex = $index
-          ) {
-            <div
-              [formGroupName]="partIndex"
-              class="bg-dark/50 p-3 rounded-lg border border-border relative"
-            >
-              <div
-                class="flex flex-col sm:flex-row sm:items-center justify-between mb-3 px-1 gap-2 border-b border-border/50 pb-2"
-              >
-                @if (partCtrl.get("inventoryItemId")?.value) {
-                  <span
-                    class="text-[10px] font-mono text-success flex items-center gap-1 flex-wrap"
-                  >
-                    <svg
-                      class="w-3 h-3 shrink-0"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fill-rule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                        clip-rule="evenodd"
-                      ></path>
-                    </svg>
-                    <span>VINCULADO:</span>
-                    <a
-                      [routerLink]="[
-                        '/app/articulos',
-                        partCtrl.get('inventoryItemId')?.value,
-                      ]"
-                      class="font-semibold text-success hover:underline max-w-[14rem] truncate"
-                      title="Abrir ficha en Catálogo Maestro"
-                      >{{ partCtrl.get("linkedItemName")?.value }}</a
-                    >
-                  </span>
-
-                  <div class="flex items-center gap-3">
-                    @if (otForm.get("warehouseId")?.value) {
-                      <span
-                        class="text-[10px] font-mono px-2 py-0.5 rounded flex items-center gap-1"
-                        [ngClass]="
-                          hasEnoughStock(partIndex)
-                            ? 'bg-success/10 text-success border border-success/30'
-                            : 'bg-warning/10 text-warning border border-warning/30'
-                        "
-                      >
-                        Disp. Bodega:
-                        {{
-                          getAvailableStock(
-                            partCtrl.get("inventoryItemId")?.value
-                          )
-                        }}
-                        @if (!hasEnoughStock(partIndex)) {
-                          <span class="font-bold">(Generará Negativo)</span>
-                        }
-                      </span>
-                    } @else {
-                      <span
-                        class="text-[10px] font-mono text-warning bg-warning/10 px-2 py-0.5 rounded border border-warning/30"
-                      >
-                        Seleccione bodega para ver stock
-                      </span>
-                    }
-
-                    @if (mode !== "READONLY") {
-                      <button
-                        type="button"
-                        (click)="unlinkInventoryItem(partIndex)"
-                        class="text-[10px] font-mono text-error hover:text-red-400 transition-colors"
-                      >
-                        DESVINCULAR
-                      </button>
-                    }
-                  </div>
-                } @else if (
-                  partCtrl.get("partNumber")?.value &&
-                  !partCtrl.get("inventoryItemId")?.value
-                ) {
-                  <span
-                    class="text-[10px] font-mono text-warning flex items-center gap-1 bg-warning/5 px-2 py-0.5 rounded border border-warning/20"
-                  >
-                    <svg
-                      class="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      ></path>
-                    </svg>
-                    NO VINCULADO: Se registrará en la OT pero no descontará
-                    stock de Bodega.
-                  </span>
-                } @else {
-                  <span class="text-[10px] font-mono text-muted/50 italic">
-                    Busque un artículo del Catálogo Maestro para vincular stock.
-                  </span>
-                }
               </div>
-
-              <div class="flex flex-wrap md:flex-nowrap items-center gap-4">
-                <div class="w-20">
-                  <label class="block text-[10px] text-muted mb-1">Cant.</label>
-                  <input
-                    type="number"
-                    formControlName="quantity"
-                    class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary font-mono"
-                    placeholder="1"
-                  />
-                </div>
-                <div class="w-full md:w-48 relative">
-                  <label class="block text-[10px] text-muted mb-1"
-                    >N° Parte (P/N)</label
-                  >
-                  <div class="flex gap-1">
-                    <input
-                      type="text"
-                      formControlName="partNumber"
-                      autocomplete="off"
-                      class="flex-1 bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary uppercase font-mono"
-                      placeholder="Ej: 577-1440"
-                    />
-                    <button
-                      type="button"
-                      (click)="openPartPicker(partIndex)"
-                      class="px-2 py-1 text-[10px] font-medium text-primary border border-primary/40 rounded hover:bg-primary/10 transition-colors whitespace-nowrap"
-                      title="Catálogo Maestro de Artículos"
-                    >
-                      Buscar
-                    </button>
-                  </div>
-                </div>
-                <div class="flex-1 w-full">
-                  <label class="block text-[10px] text-muted mb-1"
-                    >Descripción</label
-                  >
-                  <input
-                    type="text"
-                    formControlName="description"
-                    class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary uppercase"
-                    placeholder="Ej: FILTRO ACEITE"
-                  />
-                </div>
-                @if (mode !== "READONLY") {
-                  <button
-                    type="button"
-                    (click)="removePartRow(partIndex)"
-                    class="mt-5 text-error hover:text-red-400 transition-colors"
-                  >
-                    <svg
-                      class="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      ></path>
-                    </svg>
-                  </button>
-                }
+              <div class="md:col-span-2">
+                <label class="text-[10px] text-muted">Litros</label>
+                <input formControlName="liters" type="number" step="any" class="w-full bg-dark border border-border rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-primary" />
               </div>
-            </div>
-          }
-          @if (partsArray.length === 0) {
-            <div
-              class="text-center py-4 text-muted font-mono text-xs border border-dashed border-border rounded-lg"
-            >
-              No se han registrado ítems de material.
-            </div>
-          }
-        </div>
-      </div>
-    }
-
-    <div class="bg-surface border border-border rounded-xl shadow-lg p-6 mt-6">
-      <h3
-        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
-      >
-        {{
-          otForm.get("category")?.value === "PROGRAMADA"
-            ? "Otros Sistemas Intervenidos"
-            : "Sistemas Intervenidos (Marque con una X)"
-        }}
-      </h3>
-      <div
-        formArrayName="systems"
-        class="grid grid-cols-2 md:grid-cols-4 gap-4"
-      >
-        @for (sysCtrl of systemsArray.controls; track $index) {
-          <label
-            class="flex items-center gap-3 p-3 rounded bg-dark/30 border border-border/50 hover:border-primary/50 cursor-pointer transition-colors"
-          >
-            <input
-              type="checkbox"
-              [formControlName]="$index"
-              class="appearance-none w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50"
-            />
-            <span
-              class="text-sm font-medium text-muted uppercase tracking-wide"
-              >{{ systemsCatalog()[$index].name }}</span
-            >
-          </label>
-        }
-      </div>
-    </div>
-
-    <div class="bg-surface border border-border rounded-xl shadow-lg p-6 mt-6">
-      <h3
-        class="text-sm font-mono text-primary uppercase tracking-wider mb-4 border-b border-border pb-2"
-      >
-        Descripción del Trabajo (Obligatorio)
-      </h3>
-      <textarea
-        formControlName="description"
-        rows="4"
-        class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 text-sm outline-none focus:border-primary resize-none"
-        placeholder="Detalle la falla, el diagnóstico y el trabajo exacto ejecutado..."
-      ></textarea>
-    </div>
-
-    <div class="bg-surface border border-border rounded-xl shadow-lg p-6 mt-6">
-      <div
-        class="flex justify-between items-center border-b border-border pb-2 mb-4"
-      >
-        <h3 class="text-sm font-mono text-primary uppercase tracking-wider">
-          Rellenos y Consumos de Fluidos
-        </h3>
-        @if (mode !== "READONLY") {
-          <button
-            type="button"
-            (click)="addFluidRow()"
-            class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1 px-3 rounded transition-colors"
-          >
-            + AGREGAR FLUIDO
-          </button>
-        }
-      </div>
-      <div formArrayName="fluids" class="space-y-3">
-        @for (fluidCtrl of fluidsArray.controls; track $index) {
-          <div
-            [formGroupName]="$index"
-            class="flex items-center gap-4 bg-dark/50 p-3 rounded-lg border border-border"
-          >
-            <div class="flex-1">
-              <label class="block text-[10px] text-muted mb-1"
-                >Tipo de Fluido</label
-              >
-              <select
-                formControlName="fluidId"
-                class="w-full bg-dark border border-border text-muted rounded text-sm p-2 outline-none focus:border-primary"
-              >
-                <option value="" disabled selected>Seleccione fluido...</option>
-                @for (flu of fluidsCatalog(); track flu.id) {
-                  <option [value]="flu.id">{{ flu.name }}</option>
-                }
-              </select>
-            </div>
-            <div class="w-32">
-              <label class="block text-[10px] text-muted mb-1"
-                >Cantidad (Lts)</label
-              >
-              <input
-                type="number"
-                step="0.5"
-                formControlName="liters"
-                class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary font-mono"
-                placeholder="0.0"
-              />
-            </div>
-            <div class="w-40">
-              <label class="block text-[10px] text-muted mb-1">Acción</label>
-              <select
-                formControlName="action"
-                class="w-full bg-dark border border-border text-muted rounded text-sm p-2 outline-none focus:border-primary disabled:opacity-60"
-              >
-                <option value="RELLENO">Relleno</option>
-                <option value="CAMBIO">Cambio Completo</option>
-              </select>
-            </div>
-            @if (mode !== "READONLY") {
-              <button
-                type="button"
-                (click)="removeFluidRow($index)"
-                class="mt-5 text-error hover:text-red-400 transition-colors"
-              >
-                <svg
-                  class="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  ></path>
-                </svg>
-              </button>
-            }
-          </div>
-        }
-        @if (fluidsArray.length === 0) {
-          <div
-            class="text-center py-4 text-muted font-mono text-xs border border-dashed border-border rounded-lg"
-          >
-            No se han registrado consumos de fluidos.
-          </div>
-        }
-      </div>
-    </div>
-
-    @if (otForm.get("category")?.value === "PROGRAMADA") {
-      <div
-        class="bg-surface border border-border rounded-xl shadow-lg p-6 mt-6 animate-in"
-      >
-        <div
-          class="flex justify-between items-center border-b border-border pb-2 mb-4"
-        >
-          <h3 class="text-sm font-mono text-primary uppercase tracking-wider">
-            Muestras de Fluidos (APD)
-          </h3>
-          @if (mode !== "READONLY") {
-            <button
-              type="button"
-              (click)="addFluidSampleRow()"
-              class="text-xs font-mono bg-dark border border-primary/50 text-primary hover:bg-primary/10 py-1 px-3 rounded transition-colors"
-            >
-              + AGREGAR MUESTRA
-            </button>
-          }
-        </div>
-        <div formArrayName="fluidSamples" class="space-y-3">
-          @for (sampleCtrl of fluidSamplesArray.controls; track $index) {
-            <div
-              [formGroupName]="$index"
-              class="flex items-center gap-4 bg-dark/50 p-3 rounded-lg border border-border"
-            >
-              <div class="flex-1">
-                <label class="block text-[10px] text-muted mb-1"
-                  >Sistema Extraído</label
-                >
-                <select
-                  formControlName="systemId"
-                  class="w-full bg-dark border border-border text-muted rounded text-sm p-2 outline-none focus:border-primary"
-                >
-                  <option value="" disabled selected>
-                    Seleccione sistema...
-                  </option>
-                  @for (sys of systemsCatalog(); track sys.id) {
-                    <option [value]="sys.id">{{ sys.name }}</option>
-                  }
+              <div class="md:col-span-3">
+                <label class="text-[10px] text-muted">Acción</label>
+                <select formControlName="action" class="w-full bg-dark border border-border rounded-lg px-2 py-1.5 text-sm outline-none focus:border-primary">
+                  <option value="RELLENO">Relleno</option>
+                  <option value="CAMBIO">Cambio</option>
                 </select>
               </div>
-              <div class="flex-1">
-                <label class="block text-[10px] text-muted mb-1"
-                  >Código del Frasco / Tracking</label
-                >
-                <input
-                  type="text"
-                  formControlName="bottleCode"
-                  class="w-full bg-dark border border-border text-main rounded text-sm p-2 outline-none focus:border-primary font-mono uppercase"
-                  placeholder="Ej: APD-998877"
-                />
-              </div>
-              @if (mode !== "READONLY") {
-                <button
-                  type="button"
-                  (click)="removeFluidSampleRow($index)"
-                  class="mt-5 text-error hover:text-red-400 transition-colors"
-                >
-                  <svg
-                    class="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    ></path>
-                  </svg>
-                </button>
+              @if (row.get("linkedFluidItemName")?.value) {
+                <p class="md:col-span-12 text-[10px] font-mono text-success">
+                  Costeo al cierre (CPP): {{ row.get("linkedFluidItemName")?.value }}
+                </p>
               }
             </div>
           }
-          @if (fluidSamplesArray.length === 0) {
-            <div
-              class="text-center py-4 text-muted font-mono text-xs border border-dashed border-border rounded-lg"
-            >
-              No se han registrado muestras de laboratorio para esta OT.
+        </div>
+      </section>
+
+      <!-- Personal -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Personal y validaciones
+        </h3>
+        <div>
+          <label class="block text-xs text-muted mb-1">Técnicos participantes</label>
+          <textarea formControlName="techniciansNames" rows="2" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none" placeholder="Nombres separados por coma"></textarea>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-muted mb-1">Mecánico responsable <span class="text-red-400">*</span></label>
+            <input formControlName="responsibleMechanicName" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary uppercase" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Firma / nombre mecánico</label>
+            <input formControlName="responsibleMechanicSignature" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Validación jefe de turno — nombre</label>
+            <input formControlName="shiftSupervisorName" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Validación jefe de turno — firma</label>
+            <input formControlName="shiftSupervisorSignature" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+        </div>
+      </section>
+
+      <div
+        class="flex flex-wrap justify-end items-center gap-3 pt-5 mt-2 border-t border-border"
+      >
+        <a routerLink="/app/ots" class="ot-btn-ghost">Volver</a>
+        @if (mode !== "READONLY") {
+          <button type="submit" [disabled]="otForm.invalid" class="ot-btn-primary">
+            {{ mode === "CREATING" ? "Registrar OT" : "Guardar cambios" }}
+          </button>
+          @if (mode === "EDITING" && otId) {
+            <button type="button" (click)="closeWorkOrder()" class="ot-btn-outline">
+              Firmar y cerrar OT
+            </button>
+          }
+        }
+      </div>
+    </form>
+  }
+
+  @if (tab() === "backlog") {
+    <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+      <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+        Backlog vinculado a esta OT
+      </h3>
+      @if (!otId) {
+        <p class="text-sm text-muted">Guarde la OT en «Datos OT» para poder registrar ítems de backlog.</p>
+      } @else {
+        <div class="flex flex-col sm:flex-row gap-2">
+          <textarea
+            [ngModel]="newBacklogText()"
+            (ngModelChange)="newBacklogText.set($event)"
+            [ngModelOptions]="{ standalone: true }"
+            rows="2"
+            class="flex-1 bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"
+            placeholder="Descripción breve del pendiente…"
+          ></textarea>
+          <button
+            type="button"
+            (click)="addBacklogRow()"
+            class="ot-btn-primary ot-btn--compact shrink-0 self-stretch sm:self-auto"
+            [disabled]="!newBacklogText().trim()"
+          >
+            Agregar
+          </button>
+        </div>
+        <div class="rounded-lg border border-border divide-y divide-border overflow-hidden">
+          @for (b of backlogItems(); track b.id) {
+            <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+              <p class="text-main flex-1 min-w-0">{{ b.description }}</p>
+              <div class="flex flex-wrap items-center gap-2 justify-end">
+                @if (b.status === "PENDING") {
+                  <button
+                    type="button"
+                    (click)="promoteBacklog(b, 'TO_TASK')"
+                    class="text-[10px] font-mono px-2 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    → Tarea
+                  </button>
+                  <button
+                    type="button"
+                    (click)="promoteBacklog(b, 'TO_NEW_OT')"
+                    class="text-[10px] font-mono px-2 py-1.5 rounded-lg border border-border text-muted hover:border-primary/40 hover:text-main"
+                  >
+                    → Nueva OT
+                  </button>
+                }
+                <button
+                  type="button"
+                  (click)="toggleBacklogStatus(b)"
+                  class="text-xs font-mono px-3 py-2 min-h-[2.25rem] rounded-lg border transition-colors hover:border-primary/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  [ngClass]="
+                    b.status === 'DONE'
+                      ? 'bg-success/10 border-success/35 text-success'
+                      : 'bg-dark/30 border-border text-warning'
+                  "
+                >
+                  {{ b.status === "DONE" ? "Realizado" : "Pendiente" }}
+                </button>
+              </div>
             </div>
+          } @empty {
+            <p class="px-3 py-6 text-center text-muted text-sm">Sin backlog registrado.</p>
           }
         </div>
-      </div>
-    }
-
-    @if (estimatedCost() > 0) {
-      <div
-        class="bg-surface border border-primary/30 rounded-xl p-4 flex justify-between items-center backdrop-blur-xl"
-      >
-        <div>
-          <span class="text-xs font-mono text-muted uppercase tracking-wider"
-            >Costo total estimado (materiales)</span
-          >
-          <p class="text-sm text-muted mt-0.5">
-            Basado en el CPP de la bodega seleccionada.
-          </p>
-        </div>
-        <span class="text-2xl font-bold font-mono text-primary"
-          >${{ estimatedCost() | number: "1.0-0" }}</span
-        >
-      </div>
-    }
-
-    <div class="flex justify-end gap-4 pt-4 border-t border-border mt-6">
-      <a
-        routerLink="/app/ots"
-        class="px-6 py-3 font-medium text-muted hover:text-main transition-colors"
-        >Volver al Listado</a
-      >
-      @if (mode !== "READONLY") {
-        <button
-          type="submit"
-          [disabled]="otForm.invalid"
-          class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-3 px-8 rounded shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          FIRMAR Y CERRAR PARTE
-        </button>
+        <p class="text-[11px] text-muted">
+          Vista global:
+          <a routerLink="/app/ots/backlog" class="text-primary hover:underline font-mono">/app/ots/backlog</a>
+        </p>
       }
-    </div>
-  </form>
+    </section>
+  }
 
-  <app-global-item-picker
-    [open]="showPartPicker()"
-    [warehouseId]="pickerWarehouseId()"
-    [strictFamilyFirst]="true"
-    title="Catálogo Maestro de Artículos"
-    (closed)="onPartPickerClosed()"
-    (itemPicked)="onPartPicked($event)"
-  />
+  @if (tab() === "legacy") {
+    <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-6" [formGroup]="otForm">
+      <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+        Legacy · bodega, kits y repuestos
+      </h3>
+      <div class="rounded-xl border border-border bg-surface/40 p-4 space-y-2">
+        <label class="block text-xs font-medium text-muted">Bodega de origen</label>
+        @if (!selectedEquipment()) {
+          <p class="text-xs text-muted">Seleccione el equipo en «Datos OT» para listar bodegas del contrato.</p>
+        } @else if (warehouses().length === 0) {
+          <p class="text-xs text-warning">
+            No hay bodegas para el contrato de este equipo. Sin bodega no se puede buscar en catálogo ni descontar stock al cerrar.
+          </p>
+        } @else {
+          <select
+            [formControl]="warehouseIdControl"
+            class="w-full md:w-96 bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main outline-none focus:border-primary"
+          >
+            <option value="">Sin bodega</option>
+            @for (wh of warehouses(); track wh.id) {
+              <option [value]="wh.id">{{ wh.code }} — {{ wh.name }}</option>
+            }
+          </select>
+        }
+      </div>
+
+      <div class="flex flex-wrap gap-2 items-center">
+        <select (change)="applyKit($event)" class="bg-dark border border-border rounded-lg px-3 py-2 text-xs font-mono text-primary max-w-full md:max-w-md">
+          <option value="">Cargar kit PM…</option>
+          @for (kit of pmKits(); track kit.id) {
+            <option [value]="kit.id">{{ kit.code }} — {{ kit.name }}</option>
+          }
+        </select>
+        <button type="button" (click)="addPartRow()" class="ot-btn-outline ot-btn--compact">
+          + Ítem repuesto
+        </button>
+      </div>
+
+      <div formArrayName="parts" class="space-y-3">
+        @for (ctrl of partsArray.controls; track $index; let pi = $index) {
+          <div [formGroupName]="pi" class="bg-dark/50 border border-border rounded-lg p-3 grid grid-cols-1 md:grid-cols-12 gap-2">
+            <div class="md:col-span-1">
+              <label class="text-[10px] text-muted">Cant.</label>
+              <input type="number" formControlName="quantity" class="w-full bg-dark border border-border rounded px-2 py-1 text-sm font-mono" />
+            </div>
+            <div class="md:col-span-3">
+              <label class="text-[10px] text-muted">P/N</label>
+              <div class="flex gap-1">
+                <input formControlName="partNumber" class="flex-1 bg-dark border border-border rounded px-2 py-1 text-xs font-mono uppercase" />
+                <button
+                  type="button"
+                  (click)="openPartPicker(pi)"
+                  class="text-xs font-mono min-h-[2rem] px-3 py-1.5 rounded-lg border-2 border-primary text-primary bg-dark/40 hover:bg-primary/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary shrink-0"
+                >
+                  Buscar
+                </button>
+              </div>
+            </div>
+            <div class="md:col-span-6">
+              <label class="text-[10px] text-muted">Descripción</label>
+              <input formControlName="description" class="w-full bg-dark border border-border rounded px-2 py-1 text-sm uppercase" />
+            </div>
+            <div class="md:col-span-2 flex items-end justify-end">
+              <button type="button" (click)="removePartRow(pi)" class="text-error text-xs">Quitar</button>
+            </div>
+            @if (ctrl.get("inventoryItemId")?.value) {
+              <p class="md:col-span-12 text-[10px] font-mono text-success">Vinculado al catálogo · {{ ctrl.get("linkedItemName")?.value }}</p>
+            }
+          </div>
+        }
+      </div>
+
+    </section>
+  }
+
+  @if (mode !== 'READONLY') {
+    <app-global-item-picker
+      [open]="showPartPicker()"
+      [warehouseId]="pickerWarehouseId()"
+      [strictFamilyFirst]="true"
+      title="Catálogo maestro"
+      (closed)="onPartPickerClosed()"
+      (itemPicked)="onPartPicked($event)"
+    />
+    <app-global-item-picker
+      [open]="showFluidPicker()"
+      [warehouseId]="pickerWarehouseId()"
+      [strictFamilyFirst]="false"
+      title="Catálogo — fluidos / consumibles"
+      (closed)="onFluidPickerClosed()"
+      (itemPicked)="onFluidPicked($event)"
+    />
+  }
 </div>

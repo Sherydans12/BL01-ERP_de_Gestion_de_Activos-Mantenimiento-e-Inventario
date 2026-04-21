@@ -1,0 +1,209 @@
+/* Botones OT: nunca usar `text-dark` sobre primary — en tema claro `--bg-dark-rgb` es casi blanco y el contraste falla. */
+
+.ot-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0a0f14;
+  background-color: rgb(var(--primary-rgb));
+  border: none;
+  box-shadow:
+    0 4px 14px -4px rgba(0, 229, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.ot-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.ot-btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.98);
+}
+
+.ot-btn-primary:focus-visible {
+  outline: 2px solid rgb(var(--primary-rgb));
+  outline-offset: 2px;
+}
+
+.ot-btn-primary:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: none;
+}
+
+/* Compacto: primario u outline */
+.ot-btn--compact {
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  border-radius: 0.625rem;
+}
+
+.ot-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgb(var(--primary-rgb));
+  background-color: transparent;
+  border: 2px solid rgb(var(--primary-rgb));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.ot-btn-outline:hover:not(:disabled) {
+  background-color: rgba(var(--primary-rgb), 0.12);
+}
+
+.ot-btn-outline:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ot-btn-outline:focus-visible {
+  outline: 2px solid rgb(var(--primary-rgb));
+  outline-offset: 2px;
+}
+
+:host-context([data-theme='light']) .ot-btn-outline {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+
+.ot-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: transparent;
+  text-decoration: none;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.ot-btn-ghost:hover {
+  color: var(--text-main);
+  border-color: rgba(var(--primary-rgb), 0.45);
+  background-color: rgba(var(--primary-rgb), 0.06);
+}
+
+.ot-tab-rail {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(10, 15, 20, 0.55);
+}
+
+/* :host-context = tema en <html>; sin esto la encapsulación puede anular [data-theme='light'] en reglas de este .scss */
+:host-context([data-theme='light']) .ot-tab-rail {
+  background: #ffffff;
+  border: 1px solid #64748b;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.ot-tab-pill {
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  min-height: 2.5rem;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+:host-context([data-theme='light']) .ot-tab-pill {
+  font-size: 0.8125rem;
+}
+
+.ot-tab-pill--active {
+  color: rgb(var(--primary-rgb));
+  background-color: var(--bg-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+}
+
+:host-context([data-theme='light']) .ot-tab-pill--active {
+  color: rgb(var(--primary-rgb));
+  background: rgba(var(--primary-rgb), 0.12);
+  border: 1px solid rgba(var(--primary-rgb), 0.5);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(14, 116, 144, 0.18);
+}
+
+.ot-tab-pill--idle {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.ot-tab-pill--idle:hover {
+  color: var(--text-main);
+}
+
+:host-context([data-theme='light']) .ot-tab-pill.ot-tab-pill--idle {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+:host-context([data-theme='light']) .ot-tab-pill.ot-tab-pill--idle:hover {
+  color: #020617;
+  background: #f1f5f9;
+}
+
+.ot-back-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ot-back-icon:hover {
+  color: rgb(var(--primary-rgb));
+  border-color: rgba(var(--primary-rgb), 0.45);
+  box-shadow: 0 1px 6px rgba(0, 229, 255, 0.12);
+}

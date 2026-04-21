@@ -3,16 +3,108 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 
-export interface CreateWorkOrderPayload {
+export type AvailabilityImpact = 'SI' | 'NO' | 'STP';
+export type EquipmentWorkLocation = 'TALLER' | 'TERRENO';
+export type WorkShift = 'DIA' | 'NOCHE';
+export type FluidCompartment =
+  | 'MOTOR'
+  | 'TRANSMISION'
+  | 'DIRECCION'
+  | 'HIDRAULICO'
+  | 'MANDOS'
+  | 'DIFERENCIAL'
+  | 'REFRIGERANTE'
+  | 'OTROS';
+
+/** Tags multi-selección alineados al backend */
+export type OtClassificationTag =
+  | 'PROGRAMADA'
+  | 'NO_PROGRAMADA'
+  | 'ACCIDENTE_INCIDENTE'
+  | 'OT_ABIERTA_CONTINUIDAD'
+  | 'OT_ABIERTA_GEN_BCK'
+  | 'POSIBLE_GARANTIA';
+
+export interface FluidCompartmentRowPayload {
+  compartment: FluidCompartment;
+  fluidType: string;
+  liters: number;
+  action: 'RELLENO' | 'CAMBIO';
+  inventoryItemId?: string;
+}
+
+export interface CreateWorkOrderExcelPayload {
   equipmentId: string;
-  type: string;
-  category: string;
-  maintenanceType: string;
-  initialHorometer: number;
-  finalHorometer: number;
+  warehouseId?: string;
+
+  maintenanceOrderNumber?: string;
+
+  detentionStartedAt?: string;
+  detentionEndedAt?: string;
+  detentionInitialMeter?: number;
+  detentionFinalMeter?: number;
+
+  mechanicAttentionDate?: string;
+  mechanicAttentionFromTime?: string;
+  mechanicAttentionToTime?: string;
+
+  clientAttributedStart?: string;
+  clientAttributedEnd?: string;
+  clientAttributedReason?: string;
+
+  affectsAvailability?: AvailabilityImpact;
+  classificationTags?: OtClassificationTag[];
+
+  workLocation?: EquipmentWorkLocation;
+  metricHm?: number | null;
+  metricHh?: number | null;
+  workShift?: WorkShift;
+
+  initialRequestDescription?: string;
+  intervenedSystemsJson?: Record<string, unknown>;
+  symptomsText?: string;
+  causeText?: string;
+  workPerformedDescription?: string;
+
+  techniciansNames?: string;
+  responsibleMechanicName?: string;
+  responsibleMechanicSignature?: string;
+  shiftSupervisorName?: string;
+  shiftSupervisorSignature?: string;
+
+  pmCycleNumber?: number | null;
+
+  fluidCompartments?: FluidCompartmentRowPayload[];
+
+  /** Legacy — pestaña inventario */
+  parts?: {
+    partNumber: string;
+    description: string;
+    quantity: number;
+    inventoryItemId?: string;
+  }[];
+}
+
+export interface BacklogItemDto {
+  id: string;
+  workOrderId: string;
   description: string;
-  systems: string[];
-  fluids: { fluidId: string; liters: number; action: string }[];
+  status: 'PENDING' | 'DONE';
+  createdAt: string;
+  updatedAt: string;
+  workOrder?: {
+    id: string;
+    correlative: string;
+    status: string;
+    equipment?: { internalId: string; brand?: string; model?: string };
+  };
+}
+
+export interface BacklogListResponse {
+  data: BacklogItemDto[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 @Injectable({
@@ -22,8 +114,15 @@ export class WorkOrdersService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/work-orders`;
 
-  createOT(payload: CreateWorkOrderPayload): Observable<any> {
+  createOT(payload: CreateWorkOrderExcelPayload): Observable<any> {
     return this.http.post(this.apiUrl, payload);
+  }
+
+  patchWorkOrder(
+    id: string,
+    payload: Partial<CreateWorkOrderExcelPayload>,
+  ): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/${id}`, payload);
   }
 
   getWorkOrders(): Observable<any[]> {
@@ -39,7 +138,6 @@ export class WorkOrdersService {
     dateTo?: string;
     equipmentId?: string;
   }): Observable<{ data: any[]; total: number }> {
-    // Limpiamos los undefined y null de los params
     const cleanParams: Record<string, string | number> = {};
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== '') {
@@ -51,12 +149,14 @@ export class WorkOrdersService {
     });
   }
 
-  /**
-   * OTs filtradas por contrato (header `x-contract-id`, alineado con el backend).
-   */
   getWorkOrdersForContract(
     contractId: string,
-    params?: { page?: number; limit?: number; search?: string; status?: string },
+    params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+    },
   ): Observable<{ data: any[]; total: number }> {
     const cleanParams: Record<string, string | number> = {
       page: params?.page ?? 1,
@@ -80,8 +180,65 @@ export class WorkOrdersService {
   }
 
   updateStatus(id: string, status: string, warehouseId?: string) {
-    const payload: any = { status };
-    if (warehouseId) payload.warehouseId = warehouseId;
+    const payload: Record<string, string> = { status };
+    if (warehouseId) payload['warehouseId'] = warehouseId;
     return this.http.patch(`${this.apiUrl}/${id}/status`, payload);
+  }
+
+  listBacklog(options?: {
+    status?: 'PENDING' | 'DONE';
+    limit?: number;
+    offset?: number;
+    search?: string;
+  }): Observable<BacklogListResponse> {
+    const params: Record<string, string | number> = {};
+    if (options?.status) params['status'] = options.status;
+    if (options?.limit != null) params['limit'] = options.limit;
+    if (options?.offset != null) params['offset'] = options.offset;
+    if (options?.search?.trim()) params['search'] = options.search.trim();
+    return this.http.get<BacklogListResponse>(`${this.apiUrl}/backlog`, {
+      params,
+    });
+  }
+
+  addBacklogItem(
+    workOrderId: string,
+    description: string,
+  ): Observable<BacklogItemDto> {
+    return this.http.post<BacklogItemDto>(
+      `${this.apiUrl}/${workOrderId}/backlog`,
+      {
+        description,
+      },
+    );
+  }
+
+  patchBacklogItem(
+    workOrderId: string,
+    itemId: string,
+    status: 'PENDING' | 'DONE',
+  ): Observable<BacklogItemDto> {
+    return this.http.patch<BacklogItemDto>(
+      `${this.apiUrl}/${workOrderId}/backlog/${itemId}`,
+      { status },
+    );
+  }
+
+  promoteBacklogItem(
+    workOrderId: string,
+    itemId: string,
+    mode: 'TO_TASK' | 'TO_NEW_OT',
+  ): Observable<{
+    promoted: boolean;
+    mode: string;
+    newWorkOrderId?: string;
+  }> {
+    return this.http.post<{
+      promoted: boolean;
+      mode: string;
+      newWorkOrderId?: string;
+    }>(`${this.apiUrl}/${workOrderId}/backlog/${itemId}/promote`, {
+      mode,
+    });
   }
 }

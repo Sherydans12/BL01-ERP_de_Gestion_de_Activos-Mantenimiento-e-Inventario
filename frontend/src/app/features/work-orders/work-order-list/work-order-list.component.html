@@ -240,6 +240,29 @@
                   <div class="text-xs text-muted mt-1">
                     {{ ot.createdAt | date: "yyyy-MM-dd" }}
                   </div>
+                  @if (ot.affectsAvailability === "SI") {
+                    <div
+                      class="mt-2 inline-flex items-center gap-1 rounded-md border border-red-400/35 bg-red-500/10 px-2 py-0.5 text-[10px] font-mono leading-tight text-red-400"
+                      title="Esta OT cuenta detención con impacto en disponibilidad física (PA)."
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-3.5 w-3.5 shrink-0 text-red-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <span>Afecta PA</span>
+                    </div>
+                  }
                   <span
                     class="inline-flex mt-1 text-[10px] font-mono text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity"
                     >Vista OT →</span

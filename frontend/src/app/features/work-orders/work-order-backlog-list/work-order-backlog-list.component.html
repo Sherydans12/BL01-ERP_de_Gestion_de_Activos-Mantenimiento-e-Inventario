@@ -1,0 +1,155 @@
+<div class="max-w-5xl mx-auto space-y-6 pb-10">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-main tracking-tight flex items-center gap-2">
+        <span class="text-primary font-mono">BACKLOG</span>
+        órdenes de trabajo
+      </h1>
+      <p class="text-sm text-muted mt-1">
+        Pendientes y realizados por OT. Búsqueda por texto, correlativo u N° interno de equipo.
+      </p>
+    </div>
+    <a
+      routerLink="/app/ots"
+      class="text-xs font-mono text-primary hover:underline self-start sm:self-auto"
+      >← Volver a OT</a
+    >
+  </div>
+
+  <div class="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center">
+    <div class="flex flex-wrap gap-2">
+      @for (opt of filterOptions; track opt.k) {
+        <button
+          type="button"
+          (click)="setFilter(opt.k)"
+          class="rounded-lg px-3 py-1.5 text-xs font-mono border transition-colors"
+          [class.border-primary]="filter() === opt.k"
+          [class.text-primary]="filter() === opt.k"
+          [class.border-border]="filter() !== opt.k"
+          [class.text-muted]="filter() !== opt.k"
+        >
+          {{ opt.l }}
+        </button>
+      }
+    </div>
+    <div class="flex flex-1 min-w-[200px] gap-2">
+      <input
+        type="search"
+        [ngModel]="searchDraft()"
+        (ngModelChange)="searchDraft.set($event)"
+        (keydown.enter)="applySearch()"
+        placeholder="Buscar…"
+        class="flex-1 bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main outline-none focus:border-primary font-mono"
+      />
+      <button
+        type="button"
+        (click)="applySearch()"
+        class="rounded-lg bg-primary text-dark font-mono text-xs font-bold px-4 py-2 shrink-0"
+      >
+        Buscar
+      </button>
+      @if (searchApplied()) {
+        <button
+          type="button"
+          (click)="clearSearch()"
+          class="text-xs font-mono text-muted hover:text-main shrink-0"
+        >
+          Limpiar
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <p class="text-muted text-sm font-mono animate-pulse">Cargando…</p>
+  } @else {
+    <p class="text-[11px] font-mono text-muted">
+      {{ total() }} registro(s)
+      @if (searchApplied()) {
+        · filtro «{{ searchApplied() }}»
+      }
+    </p>
+
+    <div class="bg-surface border border-border rounded-xl overflow-hidden shadow-lg">
+      <table class="min-w-full text-sm">
+        <thead class="border-b border-border bg-dark/40 text-[10px] font-mono uppercase tracking-wider text-muted">
+          <tr>
+            <th class="text-left px-4 py-3">Estado</th>
+            <th class="text-left px-4 py-3">OT</th>
+            <th class="text-left px-4 py-3">Equipo</th>
+            <th class="text-left px-4 py-3">Descripción</th>
+            <th class="text-right px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          @for (item of items(); track item.id) {
+            <tr class="hover:bg-dark/30 transition-colors">
+              <td class="px-4 py-3 whitespace-nowrap">
+                <span
+                  class="text-[10px] font-mono px-2 py-0.5 rounded border"
+                  [ngClass]="
+                    item.status === 'DONE'
+                      ? 'border-success/40 text-success'
+                      : 'border-warning/40 text-warning'
+                  "
+                >
+                  {{ item.status === "DONE" ? "Realizado" : "Pendiente" }}
+                </span>
+              </td>
+              <td class="px-4 py-3 font-mono">
+                @if (item.workOrder?.id) {
+                  <a [routerLink]="['/app/ots', item.workOrder!.id]" class="text-primary hover:underline">{{ item.workOrder!.correlative }}</a>
+                } @else {
+                  —
+                }
+              </td>
+              <td class="px-4 py-3 text-muted font-mono text-xs">
+                {{ item.workOrder?.equipment?.internalId ?? "—" }}
+              </td>
+              <td class="px-4 py-3 text-main">{{ item.description }}</td>
+              <td class="px-4 py-3 text-right">
+                <button
+                  type="button"
+                  (click)="toggle(item)"
+                  class="text-xs font-mono text-primary hover:underline"
+                >
+                  Cambiar estado
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="px-4 py-10 text-center text-muted font-mono text-sm">
+                Sin registros para este filtro.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (total() > pageSize()) {
+      <div class="flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-muted">
+        <span>Página {{ page() }} / {{ totalPages() }}</span>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            (click)="prevPage()"
+            [disabled]="page() <= 1"
+            class="rounded-lg border border-border px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:border-primary hover:text-primary"
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            (click)="nextPage()"
+            [disabled]="page() >= totalPages()"
+            class="rounded-lg border border-border px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:border-primary hover:text-primary"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+    }
+  }
+</div>
