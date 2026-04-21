@@ -1,0 +1,216 @@
+<div class="max-w-6xl mx-auto space-y-8 pb-12">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-main tracking-tight">Seguridad global</h1>
+      <p class="text-sm text-muted mt-1">
+        Alertas, sesiones activas del tenant e intervención administrativa.
+      </p>
+    </div>
+    <button
+      type="button"
+      (click)="reload()"
+      [disabled]="loading()"
+      class="px-4 py-2 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50 shrink-0"
+    >
+      Actualizar todo
+    </button>
+  </div>
+
+  @if (loading() && !stats()) {
+    <p class="text-sm text-muted">Cargando…</p>
+  } @else if (stats()) {
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="rounded-2xl border border-border border-l-4 border-l-primary bg-surface p-5 shadow-sm">
+        <p class="text-xs font-mono uppercase tracking-wider text-muted">Sesiones activas</p>
+        <p class="text-3xl font-bold text-main mt-1">{{ stats()!.onlineUsersCount }}</p>
+        <p class="text-xs text-muted mt-1">
+          Usuarios con sesión abierta · {{ stats()!.activeSessionsCount }} sesión(es) JWT
+        </p>
+      </div>
+      <div class="rounded-2xl border border-border border-l-4 border-l-amber-400/80 bg-surface p-5 shadow-sm">
+        <p class="text-xs font-mono uppercase tracking-wider text-muted">Alertas (24 h)</p>
+        <p class="text-3xl font-bold text-main mt-1">{{ stats()!.suspiciousAlerts24h }}</p>
+        <p class="text-xs text-muted mt-1">Eventos marcados como <span class="text-amber-400/90">isSuspicious</span></p>
+      </div>
+      <div class="rounded-2xl border border-border border-l-4 border-l-red-400/70 bg-surface p-5 shadow-sm">
+        <p class="text-xs font-mono uppercase tracking-wider text-muted">Intentos fallidos (24 h)</p>
+        <p class="text-3xl font-bold text-main mt-1">{{ stats()!.loginFailures24h }}</p>
+        <p class="text-xs text-muted mt-1">Registros <span class="font-mono text-muted/90">LOGIN_FAILURE</span> del tenant</p>
+      </div>
+    </div>
+  }
+
+  <div class="rounded-2xl border border-border bg-surface overflow-hidden">
+    <div
+      class="flex flex-wrap gap-1 border-b border-border bg-dark/30 px-2 pt-2"
+      role="tablist"
+    >
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'alerts'"
+        (click)="setTab('alerts')"
+        class="px-4 py-2.5 rounded-t-lg text-sm font-semibold transition-colors"
+        [class.text-main]="tab() === 'alerts'"
+        [class.bg-surface]="tab() === 'alerts'"
+        [class.text-muted]="tab() !== 'alerts'"
+      >
+        Alertas sospechosas
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'sessions'"
+        (click)="setTab('sessions')"
+        class="px-4 py-2.5 rounded-t-lg text-sm font-semibold transition-colors"
+        [class.text-main]="tab() === 'sessions'"
+        [class.bg-surface]="tab() === 'sessions'"
+        [class.text-muted]="tab() !== 'sessions'"
+      >
+        Sesiones activas (tenant)
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'policies'"
+        (click)="setTab('policies')"
+        class="px-4 py-2.5 rounded-t-lg text-sm font-semibold transition-colors"
+        [class.text-main]="tab() === 'policies'"
+        [class.bg-surface]="tab() === 'policies'"
+        [class.text-muted]="tab() !== 'policies'"
+      >
+        Políticas de seguridad
+      </button>
+    </div>
+
+    <div class="p-5 sm:p-6">
+      @if (tab() === 'alerts') {
+        @if (loading()) {
+          <p class="text-sm text-muted">Cargando alertas…</p>
+        } @else if (suspiciousRows().length === 0) {
+          <p class="text-sm text-muted">No hay registros sospechosos en el alcance actual.</p>
+        } @else {
+          <div class="overflow-x-auto rounded-xl border border-border">
+            <table class="min-w-full text-sm text-left">
+              <thead class="bg-dark/50 text-xs font-mono uppercase tracking-wider text-muted">
+                <tr>
+                  <th class="px-3 py-2">Fecha</th>
+                  <th class="px-3 py-2">Acción</th>
+                  <th class="px-3 py-2">Usuario</th>
+                  <th class="px-3 py-2">Correo intentado</th>
+                  <th class="px-3 py-2">Ubicación</th>
+                  <th class="px-3 py-2">IP</th>
+                  <th class="px-3 py-2">Dispositivo</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                @for (r of suspiciousRows(); track r.id) {
+                  <tr class="hover:bg-primary/5">
+                    <td class="px-3 py-2 text-main whitespace-nowrap">
+                      {{ r.createdAt | date: 'short' }}
+                    </td>
+                    <td class="px-3 py-2 text-muted">{{ actionLabel(r.action) }}</td>
+                    <td class="px-3 py-2 text-muted">
+                      @if (r.user) {
+                        {{ displayUserName(r.user) }}
+                        <span class="block text-xs font-mono opacity-80">{{ r.user.email }}</span>
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs text-muted">{{ r.emailAttempted }}</td>
+                    <td class="px-3 py-2 text-muted">
+                      @if (r.city || r.country) {
+                        {{ r.city }}{{ r.city && r.country ? ', ' : '' }}{{ r.country }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs text-muted">{{ r.ipAddress }}</td>
+                    <td class="px-3 py-2 text-muted max-w-[220px] truncate" [title]="r.userAgent">
+                      {{ r.userAgent }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      @if (tab() === 'sessions') {
+        @if (loading()) {
+          <p class="text-sm text-muted">Cargando sesiones…</p>
+        } @else if (sessionRows().length === 0) {
+          <p class="text-sm text-muted">No hay sesiones activas en este tenant.</p>
+        } @else {
+          <p class="text-xs text-muted mb-4">
+            Revocar una sesión fuerza el cierre de esa sesión JWT en el próximo uso del API.
+          </p>
+          <div class="overflow-x-auto rounded-xl border border-border">
+            <table class="min-w-full text-sm text-left">
+              <thead class="bg-dark/50 text-xs font-mono uppercase tracking-wider text-muted">
+                <tr>
+                  <th class="px-3 py-2">Usuario</th>
+                  <th class="px-3 py-2">Correo</th>
+                  <th class="px-3 py-2">Dispositivo</th>
+                  <th class="px-3 py-2">IP</th>
+                  <th class="px-3 py-2">Última actividad</th>
+                  <th class="px-3 py-2 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                @for (s of sessionRows(); track s.id) {
+                  <tr class="hover:bg-primary/5">
+                    <td class="px-3 py-2 text-main font-medium">
+                      {{ displayUserName(s.user) }}
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs text-muted">{{ s.user.email }}</td>
+                    <td class="px-3 py-2 text-muted max-w-[200px] truncate" [title]="s.deviceLabel">
+                      {{ s.deviceLabel }}
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs text-muted">{{ s.ipAddress }}</td>
+                    <td class="px-3 py-2 text-muted whitespace-nowrap">
+                      {{ s.lastActiveAt | date: 'short' }}
+                    </td>
+                    <td class="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        (click)="revokeTenantSession(s)"
+                        [disabled]="revokingId() === s.id"
+                        class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/15 text-red-400 border border-red-400/40 hover:bg-red-500/25 disabled:opacity-50"
+                      >
+                        @if (revokingId() === s.id) {
+                          …
+                        } @else {
+                          Revocar sesión
+                        }
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      @if (tab() === 'policies') {
+        <div class="max-w-2xl space-y-4 text-sm text-muted">
+          <p class="text-main font-semibold text-base">Próximamente</p>
+          <p>
+            Aquí se podrán definir políticas avanzadas del tenant, por ejemplo:
+          </p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li>Bloqueo automático de direcciones IP tras patrones de abuso.</li>
+            <li>Obligatoriedad de contraseñas complejas y rotación periódica.</li>
+            <li>Límites de sesiones concurrentes por usuario o por rol.</li>
+          </ul>
+          <p class="text-xs border-t border-border pt-4">
+            La política actual de bloqueo por fuerza bruta y la revocación de sesiones siguen activas en backend.
+          </p>
+        </div>
+      }
+    </div>
+  </div>
+</div>

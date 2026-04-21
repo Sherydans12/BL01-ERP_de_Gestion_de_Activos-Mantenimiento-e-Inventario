@@ -1,0 +1,92 @@
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../environments/environment';
+
+export interface LoginActivityRow {
+  id: string;
+  createdAt: string;
+  city: string;
+  country: string;
+  ipAddress: string;
+  userAgent: string;
+  isSuspicious: boolean;
+  deviceLabel: string;
+  unusualLocationOrIp: boolean;
+}
+
+export interface ActiveSessionRow {
+  id: string;
+  jti: string;
+  deviceLabel: string;
+  ipAddress: string;
+  lastActiveAt: string;
+  createdAt: string;
+  isCurrent: boolean;
+}
+
+export interface ProfileMeDto {
+  id: string;
+  email: string;
+  name: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  avatarUrl: string | null;
+  role: string;
+  customRoleId: string | null;
+  customRoleName: string | null;
+}
+
+@Injectable({
+  providedIn: 'root',
+})
+export class ProfileService {
+  private http = inject(HttpClient);
+  private base = `${environment.apiUrl}/users`;
+  private authBase = `${environment.apiUrl}/auth`;
+
+  getMe() {
+    return this.http.get<ProfileMeDto>(`${this.base}/me`);
+  }
+
+  getLoginActivity() {
+    return this.http.get<LoginActivityRow[]>(`${this.base}/me/login-activity`);
+  }
+
+  updateProfile(body: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string | null;
+    removeAvatar?: boolean;
+  }) {
+    return this.http.put<ProfileMeDto>(`${this.base}/profile`, body);
+  }
+
+  uploadAvatar(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<ProfileMeDto>(`${this.base}/profile/avatar`, fd);
+  }
+
+  changePassword(oldPassword: string, newPassword: string) {
+    return this.http.post<{ success: boolean; message: string }>(
+      `${this.base}/change-password`,
+      { oldPassword, newPassword },
+    );
+  }
+
+  getActiveSessions() {
+    return this.http.get<ActiveSessionRow[]>(`${this.authBase}/sessions`);
+  }
+
+  revokeSession(sessionId: string) {
+    return this.http.delete<{ ok: boolean }>(`${this.authBase}/sessions/${sessionId}`);
+  }
+
+  revokeOtherSessions() {
+    return this.http.post<{ revoked: number }>(
+      `${this.authBase}/sessions/revoke-others`,
+      {},
+    );
+  }
+}
