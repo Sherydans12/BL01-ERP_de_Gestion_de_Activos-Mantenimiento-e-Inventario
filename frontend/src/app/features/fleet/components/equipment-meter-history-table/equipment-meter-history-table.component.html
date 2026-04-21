@@ -1,0 +1,53 @@
+@if (rows().length === 0) {
+  <p class="text-sm text-muted py-6 text-center">Sin registros de medidor.</p>
+} @else {
+  <div
+    class="overflow-x-auto rounded-xl border border-border"
+    [class.text-xs]="compact()"
+  >
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr
+          class="bg-dark text-muted font-mono uppercase tracking-wider border-b border-border"
+        >
+          <th class="py-2.5 px-3 font-medium">Fecha</th>
+          <th class="py-2.5 px-3 font-medium text-right">Valor</th>
+          <th class="py-2.5 px-3 font-medium text-right">Δ vs anterior</th>
+          <th class="py-2.5 px-3 font-medium">Fuente</th>
+          <th class="py-2.5 px-3 font-medium">Usuario</th>
+        </tr>
+      </thead>
+      <tbody class="text-sm divide-y divide-border text-main">
+        @for (row of rows(); track row.id) {
+          <tr class="hover:bg-dark/40 transition-colors">
+            <td class="py-2 px-3 text-muted font-mono whitespace-nowrap">
+              {{ row.date | date: "yyyy-MM-dd HH:mm" }}
+            </td>
+            <td class="py-2 px-3 text-right font-mono text-primary">
+              {{ formatNum(row.reading) }}
+            </td>
+            <td
+              class="py-2 px-3 text-right font-mono"
+              [class.text-success]="
+                row.deltaFromPrevious != null && row.deltaFromPrevious >= 0
+              "
+              [class.text-warning]="
+                row.deltaFromPrevious != null && row.deltaFromPrevious < 0
+              "
+            >
+              @if (row.deltaFromPrevious === null) {
+                —
+              } @else {
+                {{ row.deltaFromPrevious >= 0 ? "+" : ""
+                }}{{ formatNum(row.deltaFromPrevious) }}
+                {{ meterUnit() }}
+              }
+            </td>
+            <td class="py-2 px-3">{{ row.sourceLabel }}</td>
+            <td class="py-2 px-3 text-muted">{{ row.userLabel }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

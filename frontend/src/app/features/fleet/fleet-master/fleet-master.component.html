@@ -648,6 +648,31 @@
                       : 'Ej: 1000, 15000'
                   "
                 />
+                <p class="text-[10px] text-muted mt-1">
+                  Usada por defecto en la proyección PM de la OT (si no hay override).
+                </p>
+              </div>
+              <div class="md:col-span-2">
+                <label
+                  for="pmIntervalOverride"
+                  class="block text-sm text-muted mb-1"
+                  >Override intervalo PM (opcional)</label
+                >
+                <input
+                  type="number"
+                  id="pmIntervalOverride"
+                  formControlName="pmIntervalOverride"
+                  min="1"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  [placeholder]="
+                    equipmentForm.get('meterType')?.value === MeterType.HOURS
+                      ? 'Horas — prevalece sobre frecuencia'
+                      : 'Km — prevalece sobre frecuencia'
+                  "
+                />
+                <p class="text-[10px] text-muted mt-1">
+                  Solo si necesitás forzar otro intervalo que el de «frecuencia de mantención».
+                </p>
               </div>
             </div>
 

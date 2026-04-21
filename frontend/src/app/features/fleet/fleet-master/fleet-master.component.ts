@@ -149,6 +149,8 @@ export class FleetMasterComponent implements OnInit {
     driveType: [null],
     ownership: [null],
     maintenanceFrequency: [null],
+    /** Si se informa, prevalece sobre la frecuencia de flota para proyección PM en OT */
+    pmIntervalOverride: [null],
 
     // Último Mantenimiento
     lastMaintenanceDate: [''],
@@ -337,6 +339,7 @@ export class FleetMasterComponent implements OnInit {
       driveType: eq.driveType,
       ownership: eq.ownership,
       maintenanceFrequency: eq.maintenanceFrequency,
+      pmIntervalOverride: eq.pmIntervalOverride ?? null,
 
       lastMaintenanceDate: formatDt(eq.lastMaintenanceDate),
       lastMaintenanceMeter: eq.lastMaintenanceMeter,
@@ -444,6 +447,11 @@ export class FleetMasterComponent implements OnInit {
       maintenanceFrequency: formValue.maintenanceFrequency
         ? Number(formValue.maintenanceFrequency)
         : null,
+      pmIntervalOverride:
+        formValue.pmIntervalOverride !== null &&
+        formValue.pmIntervalOverride !== ''
+          ? Number(formValue.pmIntervalOverride)
+          : null,
       currentMeter: formValue.currentMeter ? Number(formValue.currentMeter) : 0,
       lastMaintenanceMeter: formValue.lastMaintenanceMeter
         ? Number(formValue.lastMaintenanceMeter)

@@ -195,6 +195,12 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
               </svg>
             }
+            @case ('gauge') {
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6a9 9 0 0 1 6.364 2.636l-1.5 1.5A6.75 6.75 0 1 0 18.75 12h1.5a8.25 8.25 0 1 1-2.636-6.364Z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12V7.5m0 0 2.25 2.25M12 7.5 9.75 9.75"/>
+              </svg>
+            }
           }
           {{ tab.label }}
         </button>
@@ -315,6 +321,38 @@
             <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Código Subcontrato</span>
             <span class="text-sm font-mono text-main">{{ eq.subcontract?.code || '—' }}</span>
           </div>
+
+          <div class="md:col-span-3 mt-4 pt-4 border-t border-border">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 class="text-xs uppercase tracking-wider font-semibold text-muted">
+                Historial de medidores (reciente)
+              </h3>
+              <button
+                type="button"
+                (click)="selectTab('medidores')"
+                class="text-xs font-mono text-primary hover:underline"
+              >
+                Ver tabla completa
+              </button>
+            </div>
+            <app-equipment-meter-history-table
+              [rows]="meterHistoryPreviewRows()"
+              [meterUnit]="meterUnit()"
+              [compact]="true"
+            />
+          </div>
+        </div>
+      }
+
+      @if (activeTab() === 'medidores') {
+        <div class="space-y-3">
+          <p class="text-sm text-muted">
+            Lecturas y cambios acumulados (horas o km según tipo de medición del activo).
+          </p>
+          <app-equipment-meter-history-table
+            [rows]="meterHistoryRows()"
+            [meterUnit]="meterUnit()"
+          />
         </div>
       }
 

@@ -1,0 +1,193 @@
+<div class="meter-cap-page text-main">
+  <div class="meter-cap-head">
+    <div>
+      <h1 class="meter-cap-title">Registro rápido de horómetros</h1>
+      <p class="meter-cap-sub text-muted">
+        Captura masiva para fin de turno. El servidor valida cada lectura; los
+        conflictos se resuelven en la tabla.
+      </p>
+    </div>
+    <div class="meter-cap-status">
+      @if (!isOnline()) {
+        <span class="meter-cap-pill meter-cap-pill--offline">Sin conexión</span>
+      }
+      @if (pendingSyncCount() > 0) {
+        <span
+          class="meter-cap-pill"
+          [class.meter-cap-pill--online-pending]="isOnline()"
+          [class.meter-cap-pill--pending-offline]="!isOnline()"
+        >
+          @if (isOnline()) {
+            Listo para subir: {{ pendingSyncCount() }}
+          } @else {
+            Pendientes de sincronización: {{ pendingSyncCount() }}
+          }
+        </span>
+      }
+    </div>
+  </div>
+
+  @if (conflictOnlyMode()) {
+    <div
+      class="meter-cap-banner border border-amber-500/40 bg-amber-500/10 text-amber-200 rounded-lg px-3 py-2 text-sm mb-3"
+      role="status"
+    >
+      <strong class="text-main">Conflicto con el servidor.</strong>
+      Solo se muestran equipos cuya lectura fue rechazada. Compare «En servidor»
+      con su lectura y vuelva a sincronizar, o recargue la lista completa.
+    </div>
+  }
+
+  <div class="meter-cap-toolbar">
+    <div class="meter-cap-filters">
+      @if (showContractPicker()) {
+        <label class="meter-cap-label text-muted">
+          Contrato
+          <select
+            class="meter-cap-select"
+            [disabled]="conflictOnlyMode()"
+            [ngModel]="contractScopeId() ?? ''"
+            (ngModelChange)="onContractScopeChange($event)"
+          >
+            <option value="">Según barra superior</option>
+            @for (c of contracts(); track c.id) {
+              <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+            }
+          </select>
+        </label>
+      }
+      <label class="meter-cap-label text-muted">
+        Categoría (tipo)
+        <select
+          class="meter-cap-select"
+          [disabled]="conflictOnlyMode()"
+          [ngModel]="categoryType()"
+          (ngModelChange)="onCategoryChange($event)"
+        >
+          <option value="">Todas</option>
+          @for (t of equipmentTypesSorted(); track t.id) {
+            <option [value]="t.name">{{ t.name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+    <div class="meter-cap-search-row">
+      <label class="meter-cap-label meter-cap-search flex-1 text-muted">
+        Buscar equipo
+        <input
+          type="search"
+          class="meter-cap-input"
+          placeholder="Código, patente, marca…"
+          [disabled]="conflictOnlyMode()"
+          [value]="searchText()"
+          (input)="onSearchInput($any($event.target).value)"
+        />
+      </label>
+      <button
+        type="button"
+        class="meter-cap-btn meter-cap-btn--ghost"
+        [disabled]="conflictOnlyMode()"
+        title="Roadmap: escanear QR y enfocar la lectura de la fila"
+        (click)="scanQrPlaceholder()"
+      >
+        Escanear QR
+      </button>
+    </div>
+  </div>
+
+  <div class="meter-cap-actions">
+    <button
+      type="button"
+      class="meter-cap-btn meter-cap-btn--secondary"
+      [disabled]="loading()"
+      (click)="reloadFullList()"
+    >
+      {{ conflictOnlyMode() ? 'Mostrar todos los equipos' : 'Actualizar lista' }}
+    </button>
+    <button
+      type="button"
+      class="meter-cap-btn"
+      [class.meter-cap-btn--save-local]="!isOnline() && !syncing()"
+      [class.meter-cap-btn--online-pending]="
+        isOnline() && pendingSyncCount() > 0 && !syncing()
+      "
+      [class.meter-cap-btn--primary]="
+        isOnline() && pendingSyncCount() === 0 && !syncing()
+      "
+      [disabled]="syncing() || loading() || pendingSyncCount() === 0"
+      (click)="syncReadings()"
+    >
+      {{ syncButtonLabel() }}
+    </button>
+  </div>
+
+  <div class="meter-cap-table-wrap bg-surface border border-border rounded-xl overflow-hidden">
+    @if (loading()) {
+      <div class="meter-cap-loading text-muted">Cargando equipos…</div>
+    } @else if (boardRows().length === 0) {
+      <div class="meter-cap-loading text-muted">
+        @if (conflictOnlyMode()) {
+          No quedan conflictos en pantalla. Use «Mostrar todos los equipos».
+        } @else {
+          No hay equipos con los filtros actuales.
+        }
+      </div>
+    } @else {
+      <div class="meter-cap-scroll">
+        <table class="meter-cap-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Nombre</th>
+              <th>Contrato</th>
+              <th>Última lectura</th>
+              <th>Medidor actual (BD)</th>
+              <th>Lectura actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of boardRows(); track row.id) {
+              <tr [class.meter-cap-row--invalid]="rowHasInvalidReading(row)">
+                <td class="font-mono text-muted">{{ row.internalId }}</td>
+                <td>{{ row.displayName || '—' }}</td>
+                <td class="text-muted text-xs">
+                  {{ row.contractCode ?? '—' }}
+                  @if (row.subcontractCode) {
+                    <span> / {{ row.subcontractCode }}</span>
+                  }
+                </td>
+                <td class="text-muted whitespace-nowrap">
+                  @if (row.lastReadingAt) {
+                    {{ row.lastReadingAt | date: 'short' }}
+                  } @else {
+                    —
+                  }
+                </td>
+                <td class="tabular-nums text-muted">{{ row.currentMeter }}</td>
+                <td>
+                  <div class="meter-cap-reading-cell">
+                    <input
+                      [id]="'meter-reading-' + row.id"
+                      type="number"
+                      min="0"
+                      step="1"
+                      class="meter-cap-num"
+                      [ngModel]="readingFor(row.id)"
+                      (ngModelChange)="updateReading(row.id, $event)"
+                      [class.meter-cap-num--invalid]="rowHasInvalidReading(row)"
+                    />
+                    @if (conflictOnlyMode()) {
+                      <span class="meter-cap-server-hint">
+                        En servidor: <strong>{{ row.currentMeter }}</strong>
+                      </span>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

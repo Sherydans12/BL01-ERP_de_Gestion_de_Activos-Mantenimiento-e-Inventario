@@ -17,10 +17,15 @@ import {
   AssetCostRecord,
   Equipment,
   EquipmentAnalytics,
+  EquipmentMeterLog,
   MeterType,
 } from '../../../core/models/types';
+import {
+  EquipmentMeterHistoryTableComponent,
+  EquipmentMeterHistoryRow,
+} from '../components/equipment-meter-history-table/equipment-meter-history-table.component';
 
-type TabId = 'ficha' | 'docs' | 'historial';
+type TabId = 'ficha' | 'docs' | 'historial' | 'medidores';
 
 type TimelineEventType = 'OT' | 'METER_ADJ' | 'PURCHASE';
 
@@ -48,7 +53,7 @@ interface TimelineEvent {
 @Component({
   selector: 'app-equipment-detail-modal',
   standalone: true,
-  imports: [CommonModule, DatePipe],
+  imports: [CommonModule, DatePipe, EquipmentMeterHistoryTableComponent],
   templateUrl: './equipment-detail-modal.component.html',
   styles: [
     `
@@ -83,6 +88,35 @@ export class EquipmentDetailModalComponent {
   assetCostRecords = computed(
     () => this.analytics()?.assetCostRecords ?? [],
   );
+  meterLogs = computed(() => this.analytics()?.meterLogs ?? []);
+
+  meterHistoryRows = computed<EquipmentMeterHistoryRow[]>(() => {
+    const logs = this.meterLogs();
+    if (!logs.length) return [];
+    const asc = [...logs].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+    return asc.map((log, i) => {
+      const nv = Number(log.newValue);
+      const prevReading =
+        i > 0 ? Number(asc[i - 1].newValue) : Number(log.oldValue);
+      const delta = nv - prevReading;
+      return {
+        id: log.id,
+        date: log.date,
+        reading: nv,
+        deltaFromPrevious: Number.isFinite(delta) ? delta : null,
+        sourceLabel: this.formatMeterSourceLabel(log),
+        userLabel: log.user?.name || log.user?.email || '—',
+      };
+    });
+  });
+
+  meterHistoryPreviewRows = computed(() => {
+    const all = this.meterHistoryRows();
+    if (all.length <= 8) return all;
+    return all.slice(-8);
+  });
 
   meterIcon = computed(() =>
     this.equipment()?.meterType === MeterType.KILOMETERS
@@ -297,9 +331,25 @@ export class EquipmentDetailModalComponent {
 
   tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'ficha', label: 'Ficha Técnica', icon: 'cpu' },
+    { id: 'medidores', label: 'Historial de Medidores', icon: 'gauge' },
     { id: 'docs', label: 'Documentación', icon: 'file-text' },
     { id: 'historial', label: 'Historial', icon: 'activity' },
   ];
+
+  private formatMeterSourceLabel(log: EquipmentMeterLog): string {
+    switch (log.source) {
+      case 'OT':
+        return log.workOrderCorrelative
+          ? `OT ${log.workOrderCorrelative}`
+          : 'OT';
+      case 'TELEMETRY':
+        return 'Telemetría';
+      case 'MANUAL':
+        return 'Manual / ajuste';
+      default:
+        return String(log.source);
+    }
+  }
 
   constructor() {
     effect(
