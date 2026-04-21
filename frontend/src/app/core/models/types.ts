@@ -47,6 +47,7 @@ export interface Equipment {
   // Operación
   vin?: string;
   engineNumber?: string;
+  serialNumber?: string;
   year?: number;
   fuelType?: string;
   driveType?: string;
@@ -95,7 +96,7 @@ export interface WorkOrder {
   maintenanceType: string;
   status: string;
   initialMeter: number;
-  finalMeter: number;
+  finalMeter: number | null;
   description: string;
   createdAt: string;
   closedAt?: string;
