@@ -45,6 +45,8 @@ export interface ItemPickerRow {
   partNumber: string;
   name: string;
   description?: string | null;
+  /** Equipos / marcas / modelos compatibles (texto libre). */
+  compatibilityInfo?: string | null;
   unitOfMeasure: UnitOfMeasureRef;
   brand?: string | null;
   categoryId: string;

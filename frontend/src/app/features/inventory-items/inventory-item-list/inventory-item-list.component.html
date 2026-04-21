@@ -48,7 +48,7 @@
           [ngModel]="searchQuery()"
           (ngModelChange)="onSearchChange($event)"
           (keydown.enter)="onSearchEnter($event)"
-          placeholder="N° parte, QR o descripción…"
+          placeholder="N° parte, QR, descripción o compatibilidad…"
           class="w-full bg-surface border border-border text-main rounded-lg px-3 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm"
           autocomplete="off"
         />
@@ -139,7 +139,32 @@
                 {{ item.partNumber }}
               </td>
               <td class="py-4 px-6">
-                <div class="text-main font-semibold">{{ item.name }}</div>
+                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                  <span class="text-main font-semibold min-w-0">{{ item.name }}</span>
+                  @if (compatibilityTooltip(item); as tip) {
+                    <span
+                      class="inline-flex shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-primary"
+                      [title]="tip"
+                      role="img"
+                      aria-label="Información de compatibilidad"
+                    >
+                      <svg
+                        class="h-3.5 w-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                    </span>
+                  }
+                </div>
                 @if (itemDescriptionLabel(item); as itemDesc) {
                   <div class="text-[11px] text-muted uppercase tracking-wide">
                     {{ itemDesc }}

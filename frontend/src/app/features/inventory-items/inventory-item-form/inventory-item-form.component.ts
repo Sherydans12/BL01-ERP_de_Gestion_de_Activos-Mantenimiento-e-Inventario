@@ -81,6 +81,7 @@ export class InventoryItemFormComponent implements OnInit {
       partNumber: ['', Validators.required],
       name: ['', Validators.required],
       description: [''],
+      compatibilityInfo: [''],
       familyId: ['', Validators.required],
       categoryId: ['', Validators.required],
       unitOfMeasureId: ['', Validators.required],
@@ -343,6 +344,9 @@ export class InventoryItemFormComponent implements OnInit {
           partNumber: item.partNumber,
           name: item.name,
           description: item.description,
+          compatibilityInfo:
+            (item as { compatibilityInfo?: string | null }).compatibilityInfo ??
+            '',
           unitOfMeasureId: uomId,
           brand: item.brand,
           isSerialized: item.isSerialized,
@@ -395,6 +399,7 @@ export class InventoryItemFormComponent implements OnInit {
       partNumber: raw.partNumber,
       name: raw.name,
       description: raw.description,
+      compatibilityInfo: String(raw.compatibilityInfo ?? '').trim() || null,
       categoryId: raw.categoryId,
       unitOfMeasureId: raw.unitOfMeasureId,
       brand: raw.brand,

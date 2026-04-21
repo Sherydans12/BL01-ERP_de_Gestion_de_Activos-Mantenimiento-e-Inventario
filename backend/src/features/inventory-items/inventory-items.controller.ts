@@ -16,10 +16,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InventoryItemsService } from './inventory-items.service';
-import type {
-  CreateInventoryItemDto,
-  QuickCreateItemDto,
-} from './inventory-items.service';
+import type { QuickCreateItemDto } from './inventory-items.service';
+import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -173,7 +172,7 @@ export class InventoryItemsController {
   @Put(':id')
   update(
     @Param('id') id: string,
-    @Body() dto: CreateInventoryItemDto,
+    @Body() dto: UpdateInventoryItemDto,
     @Req() req: any,
   ) {
     return this.inventoryItemsService.update(id, dto, req.user);

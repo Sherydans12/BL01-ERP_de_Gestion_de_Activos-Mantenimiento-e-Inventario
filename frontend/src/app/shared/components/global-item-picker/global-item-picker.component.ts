@@ -73,6 +73,9 @@ export class GlobalItemPickerComponent
    */
   @Input() strictFamilyFirst = false;
 
+  /** Familia de catálogo fija (oculta el selector de familia). */
+  @Input() lockedFamilyId: string | null = null;
+
   @Output() closed = new EventEmitter<void>();
   @Output() itemPicked = new EventEmitter<ItemPickerRow>();
 
@@ -131,10 +134,19 @@ export class GlobalItemPickerComponent
     if (this.open) {
       if (!el.open) {
         this.resetFilters();
-        this.itemsService.getCategoryFamilies().subscribe({
-          next: (rows) => this.families.set(rows),
-          error: () => this.families.set([]),
-        });
+        if (this.lockedFamilyId) {
+          this.familyId = this.lockedFamilyId;
+          this.itemsService.getCategoryChildren(this.lockedFamilyId).subscribe({
+            next: (rows) => this.subcategories.set(rows),
+            error: () => this.subcategories.set([]),
+          });
+          this.families.set([]);
+        } else {
+          this.itemsService.getCategoryFamilies().subscribe({
+            next: (rows) => this.families.set(rows),
+            error: () => this.families.set([]),
+          });
+        }
         el.showModal();
         this.fetch();
       }
@@ -149,7 +161,7 @@ export class GlobalItemPickerComponent
 
   private resetFilters() {
     this.searchText = '';
-    this.familyId = '';
+    this.familyId = this.lockedFamilyId ?? '';
     this.subcategoryId = '';
     this.subcategories.set([]);
     this.page.set(1);
@@ -204,6 +216,7 @@ export class GlobalItemPickerComponent
   }
 
   onFamilyChange(id: string) {
+    if (this.lockedFamilyId) return;
     this.familyId = id;
     this.subcategoryId = '';
     this.subcategories.set([]);
@@ -303,6 +316,7 @@ export class GlobalItemPickerComponent
       partNumber: item.partNumber,
       name: item.name,
       description: null,
+      compatibilityInfo: null,
       unitOfMeasure: item.unitOfMeasure,
       brand: null,
       categoryId: item.categoryId ?? '',

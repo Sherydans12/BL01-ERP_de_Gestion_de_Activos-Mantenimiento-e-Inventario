@@ -77,6 +77,11 @@ export class InventoryItemListComponent implements OnInit, OnDestroy {
       this.total() === 0,
   );
 
+  compatibilityTooltip(item: { compatibilityInfo?: string | null }): string | null {
+    const t = String(item?.compatibilityInfo ?? '').trim();
+    return t ? `Compatibilidad: ${t}` : null;
+  }
+
   itemDescriptionLabel(item: {
     description?: string | null;
     name?: string | null;

@@ -10,6 +10,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
+import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import {
   generateInventoryItemLabelPdfBuffer,
   type InventoryLabelQrMode,
@@ -38,22 +40,6 @@ const ITEM_CATALOG_ORDER_BY: Prisma.InventoryItemOrderByWithRelationInput[] = [
   { itemCategory: { name: 'asc' } },
   { name: 'asc' },
 ];
-
-export interface CreateInventoryItemDto {
-  /** SKU interno; vacío en alta → autogenerado (INV-00001). */
-  inventoryCode?: string;
-  partNumber: string;
-  name: string;
-  description?: string;
-  /** Obligatorio: subcategoría (nivel 2). */
-  categoryId: string;
-  unitOfMeasureId: string;
-  brand?: string;
-  isSerialized?: boolean;
-  isInventory?: boolean;
-  isAsset?: boolean;
-  isConsumable?: boolean;
-}
 
 export interface QuickCreateItemDto {
   name: string;
@@ -108,7 +94,7 @@ export class InventoryItemsService {
   }
 
   /**
-   * Resuelve IDs por texto (nombre, parte, descripción, qr_code) con SQL parametrizado
+   * Resuelve IDs por texto (nombre, parte, descripción, qr_code, compatibilidad) con SQL parametrizado
    * para favorecer planes con índices gin_trgm en columnas de texto.
    */
   private async searchInventoryItemIdsPgTrgm(
@@ -129,6 +115,7 @@ export class InventoryItemsService {
           OR i.name ILIKE ${pat} ESCAPE '\\'
           OR i.part_number ILIKE ${pat} ESCAPE '\\'
           OR COALESCE(i.description, '') ILIKE ${pat} ESCAPE '\\'
+          OR COALESCE(i.compatibility_info, '') ILIKE ${pat} ESCAPE '\\'
           OR i.qr_code ILIKE ${pat} ESCAPE '\\'
           OR TRIM(i.part_number) = TRIM(${trimmed})
           OR (i.inventory_code IS NOT NULL AND TRIM(i.inventory_code) = TRIM(${trimmed}))
@@ -465,6 +452,7 @@ export class InventoryItemsService {
           description: row.description,
           unitOfMeasure: row.unitOfMeasure,
           brand: row.brand,
+          compatibilityInfo: row.compatibilityInfo,
           categoryId: row.categoryId,
           itemCategory: row.itemCategory,
           stockQuantity,
@@ -618,6 +606,7 @@ export class InventoryItemsService {
           isInventory: dto.isInventory ?? true,
           isAsset: dto.isAsset ?? false,
           isConsumable: dto.isConsumable ?? true,
+          compatibilityInfo: dto.compatibilityInfo?.trim() || null,
         },
         include: {
           itemCategory: { select: ITEM_CATEGORY_SELECT },
@@ -627,24 +616,48 @@ export class InventoryItemsService {
     });
   }
 
-  async update(id: string, dto: CreateInventoryItemDto, user: any) {
-    await this.findOne(id, user);
+  async update(id: string, dto: UpdateInventoryItemDto, user: any) {
+    const existing = await this.findOne(id, user);
+    const merged: CreateInventoryItemDto = {
+      inventoryCode:
+        dto.inventoryCode !== undefined
+          ? dto.inventoryCode
+          : existing.inventoryCode ?? undefined,
+      partNumber: dto.partNumber ?? existing.partNumber,
+      name: dto.name ?? existing.name,
+      description:
+        dto.description !== undefined
+          ? dto.description
+          : existing.description ?? undefined,
+      categoryId: dto.categoryId ?? existing.categoryId,
+      unitOfMeasureId: dto.unitOfMeasureId ?? existing.unitOfMeasureId,
+      brand:
+        dto.brand !== undefined ? dto.brand : existing.brand ?? undefined,
+      compatibilityInfo:
+        dto.compatibilityInfo !== undefined
+          ? dto.compatibilityInfo
+          : existing.compatibilityInfo ?? undefined,
+      isSerialized: dto.isSerialized ?? existing.isSerialized,
+      isInventory: dto.isInventory ?? existing.isInventory,
+      isAsset: dto.isAsset ?? existing.isAsset,
+      isConsumable: dto.isConsumable ?? existing.isConsumable,
+    };
 
-    if (!dto.categoryId?.trim()) {
+    if (!merged.categoryId?.trim()) {
       throw new BadRequestException(
         'Debe seleccionar familia y subcategoría para el artículo.',
       );
     }
-    if (!dto.unitOfMeasureId?.trim()) {
+    if (!merged.unitOfMeasureId?.trim()) {
       throw new BadRequestException('Debe indicar la unidad de medida.');
     }
-    await this.assertLeafCategory(dto.categoryId, user.tenantId);
-    await this.assertUnitOfMeasure(dto.unitOfMeasureId, user.tenantId);
+    await this.assertLeafCategory(merged.categoryId, user.tenantId);
+    await this.assertUnitOfMeasure(merged.unitOfMeasureId, user.tenantId);
 
     const existingPn = await this.prisma.inventoryItem.findFirst({
       where: {
         tenantId: user.tenantId,
-        partNumber: dto.partNumber,
+        partNumber: merged.partNumber,
         id: { not: id },
       },
     });
@@ -655,7 +668,7 @@ export class InventoryItemsService {
       );
     }
 
-    const skuIn = dto.inventoryCode?.trim();
+    const skuIn = merged.inventoryCode?.trim();
     if (skuIn) {
       const existingSku = await this.prisma.inventoryItem.findFirst({
         where: {
@@ -677,16 +690,17 @@ export class InventoryItemsService {
         ...(dto.inventoryCode !== undefined
           ? { inventoryCode: skuIn || null }
           : {}),
-        partNumber: dto.partNumber,
-        name: dto.name,
-        description: dto.description,
-        categoryId: dto.categoryId,
-        unitOfMeasureId: dto.unitOfMeasureId,
-        brand: dto.brand,
-        isSerialized: dto.isSerialized ?? false,
-        isInventory: dto.isInventory ?? true,
-        isAsset: dto.isAsset ?? false,
-        isConsumable: dto.isConsumable ?? true,
+        partNumber: merged.partNumber,
+        name: merged.name,
+        description: merged.description,
+        categoryId: merged.categoryId,
+        unitOfMeasureId: merged.unitOfMeasureId,
+        brand: merged.brand,
+        isSerialized: merged.isSerialized ?? false,
+        isInventory: merged.isInventory ?? true,
+        isAsset: merged.isAsset ?? false,
+        isConsumable: merged.isConsumable ?? true,
+        compatibilityInfo: merged.compatibilityInfo?.trim() || null,
       },
       include: {
         itemCategory: { select: ITEM_CATEGORY_SELECT },
@@ -1082,6 +1096,7 @@ export class InventoryItemsService {
         categoryId: true,
         itemCategory: { select: ITEM_CATEGORY_SELECT },
         brand: true,
+        compatibilityInfo: true,
         isInventory: true,
         isAsset: true,
         isConsumable: true,

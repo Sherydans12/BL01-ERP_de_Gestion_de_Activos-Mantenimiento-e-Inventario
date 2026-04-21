@@ -14,10 +14,44 @@ export interface CreateItemCategoryDto {
 
 @Injectable()
 export class ItemCategoriesService {
+  /** Nombre canónico de la familia de catálogo para sistemas intervenidos en OT (item picker). */
+  static readonly SYSTEMS_FAMILY_NAME = 'Sistemas';
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Garantiza una familia raíz «Sistemas» por tenant (picker OT / maestro de categorías).
+   * Idempotente.
+   */
+  async ensureSystemsFamilyForTenant(tenantId: string): Promise<void> {
+    const existing = await this.prisma.itemCategory.findFirst({
+      where: {
+        tenantId,
+        parentCategoryId: null,
+        name: {
+          equals: ItemCategoriesService.SYSTEMS_FAMILY_NAME,
+          mode: 'insensitive',
+        },
+      },
+    });
+    if (existing) return;
+
+    await this.prisma.itemCategory.create({
+      data: {
+        tenantId,
+        name: ItemCategoriesService.SYSTEMS_FAMILY_NAME,
+        description:
+          'Familia para sistemas intervenidos en órdenes de trabajo (generada por el sistema si no existía).',
+        parentCategoryId: null,
+        isGlobal: true,
+      },
+    });
+  }
 
   /** Familias (nivel 1): sin padre. */
   async findFamilies(user: any) {
+    await this.ensureSystemsFamilyForTenant(user.tenantId as string);
+
     return this.prisma.itemCategory.findMany({
       where: { tenantId: user.tenantId, parentCategoryId: null },
       orderBy: { name: 'asc' },

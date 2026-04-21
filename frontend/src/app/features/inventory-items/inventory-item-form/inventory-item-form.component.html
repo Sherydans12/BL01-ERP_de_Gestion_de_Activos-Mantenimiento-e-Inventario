@@ -424,6 +424,26 @@
       ></textarea>
     </div>
 
+    <div class="border-t border-border pt-6 space-y-2">
+      <h3
+        class="text-[10px] font-mono font-bold uppercase tracking-wider text-primary"
+      >
+        Compatibilidad de Equipo
+      </h3>
+      <label class="block text-sm font-medium text-muted mb-1"
+        >Compatibilidad (Equipo/Marca/Modelo)</label
+      >
+      <textarea
+        formControlName="compatibilityInfo"
+        rows="3"
+        class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary resize-y min-h-[5rem] font-mono text-sm"
+        placeholder="Ej: Caterpillar 320 - Motor C7 / Komatsu PC200"
+      ></textarea>
+      <p class="text-[11px] text-muted mt-1 font-mono">
+        Opcional. Se usa en la búsqueda del catálogo y en el selector de repuestos de la OT.
+      </p>
+    </div>
+
     @if (mode === "EDITING" && itemId) {
       <div class="border-t border-border pt-6 space-y-3">
         <div>

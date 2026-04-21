@@ -59,27 +59,29 @@
             [ngModel]="searchText"
             (ngModelChange)="onSearchInput($event)"
             (keydown)="onSearchKeydown($event)"
-            placeholder="Cód. inventario, Nº de parte, QR o nombre…"
+            placeholder="Cód. inventario, Nº de parte, QR, nombre o compatibilidad…"
             class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main outline-none focus:border-primary/60"
             autocomplete="off"
           />
         </div>
-        <div class="w-full shrink-0 sm:w-44">
-          <label
-            class="mb-1 block font-mono text-[10px] uppercase text-muted"
-            >Familia (filtro principal)</label
-          >
-          <select
-            [ngModel]="familyId"
-            (ngModelChange)="onFamilyChange($event)"
-            class="w-full rounded-lg border border-border bg-dark px-2 py-2 text-sm text-main outline-none focus:border-primary/60"
-          >
-            <option value="">Todas</option>
-            @for (f of families(); track f.id) {
-              <option [value]="f.id">{{ f.name }}</option>
-            }
-          </select>
-        </div>
+        @if (!lockedFamilyId) {
+          <div class="w-full shrink-0 sm:w-44">
+            <label
+              class="mb-1 block font-mono text-[10px] uppercase text-muted"
+              >Familia (filtro principal)</label
+            >
+            <select
+              [ngModel]="familyId"
+              (ngModelChange)="onFamilyChange($event)"
+              class="w-full rounded-lg border border-border bg-dark px-2 py-2 text-sm text-main outline-none focus:border-primary/60"
+            >
+              <option value="">Todas</option>
+              @for (f of families(); track f.id) {
+                <option [value]="f.id">{{ f.name }}</option>
+              }
+            </select>
+          </div>
+        }
         <div class="w-full shrink-0 sm:w-44">
           <label
             class="mb-1 block font-mono text-[10px] uppercase text-muted"
@@ -194,6 +196,17 @@
                       class="mt-0.5 max-w-md line-clamp-2 text-[11px] text-muted"
                     >
                       {{ row.description }}
+                    </div>
+                  }
+                  @if (row.compatibilityInfo?.trim()) {
+                    <div
+                      class="mt-1 max-w-md rounded border border-primary/30 bg-primary/5 px-2 py-1 font-mono text-[10px] leading-snug text-primary"
+                      [title]="'Compatibilidad: ' + row.compatibilityInfo"
+                    >
+                      <span class="text-muted uppercase tracking-wide"
+                        >Compat.</span
+                      >
+                      {{ row.compatibilityInfo }}
                     </div>
                   }
                 </td>

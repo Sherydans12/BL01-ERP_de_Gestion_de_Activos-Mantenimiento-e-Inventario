@@ -37,16 +37,14 @@ export interface CreateWorkOrderExcelPayload {
   equipmentId: string;
   warehouseId?: string;
 
-  maintenanceOrderNumber?: string;
-
   detentionStartedAt?: string;
   detentionEndedAt?: string;
   detentionInitialMeter?: number;
   detentionFinalMeter?: number;
 
-  mechanicAttentionDate?: string;
-  mechanicAttentionFromTime?: string;
-  mechanicAttentionToTime?: string;
+  mechanicAttentionStartedAt?: string;
+  mechanicAttentionEndedAt?: string;
+  personnelQuantity?: number;
 
   clientAttributedStart?: string;
   clientAttributedEnd?: string;
@@ -56,12 +54,12 @@ export interface CreateWorkOrderExcelPayload {
   classificationTags?: OtClassificationTag[];
 
   workLocation?: EquipmentWorkLocation;
-  metricHm?: number | null;
-  metricHh?: number | null;
   workShift?: WorkShift;
 
+  /** IDs de ítems de catálogo (familia Sistemas / hijos). */
+  systems?: string[];
+
   initialRequestDescription?: string;
-  intervenedSystemsJson?: Record<string, unknown>;
   symptomsText?: string;
   causeText?: string;
   workPerformedDescription?: string;
