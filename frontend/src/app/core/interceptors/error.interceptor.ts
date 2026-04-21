@@ -12,13 +12,22 @@ function isPublicAuthRequest(url: string): boolean {
   );
 }
 
+/** 401 en cierre de auditoría no debe disparar forceLogout (sesión ya se está cerrando). */
+function isLogoutAuditRequest(url: string): boolean {
+  return /\/auth\/audit\/logout/.test(url);
+}
+
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notificationService = inject(NotificationService);
   const authService = inject(AuthService);
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (error.status === 401 && !isPublicAuthRequest(req.url)) {
+      if (
+        error.status === 401 &&
+        !isPublicAuthRequest(req.url) &&
+        !isLogoutAuditRequest(req.url)
+      ) {
         authService.forceLogout();
         return throwError(() => error);
       }

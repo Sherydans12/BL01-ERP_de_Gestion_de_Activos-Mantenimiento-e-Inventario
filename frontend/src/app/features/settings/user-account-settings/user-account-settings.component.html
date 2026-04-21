@@ -1,0 +1,282 @@
+<div class="max-w-3xl mx-auto space-y-8 pb-12">
+  <div>
+    <h1 class="text-2xl font-bold text-main tracking-tight">Mi cuenta</h1>
+    <p class="text-sm text-muted mt-1">
+      Datos personales y seguridad. El correo y el rol solo los puede cambiar un administrador.
+    </p>
+  </div>
+
+  @if (loading()) {
+    <p class="text-sm text-muted">Cargando perfil…</p>
+  } @else if (me()) {
+    <section
+      #datosAnchor
+      id="datos"
+      class="rounded-2xl border border-border bg-surface p-6 space-y-6 scroll-mt-6"
+    >
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 class="text-lg font-semibold text-main">Información personal</h2>
+          <p class="text-xs text-muted mt-0.5">Nombre, teléfono y foto visible en la barra lateral.</p>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row sm:items-center gap-6">
+        <app-avatar
+          [firstName]="me()!.firstName"
+          [lastName]="me()!.lastName"
+          [displayName]="me()!.name"
+          [avatarUrl]="me()!.avatarUrl"
+          [colorSeed]="me()!.email"
+          sizeClass="h-20 w-20"
+          class="shrink-0"
+        />
+        <div class="flex flex-wrap items-center gap-2">
+          <label
+            class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-border text-sm font-medium text-main hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-colors"
+          >
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="sr-only"
+              (change)="onPickAvatar($event)"
+              [disabled]="uploadingAvatar()"
+            />
+            @if (uploadingAvatar()) {
+              Subiendo…
+            } @else {
+              Subir foto
+            }
+          </label>
+          @if (me()!.avatarUrl) {
+            <button
+              type="button"
+              (click)="removeAvatar()"
+              [disabled]="savingPersonal()"
+              class="px-4 py-2 rounded-lg border border-border text-sm text-muted hover:text-red-400 hover:border-red-400/40 transition-colors disabled:opacity-50"
+            >
+              Quitar foto
+            </button>
+          }
+        </div>
+      </div>
+
+      <form [formGroup]="personalForm" (ngSubmit)="savePersonal()" class="space-y-4">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Nombre</label>
+            <input type="text" formControlName="firstName" class="bg-dark" maxlength="100" />
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Apellido</label>
+            <input type="text" formControlName="lastName" class="bg-dark" maxlength="100" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Teléfono</label>
+          <input type="text" formControlName="phone" class="bg-dark" maxlength="20" />
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Correo (solo lectura)</label>
+            <input
+              type="email"
+              [value]="me()!.email"
+              readonly
+              class="bg-dark opacity-70 cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Rol (solo lectura)</label>
+            <input type="text" [value]="roleLabel()" readonly class="bg-dark opacity-70 cursor-not-allowed" />
+          </div>
+        </div>
+        <div class="pt-2">
+          <button
+            type="submit"
+            [disabled]="personalForm.invalid || savingPersonal()"
+            class="px-5 py-2.5 rounded-lg bg-primary text-[#0a0f14] text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+          >
+            @if (savingPersonal()) {
+              Guardando…
+            } @else {
+              Guardar datos
+            }
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section
+      #seguridadAnchor
+      id="seguridad"
+      class="rounded-2xl border border-border bg-surface p-6 space-y-6 scroll-mt-6"
+    >
+      <div>
+        <h2 class="text-lg font-semibold text-main">Seguridad</h2>
+        <p class="text-xs text-muted mt-0.5">Actividad de accesos y contraseña.</p>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-main">Actividad de cuenta</h3>
+        <p class="text-xs text-muted">Últimos 5 inicios de sesión exitosos. La advertencia indica IP o ubicación distinta al acceso anterior.</p>
+        @if (loginActivityLoading()) {
+          <p class="text-xs text-muted">Cargando actividad…</p>
+        } @else if (loginActivity().length === 0) {
+          <p class="text-xs text-muted">Aún no hay registros de inicio de sesión.</p>
+        } @else {
+          <div class="overflow-x-auto rounded-xl border border-border">
+            <table class="min-w-full text-sm text-left">
+              <thead class="bg-dark/50 text-xs font-mono uppercase tracking-wider text-muted">
+                <tr>
+                  <th class="px-3 py-2">Fecha</th>
+                  <th class="px-3 py-2">Ubicación</th>
+                  <th class="px-3 py-2">Dispositivo</th>
+                  <th class="px-3 py-2">IP</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                @for (row of loginActivity(); track row.id) {
+                  <tr class="hover:bg-primary/5">
+                    <td class="px-3 py-2 text-main whitespace-nowrap">
+                      <span class="inline-flex items-center gap-1.5">
+                        @if (row.isSuspicious || row.unusualLocationOrIp) {
+                          <span class="text-amber-400 shrink-0" title="Ubicación o IP distinta a la habitual, o intentos sospechosos">⚠️</span>
+                        }
+                        {{ row.createdAt | date: 'short' }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2 text-muted">
+                      @if (row.city || row.country) {
+                        {{ row.city }}{{ row.city && row.country ? ', ' : '' }}{{ row.country }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                    <td class="px-3 py-2 text-muted max-w-[200px] truncate" [title]="row.userAgent">{{ row.deviceLabel }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-muted">{{ row.ipAddress || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+      <div class="space-y-3 border-t border-border pt-6">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-semibold text-main">Sesiones activas</h3>
+            <p class="text-xs text-muted mt-0.5">
+              Dispositivos con sesión iniciada. Puede cerrar sesiones que no reconozca o cerrar todas las demás si sospecha filtración de credenciales.
+            </p>
+          </div>
+          <button
+            type="button"
+            (click)="revokeAllOtherSessions()"
+            [disabled]="revokingOthers() || sessionsLoading()"
+            class="shrink-0 px-4 py-2 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50 transition-colors"
+          >
+            @if (revokingOthers()) {
+              Cerrando…
+            } @else {
+              Cerrar todas las demás sesiones
+            }
+          </button>
+        </div>
+        @if (sessionsLoading()) {
+          <p class="text-xs text-muted">Cargando sesiones…</p>
+        } @else if (sessions().length === 0) {
+          <p class="text-xs text-muted">No hay sesiones registradas (o el token actual no lleva identificador de sesión).</p>
+        } @else {
+          <ul class="space-y-3">
+            @for (s of sessions(); track s.id) {
+              <li
+                class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-dark/30 px-4 py-3"
+              >
+                <div class="min-w-0 space-y-1">
+                  <p class="text-sm font-medium text-main truncate">
+                    {{ s.deviceLabel }}
+                    @if (s.isCurrent) {
+                      <span class="ml-2 text-xs font-mono text-primary">(este dispositivo)</span>
+                    }
+                  </p>
+                  <p class="text-xs text-muted font-mono">{{ s.ipAddress || '—' }}</p>
+                  <p class="text-xs text-muted">
+                    Última actividad: {{ s.lastActiveAt | date: 'short' }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  (click)="revokeSessionRow(s)"
+                  [disabled]="revokingSessionId() === s.id"
+                  class="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold bg-red-500/15 text-red-400 border border-red-400/40 hover:bg-red-500/25 disabled:opacity-50 transition-colors"
+                >
+                  @if (revokingSessionId() === s.id) {
+                    …
+                  } @else {
+                    Cerrar sesión en este dispositivo
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+
+      <form [formGroup]="passwordForm" (ngSubmit)="savePassword()" class="space-y-4 max-w-md">
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Contraseña actual</label>
+          <input type="password" formControlName="oldPassword" autocomplete="current-password" class="bg-dark" />
+        </div>
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Nueva contraseña</label>
+          <input type="password" formControlName="newPassword" autocomplete="new-password" class="bg-dark" />
+        </div>
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-muted mb-1.5">Confirmar nueva</label>
+          <input type="password" formControlName="confirmPassword" autocomplete="new-password" class="bg-dark" />
+        </div>
+
+        <div class="rounded-lg border border-border/80 bg-dark/40 p-4 space-y-1.5 text-xs">
+          <p class="font-semibold text-main mb-2">Requisitos</p>
+          <p [class.text-green-400]="passwordHasMinLen()" [class.text-muted]="!passwordHasMinLen()">
+            Al menos 8 caracteres
+          </p>
+          <p [class.text-green-400]="passwordHasLetter()" [class.text-muted]="!passwordHasLetter()">
+            Al menos una letra
+          </p>
+          <p [class.text-green-400]="passwordHasNumber()" [class.text-muted]="!passwordHasNumber()">
+            Al menos un número
+          </p>
+          <p class="text-muted pt-1 border-t border-border/60 mt-2">Recomendado (más fuerte):</p>
+          <p [class.text-primary]="passwordHasUpper()" [class.text-muted]="!passwordHasUpper()">
+            Mayúscula
+          </p>
+          <p [class.text-primary]="passwordHasSymbol()" [class.text-muted]="!passwordHasSymbol()">
+            Símbolo
+          </p>
+        </div>
+
+        @if (passwordForm.hasError('passwordMismatch') && passwordForm.touched) {
+          <p class="text-sm text-red-400">Las contraseñas nuevas no coinciden.</p>
+        }
+        @if (passwordForm.get('newPassword')?.hasError('passwordPolicy') && passwordForm.get('newPassword')?.dirty) {
+          <p class="text-sm text-amber-400/90">Cumple letra + número (además de 8 caracteres).</p>
+        }
+
+        <button
+          type="submit"
+          [disabled]="passwordForm.invalid || savingPassword()"
+          class="px-5 py-2.5 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50 transition-colors"
+        >
+          @if (savingPassword()) {
+            Actualizando…
+          } @else {
+            Cambiar contraseña
+          }
+        </button>
+      </form>
+    </section>
+  }
+</div>

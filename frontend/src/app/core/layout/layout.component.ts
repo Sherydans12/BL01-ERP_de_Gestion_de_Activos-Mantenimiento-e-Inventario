@@ -7,6 +7,8 @@ import {
   computed,
   effect,
   HostListener,
+  viewChild,
+  ElementRef,
 } from '@angular/core';
 import { isPlatformBrowser, NgClass } from '@angular/common';
 import {
@@ -31,11 +33,18 @@ import {
   InventoryAnalyticsService,
 } from '../services/inventory-analytics/inventory-analytics.service';
 import { QuickViewService } from '../../shared/components/quick-view/quick-view.service';
+import { AvatarComponent } from '../../shared/components/avatar/avatar.component';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgClass],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    NgClass,
+    AvatarComponent,
+  ],
   templateUrl: './layout.component.html',
 })
 export class LayoutComponent implements OnInit {
@@ -66,6 +75,10 @@ export class LayoutComponent implements OnInit {
   commandResults = signal<GlobalSearchResult[]>([]);
   commandLoading = signal(false);
   private commandSearchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  /** Menú contextual del usuario (esquina inferior del sidebar). */
+  profileMenuOpen = signal(false);
+  profileMenuRoot = viewChild<ElementRef<HTMLElement>>('profileMenuRoot');
 
   filteredNav = computed(() => {
     const user = this.currentUser();
@@ -114,7 +127,26 @@ export class LayoutComponent implements OnInit {
   });
 
   logout() {
+    this.profileMenuOpen.set(false);
     this.authService.logout();
+  }
+
+  toggleProfileMenu(ev: Event) {
+    ev.stopPropagation();
+    this.profileMenuOpen.update((v) => !v);
+  }
+
+  closeProfileMenu() {
+    this.profileMenuOpen.set(false);
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(ev: MouseEvent) {
+    if (!this.profileMenuOpen()) return;
+    const root = this.profileMenuRoot()?.nativeElement;
+    if (root && !root.contains(ev.target as Node)) {
+      this.profileMenuOpen.set(false);
+    }
   }
 
   /** Debug: reintenta registrar la suscripción push (mismo flujo que el auto-registro). */

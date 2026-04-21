@@ -3,13 +3,17 @@ import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { environment } from '../../../../environments/environment';
-import { tap } from 'rxjs/operators';
+import { tap, finalize } from 'rxjs/operators';
 import { NotificationService } from '../notification/notification.service';
 
 export interface UserPayload {
   id: string;
   email: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
   role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
   allowedContracts: string[];
   /** ID del rol custom asignado al usuario (si tiene uno). */
@@ -115,6 +119,12 @@ export class AuthService {
               this.notification.error(
                 'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
               );
+            } else if (err.status === 423) {
+              const msg =
+                typeof err.error?.message === 'string'
+                  ? err.error.message
+                  : 'Cuenta bloqueada temporalmente por intentos fallidos.';
+              this.notification.error(msg);
             } else if (err.status === 403) {
               this.notification.error(
                 'Tu cuenta está desactivada. Contacta al administrador.',
@@ -175,6 +185,21 @@ export class AuthService {
   }
 
   logout() {
+    if (isPlatformBrowser(this.platformId)) {
+      const token = localStorage.getItem('tpm_token');
+      if (token && !isAccessTokenExpired(token)) {
+        this.http
+          .post<{ ok: boolean }>(`${this.apiUrl}/audit/logout`, {})
+          .pipe(
+            finalize(() => {
+              this.clearStoredSession();
+              this.router.navigate(['/auth/login']);
+            }),
+          )
+          .subscribe();
+        return;
+      }
+    }
     this.clearStoredSession();
     this.router.navigate(['/auth/login']);
   }
@@ -339,5 +364,35 @@ export class AuthService {
     this.router.navigate(['/auth/login']).finally(() => {
       this.forceLogoutInProgress = false;
     });
+  }
+
+  /**
+   * Fusiona campos de perfil en la sesión local (signal + localStorage) para
+   * que nombre/avatar sigan visibles ante micro-cortes de red.
+   */
+  applyProfilePatch(
+    patch: Partial<
+      Pick<
+        UserPayload,
+        | 'name'
+        | 'firstName'
+        | 'lastName'
+        | 'phone'
+        | 'avatarUrl'
+        | 'customRoleId'
+        | 'customRoleName'
+      >
+    >,
+  ): void {
+    const cur = this.currentUser();
+    if (!cur) return;
+    const merged: UserPayload = {
+      ...cur,
+      ...patch,
+    };
+    this.currentUser.set(merged);
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.setItem('tpm_user', JSON.stringify(merged));
+    }
   }
 }
