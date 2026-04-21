@@ -56,6 +56,40 @@ export class EquipmentsController {
     });
   }
 
+  /** Listado compacto para captura masiva de horómetro (debe ir antes de `@Get(':id')`). */
+  @Get('meter-capture-board')
+  getMeterCaptureBoard(
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+    @Query('type') type?: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.findMeterCaptureBoard(req.user, activeContract, {
+      type,
+      search,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /** Actualización masiva de lecturas en una sola transacción de base de datos. */
+  @Post('meter-readings/bulk-sync')
+  bulkSyncMeterReadings(
+    @Req() req: any,
+    @Body() body: { items: { equipmentId: string; newReading: number }[] },
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ) {
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.bulkSyncMeterReadings(
+      req.user,
+      activeContract,
+      body,
+    );
+  }
+
   @Get(':id/analytics')
   getAnalytics(
     @Param('id') id: string,
@@ -65,6 +99,17 @@ export class EquipmentsController {
   ) {
     const activeContract = contractId || siteId;
     return this.equipmentsService.getAnalytics(req.user, id, activeContract);
+  }
+
+  @Get(':id/meter-snapshot')
+  getMeterSnapshot(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ) {
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.getMeterSnapshot(req.user, id, activeContract);
   }
 
   @Get(':id')

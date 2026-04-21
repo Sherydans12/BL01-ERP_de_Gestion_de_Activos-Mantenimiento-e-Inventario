@@ -3,7 +3,9 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { MeterLogSource } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 
 @Injectable()
 export class MeterAdjustmentsService {
@@ -34,7 +36,6 @@ export class MeterAdjustmentsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // Crear el registro de ajuste
       const adjustment = await tx.meterAdjustment.create({
         data: {
           equipmentId: dto.equipmentId,
@@ -45,10 +46,14 @@ export class MeterAdjustmentsService {
         },
       });
 
-      // Actualizar el medidor del equipo al nuevo valor
-      await tx.equipment.update({
-        where: { id: dto.equipmentId },
-        data: { currentMeter: dto.newValue },
+      await applyCurrentMeterChange(tx, {
+        tenantId,
+        equipmentId: dto.equipmentId,
+        oldMeter: equipment.currentMeter,
+        newMeter: dto.newValue,
+        source: MeterLogSource.MANUAL,
+        sourceId: adjustment.id,
+        userId,
       });
 
       return adjustment;

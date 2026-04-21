@@ -5,24 +5,59 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import {
+  Prisma,
+  OtCategory,
+  OtType,
+  MaintenanceType,
+  AvailabilityImpact,
+  EquipmentWorkLocation,
+  WorkShift,
+  FluidCompartment,
+  BacklogStatus,
+  MeterLogSource,
+} from '@prisma/client';
+import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import Decimal from 'decimal.js';
+
+function deriveCategoryFromTags(tags: string[] | undefined): OtCategory {
+  const t = tags ?? [];
+  if (t.includes('PROGRAMADA')) return 'PROGRAMADA';
+  if (t.includes('NO_PROGRAMADA')) return 'NO_PROGRAMADA_CORRECTIVA';
+  return 'NO_PROGRAMADA_REACTIVA';
+}
+
+function deriveOtTypeFromTags(tags: string[] | undefined): OtType {
+  if ((tags ?? []).includes('OT_ABIERTA_CONTINUIDAD')) return 'CONTINUIDAD';
+  return 'NUEVA';
+}
+
+function deriveMaintenanceTypeFromTags(
+  tags: string[] | undefined,
+): MaintenanceType {
+  return (tags ?? []).includes('ACCIDENTE_INCIDENTE')
+    ? 'CORRECTIVO'
+    : 'PREVENTIVO';
+}
 
 interface CreateWorkOrderDto {
   equipmentId: string;
   warehouseId?: string;
-  type: 'NUEVA' | 'CONTINUIDAD';
-  category:
+  /** Legacy / derivado desde classificationTags si no viene */
+  type?: 'NUEVA' | 'CONTINUIDAD';
+  category?:
     | 'PROGRAMADA'
     | 'NO_PROGRAMADA_CORRECTIVA'
     | 'NO_PROGRAMADA_REACTIVA';
-  maintenanceType: 'PREVENTIVO' | 'CORRECTIVO';
-  initialMeter: number;
-  finalMeter: number;
-  description: string;
+  maintenanceType?: 'PREVENTIVO' | 'CORRECTIVO';
+  /** Si no viene, usa detención o lanza validación */
+  initialMeter?: number;
+  finalMeter?: number;
+  /** Texto único legacy; también puede armarse desde workPerformedDescription */
+  description?: string;
   responsible?: string;
-  systems: string[];
-  fluids: { fluidId: string; liters: number; action: 'RELLENO' | 'CAMBIO' }[];
+  systems?: string[];
+  fluids?: { fluidId: string; liters: number; action: 'RELLENO' | 'CAMBIO' }[];
   tasks?: {
     description: string;
     isCompleted: boolean;
@@ -36,6 +71,107 @@ interface CreateWorkOrderDto {
     inventoryItemId?: string;
   }[];
   fluidSamples?: { systemId: string; bottleCode: string }[];
+
+  maintenanceOrderNumber?: string;
+  detentionStartedAt?: string;
+  detentionEndedAt?: string;
+  detentionInitialMeter?: number;
+  detentionFinalMeter?: number;
+  mechanicAttentionDate?: string;
+  mechanicAttentionFromTime?: string;
+  mechanicAttentionToTime?: string;
+  clientAttributedStart?: string;
+  clientAttributedEnd?: string;
+  clientAttributedReason?: string;
+  affectsAvailability?: AvailabilityImpact;
+  classificationTags?: string[];
+  workLocation?: EquipmentWorkLocation;
+  metricHm?: number | string;
+  metricHh?: number | string;
+  workShift?: WorkShift;
+  initialRequestDescription?: string;
+  intervenedSystemsJson?: Prisma.InputJsonValue;
+  symptomsText?: string;
+  causeText?: string;
+  workPerformedDescription?: string;
+  techniciansNames?: string;
+  responsibleMechanicName?: string;
+  responsibleMechanicSignature?: string;
+  shiftSupervisorName?: string;
+  shiftSupervisorSignature?: string;
+  pmCycleNumber?: number;
+  fluidCompartments?: {
+    compartment: FluidCompartment;
+    fluidType: string;
+    liters: number | string;
+    action: 'RELLENO' | 'CAMBIO';
+    inventoryItemId?: string | null;
+  }[];
+}
+
+export interface UpdateWorkOrderDto {
+  warehouseId?: string | null;
+  maintenanceOrderNumber?: string | null;
+  detentionStartedAt?: string | null;
+  detentionEndedAt?: string | null;
+  detentionInitialMeter?: number | null;
+  detentionFinalMeter?: number | null;
+  mechanicAttentionDate?: string | null;
+  mechanicAttentionFromTime?: string | null;
+  mechanicAttentionToTime?: string | null;
+  clientAttributedStart?: string | null;
+  clientAttributedEnd?: string | null;
+  clientAttributedReason?: string | null;
+  affectsAvailability?: AvailabilityImpact | null;
+  classificationTags?: string[];
+  workLocation?: EquipmentWorkLocation | null;
+  metricHm?: number | string | null;
+  metricHh?: number | string | null;
+  workShift?: WorkShift | null;
+  initialRequestDescription?: string | null;
+  intervenedSystemsJson?: Prisma.InputJsonValue | null;
+  symptomsText?: string | null;
+  causeText?: string | null;
+  workPerformedDescription?: string | null;
+  /** Legacy `work_orders.description` (sincronizado con workPerformedDescription si ambos vienen). */
+  description?: string | null;
+  techniciansNames?: string | null;
+  responsibleMechanicName?: string | null;
+  responsibleMechanicSignature?: string | null;
+  shiftSupervisorName?: string | null;
+  shiftSupervisorSignature?: string | null;
+  pmCycleNumber?: number | null;
+  responsible?: string | null;
+  initialMeter?: number | null;
+  finalMeter?: number | null;
+  maintenanceType?: 'PREVENTIVO' | 'CORRECTIVO';
+  category?:
+    | 'PROGRAMADA'
+    | 'NO_PROGRAMADA_CORRECTIVA'
+    | 'NO_PROGRAMADA_REACTIVA';
+  type?: 'NUEVA' | 'CONTINUIDAD';
+  systems?: string[];
+  fluids?: { fluidId: string; liters: number; action: 'RELLENO' | 'CAMBIO' }[];
+  tasks?: {
+    description: string;
+    isCompleted: boolean;
+    observation?: string;
+    measurement?: number;
+  }[];
+  parts?: {
+    partNumber: string;
+    description: string;
+    quantity: number;
+    inventoryItemId?: string;
+  }[];
+  fluidSamples?: { systemId: string; bottleCode: string }[];
+  fluidCompartments?: {
+    compartment: FluidCompartment;
+    fluidType: string;
+    liters: number | string;
+    action: 'RELLENO' | 'CAMBIO';
+    inventoryItemId?: string | null;
+  }[];
 }
 
 @Injectable()
@@ -43,6 +179,46 @@ export class WorkOrdersService {
   private readonly logger = new Logger(WorkOrdersService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Filtro de equipo por contrato activo / permisos de usuario (OT y backlog). */
+  private equipmentAccessWhere(
+    user: any,
+    activeContract?: string,
+  ): Prisma.EquipmentWhereInput | undefined {
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (activeContract && activeContract !== 'ALL') {
+        return {
+          OR: [
+            { contractId: activeContract },
+            { subcontract: { contractId: activeContract } },
+          ],
+        };
+      }
+      return undefined;
+    }
+    return {
+      OR: [
+        { contractId: { in: user.allowedContracts || [] } },
+        {
+          subcontract: { contractId: { in: user.allowedContracts || [] } },
+        },
+      ],
+    };
+  }
+
+  private workOrderAccessWhere(
+    user: any,
+    id: string,
+    activeContract?: string,
+  ): Prisma.WorkOrderWhereInput {
+    const tenantId = user.tenantId;
+    const where: Prisma.WorkOrderWhereInput = { id, tenantId };
+    const eqFilter = this.equipmentAccessWhere(user, activeContract);
+    if (eqFilter) {
+      where.equipment = eqFilter;
+    }
+    return where;
+  }
 
   async create(user: any, dto: CreateWorkOrderDto, activeContract?: string) {
     const tenantId = user.tenantId;
@@ -86,6 +262,41 @@ export class WorkOrdersService {
         }
       }
 
+      const tags = dto.classificationTags ?? [];
+      const derivedType = dto.type ?? deriveOtTypeFromTags(tags);
+      const derivedCategory = dto.category ?? deriveCategoryFromTags(tags);
+      const derivedMaintenanceType =
+        dto.maintenanceType ??
+        (tags.includes('ACCIDENTE_INCIDENTE') ? 'CORRECTIVO' : 'PREVENTIVO');
+
+      const ini = Number(
+        dto.detentionInitialMeter ?? dto.initialMeter ?? NaN,
+      );
+      const fin = Number(dto.detentionFinalMeter ?? dto.finalMeter ?? NaN);
+      if (Number.isNaN(ini) || Number.isNaN(fin)) {
+        throw new BadRequestException(
+          'Debe indicar medición inicial y final (detención u horómetro).',
+        );
+      }
+
+      const narrative =
+        (dto.workPerformedDescription ?? '').trim() ||
+        (dto.description ?? '').trim() ||
+        (dto.initialRequestDescription ?? '').trim();
+      if (!narrative) {
+        throw new BadRequestException(
+          'Debe completar la descripción del trabajo o la solicitud inicial.',
+        );
+      }
+
+      const descForLegacyField =
+        (dto.workPerformedDescription ?? '').trim() ||
+        (dto.description ?? '').trim() ||
+        narrative;
+
+      const parseOptDate = (s?: string) =>
+        s && String(s).trim() ? new Date(s) : undefined;
+
       // 1. Generar correlativo
       const year = new Date().getFullYear();
       const count = await this.prisma.workOrder.count({ where: { tenantId } });
@@ -100,16 +311,81 @@ export class WorkOrdersService {
             warehouseId: dto.warehouseId || null,
             correlative,
             equipmentId: dto.equipmentId,
-            type: dto.type,
-            category: dto.category,
-            maintenanceType: dto.maintenanceType,
+            type: derivedType,
+            category: derivedCategory,
+            maintenanceType: derivedMaintenanceType,
             status: 'OPEN',
-            initialMeter: dto.initialMeter,
-            finalMeter: dto.finalMeter,
-            description: dto.description,
-            responsible: dto.responsible,
+            initialMeter: ini,
+            finalMeter: fin,
+            description: descForLegacyField,
+            responsible: dto.responsibleMechanicName ?? dto.responsible,
+            maintenanceOrderNumber: dto.maintenanceOrderNumber?.trim() || null,
+            detentionStartedAt: parseOptDate(dto.detentionStartedAt) ?? null,
+            detentionEndedAt: parseOptDate(dto.detentionEndedAt) ?? null,
+            detentionInitialMeter: ini,
+            detentionFinalMeter: fin,
+            mechanicAttentionDate: dto.mechanicAttentionDate?.trim()
+              ? new Date(
+                  `${dto.mechanicAttentionDate.trim()}T12:00:00.000Z`,
+                )
+              : null,
+            mechanicAttentionFromTime:
+              dto.mechanicAttentionFromTime?.trim() || null,
+            mechanicAttentionToTime:
+              dto.mechanicAttentionToTime?.trim() || null,
+            clientAttributedStart: parseOptDate(dto.clientAttributedStart)
+              ? new Date(dto.clientAttributedStart!)
+              : null,
+            clientAttributedEnd: parseOptDate(dto.clientAttributedEnd)
+              ? new Date(dto.clientAttributedEnd!)
+              : null,
+            clientAttributedReason: dto.clientAttributedReason?.trim() || null,
+            affectsAvailability: dto.affectsAvailability ?? null,
+            classificationTags: tags,
+            workLocation: dto.workLocation ?? null,
+            metricHm:
+              dto.metricHm !== undefined && dto.metricHm !== ''
+                ? new Prisma.Decimal(String(dto.metricHm))
+                : null,
+            metricHh:
+              dto.metricHh !== undefined && dto.metricHh !== ''
+                ? new Prisma.Decimal(String(dto.metricHh))
+                : null,
+            workShift: dto.workShift ?? null,
+            initialRequestDescription:
+              dto.initialRequestDescription?.trim() || null,
+            intervenedSystemsJson: dto.intervenedSystemsJson ?? undefined,
+            symptomsText: dto.symptomsText?.trim() || null,
+            causeText: dto.causeText?.trim() || null,
+            workPerformedDescription:
+              dto.workPerformedDescription?.trim() || null,
+            techniciansNames: dto.techniciansNames?.trim() || null,
+            responsibleMechanicName:
+              dto.responsibleMechanicName?.trim() || null,
+            responsibleMechanicSignature:
+              dto.responsibleMechanicSignature?.trim() || null,
+            shiftSupervisorName: dto.shiftSupervisorName?.trim() || null,
+            shiftSupervisorSignature:
+              dto.shiftSupervisorSignature?.trim() || null,
+            pmCycleNumber:
+              dto.pmCycleNumber != null
+                ? Math.min(4, Math.max(1, Math.trunc(dto.pmCycleNumber)))
+                : null,
           },
         });
+
+        if (dto.fluidCompartments && dto.fluidCompartments.length > 0) {
+          await tx.workOrderFluidCompartment.createMany({
+            data: dto.fluidCompartments.map((fc) => ({
+              workOrderId: workOrder.id,
+              compartment: fc.compartment,
+              fluidType: fc.fluidType.trim(),
+              liters: new Prisma.Decimal(String(fc.liters)),
+              action: fc.action,
+              inventoryItemId: fc.inventoryItemId?.trim() || null,
+            })),
+          });
+        }
 
         if (dto.systems && dto.systems.length > 0) {
           await tx.workOrderSystem.createMany({
@@ -209,9 +485,22 @@ export class WorkOrdersService {
             warehouse: true,
             systems: { include: { catalogItem: true } },
             fluids: { include: { catalogItem: true } },
+            fluidCompartments: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    partNumber: true,
+                    name: true,
+                    isInventory: true,
+                  },
+                },
+              },
+            },
             tasks: true,
             parts: { include: { inventoryItem: true } },
             fluidSamples: true,
+            backlogItems: true,
           },
         });
       });
@@ -472,35 +761,7 @@ export class WorkOrdersService {
   }
 
   async findOne(user: any, id: string, activeContract?: string) {
-    const tenantId = user.tenantId;
-    const where: Prisma.WorkOrderWhereInput = { id, tenantId };
-    const andConditions: Prisma.WorkOrderWhereInput[] = [];
-
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      andConditions.push({
-        equipment: {
-          OR: [
-            { contractId: { in: user.allowedContracts || [] } },
-            {
-              subcontract: { contractId: { in: user.allowedContracts || [] } },
-            },
-          ],
-        },
-      });
-    } else if (activeContract && activeContract !== 'ALL') {
-      andConditions.push({
-        equipment: {
-          OR: [
-            { contractId: activeContract },
-            { subcontract: { contractId: activeContract } },
-          ],
-        },
-      });
-    }
-
-    if (andConditions.length > 0) {
-      where.AND = andConditions;
-    }
+    const where = this.workOrderAccessWhere(user, id, activeContract);
 
     return this.prisma.workOrder.findFirst({
       where,
@@ -527,6 +788,19 @@ export class WorkOrdersService {
         fluidSamples: {
           include: { system: { select: { id: true, name: true } } },
         },
+        fluidCompartments: {
+          include: {
+            inventoryItem: {
+              select: {
+                id: true,
+                partNumber: true,
+                name: true,
+                isInventory: true,
+              },
+            },
+          },
+        },
+        backlogItems: true,
         stockReservations: true,
         purchaseRequisitions: {
           select: { id: true, correlative: true, status: true },
@@ -538,6 +812,442 @@ export class WorkOrdersService {
     });
   }
 
+  async update(
+    user: any,
+    id: string,
+    dto: UpdateWorkOrderDto,
+    activeContract?: string,
+  ) {
+    const where = this.workOrderAccessWhere(user, id, activeContract);
+    const existing = await this.prisma.workOrder.findFirst({ where });
+    if (!existing) {
+      throw new BadRequestException('Orden de Trabajo no encontrada');
+    }
+    if (existing.status === 'CLOSED') {
+      throw new BadRequestException('No se puede editar una OT cerrada.');
+    }
+
+    const parseOptDate = (s?: string | null) =>
+      s && String(s).trim() ? new Date(s) : null;
+
+    try {
+      return await this.prisma.$transaction(async (tx: any) => {
+        const data: Prisma.WorkOrderUpdateInput = {};
+
+        if (dto.warehouseId !== undefined) {
+          data.warehouse = dto.warehouseId
+            ? { connect: { id: dto.warehouseId } }
+            : { disconnect: true };
+        }
+        if (dto.maintenanceOrderNumber !== undefined) {
+          data.maintenanceOrderNumber = dto.maintenanceOrderNumber;
+        }
+        if (dto.detentionStartedAt !== undefined) {
+          data.detentionStartedAt = parseOptDate(dto.detentionStartedAt);
+        }
+        if (dto.detentionEndedAt !== undefined) {
+          data.detentionEndedAt = parseOptDate(dto.detentionEndedAt);
+        }
+        if (dto.detentionInitialMeter !== undefined) {
+          data.detentionInitialMeter = dto.detentionInitialMeter;
+          if (dto.detentionInitialMeter != null) {
+            data.initialMeter = dto.detentionInitialMeter;
+          }
+        }
+        if (dto.detentionFinalMeter !== undefined) {
+          data.detentionFinalMeter = dto.detentionFinalMeter;
+          if (dto.detentionFinalMeter != null) {
+            data.finalMeter = dto.detentionFinalMeter;
+          }
+        }
+        if (dto.mechanicAttentionDate !== undefined) {
+          data.mechanicAttentionDate =
+            dto.mechanicAttentionDate?.trim() != null &&
+            dto.mechanicAttentionDate !== ''
+              ? new Date(`${String(dto.mechanicAttentionDate).trim()}T12:00:00.000Z`)
+              : null;
+        }
+        if (dto.mechanicAttentionFromTime !== undefined) {
+          data.mechanicAttentionFromTime = dto.mechanicAttentionFromTime;
+        }
+        if (dto.mechanicAttentionToTime !== undefined) {
+          data.mechanicAttentionToTime = dto.mechanicAttentionToTime;
+        }
+        if (dto.clientAttributedStart !== undefined) {
+          data.clientAttributedStart = parseOptDate(dto.clientAttributedStart);
+        }
+        if (dto.clientAttributedEnd !== undefined) {
+          data.clientAttributedEnd = parseOptDate(dto.clientAttributedEnd);
+        }
+        if (dto.clientAttributedReason !== undefined) {
+          data.clientAttributedReason = dto.clientAttributedReason;
+        }
+        if (dto.affectsAvailability !== undefined) {
+          data.affectsAvailability = dto.affectsAvailability;
+        }
+        if (dto.classificationTags !== undefined) {
+          data.classificationTags = dto.classificationTags;
+          const tags = dto.classificationTags ?? [];
+          data.category = deriveCategoryFromTags(tags);
+          data.type = deriveOtTypeFromTags(tags);
+          data.maintenanceType = deriveMaintenanceTypeFromTags(tags);
+        }
+        if (dto.workLocation !== undefined) {
+          data.workLocation = dto.workLocation;
+        }
+        if (dto.metricHm !== undefined) {
+          data.metricHm =
+            dto.metricHm !== null && dto.metricHm !== ''
+              ? new Prisma.Decimal(String(dto.metricHm))
+              : null;
+        }
+        if (dto.metricHh !== undefined) {
+          data.metricHh =
+            dto.metricHh !== null && dto.metricHh !== ''
+              ? new Prisma.Decimal(String(dto.metricHh))
+              : null;
+        }
+        if (dto.workShift !== undefined) {
+          data.workShift = dto.workShift;
+        }
+        if (dto.initialRequestDescription !== undefined) {
+          data.initialRequestDescription = dto.initialRequestDescription;
+        }
+        if (dto.intervenedSystemsJson !== undefined) {
+          data.intervenedSystemsJson =
+            dto.intervenedSystemsJson === null
+              ? Prisma.JsonNull
+              : (dto.intervenedSystemsJson as Prisma.InputJsonValue);
+        }
+        if (dto.symptomsText !== undefined) {
+          data.symptomsText = dto.symptomsText;
+        }
+        if (dto.causeText !== undefined) {
+          data.causeText = dto.causeText;
+        }
+        if (dto.workPerformedDescription !== undefined) {
+          data.workPerformedDescription = dto.workPerformedDescription;
+        }
+        if (dto.techniciansNames !== undefined) {
+          data.techniciansNames = dto.techniciansNames;
+        }
+        if (dto.responsibleMechanicName !== undefined) {
+          data.responsibleMechanicName = dto.responsibleMechanicName;
+        }
+        if (dto.responsibleMechanicSignature !== undefined) {
+          data.responsibleMechanicSignature = dto.responsibleMechanicSignature;
+        }
+        if (dto.shiftSupervisorName !== undefined) {
+          data.shiftSupervisorName = dto.shiftSupervisorName;
+        }
+        if (dto.shiftSupervisorSignature !== undefined) {
+          data.shiftSupervisorSignature = dto.shiftSupervisorSignature;
+        }
+        if (dto.pmCycleNumber !== undefined) {
+          data.pmCycleNumber =
+            dto.pmCycleNumber != null
+              ? Math.min(4, Math.max(1, Math.trunc(dto.pmCycleNumber)))
+              : null;
+        }
+        if (dto.responsible !== undefined) {
+          data.responsible = dto.responsible;
+        }
+        if (dto.initialMeter !== undefined) {
+          data.initialMeter = dto.initialMeter ?? undefined;
+        }
+        if (dto.finalMeter !== undefined) {
+          data.finalMeter = dto.finalMeter ?? undefined;
+        }
+        if (dto.classificationTags === undefined) {
+          if (dto.maintenanceType !== undefined) {
+            data.maintenanceType = dto.maintenanceType;
+          }
+          if (dto.category !== undefined) {
+            data.category = dto.category;
+          }
+          if (dto.type !== undefined) {
+            data.type = dto.type;
+          }
+        }
+
+        if (dto.workPerformedDescription !== undefined || dto.description !== undefined) {
+          const legacyDesc =
+            (dto.workPerformedDescription ?? '').toString().trim() ||
+            (dto.description ?? '').toString().trim();
+          if (legacyDesc) {
+            data.description = legacyDesc;
+          }
+        }
+
+        if (Object.keys(data).length > 0) {
+          await tx.workOrder.update({ where: { id }, data });
+        }
+
+        if (dto.systems !== undefined) {
+          await tx.workOrderSystem.deleteMany({ where: { workOrderId: id } });
+          if (dto.systems.length > 0) {
+            await tx.workOrderSystem.createMany({
+              data: dto.systems.map((systemId) => ({
+                workOrderId: id,
+                catalogItemId: systemId,
+              })),
+            });
+          }
+        }
+
+        if (dto.fluidCompartments !== undefined) {
+          await tx.workOrderFluidCompartment.deleteMany({
+            where: { workOrderId: id },
+          });
+          if (dto.fluidCompartments.length > 0) {
+            await tx.workOrderFluidCompartment.createMany({
+              data: dto.fluidCompartments.map((fc) => ({
+                workOrderId: id,
+                compartment: fc.compartment,
+                fluidType: fc.fluidType.trim(),
+                liters: new Prisma.Decimal(String(fc.liters)),
+                action: fc.action,
+                inventoryItemId: fc.inventoryItemId?.trim() || null,
+              })),
+            });
+          }
+        }
+
+        if (dto.parts !== undefined) {
+          const tenantId = user.tenantId;
+          await tx.stockReservation.deleteMany({ where: { workOrderId: id } });
+          await tx.workOrderPart.deleteMany({ where: { workOrderId: id } });
+
+          const whRow = await tx.workOrder.findUnique({
+            where: { id },
+            select: { warehouseId: true },
+          });
+          const whEffective = whRow?.warehouseId ?? undefined;
+
+          if (dto.parts.length > 0) {
+            const partsData: any[] = [];
+            const linkedPartsForReservation: {
+              itemId: string;
+              quantity: number;
+            }[] = [];
+
+            for (const p of dto.parts) {
+              let invItemId = p.inventoryItemId;
+              if (!invItemId) {
+                const catalogItem = await tx.inventoryItem.findFirst({
+                  where: { tenantId, partNumber: p.partNumber },
+                });
+                if (catalogItem) invItemId = catalogItem.id;
+              }
+
+              partsData.push({
+                workOrderId: id,
+                partNumber: p.partNumber,
+                description: p.description,
+                quantity: Number(p.quantity),
+                inventoryItemId: invItemId || null,
+              });
+
+              if (invItemId) {
+                linkedPartsForReservation.push({
+                  itemId: invItemId,
+                  quantity: Number(p.quantity),
+                });
+              }
+            }
+
+            await tx.workOrderPart.createMany({ data: partsData });
+
+            if (whEffective && linkedPartsForReservation.length > 0) {
+              await tx.stockReservation.createMany({
+                data: linkedPartsForReservation.map((p) => ({
+                  workOrderId: id,
+                  itemId: p.itemId,
+                  warehouseId: whEffective,
+                  quantity: p.quantity,
+                })),
+              });
+            }
+          }
+        }
+
+        return tx.workOrder.findFirst({
+          where: { id },
+          include: {
+            subcontract: { select: { id: true, name: true, code: true } },
+            equipment: {
+              include: {
+                contract: { select: { id: true, name: true, code: true } },
+                subcontract: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    contractId: true,
+                  },
+                },
+              },
+            },
+            warehouse: true,
+            systems: { include: { catalogItem: true } },
+            fluids: { include: { catalogItem: true } },
+            fluidCompartments: {
+              include: {
+                inventoryItem: {
+                  select: {
+                    id: true,
+                    partNumber: true,
+                    name: true,
+                    isInventory: true,
+                  },
+                },
+              },
+            },
+            tasks: true,
+            parts: { include: { inventoryItem: true } },
+            fluidSamples: {
+              include: { system: { select: { id: true, name: true } } },
+            },
+            backlogItems: true,
+            stockReservations: true,
+            purchaseRequisitions: {
+              select: { id: true, correlative: true, status: true },
+            },
+            purchaseOrders: {
+              select: { id: true, correlative: true, status: true },
+            },
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error('Error at WorkOrdersService.update:', error);
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException('Error al actualizar la OT');
+    }
+  }
+
+  async listBacklog(
+    user: any,
+    activeContract?: string,
+    status?: BacklogStatus,
+    query?: { limit?: number; offset?: number; search?: string },
+  ) {
+    const limit = Math.min(500, Math.max(1, query?.limit ?? 100));
+    const offset = Math.max(0, query?.offset ?? 0);
+    const search = query?.search?.trim();
+
+    const tenantId = user.tenantId;
+    const eqFilter = this.equipmentAccessWhere(user, activeContract);
+
+    const where: Prisma.WorkOrderBacklogItemWhereInput = {
+      tenantId,
+      ...(status ? { status } : {}),
+      ...(eqFilter ? { workOrder: { equipment: eqFilter } } : {}),
+      ...(search
+        ? {
+            OR: [
+              { description: { contains: search, mode: 'insensitive' } },
+              {
+                workOrder: {
+                  correlative: { contains: search, mode: 'insensitive' },
+                },
+              },
+              {
+                workOrder: {
+                  equipment: {
+                    internalId: { contains: search, mode: 'insensitive' },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.workOrderBacklogItem.findMany({
+        where,
+        include: {
+          workOrder: {
+            select: {
+              id: true,
+              correlative: true,
+              status: true,
+              equipment: {
+                select: { internalId: true, brand: true, model: true },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.workOrderBacklogItem.count({ where }),
+    ]);
+
+    return { data, total, limit, offset };
+  }
+
+  async addBacklogItem(
+    user: any,
+    workOrderId: string,
+    description: string,
+    activeContract?: string,
+  ) {
+    const text = description?.trim();
+    if (!text) {
+      throw new BadRequestException('La descripción del backlog es obligatoria.');
+    }
+
+    const where = this.workOrderAccessWhere(user, workOrderId, activeContract);
+    const wo = await this.prisma.workOrder.findFirst({ where });
+    if (!wo) {
+      throw new BadRequestException('Orden de Trabajo no encontrada');
+    }
+
+    const item = await this.prisma.workOrderBacklogItem.create({
+      data: {
+        tenantId: user.tenantId,
+        workOrderId,
+        description: text,
+      },
+    });
+
+    await this.prisma.workOrder.update({
+      where: { id: workOrderId },
+      data: { hasBacklog: true },
+    });
+
+    return item;
+  }
+
+  async patchBacklogItem(
+    user: any,
+    workOrderId: string,
+    itemId: string,
+    body: { status: BacklogStatus },
+    activeContract?: string,
+  ) {
+    const where = this.workOrderAccessWhere(user, workOrderId, activeContract);
+    const wo = await this.prisma.workOrder.findFirst({ where });
+    if (!wo) {
+      throw new BadRequestException('Orden de Trabajo no encontrada');
+    }
+
+    const item = await this.prisma.workOrderBacklogItem.findFirst({
+      where: { id: itemId, workOrderId, tenantId: user.tenantId },
+    });
+    if (!item) {
+      throw new BadRequestException('Ítem de backlog no encontrado');
+    }
+
+    return this.prisma.workOrderBacklogItem.update({
+      where: { id: itemId },
+      data: { status: body.status },
+    });
+  }
+
   async updateStatus(
     user: any,
     id: string,
@@ -546,25 +1256,7 @@ export class WorkOrdersService {
   ) {
     const tenantId = user.tenantId;
     const { status, warehouseId } = body;
-    const where: Prisma.WorkOrderWhereInput = { id, tenantId };
-    const andConditions: Prisma.WorkOrderWhereInput[] = [];
-
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      andConditions.push({
-        equipment: {
-          OR: [
-            { contractId: { in: user.allowedContracts || [] } },
-            {
-              subcontract: { contractId: { in: user.allowedContracts || [] } },
-            },
-          ],
-        },
-      });
-    }
-
-    if (andConditions.length > 0) {
-      where.AND = andConditions;
-    }
+    const where = this.workOrderAccessWhere(user, id, activeContract);
 
     const userId = user.id || user.sub;
 
@@ -578,6 +1270,17 @@ export class WorkOrdersService {
                 equipment: true,
                 parts: {
                   include: { inventoryItem: { select: { isInventory: true } } },
+                },
+                fluidCompartments: {
+                  include: {
+                    inventoryItem: {
+                      select: {
+                        id: true,
+                        partNumber: true,
+                        isInventory: true,
+                      },
+                    },
+                  },
                 },
               },
             });
@@ -606,11 +1309,21 @@ export class WorkOrdersService {
               (p: any) => p.inventoryItemId && p.inventoryItem?.isInventory,
             );
 
+            const inventoryFluids = workOrder.fluidCompartments.filter(
+              (f: any) =>
+                f.inventoryItemId &&
+                Number(f.liters) > 0 &&
+                f.inventoryItem?.isInventory,
+            );
+
             const effectiveWarehouseId = warehouseId || workOrder.warehouseId;
 
-            if (inventoryParts.length > 0 && !effectiveWarehouseId) {
+            if (
+              (inventoryParts.length > 0 || inventoryFluids.length > 0) &&
+              !effectiveWarehouseId
+            ) {
               throw new BadRequestException(
-                'Debe seleccionar una bodega de origen para descontar los repuestos vinculados al catálogo.',
+                'Debe seleccionar una bodega de origen para descontar repuestos y fluidos vinculados al catálogo.',
               );
             }
 
@@ -627,12 +1340,17 @@ export class WorkOrdersService {
               data: updateData,
             });
 
-            await tx.equipment.update({
-              where: { id: workOrder.equipmentId },
-              data: { currentMeter: workOrder.finalMeter },
+            await applyCurrentMeterChange(tx, {
+              tenantId,
+              equipmentId: workOrder.equipmentId,
+              oldMeter: workOrder.equipment.currentMeter,
+              newMeter: workOrder.finalMeter,
+              source: MeterLogSource.OT,
+              sourceId: workOrder.id,
+              userId,
             });
 
-            let totalPartsCost = new Decimal(0);
+            let totalConsumableCost = new Decimal(0);
 
             if (inventoryParts.length > 0 && effectiveWarehouseId) {
               for (const part of inventoryParts) {
@@ -688,18 +1406,77 @@ export class WorkOrdersService {
                   data: { unitCost: frozenUnitCost },
                 });
 
-                totalPartsCost = totalPartsCost.plus(
+                totalConsumableCost = totalConsumableCost.plus(
                   new Decimal(part.quantity).mul(new Decimal(frozenUnitCost)),
                 );
               }
             }
 
-            if (totalPartsCost.greaterThan(0)) {
+            if (inventoryFluids.length > 0 && effectiveWarehouseId) {
+              for (const fc of inventoryFluids) {
+                const qty = Number(fc.liters);
+                const itemId = fc.inventoryItemId as string;
+
+                const currentStock = await tx.itemStock.findUnique({
+                  where: {
+                    warehouseId_itemId: {
+                      warehouseId: effectiveWarehouseId,
+                      itemId,
+                    },
+                  },
+                });
+
+                const previousQty = currentStock?.quantity || 0;
+                const newQty = previousQty - qty;
+                const isPendingRegularization = newQty < 0;
+                const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
+                const pn =
+                  fc.inventoryItem?.partNumber ?? fc.fluidType ?? 'fluid';
+
+                await tx.itemStock.upsert({
+                  where: {
+                    warehouseId_itemId: {
+                      warehouseId: effectiveWarehouseId,
+                      itemId,
+                    },
+                  },
+                  update: { quantity: newQty },
+                  create: {
+                    warehouseId: effectiveWarehouseId,
+                    itemId,
+                    quantity: newQty,
+                    unitCost: 0,
+                  },
+                });
+
+                await tx.inventoryTransaction.create({
+                  data: {
+                    type: 'WORK_ORDER_ISSUE',
+                    quantity: qty,
+                    previousStock: previousQty,
+                    newStock: newQty,
+                    isPendingRegularization,
+                    referenceId: workOrder.id,
+                    referenceType: 'WORK_ORDER',
+                    notes: `Consumo fluido OT ${workOrder.correlative} (${fc.compartment}) — ${pn}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
+                    warehouse: { connect: { id: effectiveWarehouseId } },
+                    item: { connect: { id: itemId } },
+                    user: { connect: { id: userId } },
+                  },
+                });
+
+                totalConsumableCost = totalConsumableCost.plus(
+                  new Decimal(qty).mul(new Decimal(frozenUnitCost)),
+                );
+              }
+            }
+
+            if (totalConsumableCost.greaterThan(0)) {
               await tx.assetCostRecord.create({
                 data: {
                   tenantId: workOrder.tenantId,
                   equipmentId: workOrder.equipmentId,
-                  amount: totalPartsCost.toFixed(2),
+                  amount: totalConsumableCost.toFixed(2),
                   type: 'WORK_ORDER',
                   workOrderId: workOrder.id,
                   recordedAt: new Date(),
@@ -735,5 +1512,102 @@ export class WorkOrdersService {
         'Error al actualizar estado de la OT',
       );
     }
+  }
+
+  /**
+   * Promueve un ítem de backlog: tarea en la misma OT, o nueva OT generada desde la descripción.
+   */
+  async promoteBacklogItem(
+    user: any,
+    workOrderId: string,
+    itemId: string,
+    body: { mode: 'TO_TASK' | 'TO_NEW_OT' },
+    activeContract?: string,
+  ) {
+    const whereWo = this.workOrderAccessWhere(
+      user,
+      workOrderId,
+      activeContract,
+    );
+    const wo = await this.prisma.workOrder.findFirst({
+      where: whereWo,
+      include: {
+        equipment: true,
+      },
+    });
+    if (!wo) {
+      throw new BadRequestException('Orden de Trabajo no encontrada');
+    }
+
+    const item = await this.prisma.workOrderBacklogItem.findFirst({
+      where: {
+        id: itemId,
+        workOrderId,
+        tenantId: user.tenantId,
+      },
+    });
+    if (!item) {
+      throw new BadRequestException('Ítem de backlog no encontrado');
+    }
+    if (item.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Solo se pueden promover ítems en estado pendiente.',
+      );
+    }
+
+    const text = item.description.trim();
+    if (!text) {
+      throw new BadRequestException('La descripción del backlog está vacía.');
+    }
+
+    if (body.mode === 'TO_TASK') {
+      const desc = text.length <= 255 ? text : `${text.slice(0, 252)}...`;
+      await this.prisma.workOrderTask.create({
+        data: {
+          workOrderId,
+          description: desc,
+          isCompleted: false,
+        },
+      });
+      await this.prisma.workOrderBacklogItem.update({
+        where: { id: itemId },
+        data: { status: 'DONE' },
+      });
+      return { promoted: true as const, mode: 'TO_TASK' as const };
+    }
+
+    if (body.mode !== 'TO_NEW_OT') {
+      throw new BadRequestException('Modo de promoción no válido.');
+    }
+
+    const meter =
+      wo.equipment?.currentMeter ?? wo.finalMeter ?? wo.initialMeter ?? 0;
+
+    const created = await this.create(user, {
+      equipmentId: wo.equipmentId,
+      warehouseId: wo.warehouseId ?? undefined,
+      classificationTags:
+        wo.classificationTags?.length > 0 ? [...wo.classificationTags] : [],
+      detentionInitialMeter: meter,
+      detentionFinalMeter: meter,
+      workPerformedDescription: text,
+      description: text,
+      initialRequestDescription: text,
+      affectsAvailability: wo.affectsAvailability ?? undefined,
+      responsibleMechanicName:
+        wo.responsibleMechanicName ?? wo.responsible ?? undefined,
+      maintenanceOrderNumber: wo.maintenanceOrderNumber ?? undefined,
+    });
+
+    await this.prisma.workOrderBacklogItem.update({
+      where: { id: itemId },
+      data: { status: 'DONE' },
+    });
+
+    return {
+      promoted: true as const,
+      mode: 'TO_NEW_OT' as const,
+      newWorkOrderId: created?.id as string | undefined,
+    };
   }
 }
