@@ -48,8 +48,6 @@ import {
   CLASSIFICATION_OPTIONS,
   FLUID_COMPARTMENTS_ORDER,
   FLUID_COMPARTMENT_LABELS,
-  INTERVENTION_LABELS,
-  InterventionCheckboxes,
 } from './work-order-form.constants';
 
 function isoToDatetimeLocalValue(iso: string): string {
@@ -125,6 +123,18 @@ export class WorkOrderFormComponent implements OnInit {
   pmSourceLabel(src: PmIntervalSource | undefined): string {
     return src ? pmIntervalSourceLabel(src) : '';
   }
+
+  /** Familia catálogo «Sistemas» para filtrar selección de sistemas intervenidos. */
+  systemsCatalogFamilyId = signal<string | null>(null);
+
+  pickedSystems = signal<{ id: string; label: string }[]>([]);
+  showSystemPicker = signal(false);
+
+  closeAllowed = computed(() => {
+    const raw = this.otForm.get('detentionStartedAt')?.value;
+    return typeof raw === 'string' && raw.trim().length > 0;
+  });
+
   fluidCompartmentOrder = FLUID_COMPARTMENTS_ORDER;
 
   meterLabel = computed(() =>
@@ -160,17 +170,6 @@ export class WorkOrderFormComponent implements OnInit {
   otForm: FormGroup;
 
   constructor() {
-    const intervention = this.fb.group({
-      electric: [false],
-      mechanical: [false],
-      hydraulic: [false],
-      pneumatic: [false],
-      structural: [false],
-      wheels: [false],
-      others: [false],
-      sublevelsText: [''],
-    });
-
     const compartmentRows = this.fb.array(
       FLUID_COMPARTMENTS_ORDER.map((compartment) =>
         this.fb.group({
@@ -191,16 +190,14 @@ export class WorkOrderFormComponent implements OnInit {
     this.otForm = this.fb.group({
       equipmentId: ['', Validators.required],
       warehouseId: [''],
-      maintenanceOrderNumber: [''],
 
       detentionStartedAt: [''],
       detentionEndedAt: [''],
       detentionInitialMeter: ['', Validators.required],
-      detentionFinalMeter: ['', Validators.required],
+      detentionFinalMeter: [''],
 
-      mechanicAttentionDate: [''],
-      mechanicAttentionFromTime: [''],
-      mechanicAttentionToTime: [''],
+      mechanicAttentionStartedAt: ['', Validators.required],
+      mechanicAttentionEndedAt: ['', Validators.required],
 
       clientAttributedStart: [''],
       clientAttributedEnd: [''],
@@ -210,12 +207,13 @@ export class WorkOrderFormComponent implements OnInit {
       classificationTags: classificationTagsCtrl,
 
       workLocation: ['TERRENO' as 'TALLER' | 'TERRENO'],
-      metricHm: [''],
-      metricHh: [''],
+      personnelQuantity: [
+        1,
+        [Validators.required, Validators.min(1)],
+      ],
       workShift: ['DIA' as 'DIA' | 'NOCHE'],
 
       initialRequestDescription: [''],
-      intervention,
       symptomsText: [''],
       causeText: [''],
       workPerformedDescription: ['', Validators.required],
@@ -247,6 +245,17 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    /** Familia «Sistemas» del maestro de categorías (`/app/catalogos`); el backend la crea si falta (bootstrap + primer GET familias). */
+    this.inventoryItemsService.getCategoryFamilies().subscribe({
+      next: (cats) => {
+        const hit =
+          cats.find((c) => /^sistemas$/i.test(String(c.name).trim())) ??
+          cats.find((c) => /sistema/i.test(String(c.name)));
+        this.systemsCatalogFamilyId.set(hit?.id ?? null);
+      },
+      error: () => this.systemsCatalogFamilyId.set(null),
+    });
+
     this.fleetService.getEquipments({ limit: 1000 }).subscribe({
       next: (res) => this.fleet.set(res.data),
       error: () => undefined,
@@ -303,17 +312,10 @@ export class WorkOrderFormComponent implements OnInit {
       this.otForm.patchValue(
         {
           detentionInitialMeter: ini,
-          detentionFinalMeter: ini,
+          detentionFinalMeter: '',
         },
         { emitEvent: false },
       );
-      this.otForm.get('detentionFinalMeter')?.setValidators([
-        Validators.required,
-        Validators.min(ini),
-      ]);
-      this.otForm.get('detentionFinalMeter')?.updateValueAndValidity({
-        emitEvent: false,
-      });
     }
   }
 
@@ -395,14 +397,9 @@ export class WorkOrderFormComponent implements OnInit {
         } else if (!tags.length && ot.category === 'NO_PROGRAMADA_REACTIVA') {
           tags = ['NO_PROGRAMADA'];
         }
-        const inv = (ot.intervenedSystemsJson ?? {}) as Partial<
-          InterventionCheckboxes & { sublevelsText?: string }
-        >;
-
         this.otForm.patchValue({
           equipmentId: ot.equipmentId,
           warehouseId: ot.warehouseId || '',
-          maintenanceOrderNumber: ot.maintenanceOrderNumber || '',
           detentionStartedAt: ot.detentionStartedAt
             ? isoToDatetimeLocalValue(ot.detentionStartedAt)
             : '',
@@ -410,12 +407,16 @@ export class WorkOrderFormComponent implements OnInit {
             ? isoToDatetimeLocalValue(ot.detentionEndedAt)
             : '',
           detentionInitialMeter: ot.detentionInitialMeter ?? ot.initialMeter,
-          detentionFinalMeter: ot.detentionFinalMeter ?? ot.finalMeter,
-          mechanicAttentionDate: ot.mechanicAttentionDate
-            ? String(ot.mechanicAttentionDate).slice(0, 10)
+          detentionFinalMeter:
+            ot.detentionFinalMeter ??
+            ot.finalMeter ??
+            '',
+          mechanicAttentionStartedAt: ot.mechanicAttentionStartedAt
+            ? isoToDatetimeLocalValue(ot.mechanicAttentionStartedAt)
             : '',
-          mechanicAttentionFromTime: ot.mechanicAttentionFromTime || '',
-          mechanicAttentionToTime: ot.mechanicAttentionToTime || '',
+          mechanicAttentionEndedAt: ot.mechanicAttentionEndedAt
+            ? isoToDatetimeLocalValue(ot.mechanicAttentionEndedAt)
+            : '',
           clientAttributedStart: ot.clientAttributedStart
             ? isoToDatetimeLocalValue(ot.clientAttributedStart)
             : '',
@@ -426,8 +427,7 @@ export class WorkOrderFormComponent implements OnInit {
           affectsAvailability: ot.affectsAvailability || 'SI',
           classificationTags: tags,
           workLocation: ot.workLocation || 'TERRENO',
-          metricHm: ot.metricHm != null ? String(ot.metricHm) : '',
-          metricHh: ot.metricHh != null ? String(ot.metricHh) : '',
+          personnelQuantity: Math.max(1, Number(ot.personnelQuantity ?? 1)),
           workShift: ot.workShift || 'DIA',
           initialRequestDescription: ot.initialRequestDescription || '',
           symptomsText: ot.symptomsText || '',
@@ -442,17 +442,17 @@ export class WorkOrderFormComponent implements OnInit {
           shiftSupervisorSignature: ot.shiftSupervisorSignature || '',
           pmCycleNumber:
             ot.pmCycleNumber != null ? String(ot.pmCycleNumber) : '',
-          intervention: {
-            electric: !!inv.electric,
-            mechanical: !!inv.mechanical,
-            hydraulic: !!inv.hydraulic,
-            pneumatic: !!inv.pneumatic,
-            structural: !!inv.structural,
-            wheels: !!inv.wheels,
-            others: !!inv.others,
-            sublevelsText: (inv as any).sublevelsText || '',
-          },
         });
+
+        const sysRows = ((ot.systems ?? []) as any[])
+          .map((s: any) => ({
+            id: String(s.catalogItem?.id ?? s.catalogItemId ?? ''),
+            label: s.catalogItem
+              ? `${s.catalogItem.partNumber} — ${s.catalogItem.name}`
+              : 'Ítem catálogo',
+          }))
+          .filter((x: { id: string }) => x.id.length > 0);
+        this.pickedSystems.set(sysRows);
 
         this.patchFluidRows(ot.fluidCompartments);
 
@@ -534,32 +534,6 @@ export class WorkOrderFormComponent implements OnInit {
     return (v ?? []).includes(tag);
   }
 
-  buildIntervenedJson(): Record<string, unknown> {
-    const inv = this.otForm.get('intervention')?.value as InterventionCheckboxes & {
-      sublevelsText?: string;
-    };
-    const sublevelsList = (inv.sublevelsText ?? '')
-      .split(/[,;\n]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return {
-      electric: !!inv.electric,
-      mechanical: !!inv.mechanical,
-      hydraulic: !!inv.hydraulic,
-      pneumatic: !!inv.pneumatic,
-      structural: !!inv.structural,
-      wheels: !!inv.wheels,
-      others: !!inv.others,
-      sublevels: sublevelsList,
-    };
-  }
-
-  interventionLabel(key: string): string {
-    return (
-      INTERVENTION_LABELS[key as keyof typeof INTERVENTION_LABELS] ?? key
-    );
-  }
-
   fluidLabelForRow(val: unknown): string {
     const c = val as FluidCompartment;
     return FLUID_COMPARTMENT_LABELS[c] ?? String(val);
@@ -595,13 +569,22 @@ export class WorkOrderFormComponent implements OnInit {
   buildCreatePayload(): CreateWorkOrderExcelPayload {
     const v = this.otForm.getRawValue() as any;
     const ini = Number(v.detentionInitialMeter);
-    const fin = Number(v.detentionFinalMeter);
+    const finRaw = v.detentionFinalMeter;
+    let detentionFinalMeter: number | undefined;
+    if (
+      finRaw !== '' &&
+      finRaw !== null &&
+      finRaw !== undefined &&
+      `${finRaw}`.trim() !== ''
+    ) {
+      const n = Number(finRaw);
+      if (!Number.isNaN(n)) detentionFinalMeter = n;
+    }
     const pmCycle = String(v.pmCycleNumber ?? '').trim();
 
     return {
       equipmentId: v.equipmentId,
       warehouseId: v.warehouseId || undefined,
-      maintenanceOrderNumber: v.maintenanceOrderNumber?.trim() || undefined,
       detentionStartedAt: v.detentionStartedAt
         ? new Date(v.detentionStartedAt).toISOString()
         : undefined,
@@ -609,10 +592,13 @@ export class WorkOrderFormComponent implements OnInit {
         ? new Date(v.detentionEndedAt).toISOString()
         : undefined,
       detentionInitialMeter: ini,
-      detentionFinalMeter: fin,
-      mechanicAttentionDate: v.mechanicAttentionDate?.trim() || undefined,
-      mechanicAttentionFromTime: v.mechanicAttentionFromTime?.trim() || undefined,
-      mechanicAttentionToTime: v.mechanicAttentionToTime?.trim() || undefined,
+      detentionFinalMeter,
+      mechanicAttentionStartedAt: v.mechanicAttentionStartedAt
+        ? new Date(v.mechanicAttentionStartedAt).toISOString()
+        : undefined,
+      mechanicAttentionEndedAt: v.mechanicAttentionEndedAt
+        ? new Date(v.mechanicAttentionEndedAt).toISOString()
+        : undefined,
       clientAttributedStart: v.clientAttributedStart
         ? new Date(v.clientAttributedStart).toISOString()
         : undefined,
@@ -623,11 +609,10 @@ export class WorkOrderFormComponent implements OnInit {
       affectsAvailability: v.affectsAvailability,
       classificationTags: v.classificationTags,
       workLocation: v.workLocation,
-      metricHm: v.metricHm === '' ? null : Number(v.metricHm),
-      metricHh: v.metricHh === '' ? null : Number(v.metricHh),
+      personnelQuantity: Math.max(1, Math.trunc(Number(v.personnelQuantity ?? 1))),
       workShift: v.workShift,
       initialRequestDescription: v.initialRequestDescription?.trim() || undefined,
-      intervenedSystemsJson: this.buildIntervenedJson(),
+      systems: this.pickedSystems().map((s) => s.id),
       symptomsText: v.symptomsText?.trim() || undefined,
       causeText: v.causeText?.trim() || undefined,
       workPerformedDescription: v.workPerformedDescription?.trim() || '',
@@ -703,7 +688,42 @@ export class WorkOrderFormComponent implements OnInit {
     }
   }
 
+  openSystemPicker() {
+    if (!this.systemsCatalogFamilyId()) {
+      this.notificationService.error(
+        'No hay familia de catálogo «Sistemas». Revise la jerarquía en catálogos.',
+      );
+      return;
+    }
+    this.showSystemPicker.set(true);
+  }
+
+  onSystemPickerClosed() {
+    this.showSystemPicker.set(false);
+  }
+
+  onSystemPicked(row: ItemPickerRow) {
+    const id = row.id;
+    const label = `${row.partNumber} — ${row.name}`;
+    if (this.pickedSystems().some((s) => s.id === id)) {
+      this.onSystemPickerClosed();
+      return;
+    }
+    this.pickedSystems.update((list) => [...list, { id, label }]);
+    this.onSystemPickerClosed();
+  }
+
+  removePickedSystem(id: string) {
+    this.pickedSystems.update((list) => list.filter((s) => s.id !== id));
+  }
+
   closeWorkOrder() {
+    if (!this.closeAllowed()) {
+      this.notificationService.error(
+        'Registre el inicio de detención (inicio del trabajo) antes de cerrar la OT.',
+      );
+      return;
+    }
     if (this.otForm.invalid || !this.otId || this.mode === 'READONLY') {
       this.otForm.markAllAsTouched();
       return;

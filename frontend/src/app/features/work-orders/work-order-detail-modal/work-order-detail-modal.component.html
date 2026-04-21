@@ -183,9 +183,11 @@
                 <span class="text-[10px] text-muted font-mono uppercase block mb-1"
                   >{{ meterUnit(w.equipment) }} final</span
                 >
-                <span class="text-xl font-mono text-primary">{{
-                  w.finalMeter | number
-                }}</span>
+                @if (w.finalMeter != null) {
+                  <span class="text-xl font-mono text-primary">{{ w.finalMeter | number }}</span>
+                } @else {
+                  <span class="text-xl font-mono text-muted">—</span>
+                }
               </div>
             </div>
 
