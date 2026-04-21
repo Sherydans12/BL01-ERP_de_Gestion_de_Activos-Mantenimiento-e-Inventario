@@ -72,14 +72,13 @@ interface CreateWorkOrderDto {
   }[];
   fluidSamples?: { systemId: string; bottleCode: string }[];
 
-  maintenanceOrderNumber?: string;
   detentionStartedAt?: string;
   detentionEndedAt?: string;
   detentionInitialMeter?: number;
   detentionFinalMeter?: number;
-  mechanicAttentionDate?: string;
-  mechanicAttentionFromTime?: string;
-  mechanicAttentionToTime?: string;
+  mechanicAttentionStartedAt?: string;
+  mechanicAttentionEndedAt?: string;
+  personnelQuantity?: number;
   clientAttributedStart?: string;
   clientAttributedEnd?: string;
   clientAttributedReason?: string;
@@ -111,14 +110,13 @@ interface CreateWorkOrderDto {
 
 export interface UpdateWorkOrderDto {
   warehouseId?: string | null;
-  maintenanceOrderNumber?: string | null;
   detentionStartedAt?: string | null;
   detentionEndedAt?: string | null;
   detentionInitialMeter?: number | null;
   detentionFinalMeter?: number | null;
-  mechanicAttentionDate?: string | null;
-  mechanicAttentionFromTime?: string | null;
-  mechanicAttentionToTime?: string | null;
+  mechanicAttentionStartedAt?: string | null;
+  mechanicAttentionEndedAt?: string | null;
+  personnelQuantity?: number | null;
   clientAttributedStart?: string | null;
   clientAttributedEnd?: string | null;
   clientAttributedReason?: string | null;
@@ -272,11 +270,27 @@ export class WorkOrdersService {
       const ini = Number(
         dto.detentionInitialMeter ?? dto.initialMeter ?? NaN,
       );
-      const fin = Number(dto.detentionFinalMeter ?? dto.finalMeter ?? NaN);
-      if (Number.isNaN(ini) || Number.isNaN(fin)) {
+      const finRaw = dto.detentionFinalMeter ?? dto.finalMeter;
+      let fin: number | null = null;
+      if (finRaw !== undefined && finRaw !== null && `${finRaw}`.trim() !== '') {
+        const n = Number(finRaw);
+        if (Number.isNaN(n)) {
+          throw new BadRequestException(
+            'La medición final debe ser numérica válida cuando se informa.',
+          );
+        }
+        fin = n;
+      }
+      if (Number.isNaN(ini)) {
         throw new BadRequestException(
-          'Debe indicar medición inicial y final (detención u horómetro).',
+          'Debe indicar medición inicial (detención u horómetro).',
         );
+      }
+
+      let personnelQty = 1;
+      if (dto.personnelQuantity != null) {
+        const pq = Number(dto.personnelQuantity);
+        if (!Number.isNaN(pq)) personnelQty = Math.max(1, Math.trunc(pq));
       }
 
       const narrative =
@@ -319,20 +333,15 @@ export class WorkOrdersService {
             finalMeter: fin,
             description: descForLegacyField,
             responsible: dto.responsibleMechanicName ?? dto.responsible,
-            maintenanceOrderNumber: dto.maintenanceOrderNumber?.trim() || null,
             detentionStartedAt: parseOptDate(dto.detentionStartedAt) ?? null,
             detentionEndedAt: parseOptDate(dto.detentionEndedAt) ?? null,
             detentionInitialMeter: ini,
             detentionFinalMeter: fin,
-            mechanicAttentionDate: dto.mechanicAttentionDate?.trim()
-              ? new Date(
-                  `${dto.mechanicAttentionDate.trim()}T12:00:00.000Z`,
-                )
-              : null,
-            mechanicAttentionFromTime:
-              dto.mechanicAttentionFromTime?.trim() || null,
-            mechanicAttentionToTime:
-              dto.mechanicAttentionToTime?.trim() || null,
+            mechanicAttentionStartedAt:
+              parseOptDate(dto.mechanicAttentionStartedAt) ?? null,
+            mechanicAttentionEndedAt:
+              parseOptDate(dto.mechanicAttentionEndedAt) ?? null,
+            personnelQuantity: personnelQty,
             clientAttributedStart: parseOptDate(dto.clientAttributedStart)
               ? new Date(dto.clientAttributedStart!)
               : null,
@@ -839,9 +848,6 @@ export class WorkOrdersService {
             ? { connect: { id: dto.warehouseId } }
             : { disconnect: true };
         }
-        if (dto.maintenanceOrderNumber !== undefined) {
-          data.maintenanceOrderNumber = dto.maintenanceOrderNumber;
-        }
         if (dto.detentionStartedAt !== undefined) {
           data.detentionStartedAt = parseOptDate(dto.detentionStartedAt);
         }
@@ -860,18 +866,25 @@ export class WorkOrdersService {
             data.finalMeter = dto.detentionFinalMeter;
           }
         }
-        if (dto.mechanicAttentionDate !== undefined) {
-          data.mechanicAttentionDate =
-            dto.mechanicAttentionDate?.trim() != null &&
-            dto.mechanicAttentionDate !== ''
-              ? new Date(`${String(dto.mechanicAttentionDate).trim()}T12:00:00.000Z`)
-              : null;
+        if (dto.mechanicAttentionStartedAt !== undefined) {
+          data.mechanicAttentionStartedAt = parseOptDate(
+            dto.mechanicAttentionStartedAt,
+          );
         }
-        if (dto.mechanicAttentionFromTime !== undefined) {
-          data.mechanicAttentionFromTime = dto.mechanicAttentionFromTime;
+        if (dto.mechanicAttentionEndedAt !== undefined) {
+          data.mechanicAttentionEndedAt = parseOptDate(
+            dto.mechanicAttentionEndedAt,
+          );
         }
-        if (dto.mechanicAttentionToTime !== undefined) {
-          data.mechanicAttentionToTime = dto.mechanicAttentionToTime;
+        if (dto.personnelQuantity !== undefined) {
+          if (dto.personnelQuantity === null) {
+            data.personnelQuantity = 1;
+          } else {
+            const pq = Number(dto.personnelQuantity);
+            data.personnelQuantity = Number.isNaN(pq)
+              ? 1
+              : Math.max(1, Math.trunc(pq));
+          }
         }
         if (dto.clientAttributedStart !== undefined) {
           data.clientAttributedStart = parseOptDate(dto.clientAttributedStart);
@@ -1292,13 +1305,60 @@ export class WorkOrdersService {
                 'La Orden de Trabajo ya se encuentra CERRADA',
               );
 
-            if (workOrder.finalMeter < workOrder.initialMeter) {
+            if (
+              !workOrder.detentionStartedAt ||
+              !workOrder.detentionEndedAt
+            ) {
+              throw new BadRequestException(
+                'Para cerrar la OT debe registrar inicio y fin de detención.',
+              );
+            }
+
+            const detMs =
+              workOrder.detentionEndedAt.getTime() -
+              workOrder.detentionStartedAt.getTime();
+            if (detMs < 0) {
+              throw new BadRequestException(
+                'La fecha de fin de detención debe ser posterior al inicio.',
+              );
+            }
+
+            const hmHours = detMs / (1000 * 60 * 60);
+
+            if (
+              !workOrder.mechanicAttentionStartedAt ||
+              !workOrder.mechanicAttentionEndedAt
+            ) {
+              throw new BadRequestException(
+                'Para cerrar la OT debe registrar atención mecánica (desde / hasta).',
+              );
+            }
+
+            const mechMs =
+              workOrder.mechanicAttentionEndedAt.getTime() -
+              workOrder.mechanicAttentionStartedAt.getTime();
+            if (mechMs < 0) {
+              throw new BadRequestException(
+                'La fecha de fin de atención mecánica debe ser posterior al inicio.',
+              );
+            }
+
+            const pq = Math.max(1, workOrder.personnelQuantity ?? 1);
+            const hhHours = hmHours * pq;
+
+            if (
+              workOrder.finalMeter != null &&
+              workOrder.finalMeter < workOrder.initialMeter
+            ) {
               const recentAdj = await tx.meterAdjustment.findFirst({
                 where: { equipmentId: workOrder.equipmentId },
                 orderBy: { date: 'desc' },
               });
 
-              if (!recentAdj || recentAdj.newValue > workOrder.finalMeter) {
+              if (
+                !recentAdj ||
+                recentAdj.newValue > workOrder.finalMeter!
+              ) {
                 throw new BadRequestException(
                   `El medidor final (${workOrder.finalMeter}) es menor al inicial (${workOrder.initialMeter}). Registre un Ajuste de Medidor para justificar el reinicio del contador.`,
                 );
@@ -1330,6 +1390,8 @@ export class WorkOrdersService {
             const updateData: any = {
               status: 'CLOSED',
               closedAt: new Date(),
+              metricHm: new Prisma.Decimal(String(hmHours.toFixed(4))),
+              metricHh: new Prisma.Decimal(String(hhHours.toFixed(4))),
             };
             if (effectiveWarehouseId && !workOrder.warehouseId) {
               updateData.warehouseId = effectiveWarehouseId;
@@ -1340,15 +1402,17 @@ export class WorkOrdersService {
               data: updateData,
             });
 
-            await applyCurrentMeterChange(tx, {
-              tenantId,
-              equipmentId: workOrder.equipmentId,
-              oldMeter: workOrder.equipment.currentMeter,
-              newMeter: workOrder.finalMeter,
-              source: MeterLogSource.OT,
-              sourceId: workOrder.id,
-              userId,
-            });
+            if (workOrder.finalMeter != null) {
+              await applyCurrentMeterChange(tx, {
+                tenantId,
+                equipmentId: workOrder.equipmentId,
+                oldMeter: workOrder.equipment.currentMeter,
+                newMeter: workOrder.finalMeter,
+                source: MeterLogSource.OT,
+                sourceId: workOrder.id,
+                userId,
+              });
+            }
 
             let totalConsumableCost = new Decimal(0);
 
@@ -1596,7 +1660,6 @@ export class WorkOrdersService {
       affectsAvailability: wo.affectsAvailability ?? undefined,
       responsibleMechanicName:
         wo.responsibleMechanicName ?? wo.responsible ?? undefined,
-      maintenanceOrderNumber: wo.maintenanceOrderNumber ?? undefined,
     });
 
     await this.prisma.workOrderBacklogItem.update({
