@@ -32,7 +32,8 @@
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
   }
 
-  [data-theme='light'] input,
+  /* Solo campos tipo “campo”: los checkbox/radio heredaban w-full + padding y quedaban como barras finas. */
+  [data-theme='light'] input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
   [data-theme='light'] select {
     background-color: #FFFFFF !important;
     border-color: #E2E8F0 !important;
@@ -47,16 +48,46 @@
     color: var(--text-main);
   }
 
-  /* Estilos globales para inputs y selects - DevTools Aesthetic */
-  input,
+  /**
+   * Inputs “de campo”: ancho completo. Checkbox/radio fuera de esta regla — si no,
+   * `w-full` los estira a todo el grid y parecen controles rotos / delgados.
+   */
+  input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
   select {
     @apply bg-dark border border-border rounded-md px-4 py-2 w-full transition-all duration-200 appearance-none;
     color: var(--text-main);
   }
 
-  input:focus,
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 1.125rem;
+    height: 1.125rem;
+    min-width: 1.125rem;
+    min-height: 1.125rem;
+    flex-shrink: 0;
+    padding: 0;
+    margin: 0;
+    vertical-align: middle;
+    accent-color: rgb(var(--primary-rgb));
+    cursor: pointer;
+    appearance: auto;
+    border: none;
+    background-color: transparent;
+  }
+
+  input[type='radio'] {
+    border-radius: 9999px;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='hidden']):focus,
   select:focus {
     @apply outline-none border-primary ring-1 ring-primary shadow-[0_0_10px_rgba(0,229,255,0.2)];
+  }
+
+  input[type='checkbox']:focus-visible,
+  input[type='radio']:focus-visible {
+    outline: 2px solid rgb(var(--primary-rgb));
+    outline-offset: 2px;
   }
 
   select {
@@ -176,5 +207,69 @@
   .input-field {
     @apply bg-dark border border-border rounded-md px-4 py-2 w-full transition-all duration-200;
     color: var(--text-main);
+  }
+
+  /**
+   * Chips de opción / multi-select: estado activo visible (no solo checkbox nativo).
+   */
+  .tpm-choice-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.75rem;
+    border: 2px solid var(--border);
+    background: rgba(var(--bg-dark-rgb), 0.35);
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tpm-choice-chip:hover {
+    border-color: rgba(var(--primary-rgb), 0.4);
+    color: var(--text-main);
+  }
+
+  .tpm-choice-chip--active {
+    border-color: rgb(var(--primary-rgb));
+    background: rgba(var(--primary-rgb), 0.14);
+    color: var(--text-main);
+    box-shadow:
+      inset 0 0 0 1px rgba(var(--primary-rgb), 0.25),
+      0 0 0 1px rgba(var(--primary-rgb), 0.25);
+  }
+
+  [data-theme='light'] .tpm-choice-chip {
+    background: rgba(15, 23, 42, 0.05);
+  }
+
+  [data-theme='light'] .tpm-choice-chip--active {
+    background: rgba(var(--primary-rgb), 0.12);
+  }
+
+  .tpm-choice-chip:focus-visible {
+    outline: 2px solid rgb(var(--primary-rgb));
+    outline-offset: 2px;
+  }
+
+  /** Variante en fila (radios cortos): no fuerza ancho de celda completa */
+  .tpm-choice-chip--inline {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 5.5rem;
+    justify-content: center;
+    text-align: center;
   }
 }

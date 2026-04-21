@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/services/auth/auth.guard';
+import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 
 export const routes: Routes = [
   {
@@ -44,6 +45,26 @@ export const routes: Routes = [
             (m) => m.DashboardComponent,
           ),
       },
+      {
+        path: 'configuracion',
+        data: { pageTitle: 'Mi cuenta' },
+        loadComponent: () =>
+          import('./features/settings/user-account-settings/user-account-settings.component').then(
+            (m) => m.UserAccountSettingsComponent,
+          ),
+      },
+      {
+        path: 'admin/security',
+        canActivate: [authGuard],
+        data: {
+          roles: ['SUPER_ADMIN', 'ADMIN'],
+          pageTitle: 'Seguridad global',
+        },
+        loadComponent: () =>
+          import('./features/admin/admin-security/admin-security.component').then(
+            (m) => m.AdminSecurityComponent,
+          ),
+      },
       // Futura ruta: { path: 'flota', component: FleetMasterComponent }
       // ── Operaciones ────────────────────────────────────────────────────────
       {
@@ -51,6 +72,19 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/fleet/fleet-master/fleet-master.component').then(
             (m) => m.FleetMasterComponent,
+          ),
+      },
+      {
+        path: 'flota/registro-horas',
+        canActivate: [authGuard],
+        canDeactivate: [registroHorasCanDeactivate],
+        data: {
+          roles: ['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'],
+          pageTitle: 'Registro de horómetros',
+        },
+        loadComponent: () =>
+          import('./features/meter-capture/registro-horas.component').then(
+            (m) => m.RegistroHorasComponent,
           ),
       },
       {
@@ -65,6 +99,20 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
+          ),
+      },
+      {
+        path: 'ots/backlog',
+        loadComponent: () =>
+          import('./features/work-orders/work-order-backlog-list/work-order-backlog-list.component').then(
+            (m) => m.WorkOrderBacklogListComponent,
+          ),
+      },
+      {
+        path: 'ots/analytics',
+        loadComponent: () =>
+          import('./features/work-orders/work-order-analytics-dashboard/work-order-analytics-dashboard.component').then(
+            (m) => m.WorkOrderAnalyticsDashboardComponent,
           ),
       },
       {
@@ -241,6 +289,11 @@ export const routes: Routes = [
             (m) => m.SupplyAlertsComponent,
           ),
         data: { pageTitle: 'Abastecimiento' },
+      },
+      {
+        path: 'inventario/registro-horas',
+        redirectTo: 'flota/registro-horas',
+        pathMatch: 'full',
       },
       // ── Compras (P2P) ──────────────────────────────────────────────────────
       {
