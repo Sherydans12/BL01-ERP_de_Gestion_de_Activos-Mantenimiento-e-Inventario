@@ -36,6 +36,8 @@ model Equipment {
   driveType             String?     @map("drive_type") @db.VarChar(50)
   ownership             String?     @db.VarChar(50)
   maintenanceFrequency  Int?        @map("maintenance_frequency")
+  /** Intervalo PM en horas o km según meterType (250, 500, 600, 10000…). Si null, usa reglas por tipo en cliente. */
+  pmIntervalOverride    Int?        @map("pm_interval_override")
   lastMaintenanceDate   DateTime?   @map("last_maintenance_date") @db.Date
   lastMaintenanceMeter  Int?        @map("last_maintenance_meter")
   lastMaintenanceType   String?     @map("last_maintenance_type") @db.VarChar(100)
@@ -57,6 +59,7 @@ model Equipment {
   subcontract           Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
   workOrders            WorkOrder[]
   meterAdjustments      MeterAdjustment[]
+  meterLogs             EquipmentMeterLog[]
   purchaseRequisitions  PurchaseRequisition[] @relation("RequisitionEquipment")
   purchaseOrders        PurchaseOrder[]       @relation("OrderEquipment")
   assetCostRecords      AssetCostRecord[]
@@ -120,6 +123,46 @@ model WorkOrder {
   
   hasBacklog        Boolean           @default(false) @map("has_backlog")
 
+  // —— Formulario operacional (Excel) ——
+  maintenanceOrderNumber  String?   @map("maintenance_order_number") @db.VarChar(80)
+
+  detentionStartedAt     DateTime?  @map("detention_started_at")
+  detentionEndedAt       DateTime?  @map("detention_ended_at")
+  detentionInitialMeter  Int?       @map("detention_initial_meter")
+  detentionFinalMeter    Int?       @map("detention_final_meter")
+
+  mechanicAttentionDate     DateTime? @map("mechanic_attention_date") @db.Date
+  mechanicAttentionFromTime String?   @map("mechanic_attention_from_time") @db.VarChar(8)
+  mechanicAttentionToTime   String?   @map("mechanic_attention_to_time") @db.VarChar(8)
+
+  clientAttributedStart  DateTime?  @map("client_attributed_start")
+  clientAttributedEnd    DateTime?  @map("client_attributed_end")
+  clientAttributedReason String?    @map("client_attributed_reason") @db.Text
+
+  affectsAvailability  AvailabilityImpact?  @map("affects_availability")
+  /** Tags multi-selección: PROGRAMADA, NO_PROGRAMADA, ACCIDENTE_INCIDENTE, OT_ABIERTA_CONTINUIDAD, OT_ABIERTA_GEN_BCK, POSIBLE_GARANTIA */
+  classificationTags   String[]   @default([]) @map("classification_tags")
+
+  workLocation  EquipmentWorkLocation? @map("work_location")
+  metricHm      Decimal?  @map("metric_hm") @db.Decimal(14, 4)
+  metricHh      Decimal?  @map("metric_hh") @db.Decimal(14, 4)
+  workShift     WorkShift? @map("work_shift")
+
+  initialRequestDescription String? @map("initial_request_description") @db.Text
+  intervenedSystemsJson      Json?  @map("intervened_systems_json")
+  symptomsText               String? @map("symptoms_text") @db.Text
+  causeText                  String? @map("cause_text") @db.Text
+  workPerformedDescription    String? @map("work_performed_description") @db.Text
+
+  techniciansNames               String? @map("technicians_names") @db.Text
+  responsibleMechanicName        String? @map("responsible_mechanic_name") @db.VarChar(150)
+  responsibleMechanicSignature    String? @map("responsible_mechanic_signature") @db.VarChar(255)
+  shiftSupervisorName             String? @map("shift_supervisor_name") @db.VarChar(150)
+  shiftSupervisorSignature       String? @map("shift_supervisor_signature") @db.VarChar(255)
+
+  /** Ciclo PM 1–4 cuando aplica */
+  pmCycleNumber Int? @map("pm_cycle_number")
+
   // Auditoría
   createdAt         DateTime          @default(now()) @map("created_at")
   syncedAt          DateTime?         @map("synced_at")
@@ -139,9 +182,43 @@ model WorkOrder {
   purchaseRequisitions PurchaseRequisition[] @relation("RequisitionWorkOrder")
   purchaseOrders       PurchaseOrder[]       @relation("OrderWorkOrder")
   assetCostRecords     AssetCostRecord[]
+  backlogItems         WorkOrderBacklogItem[]
+  fluidCompartments    WorkOrderFluidCompartment[]
 
   @@unique([tenantId, correlative])
   @@map("work_orders")
+}
+
+model WorkOrderBacklogItem {
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  workOrderId  String        @map("work_order_id") @db.Uuid
+  description  String        @db.Text
+  status       BacklogStatus @default(PENDING)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workOrder   WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("work_order_backlog_items")
+}
+
+model WorkOrderFluidCompartment {
+  id              String           @id @default(uuid()) @db.Uuid
+  workOrderId     String           @map("work_order_id") @db.Uuid
+  compartment     FluidCompartment
+  fluidType       String           @map("fluid_type") @db.VarChar(200)
+  liters          Decimal          @db.Decimal(14, 4)
+  action          FluidAction
+  inventoryItemId String?          @map("inventory_item_id") @db.Uuid
+
+  workOrder      WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  inventoryItem  InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryItemId])
+  @@map("work_order_fluid_compartments")
 }
 
 enum OtType {
@@ -170,6 +247,38 @@ enum OtStatus {
   IN_PROGRESS
   ON_HOLD
   CLOSED
+}
+
+enum AvailabilityImpact {
+  SI
+  NO
+  STP
+}
+
+enum EquipmentWorkLocation {
+  TALLER
+  TERRENO
+}
+
+enum WorkShift {
+  DIA
+  NOCHE
+}
+
+enum FluidCompartment {
+  MOTOR
+  TRANSMISION
+  DIRECCION
+  HIDRAULICO
+  MANDOS
+  DIFERENCIAL
+  REFRIGERANTE
+  OTROS
+}
+
+enum BacklogStatus {
+  PENDING
+  DONE
 }
 
 // ==========================================
@@ -309,17 +418,70 @@ model MaintenanceKitPart {
 // ==========================================
 // 6. USUARIOS Y AUTENTICACIÓN
 // ==========================================
+
+enum AuthAuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  PASSWORD_CHANGE
+  LOGOUT
+}
+
+/// Auditoría de accesos (login, cambio de clave, logout) con contexto de red/geo.
+model AuthAuditLog {
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String?         @map("user_id") @db.Uuid
+  emailAttempted String          @map("email_attempted") @db.VarChar(100)
+  action         AuthAuditAction
+  ipAddress      String          @map("ip_address") @db.VarChar(64)
+  userAgent      String          @map("user_agent") @db.VarChar(512)
+  city           String          @default("") @db.VarChar(120)
+  country        String          @default("") @db.VarChar(120)
+  isSuspicious   Boolean         @default(false) @map("is_suspicious")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([emailAttempted, createdAt])
+  @@map("auth_audit_logs")
+}
+
+/// Sesión de acceso (JWT `jti`) para revocación y control de dispositivos.
+model UserSession {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  jti          String   @unique @db.VarChar(64)
+  deviceLabel  String   @map("device_label") @db.VarChar(200)
+  ipAddress    String   @map("ip_address") @db.VarChar(64)
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  isValid      Boolean  @default(true) @map("is_valid")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isValid])
+  @@map("user_sessions")
+}
+
 model User {
   id                  String          @id @default(uuid()) @db.Uuid
   email               String          @unique @db.VarChar(100)
   password            String          @db.VarChar(255)
   name                String          @db.VarChar(100)
+  /// Nombre de pila (perfil). Si null, la UI puede derivar de `name`.
+  firstName           String?         @map("first_name") @db.VarChar(100)
+  /// Apellido(s) (perfil). Si null, la UI puede derivar de `name`.
+  lastName            String?         @map("last_name") @db.VarChar(100)
+  /// Ruta pública servida bajo `/uploads/...` (StorageService local).
+  avatarUrl           String?         @map("avatar_url") @db.VarChar(500)
   role                UserRole        @default(MECHANIC)
   isActive            Boolean         @default(false) @map("is_active")
   activationToken     String?         @map("activation_token") @db.VarChar(255)
   resetPasswordToken  String?         @map("reset_password_token") @db.VarChar(255)
   resetPasswordExpires DateTime?      @map("reset_password_expires")
-  
+  /// Hasta cuándo no se permite login (fuerza bruta).
+  lockoutUntil        DateTime?       @map("lockout_until")
+
   rut                 String?         @db.VarChar(20)
   phone               String?         @db.VarChar(20)
   birthDate           DateTime?       @map("birth_date") @db.Date
@@ -336,6 +498,7 @@ model User {
   contractAccess      UserContract[]  
   inventoryTransactions InventoryTransaction[]
   meterAdjustments    MeterAdjustment[]
+  equipmentMeterLogs  EquipmentMeterLog[]
   inventoryItemAttachments InventoryItemAttachment[]
 
   purchaseRequisitions    PurchaseRequisition[]      @relation("RequisitionRequester")
@@ -345,6 +508,8 @@ model User {
   pushSubscriptions       PushSubscription[]
   inventoryTransfersCreated InventoryTransfer[] @relation("InventoryTransferCreatedBy")
   purchaseDocumentsUploaded PurchaseDocument[]
+  authAuditLogs            AuthAuditLog[]
+  sessions                 UserSession[]
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -369,7 +534,9 @@ model Tenant {
   contracts             Contract[]    
   users                 User[]
   equipments            Equipment[]
+  equipmentMeterLogs    EquipmentMeterLog[]
   workOrders            WorkOrder[]
+  workOrderBacklogItems WorkOrderBacklogItem[]
   catalogs              CatalogItem[]
   warehouses            Warehouse[]
   inventoryItems        InventoryItem[]
@@ -596,7 +763,8 @@ model InventoryItem {
   unitOfMeasure     UnitOfMeasure  @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
   stocks            ItemStock[]
   transactions      InventoryTransaction[]
-  workOrderParts    WorkOrderPart[]
+  workOrderParts             WorkOrderPart[]
+  workOrderFluidCompartments WorkOrderFluidCompartment[]
   stockReservations StockReservation[]
   requisitionItems  RequisitionItem[]
   purchaseOrderItems PurchaseOrderItem[]
@@ -752,6 +920,31 @@ model MeterAdjustment {
   user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@map("meter_adjustments")
+}
+
+enum MeterLogSource {
+  OT
+  MANUAL
+  TELEMETRY
+}
+
+model EquipmentMeterLog {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  equipmentId  String          @map("equipment_id") @db.Uuid
+  oldValue     Decimal         @map("old_value") @db.Decimal(14, 4)
+  newValue     Decimal         @map("new_value") @db.Decimal(14, 4)
+  source       MeterLogSource
+  sourceId     String?         @map("source_id") @db.VarChar(80)
+  date         DateTime        @default(now()) @map("date")
+  userId       String          @map("user_id") @db.Uuid
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, equipmentId, date])
+  @@map("equipment_meter_logs")
 }
 
 /// Costos imputados al activo desde compras (PURCHASE) u órdenes de trabajo (WORK_ORDER).
