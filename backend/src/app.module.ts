@@ -24,6 +24,8 @@ import { UnitsOfMeasureModule } from './features/units-of-measure/units-of-measu
 import { InventoryAnalyticsModule } from './features/inventory-analytics/inventory-analytics.module';
 import { InventoryAdjustmentModule } from './features/inventory-adjustment/inventory-adjustment.module';
 import { InventoryTransferModule } from './features/inventory-transfer/inventory-transfer.module';
+import { WorkOrderAnalyticsModule } from './features/work-order-analytics/work-order-analytics.module';
+import { SecurityAdminModule } from './features/security-admin/security-admin.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { InventoryTransferModule } from './features/inventory-transfer/inventory
     InventoryAnalyticsModule,
     InventoryAdjustmentModule,
     InventoryTransferModule,
+    WorkOrderAnalyticsModule,
+    SecurityAdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
