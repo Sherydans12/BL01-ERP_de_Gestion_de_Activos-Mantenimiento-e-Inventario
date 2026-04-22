@@ -84,3 +84,21 @@ export interface DashboardStats {
   purchaseOrdersInbound?: DashboardPurchaseOrderRow[];
   lowStocks?: DashboardLowStockRow[];
 }
+
+/** Vista del dashboard tras `normalizeStats` (arrays y KPI siempre definidos). */
+export type DashboardUiModel = Omit<
+  DashboardStats,
+  | 'kpiStrip'
+  | 'pmDueSoon'
+  | 'openOtsHot'
+  | 'purchaseRequisitionsAttention'
+  | 'purchaseOrdersInbound'
+  | 'lowStocks'
+> & {
+  kpiStrip: DashboardKpiStrip;
+  pmDueSoon: DashboardPmRow[];
+  openOtsHot: DashboardOpenOtRow[];
+  purchaseRequisitionsAttention: DashboardPurchaseReqRow[];
+  purchaseOrdersInbound: DashboardPurchaseOrderRow[];
+  lowStocks: DashboardLowStockRow[];
+};

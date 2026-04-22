@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { WorkOrdersService } from '../../core/services/work-orders/work-orders.service';
-import type { DashboardKpiStrip, DashboardStats } from '../../core/models/dashboard-stats';
+import type { DashboardStats, DashboardUiModel } from '../../core/models/dashboard-stats';
 import { EquipmentDetailModalComponent } from '../fleet/equipment-detail-modal/equipment-detail-modal.component';
 import { WorkOrderDetailModalComponent } from '../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import { NotificationService } from '../../core/services/notification/notification.service';
@@ -23,8 +23,7 @@ export class DashboardComponent implements OnInit {
   private workOrdersService = inject(WorkOrdersService);
   private notificationService = inject(NotificationService);
 
-  /** Modelo UI: siempre incluye `kpiStrip` y arrays (post-normalización). */
-  stats = signal<(DashboardStats & { kpiStrip: DashboardKpiStrip }) | null>(null);
+  stats = signal<DashboardUiModel | null>(null);
   lastUpdated = signal<Date>(new Date());
 
   showEquipmentDetail = signal(false);
@@ -51,9 +50,7 @@ export class DashboardComponent implements OnInit {
   }
 
   /** Compatibilidad si el API aún no expone bloques nuevos. */
-  private normalizeStats(
-    raw: DashboardStats,
-  ): DashboardStats & { kpiStrip: DashboardKpiStrip } {
+  private normalizeStats(raw: DashboardStats): DashboardUiModel {
     const o = raw.otsByStatus;
     const active = (o?.OPEN ?? 0) + (o?.IN_PROGRESS ?? 0);
     const top = raw.topAlerts ?? [];
