@@ -4,6 +4,8 @@ import {
   signal,
   OnInit,
   computed,
+  viewChild,
+  ElementRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -15,6 +17,8 @@ import {
   ReactiveFormsModule,
   FormsModule,
 } from '@angular/forms';
+import { forkJoin } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { RouterLink, Router, ActivatedRoute } from '@angular/router';
 import {
   WorkOrdersService,
@@ -44,6 +48,10 @@ import {
   type PmIntervalSource,
 } from '../../../core/utils/pm-interval';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
+import {
+  CatalogService,
+  type CatalogItem,
+} from '../../../core/services/catalog/catalog.service';
 import {
   CLASSIFICATION_OPTIONS,
   FLUID_COMPARTMENTS_ORDER,
@@ -82,13 +90,17 @@ export class WorkOrderFormComponent implements OnInit {
   private inventoryStockService = inject(InventoryStockService);
   private maintenanceKitsService = inject(MaintenanceKitsService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
+  readonly catalogService = inject(CatalogService);
+
+  /** Diálogo nativo: `CatalogItem` categoría SYSTEM (catálogo global del tenant). */
+  catalogSystemsDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('catalogSystemsDialog');
 
   otId: string | null = null;
   mode: 'CREATING' | 'EDITING' | 'READONLY' = 'CREATING';
   currentStatus = '';
 
   tab = signal<'datos' | 'backlog' | 'legacy'>('datos');
-  legacyOpen = signal(false);
   pmPanelOpen = signal(false);
 
   fleet = signal<Equipment[]>([]);
@@ -124,11 +136,13 @@ export class WorkOrderFormComponent implements OnInit {
     return src ? pmIntervalSourceLabel(src) : '';
   }
 
-  /** Familia catálogo «Sistemas» para filtrar selección de sistemas intervenidos. */
-  systemsCatalogFamilyId = signal<string | null>(null);
-
   pickedSystems = signal<{ id: string; label: string }[]>([]);
-  showSystemPicker = signal(false);
+
+  /** Sistemas `CatalogItem` SYSTEM activos aún no elegidos en esta OT. */
+  availableCatalogSystemsForPick = computed(() => {
+    const picked = new Set(this.pickedSystems().map((s) => s.id));
+    return this.catalogService.systems().filter((sys) => !picked.has(sys.id));
+  });
 
   closeAllowed = computed(() => {
     const raw = this.otForm.get('detentionStartedAt')?.value;
@@ -170,18 +184,8 @@ export class WorkOrderFormComponent implements OnInit {
   otForm: FormGroup;
 
   constructor() {
-    const compartmentRows = this.fb.array(
-      FLUID_COMPARTMENTS_ORDER.map((compartment) =>
-        this.fb.group({
-          compartment: [{ value: compartment, disabled: true }],
-          fluidType: [''],
-          liters: [''],
-          action: ['RELLENO' as const],
-          inventoryItemId: [''],
-          linkedFluidItemName: [''],
-        }),
-      ),
-    );
+    /** Sin filas por defecto: el usuario agrega compartimientos solo si aplica. */
+    const compartmentRows = this.fb.array([] as FormGroup[]);
 
     const classificationTagsCtrl = this.fb.nonNullable.control<
       OtClassificationTag[]
@@ -235,25 +239,39 @@ export class WorkOrderFormComponent implements OnInit {
     return this.otForm.get('compartmentRows') as FormArray;
   }
 
+  private buildFluidRowFormGroup(
+    compartment: FluidCompartment = 'MOTOR',
+  ): FormGroup {
+    return this.fb.group({
+      compartment: [compartment],
+      fluidType: [''],
+      liters: [''],
+      action: ['RELLENO' as const],
+      inventoryItemId: [''],
+      linkedFluidItemName: [''],
+    });
+  }
+
+  addFluidCompartmentRow() {
+    this.compartmentRowsArray.push(this.buildFluidRowFormGroup('OTROS'));
+  }
+
+  removeFluidCompartmentRow(index: number) {
+    this.compartmentRowsArray.removeAt(index);
+  }
+
   get partsArray(): FormArray {
     return this.otForm.get('parts') as FormArray;
   }
 
-  /** Misma referencia para poder duplicar el `<select>` de bodega (Datos OT + Legacy). */
+  /** Misma referencia para duplicar el `<select>` de bodega (Datos OT, fluidos y repuestos). */
   get warehouseIdControl(): FormControl<string | null> {
     return this.otForm.get('warehouseId') as FormControl<string | null>;
   }
 
   ngOnInit(): void {
-    /** Familia «Sistemas» del maestro de categorías (`/app/catalogos`); el backend la crea si falta (bootstrap + primer GET familias). */
-    this.inventoryItemsService.getCategoryFamilies().subscribe({
-      next: (cats) => {
-        const hit =
-          cats.find((c) => /^sistemas$/i.test(String(c.name).trim())) ??
-          cats.find((c) => /sistema/i.test(String(c.name)));
-        this.systemsCatalogFamilyId.set(hit?.id ?? null);
-      },
-      error: () => this.systemsCatalogFamilyId.set(null),
+    this.catalogService.loadCatalogs().subscribe({
+      error: () => undefined,
     });
 
     this.fleetService.getEquipments({ limit: 1000 }).subscribe({
@@ -448,7 +466,7 @@ export class WorkOrderFormComponent implements OnInit {
           .map((s: any) => ({
             id: String(s.catalogItem?.id ?? s.catalogItemId ?? ''),
             label: s.catalogItem
-              ? `${s.catalogItem.partNumber} — ${s.catalogItem.name}`
+              ? `${s.catalogItem.code ?? s.catalogItem.partNumber ?? ''} — ${s.catalogItem.name}`
               : 'Ítem catálogo',
           }))
           .filter((x: { id: string }) => x.id.length > 0);
@@ -465,12 +483,15 @@ export class WorkOrderFormComponent implements OnInit {
                   p.quantity,
                   [Validators.required, Validators.min(1)],
                 ],
-                partNumber: [p.partNumber, Validators.required],
-                description: [p.description, Validators.required],
-                inventoryItemId: [p.inventoryItemId || ''],
+                partNumber: [p.partNumber],
+                description: [p.description],
+                inventoryItemId: [
+                  p.inventoryItemId || '',
+                  Validators.required,
+                ],
                 linkedItemName: [
                   p.inventoryItem
-                    ? `${p.inventoryItem.partNumber} - ${p.inventoryItem.name}`
+                    ? `${p.inventoryItem.partNumber} — ${p.inventoryItem.name}`
                     : '',
                 ],
               }),
@@ -497,23 +518,23 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   private patchFluidRows(rows: any[] | undefined) {
-    if (!rows?.length) return;
-    const byComp = new Map(rows.map((r) => [r.compartment, r]));
-    this.compartmentRowsArray.controls.forEach((ctrl) => {
-      const comp = ctrl.get('compartment')?.value as FluidCompartment;
-      const hit = byComp.get(comp);
-      if (hit) {
-        ctrl.patchValue({
-          fluidType: hit.fluidType || '',
-          liters: hit.liters != null ? String(hit.liters) : '',
-          action: hit.action || 'RELLENO',
-          inventoryItemId: hit.inventoryItemId || '',
-          linkedFluidItemName: hit.inventoryItem
-            ? `${hit.inventoryItem.partNumber} — ${hit.inventoryItem.name}`
-            : '',
-        });
-      }
-    });
+    this.compartmentRowsArray.clear();
+    if (!rows?.length) {
+      return;
+    }
+    for (const hit of rows) {
+      const g = this.buildFluidRowFormGroup(hit.compartment as FluidCompartment);
+      g.patchValue({
+        fluidType: hit.fluidType || '',
+        liters: hit.liters != null ? String(hit.liters) : '',
+        action: hit.action || 'RELLENO',
+        inventoryItemId: hit.inventoryItemId || '',
+        linkedFluidItemName: hit.inventoryItem
+          ? `${hit.inventoryItem.partNumber} — ${hit.inventoryItem.name}`
+          : '',
+      });
+      this.compartmentRowsArray.push(g);
+    }
   }
 
   toggleClassification(tag: OtClassificationTag, checked: boolean) {
@@ -550,20 +571,43 @@ export class WorkOrderFormComponent implements OnInit {
         inventoryItemId?: string;
       };
       const linkedId = raw.inventoryItemId?.trim();
-      const fluidLabel = raw.fluidType?.trim();
-      if (!fluidLabel && !linkedId) continue;
+      if (!linkedId) continue;
       const liters = Number(String(raw.liters).replace(',', '.'));
-      if (Number.isNaN(liters) || liters < 0) continue;
-      const payload: FluidCompartmentRowPayload = {
+      if (Number.isNaN(liters) || liters <= 0) continue;
+      const fluidLabel =
+        raw.fluidType?.trim() ||
+        (raw as { linkedFluidItemName?: string }).linkedFluidItemName?.trim() ||
+        '—';
+      out.push({
         compartment: raw.compartment,
-        fluidType: fluidLabel || '—',
+        fluidType: fluidLabel,
         liters,
         action: raw.action,
-      };
-      if (linkedId) payload.inventoryItemId = linkedId;
-      out.push(payload);
+        inventoryItemId: linkedId,
+      });
     }
     return out;
+  }
+
+  /** Fila en blanco = sin ítem y sin litros válidos; mezcla parcial = error antes de guardar. */
+  validateFluidCompartmentRows(): string | null {
+    for (let i = 0; i < this.compartmentRowsArray.length; i++) {
+      const raw = this.compartmentRowsArray.at(i).getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+      };
+      const id = raw.inventoryItemId?.trim() ?? '';
+      const liters = Number(String(raw.liters ?? '').replace(',', '.'));
+      const hasLiters = !Number.isNaN(liters) && liters > 0;
+      if (!id && !hasLiters) continue;
+      if (!id) {
+        return `Fluidos por compartimiento (fila ${i + 1}): elija un ítem del catálogo de inventario.`;
+      }
+      if (!hasLiters) {
+        return `Fluidos por compartimiento (fila ${i + 1}): indique litros consumidos (> 0).`;
+      }
+    }
+    return null;
   }
 
   buildCreatePayload(): CreateWorkOrderExcelPayload {
@@ -641,12 +685,14 @@ export class WorkOrderFormComponent implements OnInit {
       quantity: number;
       inventoryItemId?: string;
     }[];
-    return rows.map((p) => ({
-      partNumber: p.partNumber,
-      description: p.description,
-      quantity: Number(p.quantity),
-      inventoryItemId: p.inventoryItemId || undefined,
-    }));
+    return rows
+      .filter((p) => (p.inventoryItemId ?? '').toString().trim().length > 0)
+      .map((p) => ({
+        partNumber: (p.partNumber ?? '').trim(),
+        description: (p.description ?? '').trim(),
+        quantity: Number(p.quantity),
+        inventoryItemId: String(p.inventoryItemId).trim(),
+      }));
   }
 
   savePrimary() {
@@ -656,6 +702,11 @@ export class WorkOrderFormComponent implements OnInit {
       this.notificationService.error(
         'Seleccione al menos un tipo de OT (clasificación).',
       );
+      return;
+    }
+    const fluidErr = this.validateFluidCompartmentRows();
+    if (fluidErr) {
+      this.notificationService.error(fluidErr);
       return;
     }
     if (this.otForm.invalid || this.mode === 'READONLY') {
@@ -689,28 +740,51 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   openSystemPicker() {
-    if (!this.systemsCatalogFamilyId()) {
-      this.notificationService.error(
-        'No hay familia de catálogo «Sistemas». Revise la jerarquía en catálogos.',
-      );
-      return;
+    const show = () => {
+      const dlg = this.catalogSystemsDialog()?.nativeElement;
+      if (!dlg) return;
+      const n = this.catalogService.systems().length;
+      if (n === 0) {
+        this.notificationService.warning(
+          'No hay sistemas disponibles en el catálogo de la empresa. Consulte con administración.',
+        );
+        return;
+      }
+      dlg.showModal();
+    };
+
+    if (!this.catalogService.getAllCatalogs()().length) {
+      this.catalogService.loadCatalogs().subscribe({
+        next: () => queueMicrotask(show),
+        error: () =>
+          this.notificationService.error(
+            'No se pudo cargar el catálogo de sistemas.',
+          ),
+      });
+    } else {
+      queueMicrotask(show);
     }
-    this.showSystemPicker.set(true);
   }
 
-  onSystemPickerClosed() {
-    this.showSystemPicker.set(false);
+  closeCatalogSystemsDialog() {
+    this.catalogSystemsDialog()?.nativeElement.close();
   }
 
-  onSystemPicked(row: ItemPickerRow) {
-    const id = row.id;
-    const label = `${row.partNumber} — ${row.name}`;
+  onCatalogSystemsDialogBackdrop(ev: MouseEvent) {
+    if (ev.target === ev.currentTarget) {
+      this.closeCatalogSystemsDialog();
+    }
+  }
+
+  pickCatalogSystem(item: CatalogItem) {
+    const id = item.id;
     if (this.pickedSystems().some((s) => s.id === id)) {
-      this.onSystemPickerClosed();
+      this.closeCatalogSystemsDialog();
       return;
     }
+    const label = `${item.code} — ${item.name}`;
     this.pickedSystems.update((list) => [...list, { id, label }]);
-    this.onSystemPickerClosed();
+    this.closeCatalogSystemsDialog();
   }
 
   removePickedSystem(id: string) {
@@ -732,7 +806,7 @@ export class WorkOrderFormComponent implements OnInit {
     const linked = this.partsForCloseCheck();
     if (linked.length > 0 && !wh) {
       this.notificationService.error(
-        'Seleccione bodega de origen (Datos OT o pestaña Legacy) para descontar repuestos vinculados.',
+        'Seleccione la bodega de consumo en Identificación (Datos OT) para descontar repuestos vinculados al cerrar.',
       );
       this.tab.set('datos');
       return;
@@ -789,14 +863,14 @@ export class WorkOrderFormComponent implements OnInit {
       });
   }
 
-  /** Legacy — inventario */
+  /** Pestaña repuestos: solo ítems del inventario (picker «Buscar»). */
   addPartRow() {
     this.partsArray.push(
       this.fb.group({
         quantity: [1, [Validators.required, Validators.min(1)]],
-        partNumber: ['', Validators.required],
-        description: ['', Validators.required],
-        inventoryItemId: [''],
+        partNumber: [''],
+        description: [''],
+        inventoryItemId: ['', Validators.required],
         linkedItemName: [''],
       }),
     );
@@ -823,7 +897,7 @@ export class WorkOrderFormComponent implements OnInit {
     }
     if (!this.pickerWarehouseId()) {
       this.notificationService.error(
-        'Seleccione bodega de origen en el bloque «Bodega (catálogo)» debajo de Datos OT o en la pestaña Legacy.',
+        'Seleccione la bodega de consumo al inicio del formulario (sección Identificación, en «Datos OT»).',
       );
       this.tab.set('datos');
       return;
@@ -845,7 +919,7 @@ export class WorkOrderFormComponent implements OnInit {
         partNumber: row.partNumber,
         description: row.name,
         inventoryItemId: row.id,
-        linkedItemName: `${row.partNumber} - ${row.name}`,
+        linkedItemName: `${row.partNumber} — ${row.name}`,
       });
     }
     this.onPartPickerClosed();
@@ -868,7 +942,7 @@ export class WorkOrderFormComponent implements OnInit {
     }
     if (!this.pickerWarehouseId()) {
       this.notificationService.error(
-        'Seleccione bodega de origen en el bloque «Bodega (catálogo)» debajo de Datos OT o en la pestaña Legacy.',
+        'Seleccione la bodega de consumo al inicio del formulario (sección Identificación, en «Datos OT»).',
       );
       this.tab.set('datos');
       return;
@@ -886,9 +960,9 @@ export class WorkOrderFormComponent implements OnInit {
     const i = this.fluidPickerRowIndex();
     if (i >= 0) {
       const g = this.compartmentRowsArray.at(i) as FormGroup;
-      const curType = String(g.get('fluidType')?.value ?? '').trim();
+      const label = `${row.partNumber} — ${row.name}`.slice(0, 200);
       g.patchValue({
-        fluidType: curType || row.name,
+        fluidType: label,
         inventoryItemId: row.id,
         linkedFluidItemName: `${row.partNumber} — ${row.name}`,
       });
@@ -934,8 +1008,18 @@ export class WorkOrderFormComponent implements OnInit {
     return typeof v === 'string' && v.trim() ? v.trim() : null;
   }
 
+  /** Solo lectura: bodega elegida una vez al inicio (fluidos / repuestos / cierre). */
+  consumptionWarehouseLabel(): string {
+    const id = this.pickerWarehouseId();
+    if (!id) return '— sin bodega —';
+    const wh = this.warehouses().find((w: { id: string }) => w.id === id);
+    if (wh) return `${wh.code} — ${wh.name}`;
+    return id;
+  }
+
   applyKit(event: Event) {
-    const kitId = (event.target as HTMLSelectElement).value;
+    const el = event.target as HTMLSelectElement;
+    const kitId = el.value;
     if (!kitId) return;
     const kit = this.pmKits().find((k) => k.id === kitId);
     if (!kit?.parts?.length) {
@@ -947,32 +1031,62 @@ export class WorkOrderFormComponent implements OnInit {
       this.partsArray.push(
         this.fb.group({
           quantity: [part.quantity, [Validators.required, Validators.min(1)]],
-          partNumber: [part.partNumber, Validators.required],
-          description: [part.description, Validators.required],
-          inventoryItemId: [''],
+          partNumber: [part.partNumber],
+          description: [part.description],
+          inventoryItemId: ['', Validators.required],
           linkedItemName: [''],
         }),
       );
     });
-    kit.parts.forEach((part: any, index: number) => {
-      this.inventoryItemsService.searchItems(part.partNumber).subscribe({
-        next: (results: any[]) => {
-          const exact = results.find(
-            (r) =>
-              r.partNumber.toLowerCase() === part.partNumber.toLowerCase(),
+    type KitSearchHit = {
+      part: { partNumber: string };
+      results: { partNumber: string; id: string; name: string }[];
+    };
+
+    forkJoin(
+      kit.parts.map((part: { partNumber: string; quantity: number; description: string }) =>
+        this.inventoryItemsService.searchItems(part.partNumber).pipe(
+          map((results) => ({
+            part,
+            results: results as { partNumber: string; id: string; name: string }[],
+          })),
+        ),
+      ),
+    ).subscribe({
+      next: (hits) => {
+        const rows = hits as KitSearchHit[];
+        let unlinked = 0;
+        rows.forEach((hit, index: number) => {
+          const exact = hit.results.find(
+            (r: { partNumber: string }) =>
+              r.partNumber.toLowerCase() ===
+              String(hit.part.partNumber).toLowerCase(),
           );
-          if (exact) {
-            const g = this.partsArray.at(index);
-            g?.patchValue({
+          const g = this.partsArray.at(index);
+          if (exact && g) {
+            g.patchValue({
+              partNumber: exact.partNumber,
+              description: exact.name,
               inventoryItemId: exact.id,
-              linkedItemName: `${exact.partNumber} - ${exact.name}`,
+              linkedItemName: `${exact.partNumber} — ${exact.name}`,
             });
+          } else {
+            unlinked++;
           }
-        },
-        error: () => undefined,
-      });
+        });
+        this.notificationService.success(`Kit ${kit.code} cargado.`);
+        if (unlinked > 0) {
+          this.notificationService.warning(
+            `${unlinked} línea(s) del kit no tienen coincidencia exacta en inventario: use «Buscar» en cada una antes de guardar.`,
+          );
+        }
+      },
+      error: () =>
+        this.notificationService.error(
+          'No se pudo resolver el kit contra el inventario.',
+        ),
     });
-    this.notificationService.success(`Kit ${kit.code} cargado.`);
+    el.value = '';
   }
 
 }

@@ -1,409 +1,369 @@
-@if (stats()) {
-  <div class="space-y-8 animate-in fade-in duration-700">
-    <!-- HEADER -->
-    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+@if (stats(); as s) {
+  <div class="dash-page space-y-8 animate-in fade-in duration-500 pb-14">
+    <!-- Cabecera -->
+    <header class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
       <div>
-        <h2
-          class="text-3xl font-bold text-main tracking-tight flex items-center gap-3"
-        >
-          <span class="w-2 h-8 bg-primary rounded-full"></span>
-          Resumen Operativo
-        </h2>
-        <p
-          class="text-sm text-muted mt-2 font-mono uppercase tracking-widest"
-        >
-          Sincronizado: {{ lastUpdated() | date: "HH:mm:ss" }}
+        <p class="text-[10px] font-mono uppercase tracking-[0.2em] text-primary mb-1">
+          TPM · BaseLogic
+        </p>
+        <h1 class="text-2xl sm:text-3xl font-bold text-main tracking-tight">
+          Centro de control
+        </h1>
+        <p class="text-sm text-muted mt-2 max-w-2xl leading-relaxed">
+          Vista priorizada: flota, cumplimiento legal, OTs activas, compras e inventario crítico.
+          Sincronizado {{ lastUpdated() | date: "dd/MM/yyyy HH:mm" }}.
         </p>
       </div>
-      <div class="flex gap-2">
-        <button
-          (click)="loadStats()"
-          class="p-2 rounded-lg bg-surface border border-border hover:border-primary transition-colors group"
+      <button
+        type="button"
+        (click)="loadStats()"
+        class="dash-icon-btn self-start lg:self-auto"
+        aria-label="Actualizar dashboard"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+      </button>
+    </header>
+
+    <!-- KPIs compactos (no saturar: solo lo operativo) -->
+    <section class="grid grid-cols-2 lg:grid-cols-5 gap-3" aria-label="Indicadores clave">
+      <div class="dash-kpi-tile">
+        <span class="dash-kpi-tile__label">Disponibilidad flota</span>
+        <span class="dash-kpi-tile__value text-primary">{{ s.disponibilidad }}%</span>
+        <span class="dash-kpi-tile__hint"
+          >{{ s.totalEquipments - s.equiposEnMantenimiento }}/{{ s.totalEquipments }} activos</span
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="w-5 h-5 text-muted group-hover:text-primary transition-colors"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-        </button>
+      </div>
+      <div class="dash-kpi-tile">
+        <span class="dash-kpi-tile__label">OTs en curso</span>
+        <span class="dash-kpi-tile__value">{{ s.kpiStrip.activeOts }}</span>
+        <span class="dash-kpi-tile__hint font-mono text-[10px]"
+          >{{ s.otsByStatus.OPEN }} A · {{ s.otsByStatus.IN_PROGRESS }} P</span
+        >
+      </div>
+      <div class="dash-kpi-tile">
+        <span class="dash-kpi-tile__label">Docs ≤ 30 días</span>
+        <span
+          class="dash-kpi-tile__value"
+          [class.text-warning]="s.kpiStrip.legalDocsAttention30d > 0"
+          [class.text-main]="s.kpiStrip.legalDocsAttention30d === 0"
+          >{{ s.kpiStrip.legalDocsAttention30d }}</span
+        >
+        <span class="dash-kpi-tile__hint">Próximo vencimiento legal</span>
+      </div>
+      <div class="dash-kpi-tile">
+        <span class="dash-kpi-tile__label">Stock bajo mín.</span>
+        <span
+          class="dash-kpi-tile__value"
+          [class.text-warning]="s.kpiStrip.lowStockLines > 0"
+          >{{ s.kpiStrip.lowStockLines }}</span
+        >
+        <span class="dash-kpi-tile__hint">Líneas bodega activa</span>
+      </div>
+      <div class="dash-kpi-tile col-span-2 lg:col-span-1">
+        <span class="dash-kpi-tile__label">Compras</span>
+        <span class="dash-kpi-tile__value text-sm font-mono leading-tight">
+          {{ s.kpiStrip.requisitionsPipeline }} SRC · {{ s.kpiStrip.purchaseOrdersInbound }} OC
+        </span>
+        <span class="dash-kpi-tile__hint">Pipeline / en tránsito</span>
+      </div>
+    </section>
+
+    <!-- Bloque principal: flota + legal -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div class="xl:col-span-5 space-y-6">
+        <section class="dash-card" aria-labelledby="dash-avail-title">
+          <div class="dash-card__head">
+            <h2 id="dash-avail-title" class="dash-card__title">Disponibilidad</h2>
+            <a routerLink="/app/flota" class="dash-card__link">Flota →</a>
+          </div>
+          <div class="flex flex-col sm:flex-row items-center gap-8 py-4">
+            <div class="relative w-44 h-44 shrink-0 flex items-center justify-center">
+              <svg class="w-full h-full -rotate-90 text-dark/50">
+                <circle cx="88" cy="88" r="76" stroke="currentColor" stroke-width="10" fill="none" />
+                <circle
+                  cx="88"
+                  cy="88"
+                  r="76"
+                  stroke="currentColor"
+                  stroke-width="10"
+                  fill="none"
+                  class="text-primary transition-all duration-700"
+                  [style.strokeDasharray]="477"
+                  [style.strokeDashoffset]="477 - (477 * s.disponibilidad) / 100"
+                />
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center">
+                <span class="text-4xl font-bold text-main font-mono">{{ s.disponibilidad }}%</span>
+                <span class="text-[10px] text-muted font-mono uppercase">operativo</span>
+              </div>
+            </div>
+            <div class="flex-1 grid grid-cols-2 gap-4 w-full max-w-xs">
+              <div class="rounded-xl border border-border bg-dark/20 p-4 text-center">
+                <p class="text-2xl font-mono font-bold text-main">{{ s.totalEquipments - s.equiposEnMantenimiento }}</p>
+                <p class="text-[10px] text-muted uppercase mt-1">En operación</p>
+              </div>
+              <div class="rounded-xl border border-border bg-dark/20 p-4 text-center">
+                <p class="text-2xl font-mono font-bold text-warning">{{ s.equiposEnMantenimiento }}</p>
+                <p class="text-[10px] text-muted uppercase mt-1">Con OT abierta</p>
+              </div>
+              <div class="col-span-2 rounded-xl border border-border/80 bg-dark/15 px-3 py-2 text-center">
+                <p class="text-[11px] text-muted">
+                  Vencimientos legales vencidos (cualquier doc.):
+                  <span class="font-mono text-main">{{ s.expiredDocs }}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="dash-card" aria-labelledby="dash-pm-title">
+          <div class="dash-card__head">
+            <h2 id="dash-pm-title" class="dash-card__title">Próximo PM (horómetro / km)</h2>
+            <span class="text-[10px] font-mono text-muted">Top por menor margen</span>
+          </div>
+          @if (s.pmDueSoon.length) {
+            <ul class="divide-y divide-border/50">
+              @for (row of s.pmDueSoon; track row.id) {
+                <li class="py-3 flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    class="text-left group min-w-0"
+                    (click)="openAlertEquipment(row)"
+                  >
+                    <span class="font-mono text-sm text-primary group-hover:underline">{{
+                      row.internalId
+                    }}</span>
+                    <span class="text-[10px] text-muted block">{{ row.plate || "— sin patente" }}</span>
+                  </button>
+                  <div class="text-right shrink-0">
+                    <span
+                      class="text-xs font-mono font-semibold"
+                      [ngClass]="pmUrgencyTone(row.urgencyPct)"
+                      >{{ row.remainingUnits | number: "1.0-0" }} {{ meterSuffix(row.meterType) }}</span
+                    >
+                    <span class="text-[9px] text-muted block"
+                      >Próx. {{ row.nextDueMeter | number: "1.0-0" }} · uso
+                      {{ row.urgencyPct }}%</span
+                    >
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="text-sm text-muted py-8 text-center">Sin proyección PM en el recorte actual.</p>
+          }
+        </section>
+      </div>
+
+      <div class="xl:col-span-7 space-y-6">
+        <section class="dash-card dash-card--accent" aria-labelledby="dash-legal-title">
+          <div class="dash-card__head">
+            <h2 id="dash-legal-title" class="dash-card__title">Vencimientos legales</h2>
+            <span class="text-[10px] font-mono text-muted">Próximos en la cola</span>
+          </div>
+          <div class="max-h-[min(28rem,55vh)] overflow-y-auto pr-1">
+            @if (s.topAlerts.length) {
+              <ul class="space-y-2">
+                @for (alert of s.topAlerts; track alert.id) {
+                  <li>
+                    <button
+                      type="button"
+                      (click)="openAlertEquipment(alert)"
+                      class="dash-alert-row w-full text-left"
+                      [class.dash-alert-row--muted]="alert.daysRemaining > 30"
+                    >
+                      <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="font-mono text-sm text-main font-semibold">{{ alert.internalId }}</span>
+                          <span class="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted font-mono">{{
+                            alert.plate || "—"
+                          }}</span>
+                        </div>
+                        <p class="text-xs text-muted mt-0.5">{{ alert.docLabel }}</p>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <span class="text-sm font-mono font-bold" [ngClass]="legalDocTone(alert.daysRemaining)">
+                          {{
+                            alert.daysRemaining <= 0 ? "Vencido" : alert.daysRemaining + " d"
+                          }}
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="text-sm text-muted py-10 text-center">Sin vencimientos registrados en maestro de flota.</p>
+            }
+          </div>
+          <footer class="dash-card__foot">
+            <a routerLink="/app/flota" class="dash-card__link">Abrir maestro de flota</a>
+          </footer>
+        </section>
+
+        <section class="dash-card" aria-labelledby="dash-ot-title">
+          <div class="dash-card__head">
+            <h2 id="dash-ot-title" class="dash-card__title">OTs en curso (más antiguas primero)</h2>
+            <a routerLink="/app/ots" class="dash-card__link">Bandeja OT →</a>
+          </div>
+          @if (s.openOtsHot.length) {
+            <ul class="divide-y divide-border/40">
+              @for (ot of s.openOtsHot; track ot.id) {
+                <li class="py-3 flex flex-wrap items-start justify-between gap-2">
+                  <button type="button" class="text-left min-w-0 group" (click)="openRecentOt(ot)">
+                    <span class="font-mono text-sm text-primary group-hover:underline">{{ ot.correlative }}</span>
+                    <span class="text-xs text-muted block mt-0.5">{{
+                      ot.equipment?.internalId ?? "—"
+                    }}</span>
+                  </button>
+                  <div class="flex flex-col items-end gap-1 shrink-0">
+                    <span class="text-[10px] font-mono uppercase text-muted">{{ otStatusLabel(ot.status) }}</span>
+                    <span class="text-[10px] font-mono text-muted">{{ ot.createdAt | date: "dd/MM" }}</span>
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="text-sm text-muted py-6 text-center">No hay OTs abiertas o en progreso en el alcance actual.</p>
+          }
+          <footer class="dash-card__foot flex flex-wrap gap-4 justify-between items-center">
+            <span class="text-[11px] text-muted font-mono">ON_HOLD: {{ s.otsByStatus.ON_HOLD }}</span>
+            <a routerLink="/app/ots/analytics" class="dash-card__link">Analytics OT →</a>
+          </footer>
+        </section>
       </div>
     </div>
 
-    <!-- MAIN GRID -->
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <!-- WIDGET 1: DISPONIBILIDAD (Circular Indicator) -->
-      <div
-        class="bg-surface border border-border rounded-2xl p-8 flex flex-col items-center justify-center relative group overflow-hidden shadow-2xl"
-      >
-        <div
-          class="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
-        ></div>
-
-        <h3
-          class="text-muted text-xs font-mono uppercase tracking-widest mb-8"
-        >
-          Disponibilidad de Flota
-        </h3>
-
-        <div class="relative w-48 h-48 flex items-center justify-center">
-          <svg class="w-full h-full -rotate-90">
-            <circle
-              cx="96"
-              cy="96"
-              r="88"
-              stroke="currentColor"
-              stroke-width="12"
-              fill="transparent"
-              class="text-dark/40"
-            />
-            <circle
-              cx="96"
-              cy="96"
-              r="88"
-              stroke="currentColor"
-              stroke-width="12"
-              fill="transparent"
-              class="text-primary transition-all duration-1000 ease-out"
-              [style.strokeDasharray]="552.92"
-              [style.strokeDashoffset]="
-                552.92 - (552.92 * stats().disponibilidad) / 100
-              "
-            />
-          </svg>
-          <div
-            class="absolute inset-0 flex flex-col items-center justify-center"
-          >
-            <span class="text-5xl font-bold text-main font-mono"
-              >{{ stats().disponibilidad }}%</span
-            >
-            <span class="text-[10px] text-muted font-mono mt-1"
-              >OPERATIVO</span
-            >
+    <!-- Compras + inventario -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section class="dash-card" aria-labelledby="dash-buy-title">
+        <div class="dash-card__head">
+          <h2 id="dash-buy-title" class="dash-card__title">Compras</h2>
+          <a routerLink="/app/compras/analytics" class="dash-card__link">Panel compras →</a>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <h3 class="text-[10px] font-mono uppercase text-muted mb-2">Requerimientos activos</h3>
+            @if (s.purchaseRequisitionsAttention.length) {
+              <ul class="space-y-2">
+                @for (r of s.purchaseRequisitionsAttention; track r.id) {
+                  <li>
+                    <a
+                      [routerLink]="['/app/compras/requerimientos', r.id]"
+                      class="block rounded-lg border border-border/60 bg-dark/15 px-3 py-2 hover:border-primary/40 transition-colors"
+                    >
+                      <span class="font-mono text-xs text-primary">{{ r.correlative }}</span>
+                      <span class="text-[10px] text-muted block">{{ r.status }} · {{ reqPriorityLabel(r.priority) }}</span>
+                    </a>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="text-xs text-muted">Sin SRC en pipeline.</p>
+            }
+          </div>
+          <div>
+            <h3 class="text-[10px] font-mono uppercase text-muted mb-2">Órdenes de compra recientes</h3>
+            @if (s.purchaseOrdersInbound.length) {
+              <ul class="space-y-2">
+                @for (po of s.purchaseOrdersInbound; track po.id) {
+                  <li>
+                    <a
+                      [routerLink]="['/app/compras/ordenes', po.id]"
+                      class="block rounded-lg border border-border/60 bg-dark/15 px-3 py-2 hover:border-primary/40 transition-colors"
+                    >
+                      <span class="font-mono text-xs text-primary">{{ po.correlative }}</span>
+                      <span class="text-[10px] text-muted block">{{ poStatusShort(po.status) }}</span>
+                    </a>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="text-xs text-muted">Sin OC en estados recientes.</p>
+            }
           </div>
         </div>
+        <footer class="dash-card__foot flex flex-wrap gap-3">
+          <a routerLink="/app/compras/requerimientos" class="dash-card__link">SRC</a>
+          <a routerLink="/app/compras/ordenes" class="dash-card__link">OC</a>
+          <a routerLink="/app/compras/recepciones" class="dash-card__link">Recepciones</a>
+        </footer>
+      </section>
 
-        <div
-          class="grid grid-cols-2 w-full mt-10 gap-4 border-t border-border pt-6"
-        >
-          <div class="text-center">
-            <div class="text-2xl font-bold text-main font-mono">
-              {{ stats().totalEquipments - stats().equiposEnMantenimiento }}
-            </div>
-            <div
-              class="text-[10px] text-primary font-mono uppercase tracking-tighter"
-            >
-              Equipos Operativos
-            </div>
-          </div>
-          <div class="text-center border-l border-border">
-            <div class="text-2xl font-bold text-warning font-mono">
-              {{ stats().equiposEnMantenimiento }}
-            </div>
-            <div
-              class="text-[10px] text-warning font-mono uppercase tracking-tighter"
-            >
-              En Mantención
-            </div>
-          </div>
+      <section class="dash-card" aria-labelledby="dash-inv-title">
+        <div class="dash-card__head">
+          <h2 id="dash-inv-title" class="dash-card__title">Inventario crítico</h2>
+          <a routerLink="/app/inventario/stock" class="dash-card__link">Stock →</a>
         </div>
+        @if (s.lowStocks.length) {
+          <div class="overflow-x-auto rounded-lg border border-border/60">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-dark/40 text-[10px] font-mono uppercase text-muted">
+                <tr>
+                  <th class="px-3 py-2">Bodega</th>
+                  <th class="px-3 py-2">P/N</th>
+                  <th class="px-3 py-2 text-right">Stock</th>
+                  <th class="px-3 py-2 text-right">Mín.</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/40">
+                @for (row of s.lowStocks; track $index) {
+                  <tr class="hover:bg-dark/20">
+                    <td class="px-3 py-2 font-mono text-xs text-muted">{{ row.warehouseCode }}</td>
+                    <td class="px-3 py-2">
+                      <span class="font-mono text-xs text-primary">{{ row.partNumber }}</span>
+                      <span class="text-[10px] text-muted block truncate max-w-[10rem]">{{ row.name }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono text-warning">{{ row.quantity | number: "1.0-1" }}</td>
+                    <td class="px-3 py-2 text-right font-mono text-muted">{{ row.minStock | number: "1.0-1" }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-sm text-muted py-8 text-center">No hay líneas por debajo del mínimo en el alcance de contrato.</p>
+        }
+      </section>
+    </div>
+
+    <!-- Cierre reciente (contexto, no prioridad máxima) -->
+    <section class="dash-card" aria-labelledby="dash-closed-title">
+      <div class="dash-card__head">
+        <h2 id="dash-closed-title" class="dash-card__title">Últimas OT cerradas</h2>
+        <a routerLink="/app/ots" class="dash-card__link">Ver todas →</a>
       </div>
-
-      <!-- WIDGET 2: ALERTAS CRÍTICAS (Next Expirations) -->
-      <div
-        class="bg-surface border border-border rounded-2xl overflow-hidden flex flex-col shadow-2xl"
-      >
-        <div
-          class="px-6 py-5 border-b border-border bg-dark/20 flex items-center justify-between"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-error/10 text-error">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-            <h3 class="text-main font-semibold">Alertas Documentales</h3>
-          </div>
-          <span class="text-[10px] font-mono text-muted">PRÓX. 30 DÍAS</span>
-        </div>
-
-        <div class="flex-1 overflow-y-auto px-6 py-2">
-          @if (stats().topAlerts?.length > 0) {
-            @for (alert of stats().topAlerts; track alert.id) {
+      @if (s.lastClosed.length) {
+        <ul class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          @for (ot of s.lastClosed; track ot.id) {
+            <li>
               <button
                 type="button"
-                (click)="openAlertEquipment(alert)"
-                class="w-full text-left py-4 border-b border-border/50 last:border-0 hover:translate-x-1 transition-transform cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded-lg -mx-1 px-1"
+                (click)="openRecentOt(ot)"
+                class="w-full text-left rounded-xl border border-border/60 bg-dark/10 px-4 py-3 hover:border-primary/35 transition-colors"
               >
-                <div class="flex items-center justify-between gap-4">
-                  <div>
-                    <div class="flex items-center gap-2 mb-0.5">
-                      <span
-                        class="text-main font-bold text-sm leading-tight"
-                        >{{ alert.internalId }}</span
-                      >
-                      <span
-                        class="text-[10px] px-1.5 py-0.5 rounded bg-dark text-muted font-mono border border-border"
-                        >{{ alert.plate || "SIN P." }}</span
-                      >
-                    </div>
-                    <p class="text-xs text-muted font-medium">
-                      {{ alert.type }}
-                    </p>
-                  </div>
-                  <div class="text-right">
-                    <div
-                      [class]="
-                        alert.daysRemaining <= 5
-                          ? 'text-error'
-                          : alert.daysRemaining <= 15
-                            ? 'text-warning'
-                            : 'text-success'
-                      "
-                      class="text-sm font-bold font-mono"
-                    >
-                      {{
-                        alert.daysRemaining <= 0
-                          ? "VENCIDO"
-                          : alert.daysRemaining + " d"
-                      }}
-                    </div>
-                    <p class="text-[9px] text-gray-600 font-mono uppercase">
-                      Restantes
-                    </p>
-                  </div>
+                <div class="flex justify-between gap-2">
+                  <span class="font-mono text-sm text-primary">{{ ot.correlative }}</span>
+                  <span class="text-[10px] font-mono text-muted">{{ ot.closedAt | date: "dd MMM yyyy" }}</span>
                 </div>
-                <p
-                  class="text-[10px] font-mono text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity mt-2"
-                >
-                  Ver ficha del activo →
+                <p class="text-xs text-muted mt-1 font-mono">{{ ot.equipment?.internalId }}</p>
+                <p class="text-xs text-main mt-1 line-clamp-2">
+                  {{ ot.description || "—" }}
                 </p>
               </button>
-            }
-          } @else {
-            <div
-              class="flex flex-col items-center justify-center py-12 text-center"
-            >
-              <div
-                class="w-12 h-12 rounded-full bg-success/5 flex items-center justify-center mb-3"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="w-6 h-6 text-success/40"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <p class="text-sm text-muted">Sin alertas pendientes.</p>
-            </div>
+            </li>
           }
-        </div>
-        <div class="p-4 bg-dark/20 border-t border-border">
-          <a
-            routerLink="/app/fleet"
-            class="block w-full text-center py-2 text-xs font-mono text-muted hover:text-main transition-colors"
-            >IR AL MAESTRO DE FLOTA →</a
-          >
-        </div>
-      </div>
-
-      <!-- WIDGET 3: ACTIVIDAD RECIENTE (Last Closed OTs) -->
-      <div
-        class="bg-surface border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col"
-      >
-        <div
-          class="px-6 py-5 border-b border-border bg-dark/20 flex items-center justify-between"
-        >
-          <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-primary/10 text-primary">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                />
-              </svg>
-            </div>
-            <h3 class="text-main font-semibold">Actividad Reciente</h3>
-          </div>
-          <span class="text-[10px] font-mono text-muted italic"
-            >CLOSED OTS</span
-          >
-        </div>
-
-        <div class="flex-1 px-6 py-2 overflow-y-auto">
-          @if (stats().lastClosed?.length > 0) {
-            <div class="mt-2 space-y-1">
-              @for (ot of stats().lastClosed; track ot.id) {
-                <button
-                  type="button"
-                  (click)="openRecentOt(ot)"
-                  class="relative w-full text-left pl-6 pb-6 last:pb-2 group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-r-lg"
-                >
-                  <div
-                    class="absolute left-[7px] top-[14px] w-0.5 h-full bg-border group-last:h-0"
-                  ></div>
-                  <div
-                    class="absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full bg-dark border-2 border-success transition-transform group-hover:scale-125"
-                  ></div>
-
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-sm font-bold text-main font-mono">{{
-                          ot.correlative
-                        }}</span>
-                        <span
-                          class="text-[10px] font-mono text-primary font-medium tracking-tighter"
-                          >{{ ot.equipment?.internalId }}</span
-                        >
-                      </div>
-                      <p class="text-xs text-muted mt-0.5 leading-relaxed">
-                        @let desc = ot.description || "";
-                        {{ desc | slice: 0 : 60
-                        }}{{ desc.length > 60 ? "..." : "" }}
-                      </p>
-                      <p
-                        class="text-[10px] font-mono text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity mt-1"
-                      >
-                        Ver detalle de la OT →
-                      </p>
-                    </div>
-                    <span
-                      class="text-[10px] text-gray-600 font-mono mt-1 shrink-0"
-                      >{{ ot.closedAt | date: "dd MMM" }}</span
-                    >
-                  </div>
-                </button>
-              }
-            </div>
-          } @else {
-            <div
-              class="flex flex-col items-center justify-center py-12 text-center text-muted font-mono text-sm"
-            >
-              <p>Sin actividad reciente.</p>
-            </div>
-          }
-        </div>
-
-        <div class="p-4 bg-dark/20 border-t border-border">
-          <a
-            routerLink="/app/ots"
-            class="block w-full text-center py-2 text-xs font-mono text-muted hover:text-main transition-colors"
-            >VER TODAS LAS OT →</a
-          >
-        </div>
-      </div>
-    </div>
-
-    <!-- ADDITIONAL INSIGHTS (Optional) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
-      <div
-        class="p-6 rounded-2xl bg-surface/40 border border-border/50 backdrop-blur-sm flex items-center justify-between group cursor-help transition-all hover:bg-surface"
-      >
-        <div class="flex items-center gap-4">
-          <div
-            class="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center text-warning"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="w-6 h-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h4 class="text-sm font-semibold text-main">
-              Pendientes de Revisión
-            </h4>
-            <p class="text-xs text-muted">
-              OTs que requieren aprobación técnica
-            </p>
-          </div>
-        </div>
-        <span
-          class="text-2xl font-bold font-mono text-main group-hover:text-warning transition-colors"
-          >{{ stats().otsByStatus.ON_HOLD || 0 }}</span
-        >
-      </div>
-
-      <div
-        class="p-6 rounded-2xl bg-surface/40 border border-border/50 backdrop-blur-sm flex items-center justify-between group cursor-help transition-all hover:bg-surface"
-      >
-        <div class="flex items-center gap-4">
-          <div
-            class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="w-6 h-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h4 class="text-sm font-semibold text-main">
-              Mantenimientos al Día
-            </h4>
-            <p class="text-xs text-muted">Sin alertas de flota críticas</p>
-          </div>
-        </div>
-        <span
-          class="text-2xl font-bold font-mono text-main group-hover:text-primary transition-colors"
-          >{{ stats().totalEquipments - stats().expiredDocs }}</span
-        >
-      </div>
-    </div>
+        </ul>
+      } @else {
+        <p class="text-sm text-muted py-6 text-center">Sin cierres recientes.</p>
+      }
+    </section>
   </div>
 
   <app-equipment-detail-modal
@@ -418,13 +378,16 @@
     (close)="closeOtDetail()"
   />
 } @else {
-  <!-- LOADING SKELETON -->
-  <div class="space-y-6 animate-pulse">
-    <div class="h-12 w-1/4 bg-border rounded-lg"></div>
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <div class="h-80 bg-surface border border-border rounded-2xl"></div>
-      <div class="h-80 bg-surface border border-border rounded-2xl"></div>
-      <div class="h-80 bg-surface border border-border rounded-2xl"></div>
+  <div class="space-y-6 animate-pulse max-w-6xl mx-auto">
+    <div class="h-10 w-1/3 bg-border rounded-lg"></div>
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      @for (_ of [1, 2, 3, 4, 5]; track $index) {
+        <div class="h-24 bg-surface border border-border rounded-xl"></div>
+      }
+    </div>
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div class="h-96 xl:col-span-5 bg-surface border border-border rounded-2xl"></div>
+      <div class="h-96 xl:col-span-7 bg-surface border border-border rounded-2xl"></div>
     </div>
   </div>
 }

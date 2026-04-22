@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import type { DashboardStats } from '../../models/dashboard-stats';
 
 export type AvailabilityImpact = 'SI' | 'NO' | 'STP';
 export type EquipmentWorkLocation = 'TALLER' | 'TERRENO';
@@ -27,10 +28,12 @@ export type OtClassificationTag =
 
 export interface FluidCompartmentRowPayload {
   compartment: FluidCompartment;
+  /** Etiqueta derivada del ítem de inventario (el backend puede sobrescribirla). */
   fluidType: string;
   liters: number;
   action: 'RELLENO' | 'CAMBIO';
-  inventoryItemId?: string;
+  /** Obligatorio: el fluido debe existir en el inventario de la empresa. */
+  inventoryItemId: string;
 }
 
 export interface CreateWorkOrderExcelPayload {
@@ -74,12 +77,12 @@ export interface CreateWorkOrderExcelPayload {
 
   fluidCompartments?: FluidCompartmentRowPayload[];
 
-  /** Legacy — pestaña inventario */
+  /** Repuestos: cada línea debe ir enlazada a un ítem del inventario. */
   parts?: {
     partNumber: string;
     description: string;
     quantity: number;
-    inventoryItemId?: string;
+    inventoryItemId: string;
   }[];
 }
 
@@ -169,8 +172,8 @@ export class WorkOrdersService {
     });
   }
 
-  getStats(): Observable<any> {
-    return this.http.get<any>(`${this.apiUrl}/stats`);
+  getStats(): Observable<DashboardStats> {
+    return this.http.get<DashboardStats>(`${this.apiUrl}/stats`);
   }
 
   getWorkOrder(id: string): Observable<any> {

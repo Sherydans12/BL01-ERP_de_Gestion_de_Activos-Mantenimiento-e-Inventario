@@ -20,6 +20,110 @@ import {
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import Decimal from 'decimal.js';
 
+function truncateForDb(s: string, max: number): string {
+  if (!s) return '';
+  return s.length <= max ? s : s.slice(0, max);
+}
+
+/** Alineado a `frontend/.../pm-interval.ts` para KPI de próximo PM en dashboard. */
+function intervalFromHeuristicBackend(
+  type: string,
+  model: string,
+  meterType: string,
+): number {
+  const t = `${type || ''} ${model || ''}`.toLowerCase();
+  const isKm = meterType === 'KILOMETERS';
+  if (t.includes('camioneta') || t.includes('suv') || t.includes('pickup')) {
+    return isKm ? 10000 : 250;
+  }
+  if (
+    t.includes('carretera') ||
+    t.includes('tracto') ||
+    t.includes('alto tonelaje')
+  ) {
+    return 600;
+  }
+  if (t.includes('camión') || t.includes('camion') || t.includes('dumper')) {
+    return 500;
+  }
+  return 250;
+}
+
+function resolvePmIntervalBackend(eq: {
+  pmIntervalOverride: number | null;
+  maintenanceFrequency: number | null;
+  type: string;
+  model: string;
+  meterType: string;
+}): number {
+  if (eq.pmIntervalOverride != null && eq.pmIntervalOverride > 0) {
+    return eq.pmIntervalOverride;
+  }
+  if (eq.maintenanceFrequency != null && eq.maintenanceFrequency > 0) {
+    return eq.maintenanceFrequency;
+  }
+  return intervalFromHeuristicBackend(eq.type, eq.model, eq.meterType);
+}
+
+function pmRemainingBackend(eq: {
+  initialMeter: number;
+  currentMeter: number;
+  lastMaintenanceMeter: number | null;
+  pmIntervalOverride: number | null;
+  maintenanceFrequency: number | null;
+  type: string;
+  model: string;
+  meterType: string;
+}): { remaining: number; interval: number; nextDue: number } {
+  const interval = resolvePmIntervalBackend(eq);
+  const base =
+    eq.lastMaintenanceMeter != null
+      ? eq.lastMaintenanceMeter
+      : eq.initialMeter ?? 0;
+  const current = eq.currentMeter ?? base;
+  const nextDue = base + interval;
+  const remaining = Math.max(0, nextDue - current);
+  return { remaining, interval, nextDue };
+}
+
+function nearestLegalDocAlert(
+  e: {
+    techReviewExp: Date | null;
+    circPermitExp: Date | null;
+    soapExp: Date | null;
+    mechanicalCertExp: Date | null;
+    liabilityPolicyExp: Date | null;
+  },
+  now: Date,
+): { daysRemaining: number; docLabel: string } {
+  const pairs: { exp: Date; label: string }[] = [];
+  if (e.techReviewExp)
+    pairs.push({ exp: new Date(e.techReviewExp), label: 'Rev. técnica' });
+  if (e.circPermitExp)
+    pairs.push({ exp: new Date(e.circPermitExp), label: 'Perm. circulación' });
+  if (e.soapExp) pairs.push({ exp: new Date(e.soapExp), label: 'SOAP' });
+  if (e.mechanicalCertExp)
+    pairs.push({ exp: new Date(e.mechanicalCertExp), label: 'Cert. mecánica' });
+  if (e.liabilityPolicyExp)
+    pairs.push({
+      exp: new Date(e.liabilityPolicyExp),
+      label: 'Póliza RC',
+    });
+  if (pairs.length === 0) return { daysRemaining: 999999, docLabel: '—' };
+  let bestDays = 999999;
+  let bestLabel = '—';
+  for (const p of pairs) {
+    const days = Math.ceil(
+      (p.exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (days < bestDays) {
+      bestDays = days;
+      bestLabel = p.label;
+    }
+  }
+  return { daysRemaining: bestDays, docLabel: bestLabel };
+}
+
 function deriveCategoryFromTags(tags: string[] | undefined): OtCategory {
   const t = tags ?? [];
   if (t.includes('PROGRAMADA')) return 'PROGRAMADA';
@@ -384,16 +488,37 @@ export class WorkOrdersService {
         });
 
         if (dto.fluidCompartments && dto.fluidCompartments.length > 0) {
-          await tx.workOrderFluidCompartment.createMany({
-            data: dto.fluidCompartments.map((fc) => ({
+          const fluidRows: Prisma.WorkOrderFluidCompartmentCreateManyInput[] =
+            [];
+          for (const fc of dto.fluidCompartments) {
+            const invId = fc.inventoryItemId?.trim();
+            if (!invId) {
+              throw new BadRequestException(
+                'Cada fluido por compartimiento debe estar vinculado a un ítem del inventario de la empresa.',
+              );
+            }
+            const fluidItem = await tx.inventoryItem.findFirst({
+              where: { id: invId, tenantId },
+              select: { id: true, partNumber: true, name: true },
+            });
+            if (!fluidItem) {
+              throw new BadRequestException(
+                'Un ítem de fluido no existe o no pertenece a su empresa.',
+              );
+            }
+            fluidRows.push({
               workOrderId: workOrder.id,
               compartment: fc.compartment,
-              fluidType: fc.fluidType.trim(),
+              fluidType: truncateForDb(
+                `${fluidItem.partNumber} — ${fluidItem.name}`,
+                200,
+              ),
               liters: new Prisma.Decimal(String(fc.liters)),
               action: fc.action,
-              inventoryItemId: fc.inventoryItemId?.trim() || null,
-            })),
-          });
+              inventoryItemId: fluidItem.id,
+            });
+          }
+          await tx.workOrderFluidCompartment.createMany({ data: fluidRows });
         }
 
         if (dto.systems && dto.systems.length > 0) {
@@ -429,38 +554,41 @@ export class WorkOrdersService {
         }
 
         if (dto.parts && dto.parts.length > 0) {
-          const partsData = [];
-          const linkedPartsForReservation = [];
+          const partsData: Prisma.WorkOrderPartCreateManyInput[] = [];
+          const linkedPartsForReservation: {
+            itemId: string;
+            quantity: number;
+          }[] = [];
 
           for (const p of dto.parts) {
-            let invItemId = p.inventoryItemId;
-
-            // AUTO-ENLACE: Si no trae ID pero sí partNumber, lo buscamos en el catálogo maestro
+            const invItemId = p.inventoryItemId?.trim();
             if (!invItemId) {
-              const catalogItem = await tx.inventoryItem.findFirst({
-                where: { tenantId, partNumber: p.partNumber },
-              });
-              if (catalogItem) invItemId = catalogItem.id;
+              throw new BadRequestException(
+                'Toda línea de repuesto debe estar vinculada a un ítem del inventario de la empresa (use el buscador de catálogo).',
+              );
             }
-
+            const inv = await tx.inventoryItem.findFirst({
+              where: { id: invItemId, tenantId },
+              select: { id: true, partNumber: true, name: true },
+            });
+            if (!inv) {
+              throw new BadRequestException(
+                'Un repuesto no existe o no pertenece a su empresa.',
+              );
+            }
             partsData.push({
               workOrderId: workOrder.id,
-              partNumber: p.partNumber,
-              description: p.description,
+              partNumber: inv.partNumber,
+              description: truncateForDb(inv.name, 100),
               quantity: Number(p.quantity),
-              inventoryItemId: invItemId || null,
+              inventoryItemId: inv.id,
             });
-
-            // Si logramos enlazarlo, lo preparamos para la reserva de stock
-            if (invItemId) {
-              linkedPartsForReservation.push({
-                itemId: invItemId,
-                quantity: Number(p.quantity),
-              });
-            }
+            linkedPartsForReservation.push({
+              itemId: inv.id,
+              quantity: Number(p.quantity),
+            });
           }
 
-          // Guardar las piezas en la OT
           await tx.workOrderPart.createMany({ data: partsData });
 
           // --- RESERVAS: Crear reservas iniciales si hay bodega ---
@@ -664,7 +792,36 @@ export class WorkOrdersService {
       AND: filterEqConditions,
     };
 
-    const [open, inProgress, onHold, closed] = await Promise.all([
+    const contractScope =
+      user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
+        ? activeContract && activeContract !== 'ALL'
+          ? { contractId: activeContract }
+          : {}
+        : { contractId: { in: user.allowedContracts || [] } };
+
+    const stockWarehouseWhere: Prisma.WarehouseWhereInput = {
+      tenantId,
+      ...contractScope,
+    };
+
+    const [
+      open,
+      inProgress,
+      onHold,
+      closed,
+      expiredDocs,
+      totalEquipments,
+      activeOts,
+      lastClosed,
+      topAlertsData,
+      equipmentForPm,
+      openOtsHot,
+      requisitionsAttention,
+      purchaseOrdersInbound,
+      requisitionPipelineCount,
+      poAwaitingInboundCount,
+      itemStockCandidates,
+    ] = await Promise.all([
       this.prisma.workOrder.count({
         where: { ...whereBaseWO, status: 'OPEN' },
       }),
@@ -677,74 +834,213 @@ export class WorkOrdersService {
       this.prisma.workOrder.count({
         where: { ...whereBaseWO, status: 'CLOSED' },
       }),
+      this.prisma.equipment.count({
+        where: {
+          ...whereBaseEq,
+          OR: [
+            { techReviewExp: { lt: now } },
+            { circPermitExp: { lt: now } },
+            { soapExp: { lt: now } },
+            { mechanicalCertExp: { lt: now } },
+            { liabilityPolicyExp: { lt: now } },
+          ],
+        },
+      }),
+      this.prisma.equipment.count({ where: whereBaseEq }),
+      this.prisma.workOrder.groupBy({
+        by: ['equipmentId'],
+        where: {
+          ...whereBaseWO,
+          status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] },
+        },
+      }),
+      this.prisma.workOrder.findMany({
+        where: { ...whereBaseWO, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+        take: 4,
+        include: {
+          equipment: { select: { internalId: true } },
+        },
+      }),
+      this.prisma.equipment.findMany({
+        where: {
+          ...whereBaseEq,
+          OR: [
+            { techReviewExp: { not: null } },
+            { circPermitExp: { not: null } },
+            { soapExp: { not: null } },
+            { mechanicalCertExp: { not: null } },
+            { liabilityPolicyExp: { not: null } },
+          ],
+        },
+        take: 48,
+      }),
+      this.prisma.equipment.findMany({
+        where: whereBaseEq,
+        select: {
+          id: true,
+          internalId: true,
+          plate: true,
+          meterType: true,
+          initialMeter: true,
+          currentMeter: true,
+          lastMaintenanceMeter: true,
+          pmIntervalOverride: true,
+          maintenanceFrequency: true,
+          type: true,
+          model: true,
+        },
+        take: 320,
+      }),
+      this.prisma.workOrder.findMany({
+        where: {
+          ...whereBaseWO,
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 6,
+        select: {
+          id: true,
+          correlative: true,
+          status: true,
+          createdAt: true,
+          equipment: { select: { internalId: true, type: true } },
+        },
+      }),
+      this.prisma.purchaseRequisition.findMany({
+        where: {
+          tenantId,
+          ...contractScope,
+          status: {
+            in: [
+              'SUBMITTED',
+              'QUOTING',
+              'PENDING_APPROVAL',
+              'PARTIALLY_PURCHASED',
+            ],
+          },
+        },
+        orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
+        take: 5,
+        select: {
+          id: true,
+          correlative: true,
+          status: true,
+          priority: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.purchaseOrder.findMany({
+        where: {
+          tenantId,
+          ...contractScope,
+          status: {
+            in: [
+              'PENDING_APPROVAL',
+              'PARTIALLY_APPROVED',
+              'APPROVED',
+              'ORDERED',
+              'SENT',
+              'SENT_TO_SUPPLIER',
+              'PARTIALLY_RECEIVED',
+            ],
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          correlative: true,
+          status: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.purchaseRequisition.count({
+        where: {
+          tenantId,
+          ...contractScope,
+          status: {
+            in: [
+              'SUBMITTED',
+              'QUOTING',
+              'PENDING_APPROVAL',
+              'PARTIALLY_PURCHASED',
+            ],
+          },
+        },
+      }),
+      this.prisma.purchaseOrder.count({
+        where: {
+          tenantId,
+          ...contractScope,
+          status: {
+            in: ['ORDERED', 'SENT', 'SENT_TO_SUPPLIER', 'PARTIALLY_RECEIVED'],
+          },
+        },
+      }),
+      this.prisma.itemStock.findMany({
+        where: {
+          minStock: { gt: 0 },
+          warehouse: stockWarehouseWhere,
+        },
+        include: {
+          item: { select: { partNumber: true, name: true } },
+          warehouse: { select: { code: true, name: true } },
+        },
+        take: 150,
+      }),
     ]);
 
-    const expiredDocs = await this.prisma.equipment.count({
-      where: {
-        ...whereBaseEq,
-        OR: [{ techReviewExp: { lt: now } }, { circPermitExp: { lt: now } }],
-      },
-    });
-
-    const totalEquipments = await this.prisma.equipment.count({
-      where: whereBaseEq,
-    });
-
-    const activeOts = await this.prisma.workOrder.groupBy({
-      by: ['equipmentId'],
-      where: {
-        ...whereBaseWO,
-        status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] },
-      },
-    });
     const equiposEnMantenimientoCount = activeOts.length;
-
-    const lastClosed = await this.prisma.workOrder.findMany({
-      where: { ...whereBaseWO, status: 'CLOSED' },
-      orderBy: { closedAt: 'desc' },
-      take: 5,
-      include: {
-        equipment: { select: { internalId: true } },
-      },
-    });
-
-    const topAlertsData = await this.prisma.equipment.findMany({
-      where: {
-        ...whereBaseEq,
-        OR: [
-          { techReviewExp: { not: null } },
-          { circPermitExp: { not: null } },
-        ],
-      },
-      orderBy: [{ techReviewExp: 'asc' }],
-      take: 10,
-    });
 
     const alerts = topAlertsData
       .map((e: any) => {
-        const trDays = e.techReviewExp
-          ? Math.ceil(
-              (new Date(e.techReviewExp).getTime() - now.getTime()) /
-                (1000 * 60 * 60 * 24),
-            )
-          : 9999;
-        const cpDays = e.circPermitExp
-          ? Math.ceil(
-              (new Date(e.circPermitExp).getTime() - now.getTime()) /
-                (1000 * 60 * 60 * 24),
-            )
-          : 9999;
-        const minDays = Math.min(trDays, cpDays);
+        const { daysRemaining, docLabel } = nearestLegalDocAlert(e, now);
         return {
           id: e.id,
           internalId: e.internalId,
           plate: e.plate,
-          daysRemaining: minDays,
-          type: trDays < cpDays ? 'Rev. Técnica' : 'Perm. Circulación',
+          daysRemaining,
+          docLabel,
         };
       })
+      .filter((a: { daysRemaining: number }) => a.daysRemaining < 999999)
       .sort((a: any, b: any) => a.daysRemaining - b.daysRemaining)
-      .slice(0, 5);
+      .slice(0, 6);
+
+    const legalAttention30d = alerts.filter((a) => a.daysRemaining <= 30).length;
+
+    const pmDueSoon = equipmentForPm
+      .map((e) => {
+        const { remaining, interval, nextDue } = pmRemainingBackend(e);
+        return {
+          id: e.id,
+          internalId: e.internalId,
+          plate: e.plate,
+          meterType: e.meterType,
+          remainingUnits: remaining,
+          interval,
+          nextDueMeter: nextDue,
+          urgencyPct:
+            interval > 0
+              ? Math.min(100, Math.round(((interval - remaining) / interval) * 100))
+              : 0,
+        };
+      })
+      .sort((a, b) => a.remainingUnits - b.remainingUnits)
+      .slice(0, 6);
+
+    const lowStocks = itemStockCandidates
+      .filter((s) => s.quantity < s.minStock)
+      .sort((a, b) => a.quantity / a.minStock - b.quantity / b.minStock)
+      .slice(0, 8)
+      .map((s) => ({
+        warehouseCode: s.warehouse.code,
+        partNumber: s.item.partNumber,
+        name: s.item.name,
+        quantity: s.quantity,
+        minStock: s.minStock,
+      }));
 
     return {
       otsByStatus: {
@@ -766,6 +1062,19 @@ export class WorkOrdersService {
           : 100,
       lastClosed,
       topAlerts: alerts,
+      /** KPIs agregados (dashboard principal) */
+      kpiStrip: {
+        activeOts: open + inProgress,
+        legalDocsAttention30d: legalAttention30d,
+        lowStockLines: lowStocks.length,
+        requisitionsPipeline: requisitionPipelineCount,
+        purchaseOrdersInbound: poAwaitingInboundCount,
+      },
+      pmDueSoon,
+      openOtsHot,
+      purchaseRequisitionsAttention: requisitionsAttention,
+      purchaseOrdersInbound,
+      lowStocks,
     };
   }
 
@@ -1013,16 +1322,37 @@ export class WorkOrdersService {
             where: { workOrderId: id },
           });
           if (dto.fluidCompartments.length > 0) {
-            await tx.workOrderFluidCompartment.createMany({
-              data: dto.fluidCompartments.map((fc) => ({
+            const fluidRows: Prisma.WorkOrderFluidCompartmentCreateManyInput[] =
+              [];
+            for (const fc of dto.fluidCompartments) {
+              const invId = fc.inventoryItemId?.trim();
+              if (!invId) {
+                throw new BadRequestException(
+                  'Cada fluido por compartimiento debe estar vinculado a un ítem del inventario de la empresa.',
+                );
+              }
+              const fluidItem = await tx.inventoryItem.findFirst({
+                where: { id: invId, tenantId: user.tenantId },
+                select: { id: true, partNumber: true, name: true },
+              });
+              if (!fluidItem) {
+                throw new BadRequestException(
+                  'Un ítem de fluido no existe o no pertenece a su empresa.',
+                );
+              }
+              fluidRows.push({
                 workOrderId: id,
                 compartment: fc.compartment,
-                fluidType: fc.fluidType.trim(),
+                fluidType: truncateForDb(
+                  `${fluidItem.partNumber} — ${fluidItem.name}`,
+                  200,
+                ),
                 liters: new Prisma.Decimal(String(fc.liters)),
                 action: fc.action,
-                inventoryItemId: fc.inventoryItemId?.trim() || null,
-              })),
-            });
+                inventoryItemId: fluidItem.id,
+              });
+            }
+            await tx.workOrderFluidCompartment.createMany({ data: fluidRows });
           }
         }
 
@@ -1045,28 +1375,32 @@ export class WorkOrdersService {
             }[] = [];
 
             for (const p of dto.parts) {
-              let invItemId = p.inventoryItemId;
+              const invItemId = p.inventoryItemId?.trim();
               if (!invItemId) {
-                const catalogItem = await tx.inventoryItem.findFirst({
-                  where: { tenantId, partNumber: p.partNumber },
-                });
-                if (catalogItem) invItemId = catalogItem.id;
+                throw new BadRequestException(
+                  'Toda línea de repuesto debe estar vinculada a un ítem del inventario de la empresa (use el buscador de catálogo).',
+                );
               }
-
+              const inv = await tx.inventoryItem.findFirst({
+                where: { id: invItemId, tenantId },
+                select: { id: true, partNumber: true, name: true },
+              });
+              if (!inv) {
+                throw new BadRequestException(
+                  'Un repuesto no existe o no pertenece a su empresa.',
+                );
+              }
               partsData.push({
                 workOrderId: id,
-                partNumber: p.partNumber,
-                description: p.description,
+                partNumber: inv.partNumber,
+                description: truncateForDb(inv.name, 100),
                 quantity: Number(p.quantity),
-                inventoryItemId: invItemId || null,
+                inventoryItemId: inv.id,
               });
-
-              if (invItemId) {
-                linkedPartsForReservation.push({
-                  itemId: invItemId,
-                  quantity: Number(p.quantity),
-                });
-              }
+              linkedPartsForReservation.push({
+                itemId: inv.id,
+                quantity: Number(p.quantity),
+              });
             }
 
             await tx.workOrderPart.createMany({ data: partsData });

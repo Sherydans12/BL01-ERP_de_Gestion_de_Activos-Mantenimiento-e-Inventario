@@ -203,34 +203,196 @@
                   @for (sys of w.systems; track sys.catalogItemId) {
                     <span
                       class="inline-flex px-2 py-1 rounded-md text-xs bg-dark border border-border text-main"
-                      >{{ sys.catalogItem?.name }}</span
+                      >@if (sys.catalogItem?.code) {
+                        <span class="font-mono text-primary mr-1.5">{{
+                          sys.catalogItem.code
+                        }}</span>
+                      }{{ sys.catalogItem?.name }}</span
                     >
                   }
                 </div>
               </div>
             }
 
-            <!-- Fluidos -->
-            @if (w.fluids?.length) {
-              <div>
-                <h3
-                  class="text-[10px] font-mono uppercase tracking-wider text-muted mb-2"
-                >
-                  Fluidos
-                </h3>
-                <div class="space-y-2">
-                  @for (f of w.fluids; track f.id) {
-                    <div
-                      class="flex justify-between gap-4 text-sm border border-border/50 rounded-lg px-3 py-2 bg-dark/20"
-                    >
-                      <span class="text-main">{{ f.catalogItem?.name }}</span>
-                      <span class="font-mono text-muted"
-                        >{{ f.liters }} L · {{ f.action }}</span
-                      >
-                    </div>
-                  }
+            <!-- Materiales y consumos (orden: repuestos → compartimientos → legado catálogo) -->
+            @if (hasConsumosSection(w)) {
+              <section
+                class="space-y-5 rounded-xl border border-border bg-dark/15 p-4"
+                aria-label="Materiales y consumos"
+              >
+                <div class="flex flex-col gap-1 border-b border-border/60 pb-3">
+                  <h3
+                    class="text-[10px] font-mono uppercase tracking-wider text-primary"
+                  >
+                    Materiales y consumos
+                  </h3>
+                  <p class="text-[11px] text-muted leading-snug">
+                    Repuestos de bodega (manual o enlazados a ítem), fluidos por
+                    compartimiento del formulario OT y, si aplica, consumos por
+                    ítem de catálogo (modelo anterior).
+                  </p>
                 </div>
-              </div>
+
+                <!-- 1 Repuestos -->
+                @if (w.parts?.length) {
+                  <div class="space-y-3">
+                    <h4
+                      class="text-[10px] font-mono uppercase tracking-wider text-muted"
+                    >
+                      1 · Repuestos / materiales de bodega
+                    </h4>
+                    @if (partsWithInventoryLink(w).length) {
+                      <p class="text-[11px] text-muted">
+                        Con ítem de inventario (picker, kit PM resuelto u otra
+                        línea enlazada)
+                      </p>
+                      <div class="overflow-x-auto rounded-lg border border-border">
+                        <table class="w-full text-sm text-left">
+                          <thead
+                            class="bg-dark text-[10px] font-mono uppercase text-muted"
+                          >
+                            <tr>
+                              <th class="px-3 py-2">P/N</th>
+                              <th class="px-3 py-2">Descripción</th>
+                              <th class="px-3 py-2">Ítem bodega</th>
+                              <th class="px-3 py-2 text-right">Cant.</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-border/40">
+                            @for (p of partsWithInventoryLink(w); track p.id) {
+                              <tr>
+                                <td class="px-3 py-2 font-mono text-primary">
+                                  {{ p.partNumber }}
+                                </td>
+                                <td class="px-3 py-2 text-main">{{ p.description }}</td>
+                                <td class="px-3 py-2 text-xs text-muted">
+                                  @if (p.inventoryItem) {
+                                    <span class="font-mono text-main">{{
+                                      p.inventoryItem.partNumber
+                                    }}</span>
+                                    <span class="block truncate max-w-[12rem]">{{
+                                      p.inventoryItem.name
+                                    }}</span>
+                                  } @else {
+                                    —
+                                  }
+                                </td>
+                                <td class="px-3 py-2 text-right font-mono">
+                                  {{ p.quantity | number: "1.0-2" }}
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                    @if (partsWithoutInventoryLink(w).length) {
+                      <p class="text-[11px] text-muted pt-1">
+                        Solo texto (carga manual de P/N sin vínculo a catálogo)
+                      </p>
+                      <div class="overflow-x-auto rounded-lg border border-border">
+                        <table class="w-full text-sm text-left">
+                          <thead
+                            class="bg-dark text-[10px] font-mono uppercase text-muted"
+                          >
+                            <tr>
+                              <th class="px-3 py-2">P/N</th>
+                              <th class="px-3 py-2">Descripción</th>
+                              <th class="px-3 py-2 text-right">Cant.</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-border/40">
+                            @for (p of partsWithoutInventoryLink(w); track p.id) {
+                              <tr>
+                                <td class="px-3 py-2 font-mono text-primary">
+                                  {{ p.partNumber }}
+                                </td>
+                                <td class="px-3 py-2 text-main">{{ p.description }}</td>
+                                <td class="px-3 py-2 text-right font-mono">
+                                  {{ p.quantity | number: "1.0-2" }}
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- 2 Fluidos por compartimiento -->
+                @if (w.fluidCompartments?.length) {
+                  <div class="space-y-2">
+                    <h4
+                      class="text-[10px] font-mono uppercase tracking-wider text-muted"
+                    >
+                      2 · Fluidos por compartimiento
+                    </h4>
+                    <p class="text-[11px] text-muted">
+                      Registrado en pestaña de fluidos del formulario OT (Motor,
+                      Transmisión, etc.).
+                    </p>
+                    <div class="space-y-2">
+                      @for (fc of sortedFluidCompartments(w); track fc.id) {
+                        <div
+                          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm border border-border/50 rounded-lg px-3 py-2.5 bg-dark/20"
+                        >
+                          <div class="min-w-0">
+                            <span
+                              class="text-[10px] font-mono uppercase text-primary"
+                              >{{ fluidCompartmentLabel(fc.compartment) }}</span
+                            >
+                            <p class="text-main font-medium">{{ fc.fluidType }}</p>
+                            @if (fc.inventoryItem) {
+                              <p class="text-xs text-muted mt-0.5">
+                                Ítem:
+                                <span class="font-mono text-main">{{
+                                  fc.inventoryItem.partNumber
+                                }}</span>
+                                · {{ fc.inventoryItem.name }}
+                              </p>
+                            }
+                          </div>
+                          <div
+                            class="shrink-0 font-mono text-xs text-muted text-right"
+                          >
+                            {{ fc.liters | number: "1.0-2" }} L ·
+                            {{ fluidActionLabel(fc.action) }}
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+
+                <!-- 3 Consumo fluido legado (catálogo por ítem) -->
+                @if (w.fluids?.length) {
+                  <div class="space-y-2">
+                    <h4
+                      class="text-[10px] font-mono uppercase tracking-wider text-muted"
+                    >
+                      3 · Consumo por ítem catálogo (legado)
+                    </h4>
+                    <p class="text-[11px] text-muted">
+                      Líneas antiguas vinculadas a un ítem de catálogo distinto al
+                      modelo por compartimiento.
+                    </p>
+                    <div class="space-y-2">
+                      @for (f of w.fluids; track f.id) {
+                        <div
+                          class="flex justify-between gap-4 text-sm border border-border/50 rounded-lg px-3 py-2 bg-dark/20"
+                        >
+                          <span class="text-main">{{ f.catalogItem?.name }}</span>
+                          <span class="font-mono text-muted shrink-0"
+                            >{{ f.liters | number: "1.0-2" }} L ·
+                            {{ fluidActionLabel(f.action) }}</span
+                          >
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              </section>
             }
 
             <!-- Tareas -->
@@ -262,43 +424,6 @@
                     </li>
                   }
                 </ul>
-              </div>
-            }
-
-            <!-- Repuestos -->
-            @if (w.parts?.length) {
-              <div>
-                <h3
-                  class="text-[10px] font-mono uppercase tracking-wider text-muted mb-2"
-                >
-                  Repuestos / materiales
-                </h3>
-                <div class="overflow-x-auto rounded-lg border border-border">
-                  <table class="w-full text-sm text-left">
-                    <thead
-                      class="bg-dark text-[10px] font-mono uppercase text-muted"
-                    >
-                      <tr>
-                        <th class="px-3 py-2">Parte</th>
-                        <th class="px-3 py-2">Descripción</th>
-                        <th class="px-3 py-2 text-right">Cant.</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border/40">
-                      @for (p of w.parts; track p.id) {
-                        <tr>
-                          <td class="px-3 py-2 font-mono text-primary">
-                            {{ p.partNumber }}
-                          </td>
-                          <td class="px-3 py-2 text-main">{{ p.description }}</td>
-                          <td class="px-3 py-2 text-right font-mono">
-                            {{ p.quantity | number: "1.0-2" }}
-                          </td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
               </div>
             }
 

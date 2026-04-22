@@ -12,8 +12,15 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import {
+  WorkOrdersService,
+  type FluidCompartment,
+} from '../../../core/services/work-orders/work-orders.service';
 import { MeterType } from '../../../core/models/types';
+import {
+  FLUID_COMPARTMENTS_ORDER,
+  FLUID_COMPARTMENT_LABELS,
+} from '../work-order-form/work-order-form.constants';
 
 @Component({
   selector: 'app-work-order-detail-modal',
@@ -136,5 +143,50 @@ export class WorkOrderDetailModalComponent {
 
   meterUnit(eq: any): string {
     return eq?.meterType === MeterType.KILOMETERS ? 'Km' : 'Hrs';
+  }
+
+  fluidCompartmentLabel(comp: string | undefined): string {
+    if (!comp) return '—';
+    const c = comp as FluidCompartment;
+    return FLUID_COMPARTMENT_LABELS[c] ?? comp;
+  }
+
+  /** Misma jerarquía que en el formulario OT (Motor → … → Otros). */
+  sortedFluidCompartments(w: { fluidCompartments?: { compartment?: string }[] }): any[] {
+    const rows = w?.fluidCompartments ?? [];
+    const order = FLUID_COMPARTMENTS_ORDER;
+    const idx = (c: string) => {
+      const i = order.indexOf(c as FluidCompartment);
+      return i === -1 ? 999 : i;
+    };
+    return [...rows].sort(
+      (a, b) => idx(String(a.compartment)) - idx(String(b.compartment)),
+    );
+  }
+
+  partsWithInventoryLink(w: { parts?: { inventoryItemId?: string | null }[] }): any[] {
+    return (w?.parts ?? []).filter((p) => !!p.inventoryItemId);
+  }
+
+  partsWithoutInventoryLink(w: { parts?: { inventoryItemId?: string | null }[] }): any[] {
+    return (w?.parts ?? []).filter((p) => !p.inventoryItemId);
+  }
+
+  fluidActionLabel(action: string | undefined): string {
+    if (action === 'RELLENO') return 'Relleno';
+    if (action === 'CAMBIO') return 'Cambio';
+    return action ?? '—';
+  }
+
+  hasConsumosSection(w: {
+    parts?: unknown[];
+    fluidCompartments?: unknown[];
+    fluids?: unknown[];
+  }): boolean {
+    return (
+      (w.parts?.length ?? 0) > 0 ||
+      (w.fluidCompartments?.length ?? 0) > 0 ||
+      (w.fluids?.length ?? 0) > 0
+    );
   }
 }

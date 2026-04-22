@@ -207,3 +207,49 @@
   border-color: rgba(var(--primary-rgb), 0.45);
   box-shadow: 0 1px 6px rgba(0, 229, 255, 0.12);
 }
+
+/* Fluidos OT: <details> colapsable — control derecho tipo “botón” */
+.ot-fluidos-details > summary .ot-fluidos-chevron {
+  display: inline-block;
+  transition: transform 0.18s ease;
+}
+
+.ot-fluidos-details[open] > summary .ot-fluidos-chevron {
+  transform: rotate(90deg);
+}
+
+.ot-fluid-row-card {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ot-fluid-row-card:focus-within {
+  border-color: rgba(var(--primary-rgb), 0.45);
+  box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.12);
+}
+
+.ot-part-row-card {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ot-part-row-card:focus-within {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.08);
+}
+
+/* Modal sistemas intervenidos (CatalogItem SYSTEM) */
+:host dialog.ot-catalog-systems-dialog {
+  max-width: min(96vw, 28rem);
+  width: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+:host dialog.ot-catalog-systems-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+}
