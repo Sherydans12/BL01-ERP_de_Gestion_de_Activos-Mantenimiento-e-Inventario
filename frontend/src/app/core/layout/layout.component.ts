@@ -261,7 +261,8 @@ export class LayoutComponent implements OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onWindowKeydown(ev: KeyboardEvent) {
-    const key = ev.key.toLowerCase();
+    // `key` puede ser undefined en algunos eventos (p. ej. foco en <dialog> / IME / extensiones).
+    const key = (ev.key ?? '').toLowerCase();
     if ((ev.ctrlKey || ev.metaKey) && key === 'k') {
       ev.preventDefault();
       this.openCommandPalette();

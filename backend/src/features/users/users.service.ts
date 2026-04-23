@@ -3,6 +3,8 @@ import {
   BadRequestException,
   ConflictException,
   UnauthorizedException,
+  Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -36,6 +38,8 @@ const meSelect = {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private prisma: PrismaService,
     private mailerService: MailerService,
@@ -281,6 +285,15 @@ export class UsersService {
 
     const activationToken = crypto.randomBytes(32).toString('hex');
 
+    const rutNorm =
+      data.rut != null && String(data.rut).trim() !== ''
+        ? String(data.rut).trim()
+        : null;
+    const phoneNorm =
+      data.phone != null && String(data.phone).trim() !== ''
+        ? String(data.phone).trim()
+        : null;
+
     try {
       const newUser = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -292,8 +305,8 @@ export class UsersService {
             isActive: false,
             activationToken,
             tenantId: effectiveRole === 'SUPER_ADMIN' ? null : tenantId,
-            rut: data.rut,
-            phone: data.phone,
+            rut: rutNorm,
+            phone: phoneNorm,
             birthDate: data.birthDate ? new Date(data.birthDate) : null,
             position: data.position,
             customRoleId,
@@ -323,10 +336,11 @@ export class UsersService {
         this.config.get('FRONTEND_URL') || 'http://localhost:4200';
       const activationLink = `${frontendUrl}/auth/activate?token=${activationToken}`;
 
-      await this.mailerService.sendMail({
-        to: data.email,
-        subject: 'Invitación a Sistema TPM',
-        html: `
+      try {
+        await this.mailerService.sendMail({
+          to: data.email,
+          subject: 'Invitación a Sistema TPM',
+          html: `
           <div style="font-family: sans-serif; color: #333;">
             <h2>Bienvenido al Sistema de Gestión de Activos TPM</h2>
             <p>Hola <strong>${data.name}</strong>,</p>
@@ -343,7 +357,20 @@ export class UsersService {
             <p>Saludos,<br>Equipo TPM</p>
           </div>
         `,
-      });
+        });
+      } catch (mailErr) {
+        this.logger.warn(
+          `Fallo al enviar invitación a ${data.email}: ${mailErr instanceof Error ? mailErr.message : String(mailErr)}`,
+        );
+        try {
+          await this.prisma.user.delete({ where: { id: newUser.id } });
+        } catch {
+          /* evitar enmascarar el error principal */
+        }
+        throw new ServiceUnavailableException(
+          'No se pudo enviar el correo de invitación. Verifique la configuración SMTP del servidor o intente más tarde.',
+        );
+      }
 
       return {
         id: newUser.id,
@@ -528,10 +555,11 @@ export class UsersService {
       this.config.get('FRONTEND_URL') || 'http://localhost:4200';
     const activationLink = `${frontendUrl}/auth/activate?token=${newToken}`;
 
-    await this.mailerService.sendMail({
-      to: user.email,
-      subject: 'Reenvío de Invitación - Sistema TPM',
-      html: `
+    try {
+      await this.mailerService.sendMail({
+        to: user.email,
+        subject: 'Reenvío de Invitación - Sistema TPM',
+        html: `
         <div style="font-family: sans-serif; color: #333;">
           <h2>Invitación al Sistema de Gestión de Activos TPM</h2>
           <p>Hola <strong>${user.name}</strong>,</p>
@@ -546,7 +574,15 @@ export class UsersService {
           <p style="font-size: 0.8em; color: #666;">Enlace directo: ${activationLink}</p>
         </div>
       `,
-    });
+      });
+    } catch (mailErr) {
+      this.logger.warn(
+        `Fallo al reenviar invitación a ${user.email}: ${mailErr instanceof Error ? mailErr.message : String(mailErr)}`,
+      );
+      throw new ServiceUnavailableException(
+        'No se pudo enviar el correo de invitación. Verifique la configuración SMTP del servidor o intente más tarde.',
+      );
+    }
 
     return { success: true, message: 'Invitación reenviada correctamente' };
   }
