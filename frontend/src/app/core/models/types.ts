@@ -52,6 +52,8 @@ export interface Equipment {
   fuelType?: string;
   driveType?: string;
   ownership?: string;
+  isSubleased?: boolean;
+  subleaseCompanyName?: string | null;
 
   // Mantenimiento y Vencimientos (DateTime transformado a string ISO)
   maintenanceFrequency?: number;

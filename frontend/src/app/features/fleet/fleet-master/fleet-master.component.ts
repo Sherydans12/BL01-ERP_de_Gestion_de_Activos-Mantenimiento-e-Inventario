@@ -148,7 +148,9 @@ export class FleetMasterComponent implements OnInit {
     // Operación y Mantenimiento
     fuelType: [null],
     driveType: [null],
-    ownership: [null],
+    ownership: [''],
+    isSubleased: [false],
+    subleaseCompanyName: [''],
     maintenanceFrequency: [null],
     /** Si se informa, prevalece sobre la frecuencia de flota para proyección PM en OT */
     pmIntervalOverride: [null],
@@ -187,6 +189,9 @@ export class FleetMasterComponent implements OnInit {
 
   ngOnInit() {
     this.loadContracts();
+    this.catalogService.loadCatalogs().subscribe({
+      error: () => undefined,
+    });
 
     // Escuchar cambios en el selector de Contrato para limpiar el Subcontrato
     this.equipmentForm.get('contractId')?.valueChanges.subscribe((val) => {
@@ -194,6 +199,12 @@ export class FleetMasterComponent implements OnInit {
       // Si cambia el contrato y no estamos en modo edición inicializando datos, reseteamos el subcontrato
       if (!this.isEditMode) {
         this.equipmentForm.get('subcontractId')?.setValue('');
+      }
+    });
+
+    this.equipmentForm.get('isSubleased')?.valueChanges.subscribe((on) => {
+      if (!on) {
+        this.equipmentForm.get('subleaseCompanyName')?.setValue('');
       }
     });
   }
@@ -290,6 +301,9 @@ export class FleetMasterComponent implements OnInit {
       currentMeter: 0,
       contractId: globalContractId !== 'ALL' ? globalContractId : '',
       subcontractId: '',
+      ownership: '',
+      isSubleased: false,
+      subleaseCompanyName: '',
     });
 
     this.equipmentForm.get('soapExp')?.clearValidators();
@@ -337,7 +351,9 @@ export class FleetMasterComponent implements OnInit {
       year: eq.year,
       fuelType: eq.fuelType,
       driveType: eq.driveType,
-      ownership: eq.ownership,
+      ownership: eq.ownership ?? '',
+      isSubleased: eq.isSubleased ?? false,
+      subleaseCompanyName: eq.subleaseCompanyName ?? '',
       maintenanceFrequency: eq.maintenanceFrequency,
       pmIntervalOverride: eq.pmIntervalOverride ?? null,
 
@@ -440,8 +456,20 @@ export class FleetMasterComponent implements OnInit {
       return;
     }
 
+    if (formValue.isSubleased && !formValue.subleaseCompanyName?.trim()) {
+      this.notificationService.error(
+        'Si el equipo está en subarriendo, indique la empresa arrendataria (razón social o nombre).',
+      );
+      return;
+    }
+
     const payload: any = {
       ...formValue,
+      ownership: formValue.ownership?.trim() || null,
+      isSubleased: !!formValue.isSubleased,
+      subleaseCompanyName: formValue.isSubleased
+        ? formValue.subleaseCompanyName?.trim() || null
+        : null,
       subcontractId: formValue.subcontractId || null,
       year: formValue.year ? Number(formValue.year) : null,
       maintenanceFrequency: formValue.maintenanceFrequency
@@ -518,6 +546,9 @@ export class FleetMasterComponent implements OnInit {
       mineInternalId: 'N° int. mina',
       internalId: 'N° Interno',
       plate: 'Patente',
+      ownership: 'Tipo de propiedad',
+      isSubleased: 'Subarriendo',
+      subleaseCompanyName: 'Empresa subarriendo',
       type: 'Tipo',
       brand: 'Marca',
       model: 'Modelo',

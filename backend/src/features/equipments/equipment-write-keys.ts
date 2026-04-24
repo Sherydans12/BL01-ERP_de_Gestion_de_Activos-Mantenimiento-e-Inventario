@@ -21,6 +21,8 @@ export const EQUIPMENT_WRITABLE_KEYS = [
   'fuelType',
   'driveType',
   'ownership',
+  'isSubleased',
+  'subleaseCompanyName',
   'maintenanceFrequency',
   'pmIntervalOverride',
   'lastMaintenanceDate',

@@ -591,6 +591,70 @@
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
             >
+              Propiedad y subarriendo
+            </h4>
+            <p class="text-[11px] text-muted mb-4 max-w-3xl">
+              El <span class="text-main font-medium">tipo de propiedad</span> proviene del catálogo
+              «Tipo de Propiedad» (ruta administrativa). Aquí solo puede elegirse entre las opciones ya creadas.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="md:col-span-2">
+                <label for="ownership" class="block text-sm text-muted mb-1"
+                  >Tipo de propiedad</label
+                >
+                <select
+                  id="ownership"
+                  formControlName="ownership"
+                  class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                >
+                  <option value="">Sin especificar</option>
+                  @for (o of ownerships(); track o.id) {
+                    <option [value]="o.name">{{ o.name }}</option>
+                  }
+                </select>
+                @if (ownerships().length === 0) {
+                  <p class="text-[10px] text-warning mt-1.5 font-mono">
+                    No hay tipos de propiedad activos. Solicite a administración que carguen ítems en catálogos (categoría Tipo de Propiedad).
+                  </p>
+                }
+              </div>
+              <div class="md:col-span-2 flex flex-col gap-3">
+                <label
+                  class="inline-flex items-center gap-2.5 text-sm text-main cursor-pointer select-none"
+                >
+                  <input
+                    type="checkbox"
+                    formControlName="isSubleased"
+                    class="h-4 w-4 rounded border-border bg-dark text-primary focus:ring-primary focus:ring-offset-0"
+                  />
+                  Equipo en subarriendo
+                </label>
+                @if (equipmentForm.get("isSubleased")?.value) {
+                  <div>
+                    <label
+                      for="subleaseCompanyName"
+                      class="block text-sm text-muted mb-1"
+                      >Empresa a la que se arrienda
+                      <span class="text-primary">*</span></label
+                    >
+                    <input
+                      type="text"
+                      id="subleaseCompanyName"
+                      formControlName="subleaseCompanyName"
+                      class="w-full bg-dark border border-border text-main rounded-lg px-3 py-2 outline-none focus:border-primary"
+                      placeholder="Razón social o nombre comercial"
+                      autocomplete="organization"
+                    />
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4
+              class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
+            >
               Información técnica
             </h4>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

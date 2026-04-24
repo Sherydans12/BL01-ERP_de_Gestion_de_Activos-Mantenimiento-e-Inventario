@@ -274,9 +274,20 @@
             <span class="text-sm text-main">{{ eq.driveType || '—' }}</span>
           </div>
           <div>
-            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Propiedad</span>
+            <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Tipo de propiedad</span>
             <span class="text-sm text-main">{{ eq.ownership || '—' }}</span>
           </div>
+          @if (eq.isSubleased) {
+            <div class="md:col-span-2">
+              <span class="text-[11px] uppercase tracking-wider text-muted block mb-0.5">Subarriendo</span>
+              <span class="text-sm text-main"
+                >Empresa arrendataria (subarriendo):
+                <span class="font-semibold text-primary">{{
+                  eq.subleaseCompanyName || '—'
+                }}</span></span
+              >
+            </div>
+          }
 
           <!-- Mantenimiento -->
           <div class="md:col-span-3 mt-3 mb-1">

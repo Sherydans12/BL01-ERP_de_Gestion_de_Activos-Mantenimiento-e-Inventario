@@ -35,7 +35,11 @@ model Equipment {
   // Operación y Mantenimiento (Evolucionado)
   fuelType              String?     @map("fuel_type") @db.VarChar(50)
   driveType             String?     @map("drive_type") @db.VarChar(50)
+  /** Nombre del ítem de catálogo OWNERSHIP (Tipo de Propiedad). */
   ownership             String?     @db.VarChar(50)
+  isSubleased           Boolean     @default(false) @map("is_subleased")
+  /** Empresa a la que se arrienda el activo (obligatorio si isSubleased). */
+  subleaseCompanyName   String?     @map("sublease_company_name") @db.VarChar(200)
   maintenanceFrequency  Int?        @map("maintenance_frequency")
   /** Intervalo PM en horas o km según meterType (250, 500, 600, 10000…). Si null, usa reglas por tipo en cliente. */
   pmIntervalOverride    Int?        @map("pm_interval_override")

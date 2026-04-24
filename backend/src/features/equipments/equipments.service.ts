@@ -15,6 +15,61 @@ export class EquipmentsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Coherencia subarriendo: si isSubleased, exige empresa; si no, limpia nombre.
+   * En update, si el body no trae claves de subarriendo, no toca el estado persistido.
+   */
+  private normalizeSubleasePayload(
+    data: Record<string, unknown>,
+    existing: {
+      isSubleased: boolean;
+      subleaseCompanyName: string | null;
+    } | null,
+  ): void {
+    const hasIs = Object.prototype.hasOwnProperty.call(data, 'isSubleased');
+    const hasName = Object.prototype.hasOwnProperty.call(
+      data,
+      'subleaseCompanyName',
+    );
+
+    if (!hasIs && !hasName) {
+      if (!existing) {
+        data['isSubleased'] = false;
+        data['subleaseCompanyName'] = null;
+      }
+      return;
+    }
+
+    const isSubleased = hasIs
+      ? data['isSubleased'] === true ||
+        data['isSubleased'] === 'true' ||
+        data['isSubleased'] === 1 ||
+        data['isSubleased'] === '1'
+      : Boolean(existing?.isSubleased);
+
+    let company = '';
+    if (hasName) {
+      const rawName = data['subleaseCompanyName'];
+      company =
+        typeof rawName === 'string'
+          ? rawName.trim()
+          : rawName != null
+            ? String(rawName).trim()
+            : '';
+    } else if (existing?.subleaseCompanyName) {
+      company = String(existing.subleaseCompanyName).trim();
+    }
+
+    if (isSubleased && !company) {
+      throw new BadRequestException(
+        'Si el equipo está en subarriendo, indique la empresa arrendataria (razón social o nombre).',
+      );
+    }
+
+    data['isSubleased'] = Boolean(isSubleased);
+    data['subleaseCompanyName'] = isSubleased ? company : null;
+  }
+
   // POST: Crear un nuevo equipo
   async create(user: any, data: any, activeContract?: string) {
     const tenantId = user.tenantId;
@@ -64,6 +119,8 @@ export class EquipmentsService {
     if (!userId) {
       throw new BadRequestException('Usuario no válido para auditoría de medidor.');
     }
+
+    this.normalizeSubleasePayload(data as Record<string, unknown>, null);
 
     try {
       const scalars = pickEquipmentWritablePayload(
@@ -435,6 +492,11 @@ export class EquipmentsService {
       });
       if (!existing)
         throw new BadRequestException('Equipo no encontrado o sin permisos');
+
+      this.normalizeSubleasePayload(data as Record<string, unknown>, {
+        isSubleased: existing.isSubleased,
+        subleaseCompanyName: existing.subleaseCompanyName,
+      });
 
       // Limpiamos subcontractId si el frontend manda un string vacío
       if (data.subcontractId === '') {

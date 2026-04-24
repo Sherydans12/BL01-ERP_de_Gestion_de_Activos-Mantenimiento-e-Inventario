@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsDateString,
   IsUUID,
+  IsBoolean,
 } from 'class-validator';
 import { MeterType } from '@prisma/client';
 
@@ -74,6 +75,14 @@ export class CreateEquipmentDto {
   @IsString()
   @IsOptional()
   ownership?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isSubleased?: boolean;
+
+  @IsString()
+  @IsOptional()
+  subleaseCompanyName?: string | null;
 
   @IsInt()
   @IsOptional()
