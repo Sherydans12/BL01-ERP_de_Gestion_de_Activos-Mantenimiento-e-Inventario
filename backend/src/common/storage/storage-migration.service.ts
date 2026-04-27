@@ -77,7 +77,9 @@ export class StorageMigrationService {
     mimeType?: string | null;
     updateDb: (newStorageKey: string) => Promise<void>;
   }): Promise<'migrated' | 'error'> {
-    const legacyRelativePath = this.normalizeLegacyUploadsPath(params.legacyValue);
+    const legacyRelativePath = this.normalizeLegacyUploadsPath(
+      params.legacyValue,
+    );
     if (!legacyRelativePath) {
       return 'error';
     }
@@ -92,7 +94,8 @@ export class StorageMigrationService {
 
     try {
       const buffer = await fs.readFile(absolutePath);
-      const mimeType = params.mimeType?.trim() || this.guessMimeType(absolutePath);
+      const mimeType =
+        params.mimeType?.trim() || this.guessMimeType(absolutePath);
       await this.storage.uploadBufferWithKey(targetKey, buffer, mimeType);
       await params.updateDb(targetKey);
       return 'migrated';
@@ -124,7 +127,7 @@ export class StorageMigrationService {
         select: { id: true, tenantId: true, avatarUrl: true, createdAt: true },
       });
       if (!rows.length) break;
-      cursorId = rows[rows.length - 1]!.id;
+      cursorId = rows[rows.length - 1].id;
 
       for (const row of rows) {
         if (!row.avatarUrl || !row.tenantId) {
@@ -138,10 +141,12 @@ export class StorageMigrationService {
           createdAt: row.createdAt,
           legacyValue: row.avatarUrl,
           updateDb: (newStorageKey) =>
-            this.prisma.user.update({
-              where: { id: row.id },
-              data: { avatarUrl: newStorageKey },
-            }).then(() => undefined),
+            this.prisma.user
+              .update({
+                where: { id: row.id },
+                data: { avatarUrl: newStorageKey },
+              })
+              .then(() => undefined),
         });
         if (result === 'migrated') summary.migrated += 1;
         else summary.errors += 1;
@@ -149,7 +154,9 @@ export class StorageMigrationService {
     }
   }
 
-  private async migrateInventoryAttachments(summary: MigrationSummary): Promise<void> {
+  private async migrateInventoryAttachments(
+    summary: MigrationSummary,
+  ): Promise<void> {
     let cursorId: string | null = null;
     while (true) {
       const rows: Array<{
@@ -174,7 +181,7 @@ export class StorageMigrationService {
         },
       });
       if (!rows.length) break;
-      cursorId = rows[rows.length - 1]!.id;
+      cursorId = rows[rows.length - 1].id;
 
       for (const row of rows) {
         const result = await this.migrateOneRecord({
@@ -185,10 +192,12 @@ export class StorageMigrationService {
           legacyValue: row.storageKey,
           mimeType: row.mimeType,
           updateDb: (newStorageKey) =>
-            this.prisma.inventoryItemAttachment.update({
-              where: { id: row.id },
-              data: { storageKey: newStorageKey },
-            }).then(() => undefined),
+            this.prisma.inventoryItemAttachment
+              .update({
+                where: { id: row.id },
+                data: { storageKey: newStorageKey },
+              })
+              .then(() => undefined),
         });
         if (result === 'migrated') summary.migrated += 1;
         else summary.errors += 1;
@@ -196,7 +205,9 @@ export class StorageMigrationService {
     }
   }
 
-  private async migratePurchaseDocuments(summary: MigrationSummary): Promise<void> {
+  private async migratePurchaseDocuments(
+    summary: MigrationSummary,
+  ): Promise<void> {
     let cursorId: string | null = null;
     while (true) {
       const rows: Array<{
@@ -221,7 +232,7 @@ export class StorageMigrationService {
         },
       });
       if (!rows.length) break;
-      cursorId = rows[rows.length - 1]!.id;
+      cursorId = rows[rows.length - 1].id;
 
       for (const row of rows) {
         const result = await this.migrateOneRecord({
@@ -232,10 +243,12 @@ export class StorageMigrationService {
           legacyValue: row.storageKey,
           mimeType: row.mimeType,
           updateDb: (newStorageKey) =>
-            this.prisma.purchaseDocument.update({
-              where: { id: row.id },
-              data: { storageKey: newStorageKey },
-            }).then(() => undefined),
+            this.prisma.purchaseDocument
+              .update({
+                where: { id: row.id },
+                data: { storageKey: newStorageKey },
+              })
+              .then(() => undefined),
         });
         if (result === 'migrated') summary.migrated += 1;
         else summary.errors += 1;
@@ -271,7 +284,7 @@ export class StorageMigrationService {
         },
       });
       if (!rows.length) break;
-      cursorId = rows[rows.length - 1]!.id;
+      cursorId = rows[rows.length - 1].id;
 
       for (const row of rows) {
         const currentValue = row[field];
@@ -286,10 +299,12 @@ export class StorageMigrationService {
           createdAt: row.createdAt,
           legacyValue: currentValue,
           updateDb: (newStorageKey) =>
-            this.prisma.workOrder.update({
-              where: { id: row.id },
-              data: { [field]: newStorageKey },
-            }).then(() => undefined),
+            this.prisma.workOrder
+              .update({
+                where: { id: row.id },
+                data: { [field]: newStorageKey },
+              })
+              .then(() => undefined),
         });
         if (result === 'migrated') summary.migrated += 1;
         else summary.errors += 1;
@@ -350,7 +365,9 @@ export class StorageMigrationService {
       );
     }
 
-    this.logger.log('Iniciando migración de archivos locales (/uploads/) hacia R2...');
+    this.logger.log(
+      'Iniciando migración de archivos locales (/uploads/) hacia R2...',
+    );
     this.logger.log(`UPLOAD_PATH origen: ${this.uploadPath}`);
     this.logger.log(`Procesamiento por lotes de ${BATCH_SIZE} registros.`);
 
@@ -367,7 +384,10 @@ export class StorageMigrationService {
       summary,
       'responsibleMechanicSignature',
     );
-    await this.migrateWorkOrderSignatureField(summary, 'shiftSupervisorSignature');
+    await this.migrateWorkOrderSignatureField(
+      summary,
+      'shiftSupervisorSignature',
+    );
 
     this.logger.log(
       `Migración finalizada: ${summary.migrated} migrados con éxito, ${summary.errors} errores, ${summary.alreadyInR2} ya estaban en R2.`,

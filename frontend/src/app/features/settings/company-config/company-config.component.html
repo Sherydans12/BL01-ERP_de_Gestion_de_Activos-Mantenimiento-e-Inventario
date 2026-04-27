@@ -84,6 +84,21 @@
               placeholder="Ej: Av. Industrial 1234, Santiago"
             />
           </div>
+
+          <div class="space-y-2 md:col-span-2">
+            <label class="block text-sm font-medium text-muted">Costo Hora Hombre (Tarifa HH)</label>
+            <input
+              type="number"
+              formControlName="laborRatePerHour"
+              min="0"
+              step="0.01"
+              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+              placeholder="Ej: 25000"
+            />
+            <p class="text-xs text-muted/80">
+              Este valor se utiliza para calcular el costo de mano de obra en los reportes de disponibilidad y OTs.
+            </p>
+          </div>
         </div>
       </div>
 

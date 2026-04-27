@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
@@ -53,8 +48,8 @@ function clipHours(
   return (e - s) / 3_600_000;
 }
 
-/** Labor rate CLP/HH — configurable sin romper si no existe. */
-function laborRatePerHh(): number {
+/** Labor rate CLP/HH fallback por env var para compatibilidad operativa. */
+function laborRatePerHhFromEnv(): number {
   const raw = process.env.WO_ANALYTICS_LABOR_RATE_PER_HH;
   const n = raw ? Number(raw) : NaN;
   return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -104,18 +99,34 @@ export type ProjectedServiceRow = {
 };
 
 @Injectable()
-export class WorkOrderAnalyticsService implements OnModuleInit {
+export class WorkOrderAnalyticsService {
   private readonly logger = new Logger(WorkOrderAnalyticsService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  onModuleInit(): void {
-    const raw = process.env.WO_ANALYTICS_LABOR_RATE_PER_HH;
-    if (raw === undefined || String(raw).trim() === '') {
-      this.logger.warn(
-        'Advertencia: Tarifa de mano de obra no configurada. Los reportes PDF mostrarán costos de HH en 0. Configura WO_ANALYTICS_LABOR_RATE_PER_HH en las variables de entorno.',
-      );
+  private async resolveLaborRatePerHour(tenantId: string): Promise<number> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { laborRatePerHour: true },
+    });
+
+    const fromDb = tenant?.laborRatePerHour
+      ? new Decimal(tenant.laborRatePerHour.toString()).toNumber()
+      : 0;
+
+    if (fromDb > 0) {
+      return fromDb;
     }
+
+    const fromEnv = laborRatePerHhFromEnv();
+    if (fromEnv > 0) {
+      return fromEnv;
+    }
+
+    this.logger.warn(
+      `Tarifa HH en 0 para tenant ${tenantId}. Define tenant.laborRatePerHour en configuración de empresa o WO_ANALYTICS_LABOR_RATE_PER_HH como fallback.`,
+    );
+    return 0;
   }
 
   private equipmentAccessWhere(
@@ -149,9 +160,7 @@ export class WorkOrderAnalyticsService implements OnModuleInit {
   ): Prisma.WorkOrderWhereInput {
     const tenantId = user.tenantId;
     const eqFilter = this.equipmentAccessWhere(user, activeContract);
-    return eqFilter
-      ? { tenantId, equipment: eqFilter }
-      : { tenantId };
+    return eqFilter ? { tenantId, equipment: eqFilter } : { tenantId };
   }
 
   async getDashboard(
@@ -167,10 +176,7 @@ export class WorkOrderAnalyticsService implements OnModuleInit {
     }
     const rangeEnd = new Date(to);
     rangeEnd.setHours(23, 59, 59, 999);
-    const periodHoursTotal = Math.max(
-      0.001,
-      hoursBetween(from, rangeEnd),
-    );
+    const periodHoursTotal = Math.max(0.001, hoursBetween(from, rangeEnd));
 
     const baseWo = this.woWhere(user, activeContract);
 
@@ -215,8 +221,7 @@ export class WorkOrderAnalyticsService implements OnModuleInit {
             0,
             Math.min(
               100,
-              ((periodHoursTotal - downtimeImpactHoursSi) /
-                periodHoursTotal) *
+              ((periodHoursTotal - downtimeImpactHoursSi) / periodHoursTotal) *
                 100,
             ),
           )
@@ -420,7 +425,7 @@ export class WorkOrderAnalyticsService implements OnModuleInit {
         lastMaintenanceMeter: r.lastMaintenanceMeter,
       };
       const proj = computePmProjection(pmIn);
-      const src = proj.source as PmIntervalSource;
+      const src = proj.source;
       out.push({
         equipmentId: r.id,
         internalId: r.internalId,
@@ -502,7 +507,7 @@ export class WorkOrderAnalyticsService implements OnModuleInit {
     const hhHours = hhAgg._sum.metricHh
       ? new Decimal(hhAgg._sum.metricHh.toString()).toNumber()
       : 0;
-    const laborRate = laborRatePerHh();
+    const laborRate = await this.resolveLaborRatePerHour(user.tenantId);
     const laborCostEstimate = hhHours * laborRate;
 
     const partsFluidCost = costs._sum.amount
@@ -515,10 +520,7 @@ export class WorkOrderAnalyticsService implements OnModuleInit {
     });
 
     const availabilityReferenceLines = [...dashboard.availabilityByEquipment]
-      .sort(
-        (a, b) =>
-          (a.availabilityPct ?? 100) - (b.availabilityPct ?? 100),
-      )
+      .sort((a, b) => (a.availabilityPct ?? 100) - (b.availabilityPct ?? 100))
       .slice(0, 15)
       .map((eq) => ({
         label: equipmentDisplayLabel(eq),

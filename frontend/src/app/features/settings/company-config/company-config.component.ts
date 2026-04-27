@@ -87,6 +87,7 @@ export class CompanyConfigComponent implements OnInit {
         [Validators.required, Validators.pattern(/^#[0-9a-fA-F]{6}$/i)],
       ],
       logoUrl: [''],
+      laborRatePerHour: [0, [Validators.min(0)]],
     });
   }
 
@@ -116,6 +117,7 @@ export class CompanyConfigComponent implements OnInit {
       phone: t.phone || '',
       primaryColor: t.primaryColor || '#00E5FF',
       logoUrl: t.logoUrl || '',
+      laborRatePerHour: t.laborRatePerHour ?? 0,
     });
   }
 

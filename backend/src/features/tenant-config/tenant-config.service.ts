@@ -23,6 +23,7 @@ export class TenantConfigService {
         phone: true,
         logoUrl: true,
         primaryColor: true,
+        laborRatePerHour: true,
         backgroundPreference: true,
         sidebarPermissions: true,
         tenantRoles: {
@@ -50,6 +51,9 @@ export class TenantConfigService {
       address: tenant.address || '',
       phone: tenant.phone || '',
       logoUrl: tenant.logoUrl || '',
+      laborRatePerHour: tenant.laborRatePerHour
+        ? Number(tenant.laborRatePerHour.toString())
+        : 0,
     };
   }
 
@@ -66,6 +70,7 @@ export class TenantConfigService {
         phone: true,
         logoUrl: true,
         primaryColor: true,
+        laborRatePerHour: true,
         backgroundPreference: true,
         sidebarPermissions: true,
       },

@@ -117,7 +117,9 @@ export class R2StorageProvider implements StorageProvider {
     );
     const body = output.Body;
     if (!body) {
-      const err = new Error(`ENOENT: ${normalizedKey}`) as NodeJS.ErrnoException;
+      const err = new Error(
+        `ENOENT: ${normalizedKey}`,
+      ) as NodeJS.ErrnoException;
       err.code = 'ENOENT';
       throw err;
     }

@@ -9,6 +9,7 @@ export interface Tenant {
   phone?: string | null;
   logoUrl?: string | null;
   primaryColor?: string;
+  laborRatePerHour?: number | null;
   backgroundPreference?: 'DARK' | 'LIGHT';
   /** Permisos de sidebar configurados por el ADMIN del tenant. Clave = rol, valor = lista de rutas permitidas. */
   sidebarPermissions?: Record<string, string[]> | null;

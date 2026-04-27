@@ -33,10 +33,13 @@ export class StorageService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    const driver = (config.get<string>('STORAGE_DRIVER') || 'local').toLowerCase();
+    const driver = (
+      config.get<string>('STORAGE_DRIVER') || 'local'
+    ).toLowerCase();
     const basePath = config.get<string>('UPLOAD_PATH') || './uploads';
     this.backendPublicUrl =
-      config.get<string>('BACKEND_PUBLIC_URL')?.trim().replace(/\/+$/, '') || '';
+      config.get<string>('BACKEND_PUBLIC_URL')?.trim().replace(/\/+$/, '') ||
+      '';
     if (driver === 'r2' || driver === 's3') {
       const accountId = this.getRequiredEnv('R2_ACCOUNT_ID');
       const accessKeyId = this.getRequiredEnv('R2_ACCESS_KEY_ID');
@@ -52,19 +55,21 @@ export class StorageService {
         publicUrl: this.config.get<string>('R2_PUBLIC_URL'),
         keyPrefix: this.config.get<string>('R2_KEY_PREFIX'),
       });
-      StorageService.log.log(`Storage driver activo: ${driver} (bucket=${bucket})`);
+      StorageService.log.log(
+        `Storage driver activo: ${driver} (bucket=${bucket})`,
+      );
     } else {
       this.provider = new LocalStorageProvider(basePath);
-      StorageService.log.log(
-        `Storage driver activo: local (path=${basePath})`,
-      );
+      StorageService.log.log(`Storage driver activo: local (path=${basePath})`);
     }
   }
 
   private getRequiredEnv(name: string): string {
     const value = this.config.get<string>(name)?.trim();
     if (!value) {
-      throw new Error(`Configuración de storage incompleta: falta variable ${name}`);
+      throw new Error(
+        `Configuración de storage incompleta: falta variable ${name}`,
+      );
     }
     return value;
   }
@@ -139,66 +144,67 @@ export class StorageService {
       quotationCount,
       invoiceCount,
       workOrderSignatureCount,
-    ] =
-      await Promise.all([
-        this.prisma.user.count({
-          where: {
-            tenantId,
-            OR: [
-              { avatarUrl: raw },
-              { avatarUrl: normalized },
-              ...(uploadsVariant ? [{ avatarUrl: uploadsVariant }] : []),
-            ],
-          },
-        }),
-        this.prisma.inventoryItemAttachment.count({
-          where: {
-            tenantId,
-            storageKey: normalized,
-          },
-        }),
-        this.prisma.purchaseDocument.count({
-          where: {
-            tenantId,
-            storageKey: normalized,
-          },
-        }),
-        this.prisma.purchaseQuotation.count({
-          where: {
-            tenantId,
-            OR: [
-              { attachmentUrl: raw },
-              { attachmentUrl: normalized },
-              ...(uploadsVariant ? [{ attachmentUrl: uploadsVariant }] : []),
-            ],
-          },
-        }),
-        this.prisma.purchaseInvoice.count({
-          where: {
-            tenantId,
-            OR: [
-              { pdfUrl: raw },
-              { pdfUrl: normalized },
-              ...(uploadsVariant ? [{ pdfUrl: uploadsVariant }] : []),
-            ],
-          },
-        }),
-        this.prisma.workOrder.count({
-          where: {
-            tenantId,
-            OR: [
-              { responsibleMechanicSignature: raw },
-              { responsibleMechanicSignature: normalized },
-              ...(uploadsVariant
-                ? [{ responsibleMechanicSignature: uploadsVariant }]
-                : []),
-              { shiftSupervisorSignature: raw },
-              { shiftSupervisorSignature: normalized },
-              ...(uploadsVariant ? [{ shiftSupervisorSignature: uploadsVariant }] : []),
-            ],
-          },
-        }),
-      ]);
+    ] = await Promise.all([
+      this.prisma.user.count({
+        where: {
+          tenantId,
+          OR: [
+            { avatarUrl: raw },
+            { avatarUrl: normalized },
+            ...(uploadsVariant ? [{ avatarUrl: uploadsVariant }] : []),
+          ],
+        },
+      }),
+      this.prisma.inventoryItemAttachment.count({
+        where: {
+          tenantId,
+          storageKey: normalized,
+        },
+      }),
+      this.prisma.purchaseDocument.count({
+        where: {
+          tenantId,
+          storageKey: normalized,
+        },
+      }),
+      this.prisma.purchaseQuotation.count({
+        where: {
+          tenantId,
+          OR: [
+            { attachmentUrl: raw },
+            { attachmentUrl: normalized },
+            ...(uploadsVariant ? [{ attachmentUrl: uploadsVariant }] : []),
+          ],
+        },
+      }),
+      this.prisma.purchaseInvoice.count({
+        where: {
+          tenantId,
+          OR: [
+            { pdfUrl: raw },
+            { pdfUrl: normalized },
+            ...(uploadsVariant ? [{ pdfUrl: uploadsVariant }] : []),
+          ],
+        },
+      }),
+      this.prisma.workOrder.count({
+        where: {
+          tenantId,
+          OR: [
+            { responsibleMechanicSignature: raw },
+            { responsibleMechanicSignature: normalized },
+            ...(uploadsVariant
+              ? [{ responsibleMechanicSignature: uploadsVariant }]
+              : []),
+            { shiftSupervisorSignature: raw },
+            { shiftSupervisorSignature: normalized },
+            ...(uploadsVariant
+              ? [{ shiftSupervisorSignature: uploadsVariant }]
+              : []),
+          ],
+        },
+      }),
+    ]);
 
     return (
       userAvatarCount > 0 ||
@@ -240,10 +246,14 @@ export class StorageService {
         OR: [
           { responsibleMechanicSignature: raw },
           { responsibleMechanicSignature: normalized },
-          ...(uploadsVariant ? [{ responsibleMechanicSignature: uploadsVariant }] : []),
+          ...(uploadsVariant
+            ? [{ responsibleMechanicSignature: uploadsVariant }]
+            : []),
           { shiftSupervisorSignature: raw },
           { shiftSupervisorSignature: normalized },
-          ...(uploadsVariant ? [{ shiftSupervisorSignature: uploadsVariant }] : []),
+          ...(uploadsVariant
+            ? [{ shiftSupervisorSignature: uploadsVariant }]
+            : []),
         ],
       },
       select: {

@@ -136,12 +136,12 @@ export function generateWorkOrderManagementMonthlyPdfBuffer(
     };
 
     const k = dashboard.kpis;
-    drawKpi(left, 'Disponibilidad física (flota)', formatPct(k.fleetAvailabilityPct));
     drawKpi(
-      left + colW + gap,
-      'MTTR (correctivas)',
-      formatHours(k.mttrHours),
+      left,
+      'Disponibilidad física (flota)',
+      formatPct(k.fleetAvailabilityPct),
     );
+    drawKpi(left + colW + gap, 'MTTR (correctivas)', formatHours(k.mttrHours));
     drawKpi(
       left + (colW + gap) * 2,
       'MTBF (entre fallas no programadas)',
@@ -162,17 +162,22 @@ export function generateWorkOrderManagementMonthlyPdfBuffer(
 
     const refLines = availabilityReferenceLines ?? [];
     if (refLines.length > 0) {
-      doc.fontSize(12).fillColor('#000000').text(
-        'Referencia — disponibilidad por equipo (menor PA primero)',
-        { underline: true },
-      );
+      doc
+        .fontSize(12)
+        .fillColor('#000000')
+        .text('Referencia — disponibilidad por equipo (menor PA primero)', {
+          underline: true,
+        });
       doc.moveDown(0.5);
-      doc.fontSize(8).fillColor('#888888').text(
-        'Etiqueta: marca/modelo si existe; si no, patente o N° interno.',
-        left,
-        doc.y,
-        { width },
-      );
+      doc
+        .fontSize(8)
+        .fillColor('#888888')
+        .text(
+          'Etiqueta: marca/modelo si existe; si no, patente o N° interno.',
+          left,
+          doc.y,
+          { width },
+        );
       doc.moveDown(0.4);
       doc.fontSize(9).fillColor('#444444');
       for (const row of refLines) {
@@ -181,27 +186,39 @@ export function generateWorkOrderManagementMonthlyPdfBuffer(
       doc.moveDown(1);
     }
 
-    doc.fontSize(12).fillColor('#000000').text('Costos de mantenimiento (estimado)', {
-      underline: true,
-    });
+    doc
+      .fontSize(12)
+      .fillColor('#000000')
+      .text('Costos de mantenimiento (estimado)', {
+        underline: true,
+      });
     doc.moveDown(0.5);
     doc.fontSize(10).fillColor('#333333');
-    doc.text(`Repuestos y fluidos (asset cost WORK_ORDER): ${formatClp(totalAssetCostWo)}`, {
-      width,
-    });
+    doc.text(
+      `Repuestos y fluidos (asset cost WORK_ORDER): ${formatClp(totalAssetCostWo)}`,
+      {
+        width,
+      },
+    );
     doc.text(
       `Mano de obra: ${totalLaborHours.toFixed(1)} HH × ${formatClp(laborRatePerHour)} = ${formatClp(laborCostEstimate)}`,
       { width },
     );
     doc.moveDown(0.3);
-    doc.fontSize(11).fillColor('#111111').text(`Total estimado: ${formatClp(totalMaintenanceEstimate)}`, {
-      width,
-    });
+    doc
+      .fontSize(11)
+      .fillColor('#111111')
+      .text(`Total estimado: ${formatClp(totalMaintenanceEstimate)}`, {
+        width,
+      });
     doc.moveDown(1);
 
-    doc.fontSize(12).fillColor('#000000').text('Programado vs no programado (OT cerradas)', {
-      underline: true,
-    });
+    doc
+      .fontSize(12)
+      .fillColor('#000000')
+      .text('Programado vs no programado (OT cerradas)', {
+        underline: true,
+      });
     doc.moveDown(0.4);
     doc.fontSize(10).fillColor('#333333');
     const ps = dashboard.programmedSplit;
@@ -210,9 +227,12 @@ export function generateWorkOrderManagementMonthlyPdfBuffer(
     doc.text(`Sin clasificar / otras: ${ps.unknown}`, { width });
     doc.moveDown(0.8);
 
-    doc.fontSize(12).fillColor('#000000').text('Pareto — sistemas intervenidos (conteo OT)', {
-      underline: true,
-    });
+    doc
+      .fontSize(12)
+      .fillColor('#000000')
+      .text('Pareto — sistemas intervenidos (conteo OT)', {
+        underline: true,
+      });
     doc.moveDown(0.5);
     const topPareto = [...dashboard.paretoSystems]
       .filter((p) => p.otCount > 0)

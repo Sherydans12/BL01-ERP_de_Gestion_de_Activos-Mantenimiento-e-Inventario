@@ -2,7 +2,10 @@
 
 export type MeterTypeBackend = 'HOURS' | 'KILOMETERS';
 
-export type PmIntervalSource = 'override' | 'fleet_frequency' | 'heuristic_default';
+export type PmIntervalSource =
+  | 'override'
+  | 'fleet_frequency'
+  | 'heuristic_default';
 
 export interface EquipmentPmInput {
   type: string;
@@ -74,7 +77,7 @@ export function computePmProjection(equipment: EquipmentPmInput): {
   const base =
     equipment.lastMaintenanceMeter != null
       ? equipment.lastMaintenanceMeter
-      : equipment.initialMeter ?? 0;
+      : (equipment.initialMeter ?? 0);
   const current = equipment.currentMeter ?? base;
   const nextDueMeter = base + interval;
   const remainingUnits = Math.max(0, nextDueMeter - current);

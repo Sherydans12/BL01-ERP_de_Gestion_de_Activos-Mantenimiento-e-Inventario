@@ -4,7 +4,10 @@ import {
   IsEnum,
   IsObject,
   Matches,
+  IsNumber,
+  Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { BackgroundPreference } from '@prisma/client';
 
 export class UpdateTenantConfigDto {
@@ -42,4 +45,10 @@ export class UpdateTenantConfigDto {
   @IsObject()
   @IsOptional()
   sidebarPermissions?: Record<string, string[]>;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  laborRatePerHour?: number;
 }

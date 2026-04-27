@@ -25,7 +25,12 @@ export class StorageController {
   @Get('resolve')
   async resolveAndRedirect(
     @Query('key') key: string,
-    @Req() req: { user?: { id?: string; tenantId?: string }; ip?: string; headers?: Record<string, unknown> },
+    @Req()
+    req: {
+      user?: { id?: string; tenantId?: string };
+      ip?: string;
+      headers?: Record<string, unknown>;
+    },
     @Res() res: Response,
   ) {
     const keyRaw = key?.trim();
@@ -34,10 +39,15 @@ export class StorageController {
     }
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
-      throw new ForbiddenException('No se pudo resolver el tenant del usuario.');
+      throw new ForbiddenException(
+        'No se pudo resolver el tenant del usuario.',
+      );
     }
 
-    const allowed = await this.storage.canTenantReadStorageKey(tenantId, keyRaw);
+    const allowed = await this.storage.canTenantReadStorageKey(
+      tenantId,
+      keyRaw,
+    );
     if (!allowed) {
       throw new ForbiddenException('Sin permisos para acceder al archivo.');
     }
