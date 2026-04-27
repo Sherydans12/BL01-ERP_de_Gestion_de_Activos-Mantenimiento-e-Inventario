@@ -17,6 +17,12 @@ export type UploadedFileMeta = {
   originalName: string;
 };
 
+export type StorageAuditTarget = {
+  entityType: 'PURCHASE_DOCUMENT' | 'WORK_ORDER';
+  entityId: string;
+  storageKey: string;
+};
+
 @Injectable()
 export class StorageService {
   private static readonly log = new Logger(StorageService.name);
@@ -114,7 +120,7 @@ export class StorageService {
       return this.buildLocalUrl(`/uploads/${normalized}`);
     }
 
-    return this.getSignedDownloadUrl(normalized, 600);
+    return this.getSignedDownloadUrl(normalized, 300);
   }
 
   async canTenantReadStorageKey(
@@ -126,7 +132,14 @@ export class StorageService {
     const normalized = this.normalizeStorageKey(raw);
     const uploadsVariant = normalized ? `/uploads/${normalized}` : null;
 
-    const [userAvatarCount, inventoryDocCount, purchaseDocCount, quotationCount, invoiceCount] =
+    const [
+      userAvatarCount,
+      inventoryDocCount,
+      purchaseDocCount,
+      quotationCount,
+      invoiceCount,
+      workOrderSignatureCount,
+    ] =
       await Promise.all([
         this.prisma.user.count({
           where: {
@@ -170,6 +183,21 @@ export class StorageService {
             ],
           },
         }),
+        this.prisma.workOrder.count({
+          where: {
+            tenantId,
+            OR: [
+              { responsibleMechanicSignature: raw },
+              { responsibleMechanicSignature: normalized },
+              ...(uploadsVariant
+                ? [{ responsibleMechanicSignature: uploadsVariant }]
+                : []),
+              { shiftSupervisorSignature: raw },
+              { shiftSupervisorSignature: normalized },
+              ...(uploadsVariant ? [{ shiftSupervisorSignature: uploadsVariant }] : []),
+            ],
+          },
+        }),
       ]);
 
     return (
@@ -177,8 +205,66 @@ export class StorageService {
       inventoryDocCount > 0 ||
       purchaseDocCount > 0 ||
       quotationCount > 0 ||
-      invoiceCount > 0
+      invoiceCount > 0 ||
+      workOrderSignatureCount > 0
     );
+  }
+
+  async resolveAuditTargetForStorageKey(
+    tenantId: string,
+    storageKeyCandidate: string,
+  ): Promise<StorageAuditTarget | null> {
+    const raw = (storageKeyCandidate || '').trim();
+    if (!raw) return null;
+    const normalized = this.normalizeStorageKey(raw);
+    const uploadsVariant = normalized ? `/uploads/${normalized}` : null;
+
+    const purchaseDoc = await this.prisma.purchaseDocument.findFirst({
+      where: {
+        tenantId,
+        storageKey: normalized,
+      },
+      select: { id: true, storageKey: true },
+    });
+    if (purchaseDoc) {
+      return {
+        entityType: 'PURCHASE_DOCUMENT',
+        entityId: purchaseDoc.id,
+        storageKey: purchaseDoc.storageKey,
+      };
+    }
+
+    const workOrder = await this.prisma.workOrder.findFirst({
+      where: {
+        tenantId,
+        OR: [
+          { responsibleMechanicSignature: raw },
+          { responsibleMechanicSignature: normalized },
+          ...(uploadsVariant ? [{ responsibleMechanicSignature: uploadsVariant }] : []),
+          { shiftSupervisorSignature: raw },
+          { shiftSupervisorSignature: normalized },
+          ...(uploadsVariant ? [{ shiftSupervisorSignature: uploadsVariant }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        responsibleMechanicSignature: true,
+        shiftSupervisorSignature: true,
+      },
+    });
+    if (!workOrder) return null;
+    const resolvedKey =
+      workOrder.responsibleMechanicSignature === raw ||
+      workOrder.responsibleMechanicSignature === normalized ||
+      workOrder.responsibleMechanicSignature === uploadsVariant
+        ? workOrder.responsibleMechanicSignature
+        : workOrder.shiftSupervisorSignature;
+    if (!resolvedKey) return null;
+    return {
+      entityType: 'WORK_ORDER',
+      entityId: workOrder.id,
+      storageKey: this.normalizeStorageKey(resolvedKey),
+    };
   }
 
   /** Clave con nombre único (UUID) + extensión segura. */

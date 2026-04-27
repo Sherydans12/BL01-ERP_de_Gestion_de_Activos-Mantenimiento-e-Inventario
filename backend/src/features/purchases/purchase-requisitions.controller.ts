@@ -20,6 +20,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
+import {
+  documentUploadPolicy,
+  FileValidationInterceptor,
+} from '../../common/storage/file-validation.interceptor';
 
 const quotationAttachmentLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
@@ -92,7 +96,10 @@ export class PurchaseRequisitionsController {
 
   @Post(':id/quotations')
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
-  @UseInterceptors(FileInterceptor('attachment', quotationAttachmentLimits))
+  @UseInterceptors(
+    FileInterceptor('attachment', quotationAttachmentLimits),
+    new FileValidationInterceptor(documentUploadPolicy),
+  )
   addQuotation(
     @Param('id') id: string,
     @Body() body: any,

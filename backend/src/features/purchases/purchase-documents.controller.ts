@@ -20,6 +20,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PurchaseDocumentsService } from './purchase-documents.service';
 import type { PurchaseDocumentEntity } from '@prisma/client';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
+import {
+  documentUploadPolicy,
+  FileValidationInterceptor,
+} from '../../common/storage/file-validation.interceptor';
 
 const fileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
@@ -52,7 +56,10 @@ export class PurchaseDocumentsController {
 
   @Post()
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
-  @UseInterceptors(FileInterceptor('file', fileLimits))
+  @UseInterceptors(
+    FileInterceptor('file', fileLimits),
+    new FileValidationInterceptor(documentUploadPolicy),
+  )
   upload(
     @Query('entity') entity: string,
     @Query('entityId') entityId: string,

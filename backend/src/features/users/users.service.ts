@@ -168,10 +168,12 @@ export class UsersService {
       throw new BadRequestException('Archivo requerido');
     }
     if (file.buffer.length > MAX_USER_AVATAR_BYTES) {
-      throw new BadRequestException('La imagen no puede superar 2 MB');
+      throw new BadRequestException('La imagen no puede superar 5 MB');
     }
     if (!USER_AVATAR_MIME_TYPES.has(file.mimetype)) {
-      throw new BadRequestException('Formato no permitido (JPG, PNG o WebP)');
+      throw new BadRequestException(
+        'Tipo de archivo no permitido por políticas de seguridad',
+      );
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });

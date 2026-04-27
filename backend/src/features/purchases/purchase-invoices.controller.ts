@@ -21,6 +21,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 import { PurchaseDocumentsService } from './purchase-documents.service';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
+import {
+  documentUploadPolicy,
+  FileValidationInterceptor,
+} from '../../common/storage/file-validation.interceptor';
 
 const invoiceFileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
@@ -86,7 +90,10 @@ export class PurchaseInvoicesController {
 
   @Post()
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
-  @UseInterceptors(FileInterceptor('pdf', invoiceFileLimits))
+  @UseInterceptors(
+    FileInterceptor('pdf', invoiceFileLimits),
+    new FileValidationInterceptor(documentUploadPolicy),
+  )
   async create(
     @Body()
     body: {
@@ -164,7 +171,10 @@ export class PurchaseInvoicesController {
 
   @Patch(':id')
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
-  @UseInterceptors(FileInterceptor('pdf', invoiceFileLimits))
+  @UseInterceptors(
+    FileInterceptor('pdf', invoiceFileLimits),
+    new FileValidationInterceptor(documentUploadPolicy),
+  )
   async update(
     @Param('id') id: string,
     @Body()

@@ -39,6 +39,24 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       }
 
       let errorMessage = 'Ocurrió un error inesperado.';
+      const rawMessage = error.error?.message;
+      const normalizedMessage = Array.isArray(rawMessage)
+        ? rawMessage.join(', ')
+        : typeof rawMessage === 'string'
+          ? rawMessage
+          : '';
+
+      if (
+        normalizedMessage
+          .toLowerCase()
+          .includes('tipo de archivo no permitido por políticas de seguridad')
+      ) {
+        notificationService.error(
+          'Tipo de archivo no permitido por políticas de seguridad',
+          6000,
+        );
+        return throwError(() => error);
+      }
 
       if (error.error && typeof error.error.message === 'string') {
         // Validation errors form NestJS (BadRequestException, etc)

@@ -26,6 +26,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { MAX_USER_AVATAR_BYTES } from './user-avatar.constants';
+import {
+  avatarUploadPolicy,
+  FileValidationInterceptor,
+} from '../../common/storage/file-validation.interceptor';
 
 const avatarUploadLimits = { limits: { fileSize: MAX_USER_AVATAR_BYTES } };
 
@@ -59,7 +63,10 @@ export class UsersController {
   }
 
   @Post('profile/avatar')
-  @UseInterceptors(FileInterceptor('file', avatarUploadLimits))
+  @UseInterceptors(
+    FileInterceptor('file', avatarUploadLimits),
+    new FileValidationInterceptor(avatarUploadPolicy),
+  )
   uploadAvatar(
     @Req() req: any,
     @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string },
