@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { MailerService } from '@nestjs-modules/mailer';
 import { AuthService } from './auth.service';
 import { AuthAuditService } from './auth-audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CaptchaService } from './captcha.service';
+import { UserSessionService } from './user-session.service';
+import { EmailService } from '../../common/email/email.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -26,9 +27,10 @@ describe('AuthService', () => {
         },
         { provide: PrismaService, useValue: {} },
         { provide: JwtService, useValue: {} },
-        { provide: MailerService, useValue: { sendMail: jest.fn() } },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: CaptchaService, useValue: { validate: jest.fn() } },
+        { provide: UserSessionService, useValue: {} },
       ],
     }).compile();
 

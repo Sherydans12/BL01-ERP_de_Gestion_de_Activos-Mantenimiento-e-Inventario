@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MailerService } from '@nestjs-modules/mailer';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
@@ -22,6 +21,7 @@ import {
 import { AuthAuditService } from '../auth/auth-audit.service';
 import type { LoginRequestMeta } from '../auth/auth-request.util';
 import { UserSessionService } from '../auth/user-session.service';
+import { EmailService } from '../../common/email/email.service';
 
 const meSelect = {
   id: true,
@@ -42,7 +42,7 @@ export class UsersService {
 
   constructor(
     private prisma: PrismaService,
-    private mailerService: MailerService,
+    private emailService: EmailService,
     private config: ConfigService,
     private readonly storage: StorageService,
     private readonly authAudit: AuthAuditService,
@@ -337,7 +337,7 @@ export class UsersService {
       const activationLink = `${frontendUrl}/auth/activate?token=${activationToken}`;
 
       try {
-        await this.mailerService.sendMail({
+        await this.emailService.sendMail({
           to: data.email,
           subject: 'Invitación a Sistema TPM',
           html: `
@@ -556,7 +556,7 @@ export class UsersService {
     const activationLink = `${frontendUrl}/auth/activate?token=${newToken}`;
 
     try {
-      await this.mailerService.sendMail({
+      await this.emailService.sendMail({
         to: user.email,
         subject: 'Reenvío de Invitación - Sistema TPM',
         html: `

@@ -34,8 +34,8 @@ import {
   PurchaseOrderStatus,
   UserRole,
 } from '@prisma/client';
-import { MailerService } from '@nestjs-modules/mailer';
 import type { QuotationStatusChange } from './purchase-quotation-status-sync.util';
+import { EmailService } from '../../common/email/email.service';
 
 const SUBCONTRACT_SELECT = {
   select: { id: true, code: true, name: true },
@@ -56,7 +56,7 @@ export class PurchaseOrdersService {
     private readonly sequenceService: SequenceService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
-    private readonly mailer: MailerService,
+    private readonly emailService: EmailService,
   ) {}
 
   private buildContractScope(user?: {
@@ -1961,7 +1961,7 @@ export class PurchaseOrdersService {
       for (const u of users) {
         const to = u.email?.trim();
         if (!to?.includes('@')) continue;
-        await this.mailer.sendMail({
+        await this.emailService.sendMail({
           to,
           subject: title,
           html,

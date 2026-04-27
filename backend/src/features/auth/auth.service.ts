@@ -10,13 +10,13 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { MailerService } from '@nestjs-modules/mailer';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { CaptchaService } from './captcha.service';
 import { AuthAuditService, summarizeUserAgent } from './auth-audit.service';
 import type { LoginRequestMeta } from './auth-request.util';
 import { UserSessionService } from './user-session.service';
+import { EmailService } from '../../common/email/email.service';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
 const BCRYPT_DUMMY_HASH =
@@ -48,7 +48,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private mailerService: MailerService,
+    private emailService: EmailService,
     private config: ConfigService,
     private captcha: CaptchaService,
     private readonly authAudit: AuthAuditService,
@@ -64,7 +64,7 @@ export class AuthService {
     ip: string;
   }) {
     try {
-      await this.mailerService.sendMail({
+      await this.emailService.sendMail({
         to: params.toEmail,
         subject: 'Alerta de seguridad — acceso inusual en TPM',
         html: `
@@ -442,7 +442,7 @@ export class AuthService {
       this.config.get('FRONTEND_URL') || 'http://localhost:4200';
     const resetLink = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
-    await this.mailerService.sendMail({
+    await this.emailService.sendMail({
       to: user.email,
       subject: 'Recuperación de Contraseña - Sistema TPM',
       html: `
