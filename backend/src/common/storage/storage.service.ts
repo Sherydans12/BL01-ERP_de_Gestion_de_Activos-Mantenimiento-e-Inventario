@@ -217,6 +217,21 @@ export class StorageService {
     return storageKey;
   }
 
+  async uploadBufferWithKey(
+    storageKey: string,
+    buffer: Buffer,
+    mimeType = 'application/octet-stream',
+  ): Promise<string> {
+    this.assertFileSize(buffer);
+    const normalized = this.normalizeStorageKey(storageKey);
+    const { storageKey: uploadedKey } = await this.provider.upload(
+      normalized,
+      buffer,
+      mimeType,
+    );
+    return uploadedKey;
+  }
+
   async uploadWithMeta(
     file: { buffer: Buffer; originalname: string; mimetype: string },
     folder: string,
