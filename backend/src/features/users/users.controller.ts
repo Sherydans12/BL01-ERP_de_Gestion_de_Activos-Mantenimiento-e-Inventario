@@ -119,6 +119,7 @@ export class UsersController {
   }
 
   @Post(':id/resend-activation')
+  @Roles('ADMIN', 'SUPER_ADMIN')
   async resendActivation(@Param('id') id: string, @Request() req: any) {
     return this.usersService.resendActivation(
       id,

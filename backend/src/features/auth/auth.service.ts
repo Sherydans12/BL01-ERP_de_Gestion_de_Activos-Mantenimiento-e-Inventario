@@ -442,10 +442,11 @@ export class AuthService {
       this.config.get('FRONTEND_URL') || 'http://localhost:4200';
     const resetLink = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
-    await this.emailService.sendMail({
-      to: user.email,
-      subject: 'Recuperación de Contraseña - Sistema TPM',
-      html: `
+    try {
+      await this.emailService.sendMail({
+        to: user.email,
+        subject: 'Recuperación de Contraseña - Sistema TPM',
+        html: `
         <div style="font-family: sans-serif; color: #333;">
           <h2>Recuperación de Contraseña</h2>
           <p>Hola <strong>${user.name}</strong>,</p>
@@ -457,7 +458,20 @@ export class AuthService {
           <p style="font-size: 0.8em; color: #666;">Si no fuiste tú, ignora este correo.</p>
         </div>
       `,
-    });
+      });
+    } catch (err) {
+      this.log.warn(
+        `No se pudo enviar email de recuperación para ${user.email}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      // Respuesta genérica para evitar enumeración de cuentas.
+      await finishTiming();
+      return {
+        success: true,
+        message: FORGOT_PASSWORD_MESSAGE,
+      };
+    }
 
     await finishTiming();
     return {

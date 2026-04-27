@@ -368,7 +368,7 @@ export class UsersService {
           /* evitar enmascarar el error principal */
         }
         throw new ServiceUnavailableException(
-          'No se pudo enviar el correo de invitación. Verifique la configuración SMTP del servidor o intente más tarde.',
+          'No se pudo enviar el correo de invitación. Verifique la configuración de correo del servidor o intente más tarde.',
         );
       }
 
@@ -580,7 +580,7 @@ export class UsersService {
         `Fallo al reenviar invitación a ${user.email}: ${mailErr instanceof Error ? mailErr.message : String(mailErr)}`,
       );
       throw new ServiceUnavailableException(
-        'No se pudo enviar el correo de invitación. Verifique la configuración SMTP del servidor o intente más tarde.',
+        'No se pudo enviar el correo de invitación. Verifique la configuración de correo del servidor o intente más tarde.',
       );
     }
 
