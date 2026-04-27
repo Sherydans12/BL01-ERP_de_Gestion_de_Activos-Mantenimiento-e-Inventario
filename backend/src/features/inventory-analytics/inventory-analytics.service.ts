@@ -350,21 +350,17 @@ export class InventoryAnalyticsService {
       criticalItems,
       deadStockItems,
       immobilizedCapital,
-      purchaseRequisitionExportRows: purchaseRequisitionExportRows.map(
-        (r) => ({
-          correlative: r.correlative,
-          status: r.status,
-          ocVendorDetail: r.purchaseOrders
-            .map((po) => {
-              const vn =
-                po.quotation?.vendor?.name ??
-                po.quotation?.vendor?.code ??
-                '—';
-              return `${po.correlative} — ${vn} — ${po.status}`;
-            })
-            .join(' | '),
-        }),
-      ),
+      purchaseRequisitionExportRows: purchaseRequisitionExportRows.map((r) => ({
+        correlative: r.correlative,
+        status: r.status,
+        ocVendorDetail: r.purchaseOrders
+          .map((po) => {
+            const vn =
+              po.quotation?.vendor?.name ?? po.quotation?.vendor?.code ?? '—';
+            return `${po.correlative} — ${vn} — ${po.status}`;
+          })
+          .join(' | '),
+      })),
     };
   }
 
@@ -591,10 +587,12 @@ export class InventoryAnalyticsService {
     const normalized = q.replace(/[^A-Z0-9]/g, '');
     const compactRaw = rawQuery.replace(/\s+/g, '');
     const stripPrefixes = (v: string) =>
-      v.replace(
-        /^(OC|PO|INV|FAC|REQ|WR|OT|WO|EQ|EQP|REP|WH|BOD)[\s\-_:]*/i,
-        '',
-      ).trim();
+      v
+        .replace(
+          /^(OC|PO|INV|FAC|REQ|WR|OT|WO|EQ|EQP|REP|WH|BOD)[\s\-_:]*/i,
+          '',
+        )
+        .trim();
     const rawNoPrefix = stripPrefixes(rawQuery);
     const normalizedNoPrefix = stripPrefixes(normalized);
     const searchTerms = Array.from(
@@ -696,7 +694,9 @@ export class InventoryAnalyticsService {
           tenantId,
           OR: searchTerms.flatMap((term) => [
             { internalId: { contains: term, mode: 'insensitive' as const } },
-            { mineInternalId: { contains: term, mode: 'insensitive' as const } },
+            {
+              mineInternalId: { contains: term, mode: 'insensitive' as const },
+            },
             { plate: { contains: term, mode: 'insensitive' as const } },
             { brand: { contains: term, mode: 'insensitive' as const } },
             { model: { contains: term, mode: 'insensitive' as const } },
@@ -784,7 +784,9 @@ export class InventoryAnalyticsService {
         inventoryCode: string | null;
       },
     ): number => {
-      const ic = (item.inventoryCode ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const ic = (item.inventoryCode ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
       const pn = item.partNumber.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (normQuery.length < 2) return 0;
       if (ic && ic === normQuery) return 100;

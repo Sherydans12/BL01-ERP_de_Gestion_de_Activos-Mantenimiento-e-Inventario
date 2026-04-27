@@ -947,10 +947,7 @@ export class PurchaseRequisitionsService {
       where: {
         tenantId: user.tenantId,
         status: { notIn: [...PO_INACTIVE_FOR_LINK] },
-        OR: [
-          { requisitionId: id },
-          { quotation: { requisitionId: id } },
-        ],
+        OR: [{ requisitionId: id }, { quotation: { requisitionId: id } }],
       },
       select: { id: true, correlative: true, status: true },
     });
@@ -1196,7 +1193,9 @@ export class PurchaseRequisitionsService {
     }
 
     for (const a of dto.awards) {
-      const reqItem = requisition.items.find((i) => i.id === a.requisitionItemId);
+      const reqItem = requisition.items.find(
+        (i) => i.id === a.requisitionItemId,
+      );
       if (!reqItem) {
         throw new BadRequestException(
           `Ítem de requerimiento no pertenece a este SRC: ${a.requisitionItemId}`,
@@ -1209,10 +1208,7 @@ export class PurchaseRequisitionsService {
             purchaseOrder: {
               tenantId,
               status: { notIn: [...PO_INACTIVE_FOR_LINK] },
-              OR: [
-                { requisitionId },
-                { quotation: { requisitionId } },
-              ],
+              OR: [{ requisitionId }, { quotation: { requisitionId } }],
             },
           },
         });
@@ -1264,10 +1260,8 @@ export class PurchaseRequisitionsService {
         });
       }
 
-      quotationStatusChanges = await syncPurchaseQuotationStatusesFromLineAwards(
-        tx,
-        requisitionId,
-      );
+      quotationStatusChanges =
+        await syncPurchaseQuotationStatusesFromLineAwards(tx, requisitionId);
     });
 
     const updated = await this.findById(requisitionId, tenantId, user);

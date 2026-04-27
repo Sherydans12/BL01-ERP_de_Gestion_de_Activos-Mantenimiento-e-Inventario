@@ -331,7 +331,12 @@ export class InventoryItemsService {
     if (warehouseIdForStock) {
       include.stocks = {
         where: { warehouseId: warehouseIdForStock },
-        select: { quantity: true, unitCost: true, location: true, minStock: true },
+        select: {
+          quantity: true,
+          unitCost: true,
+          location: true,
+          minStock: true,
+        },
       };
     }
 
@@ -498,8 +503,7 @@ export class InventoryItemsService {
     });
     if (!item) throw new NotFoundException('Artículo no encontrado');
 
-    const frontendRaw =
-      this.config.get<string>('FRONTEND_URL')?.trim() || '';
+    const frontendRaw = this.config.get<string>('FRONTEND_URL')?.trim() || '';
     const base = frontendRaw.replace(/\/$/, '');
 
     let qrPayload: string;
@@ -622,21 +626,21 @@ export class InventoryItemsService {
       inventoryCode:
         dto.inventoryCode !== undefined
           ? dto.inventoryCode
-          : existing.inventoryCode ?? undefined,
+          : (existing.inventoryCode ?? undefined),
       partNumber: dto.partNumber ?? existing.partNumber,
       name: dto.name ?? existing.name,
       description:
         dto.description !== undefined
           ? dto.description
-          : existing.description ?? undefined,
+          : (existing.description ?? undefined),
       categoryId: dto.categoryId ?? existing.categoryId,
       unitOfMeasureId: dto.unitOfMeasureId ?? existing.unitOfMeasureId,
       brand:
-        dto.brand !== undefined ? dto.brand : existing.brand ?? undefined,
+        dto.brand !== undefined ? dto.brand : (existing.brand ?? undefined),
       compatibilityInfo:
         dto.compatibilityInfo !== undefined
           ? dto.compatibilityInfo
-          : existing.compatibilityInfo ?? undefined,
+          : (existing.compatibilityInfo ?? undefined),
       isSerialized: dto.isSerialized ?? existing.isSerialized,
       isInventory: dto.isInventory ?? existing.isInventory,
       isAsset: dto.isAsset ?? existing.isAsset,

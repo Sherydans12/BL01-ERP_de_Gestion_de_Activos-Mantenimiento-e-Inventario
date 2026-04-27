@@ -278,7 +278,8 @@ export class WarehouseReceiptsService {
 
       const incomingByOrderItem = new Map<string, number>();
       for (const line of receiptLines) {
-        const incoming = items.find((i) => i.id === line.id)?.quantityReceived ?? 0;
+        const incoming =
+          items.find((i) => i.id === line.id)?.quantityReceived ?? 0;
         if (incoming < 0) {
           throw new BadRequestException(
             'La cantidad recibida no puede ser negativa.',

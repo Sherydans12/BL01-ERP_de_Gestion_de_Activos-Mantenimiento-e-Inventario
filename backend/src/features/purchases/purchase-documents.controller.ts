@@ -63,7 +63,8 @@ export class PurchaseDocumentsController {
   upload(
     @Query('entity') entity: string,
     @Query('entityId') entityId: string,
-    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string },
+    @UploadedFile()
+    file: { buffer: Buffer; originalname: string; mimetype: string },
     @Req() req: any,
   ) {
     if (!file?.buffer?.length) {

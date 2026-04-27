@@ -29,7 +29,9 @@ export class SecurityAdminService {
     role: string;
   }): void {
     if (requester.role === 'ADMIN' && !requester.tenantId) {
-      throw new ForbiddenException('Sin contexto de tenant para esta operación.');
+      throw new ForbiddenException(
+        'Sin contexto de tenant para esta operación.',
+      );
     }
   }
 

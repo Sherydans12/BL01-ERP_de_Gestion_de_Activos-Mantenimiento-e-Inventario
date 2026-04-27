@@ -25,7 +25,9 @@ import {
   FileValidationInterceptor,
 } from '../../common/storage/file-validation.interceptor';
 
-const quotationAttachmentLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
+const quotationAttachmentLimits = {
+  limits: { fileSize: MAX_UPLOAD_FILE_BYTES },
+};
 
 @Controller('purchase-requisitions')
 @UseGuards(JwtAuthGuard, RolesGuard)

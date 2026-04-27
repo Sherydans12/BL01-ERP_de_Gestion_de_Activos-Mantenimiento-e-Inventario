@@ -7,13 +7,17 @@ export type PhysicalCountSheetRow = {
   location: string;
 };
 
-function sortRowsByLocation(rows: PhysicalCountSheetRow[]): PhysicalCountSheetRow[] {
+function sortRowsByLocation(
+  rows: PhysicalCountSheetRow[],
+): PhysicalCountSheetRow[] {
   return [...rows].sort((a, b) => {
     const ka = (a.location ?? '').trim() || '\uffff';
     const kb = (b.location ?? '').trim() || '\uffff';
     const c = ka.localeCompare(kb, 'es', { sensitivity: 'base' });
     if (c !== 0) return c;
-    return a.partNumber.localeCompare(b.partNumber, 'es', { sensitivity: 'base' });
+    return a.partNumber.localeCompare(b.partNumber, 'es', {
+      sensitivity: 'base',
+    });
   });
 }
 
@@ -109,7 +113,9 @@ export function generatePhysicalCountSheetPdfBuffer(data: {
         .stroke();
 
       const desc = (r.description ?? '').trim() || '—';
-      doc.text(r.inventoryCode || '—', col.code + 4, y + 4, { width: wCode - 8 });
+      doc.text(r.inventoryCode || '—', col.code + 4, y + 4, {
+        width: wCode - 8,
+      });
       doc.text(r.partNumber || '—', col.part + 4, y + 4, { width: wPart - 8 });
       doc.text(desc, col.desc + 4, y + 4, {
         width: wDesc - 8,

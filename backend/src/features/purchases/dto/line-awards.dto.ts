@@ -1,10 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsArray,
-  ArrayMinSize,
-  IsUUID,
-  ValidateNested,
-} from 'class-validator';
+import { IsArray, ArrayMinSize, IsUUID, ValidateNested } from 'class-validator';
 
 export class LineAwardDto {
   @IsUUID()

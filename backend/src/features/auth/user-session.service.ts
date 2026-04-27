@@ -34,7 +34,10 @@ export class UserSessionService {
   }
 
   /** Valida que exista sesión activa para el jti. */
-  async assertSessionValid(userId: string, jti: string | undefined): Promise<void> {
+  async assertSessionValid(
+    userId: string,
+    jti: string | undefined,
+  ): Promise<void> {
     if (!jti) return;
     const row = await this.prisma.userSession.findFirst({
       where: { userId, jti, isValid: true },
@@ -44,7 +47,10 @@ export class UserSessionService {
     }
   }
 
-  async touchLastActive(userId: string, jti: string | undefined): Promise<void> {
+  async touchLastActive(
+    userId: string,
+    jti: string | undefined,
+  ): Promise<void> {
     if (!jti) return;
     const key = this.touchKey(userId, jti);
     const now = Date.now();
@@ -87,7 +93,10 @@ export class UserSessionService {
     });
   }
 
-  async revokeOthers(userId: string, keepJti: string | undefined): Promise<{ revoked: number }> {
+  async revokeOthers(
+    userId: string,
+    keepJti: string | undefined,
+  ): Promise<{ revoked: number }> {
     if (!keepJti) {
       const r = await this.prisma.userSession.updateMany({
         where: { userId, isValid: true },

@@ -44,10 +44,7 @@ export class PurchaseOrdersController {
     @Param('requisitionId') requisitionId: string,
     @Req() req: any,
   ) {
-    return this.service.createOrdersFromRequisition(
-      requisitionId,
-      req.user,
-    );
+    return this.service.createOrdersFromRequisition(requisitionId, req.user);
   }
 
   @Get(':id/logs')

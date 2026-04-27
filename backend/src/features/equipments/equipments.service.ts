@@ -117,7 +117,9 @@ export class EquipmentsService {
 
     const userId = user.id || user.sub;
     if (!userId) {
-      throw new BadRequestException('Usuario no válido para auditoría de medidor.');
+      throw new BadRequestException(
+        'Usuario no válido para auditoría de medidor.',
+      );
     }
 
     this.normalizeSubleasePayload(data as Record<string, unknown>, null);
@@ -534,7 +536,7 @@ export class EquipmentsService {
 
       const patch = pickEquipmentWritablePayload(
         data as Record<string, unknown>,
-      ) as Record<string, unknown>;
+      );
       if (Object.keys(patch).length === 0) {
         throw new BadRequestException(
           'No hay campos válidos para actualizar el equipo.',

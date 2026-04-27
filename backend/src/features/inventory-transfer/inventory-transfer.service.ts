@@ -213,7 +213,6 @@ export class InventoryTransferService {
               userId,
             },
           });
-
         }
 
         return tx.inventoryTransfer.findUnique({
@@ -260,7 +259,10 @@ export class InventoryTransferService {
           );
         }
         if (
-          !this.canAccessContract(user, transfer.destinationWarehouse.contractId)
+          !this.canAccessContract(
+            user,
+            transfer.destinationWarehouse.contractId,
+          )
         ) {
           throw new ForbiddenException(
             'No tiene permisos para confirmar recepción en esta bodega destino.',

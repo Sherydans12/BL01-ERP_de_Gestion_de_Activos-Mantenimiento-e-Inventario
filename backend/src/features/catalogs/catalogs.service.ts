@@ -82,10 +82,11 @@ export class CatalogsService {
     if (!existing) {
       throw new NotFoundException('Ítem de catálogo no encontrado');
     }
-    const { tenant: _t, tenantId: _tid, ...rest } = data as Record<
-      string,
-      unknown
-    >;
+    const {
+      tenant: _t,
+      tenantId: _tid,
+      ...rest
+    } = data as Record<string, unknown>;
     try {
       return await this.prisma.catalogItem.update({
         where: { id },

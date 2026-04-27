@@ -140,14 +140,19 @@ export class UsersService {
       phone: nextPhone,
     };
 
-    if (dto.firstName !== undefined) data.firstName = dto.firstName.trim() || null;
+    if (dto.firstName !== undefined)
+      data.firstName = dto.firstName.trim() || null;
     if (dto.lastName !== undefined) data.lastName = dto.lastName.trim() || null;
     if (dto.removeAvatar) data.avatarUrl = null;
 
     if (dto.firstName !== undefined || dto.lastName !== undefined) {
       data.name = this.buildDisplayName(
-        dto.firstName !== undefined ? dto.firstName.trim() || null : user.firstName,
-        dto.lastName !== undefined ? dto.lastName.trim() || null : user.lastName,
+        dto.firstName !== undefined
+          ? dto.firstName.trim() || null
+          : user.firstName,
+        dto.lastName !== undefined
+          ? dto.lastName.trim() || null
+          : user.lastName,
         user.name,
       );
     }
@@ -188,7 +193,10 @@ export class UsersService {
       }
     }
 
-    const meta = await this.storage.uploadWithMeta(file, USER_AVATAR_STORAGE_FOLDER);
+    const meta = await this.storage.uploadWithMeta(
+      file,
+      USER_AVATAR_STORAGE_FOLDER,
+    );
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { avatarUrl: meta.storageKey },

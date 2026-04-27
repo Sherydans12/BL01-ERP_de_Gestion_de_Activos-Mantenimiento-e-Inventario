@@ -9,10 +9,10 @@ export type LoginRequestMeta = {
 export function extractClientIp(req: Request): string {
   const xf = req.headers['x-forwarded-for'];
   if (typeof xf === 'string' && xf.trim()) {
-    return xf.split(',')[0]!.trim();
+    return xf.split(',')[0].trim();
   }
   if (Array.isArray(xf) && xf[0]) {
-    return xf[0].split(',')[0]!.trim();
+    return xf[0].split(',')[0].trim();
   }
   const ip = req.ip || req.socket?.remoteAddress;
   return typeof ip === 'string' && ip ? ip : '';

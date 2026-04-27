@@ -31,10 +31,8 @@ function truncate(s: string, maxChars: number): string {
 export async function generateInventoryItemLabelPdfBuffer(
   input: InventoryLabelInput,
 ): Promise<Buffer> {
-  const w =
-    input.size === '50x25' ? mm(50) : mm(100);
-  const h =
-    input.size === '50x25' ? mm(25) : mm(50);
+  const w = input.size === '50x25' ? mm(50) : mm(100);
+  const h = input.size === '50x25' ? mm(25) : mm(50);
 
   const qrPixelSize = input.size === '50x25' ? 120 : 240;
   const qrBuffer = await QRCode.toBuffer(input.qrPayload, {
@@ -56,10 +54,7 @@ export async function generateInventoryItemLabelPdfBuffer(
 
     const pad = input.size === '50x25' ? 3 : 8;
     const sku = input.inventoryCode?.trim() || '—';
-    const nameTrunc = truncate(
-      input.name,
-      input.size === '50x25' ? 28 : 48,
-    );
+    const nameTrunc = truncate(input.name, input.size === '50x25' ? 28 : 48);
     const pn = input.partNumber.trim() || '—';
 
     if (input.size === '100x50') {

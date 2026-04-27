@@ -79,7 +79,7 @@ function pmRemainingBackend(eq: {
   const base =
     eq.lastMaintenanceMeter != null
       ? eq.lastMaintenanceMeter
-      : eq.initialMeter ?? 0;
+      : (eq.initialMeter ?? 0);
   const current = eq.currentMeter ?? base;
   const nextDue = base + interval;
   const remaining = Math.max(0, nextDue - current);
@@ -371,12 +371,14 @@ export class WorkOrdersService {
         dto.maintenanceType ??
         (tags.includes('ACCIDENTE_INCIDENTE') ? 'CORRECTIVO' : 'PREVENTIVO');
 
-      const ini = Number(
-        dto.detentionInitialMeter ?? dto.initialMeter ?? NaN,
-      );
+      const ini = Number(dto.detentionInitialMeter ?? dto.initialMeter ?? NaN);
       const finRaw = dto.detentionFinalMeter ?? dto.finalMeter;
       let fin: number | null = null;
-      if (finRaw !== undefined && finRaw !== null && `${finRaw}`.trim() !== '') {
+      if (
+        finRaw !== undefined &&
+        finRaw !== null &&
+        `${finRaw}`.trim() !== ''
+      ) {
         const n = Number(finRaw);
         if (Number.isNaN(n)) {
           throw new BadRequestException(
@@ -1008,7 +1010,9 @@ export class WorkOrdersService {
       .sort((a: any, b: any) => a.daysRemaining - b.daysRemaining)
       .slice(0, 6);
 
-    const legalAttention30d = alerts.filter((a) => a.daysRemaining <= 30).length;
+    const legalAttention30d = alerts.filter(
+      (a) => a.daysRemaining <= 30,
+    ).length;
 
     const pmDueSoon = equipmentForPm
       .map((e) => {
@@ -1023,7 +1027,10 @@ export class WorkOrdersService {
           nextDueMeter: nextDue,
           urgencyPct:
             interval > 0
-              ? Math.min(100, Math.round(((interval - remaining) / interval) * 100))
+              ? Math.min(
+                  100,
+                  Math.round(((interval - remaining) / interval) * 100),
+                )
               : 0,
         };
       })
@@ -1239,7 +1246,7 @@ export class WorkOrdersService {
           data.intervenedSystemsJson =
             dto.intervenedSystemsJson === null
               ? Prisma.JsonNull
-              : (dto.intervenedSystemsJson as Prisma.InputJsonValue);
+              : dto.intervenedSystemsJson;
         }
         if (dto.symptomsText !== undefined) {
           data.symptomsText = dto.symptomsText;
@@ -1292,7 +1299,10 @@ export class WorkOrdersService {
           }
         }
 
-        if (dto.workPerformedDescription !== undefined || dto.description !== undefined) {
+        if (
+          dto.workPerformedDescription !== undefined ||
+          dto.description !== undefined
+        ) {
           const legacyDesc =
             (dto.workPerformedDescription ?? '').toString().trim() ||
             (dto.description ?? '').toString().trim();
@@ -1544,7 +1554,9 @@ export class WorkOrdersService {
   ) {
     const text = description?.trim();
     if (!text) {
-      throw new BadRequestException('La descripción del backlog es obligatoria.');
+      throw new BadRequestException(
+        'La descripción del backlog es obligatoria.',
+      );
     }
 
     const where = this.workOrderAccessWhere(user, workOrderId, activeContract);
@@ -1639,10 +1651,7 @@ export class WorkOrdersService {
                 'La Orden de Trabajo ya se encuentra CERRADA',
               );
 
-            if (
-              !workOrder.detentionStartedAt ||
-              !workOrder.detentionEndedAt
-            ) {
+            if (!workOrder.detentionStartedAt || !workOrder.detentionEndedAt) {
               throw new BadRequestException(
                 'Para cerrar la OT debe registrar inicio y fin de detención.',
               );
@@ -1689,10 +1698,7 @@ export class WorkOrdersService {
                 orderBy: { date: 'desc' },
               });
 
-              if (
-                !recentAdj ||
-                recentAdj.newValue > workOrder.finalMeter!
-              ) {
+              if (!recentAdj || recentAdj.newValue > workOrder.finalMeter!) {
                 throw new BadRequestException(
                   `El medidor final (${workOrder.finalMeter}) es menor al inicial (${workOrder.initialMeter}). Registre un Ajuste de Medidor para justificar el reinicio del contador.`,
                 );

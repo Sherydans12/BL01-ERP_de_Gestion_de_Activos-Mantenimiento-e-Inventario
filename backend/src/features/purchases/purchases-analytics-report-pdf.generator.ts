@@ -206,9 +206,12 @@ export function generatePurchasesAnalyticsReportPdfBuffer(
 
     const rowsReq = data.requisitionPurchaseRows ?? [];
     if (rowsReq.length > 0) {
-      doc.fontSize(11).fillColor('#111111').text('Requerimientos — OC y proveedor', {
-        underline: true,
-      });
+      doc
+        .fontSize(11)
+        .fillColor('#111111')
+        .text('Requerimientos — OC y proveedor', {
+          underline: true,
+        });
       doc.moveDown(0.4);
       doc.fontSize(8).fillColor('#333333');
       for (const r of rowsReq.slice(0, 28)) {

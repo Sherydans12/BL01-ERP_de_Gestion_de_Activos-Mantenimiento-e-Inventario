@@ -3,10 +3,12 @@ import { buildRequisitionReconciliationSnapshot } from './purchase-requisition-r
 import { buildActivityLogDetails } from '../../common/audit/activity-log-details.util';
 
 /** Resuelve el SRC desde una OC (directo o vía cotización multiproveedor). */
-export function requisitionIdFromPurchaseOrder(po: {
-  requisitionId?: string | null;
-  quotation?: { requisitionId: string } | null;
-} | null): string | null {
+export function requisitionIdFromPurchaseOrder(
+  po: {
+    requisitionId?: string | null;
+    quotation?: { requisitionId: string } | null;
+  } | null,
+): string | null {
   if (!po) return null;
   return po.requisitionId ?? po.quotation?.requisitionId ?? null;
 }

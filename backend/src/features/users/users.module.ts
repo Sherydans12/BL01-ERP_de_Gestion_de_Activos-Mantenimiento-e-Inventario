@@ -7,12 +7,7 @@ import { AuthAuditModule } from '../auth/auth-audit.module';
 import { UserSessionModule } from '../auth/user-session.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    StorageModule,
-    AuthAuditModule,
-    UserSessionModule,
-  ],
+  imports: [PrismaModule, StorageModule, AuthAuditModule, UserSessionModule],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],

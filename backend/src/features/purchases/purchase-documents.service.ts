@@ -84,17 +84,9 @@ export class PurchaseDocumentsService {
       where: { id, tenantId },
     });
     if (!doc) throw new NotFoundException('Documento no encontrado');
-    await this.assertCanAccessEntity(
-      tenantId,
-      doc.entity,
-      doc.entityId,
-      user,
-    );
+    await this.assertCanAccessEntity(tenantId, doc.entity, doc.entityId, user);
     const stream = await this.storage.getFileStream(doc.storageKey);
-    res.setHeader(
-      'Content-Type',
-      doc.mimeType || 'application/octet-stream',
-    );
+    res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
     res.setHeader(
       'Content-Disposition',
       `inline; filename="${encodeURIComponent(doc.originalName)}"`,

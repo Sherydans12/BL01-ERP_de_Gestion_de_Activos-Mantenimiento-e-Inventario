@@ -44,7 +44,11 @@ export class CatalogsController {
     @Param('id') id: string,
     @Body() updateCatalogDto: Prisma.CatalogItemUpdateInput,
   ) {
-    return this.catalogsService.update(req.user?.tenantId, id, updateCatalogDto);
+    return this.catalogsService.update(
+      req.user?.tenantId,
+      id,
+      updateCatalogDto,
+    );
   }
 
   @Delete(':id')

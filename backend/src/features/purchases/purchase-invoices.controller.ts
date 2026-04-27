@@ -108,7 +108,8 @@ export class PurchaseInvoicesController {
       taxAmount?: string | number | null;
       pdfUrl?: string;
     },
-    @UploadedFile() file:
+    @UploadedFile()
+    file:
       | { buffer: Buffer; originalname: string; mimetype: string }
       | undefined,
     @Req() req: any,
@@ -187,7 +188,8 @@ export class PurchaseInvoicesController {
       taxAmount?: string | number | null;
       pdfUrl?: string | null;
     },
-    @UploadedFile() file:
+    @UploadedFile()
+    file:
       | { buffer: Buffer; originalname: string; mimetype: string }
       | undefined,
     @Req() req: any,

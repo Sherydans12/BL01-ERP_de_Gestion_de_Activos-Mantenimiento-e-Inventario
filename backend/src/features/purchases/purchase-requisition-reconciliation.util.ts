@@ -56,10 +56,7 @@ export async function buildRequisitionReconciliationSnapshot(
   const pos = await prisma.purchaseOrder.findMany({
     where: {
       tenantId,
-      OR: [
-        { requisitionId },
-        { quotation: { requisitionId } },
-      ],
+      OR: [{ requisitionId }, { quotation: { requisitionId } }],
       status: { notIn: [...PO_INACTIVE] },
     },
     select: {
@@ -159,8 +156,7 @@ export async function buildRequisitionReconciliationSnapshot(
     );
 
   const budgetExceeded =
-    adjudicatedMatrixTotal > 0 &&
-    invoicesTotal > adjudicatedMatrixTotal + 0.01;
+    adjudicatedMatrixTotal > 0 && invoicesTotal > adjudicatedMatrixTotal + 0.01;
 
   return {
     totalRequisitionLines,

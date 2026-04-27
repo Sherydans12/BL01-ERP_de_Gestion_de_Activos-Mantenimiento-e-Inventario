@@ -187,10 +187,7 @@ export class InventoryStockService {
               sourceQuotationItemId: { in: awardIds },
               purchaseOrder: {
                 tenantId,
-                OR: [
-                  { requisitionId },
-                  { quotation: { requisitionId } },
-                ],
+                OR: [{ requisitionId }, { quotation: { requisitionId } }],
                 status: { notIn: ['CANCELLED', 'REJECTED'] },
               },
             },
@@ -461,7 +458,10 @@ export class InventoryStockService {
       referenceId: string | null;
       referenceType: string | null;
     },
-  >(rows: T[], tenantId: string): Promise<Array<T & { trace?: Record<string, unknown> }>> {
+  >(
+    rows: T[],
+    tenantId: string,
+  ): Promise<Array<T & { trace?: Record<string, unknown> }>> {
     const receiptIds = [
       ...new Set(
         rows
@@ -751,12 +751,18 @@ export class InventoryStockService {
     const minStock = hasMin ? Number(dto.minStock) : undefined;
     const maxStock = hasMax ? Number(dto.maxStock) : undefined;
 
-    if (minStock !== undefined && (!Number.isFinite(minStock) || minStock < 0)) {
+    if (
+      minStock !== undefined &&
+      (!Number.isFinite(minStock) || minStock < 0)
+    ) {
       throw new BadRequestException(
         'El stock mínimo debe ser un número mayor o igual a cero.',
       );
     }
-    if (maxStock !== undefined && (!Number.isFinite(maxStock) || maxStock < 0)) {
+    if (
+      maxStock !== undefined &&
+      (!Number.isFinite(maxStock) || maxStock < 0)
+    ) {
       throw new BadRequestException(
         'El stock máximo debe ser un número mayor o igual a cero.',
       );
@@ -790,7 +796,9 @@ export class InventoryStockService {
 
     const loc =
       dto.location !== undefined
-        ? (dto.location?.trim() ? dto.location.trim().slice(0, 120) : null)
+        ? dto.location?.trim()
+          ? dto.location.trim().slice(0, 120)
+          : null
         : undefined;
 
     return this.prisma.itemStock.upsert({
@@ -812,9 +820,7 @@ export class InventoryStockService {
         unitCost: current?.unitCost ?? 0,
         minStock: finalMin,
         maxStock: finalMax,
-        ...(loc !== undefined
-          ? { location: loc }
-          : {}),
+        ...(loc !== undefined ? { location: loc } : {}),
       },
     });
   }
@@ -1036,7 +1042,9 @@ export class InventoryStockService {
           ...updatedStock,
           unitCost: this.maskCostValue(
             user,
-            updatedStock.unitCost != null ? Number(updatedStock.unitCost) : null,
+            updatedStock.unitCost != null
+              ? Number(updatedStock.unitCost)
+              : null,
           ),
         };
         return { stock: stockMasked, transaction };
@@ -1110,8 +1118,7 @@ export class InventoryStockService {
         numerator,
         denominator,
         iraPercent: null,
-        note:
-          'Sin stock en sistema en el alcance seleccionado; no se puede calcular IRA.',
+        note: 'Sin stock en sistema en el alcance seleccionado; no se puede calcular IRA.',
       };
     }
 
@@ -1123,8 +1130,7 @@ export class InventoryStockService {
       numerator,
       denominator,
       iraPercent,
-      note:
-        'Basado en ajustes por conteo (últimos 30 días) y suma de stock físico en sistema.',
+      note: 'Basado en ajustes por conteo (últimos 30 días) y suma de stock físico en sistema.',
     };
   }
 
@@ -1297,8 +1303,7 @@ export class InventoryStockService {
     });
 
     const pdfRows = stocks.map((r) => {
-      const rawDesc =
-        r.item.description?.trim() || r.item.name?.trim() || '—';
+      const rawDesc = r.item.description?.trim() || r.item.name?.trim() || '—';
       const description =
         rawDesc.length > 120 ? `${rawDesc.slice(0, 117)}…` : rawDesc;
       return {

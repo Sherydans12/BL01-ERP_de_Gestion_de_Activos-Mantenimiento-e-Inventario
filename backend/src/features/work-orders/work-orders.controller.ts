@@ -70,18 +70,12 @@ export class WorkOrdersController {
     @Query('search') search?: string,
   ) {
     const activeContract = siteId || contractHeader;
-    const st =
-      status === 'PENDING' || status === 'DONE' ? status : undefined;
-    return this.workOrdersService.listBacklog(
-      req.user,
-      activeContract,
-      st as 'PENDING' | 'DONE' | undefined,
-      {
-        limit: limit ? parseInt(limit, 10) : undefined,
-        offset: offset ? parseInt(offset, 10) : undefined,
-        search,
-      },
-    );
+    const st = status === 'PENDING' || status === 'DONE' ? status : undefined;
+    return this.workOrdersService.listBacklog(req.user, activeContract, st, {
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+      search,
+    });
   }
 
   @Get(':id')
@@ -154,9 +148,7 @@ export class WorkOrdersController {
     @Headers('x-site-id') siteId?: string,
   ) {
     if (body?.mode !== 'TO_TASK' && body?.mode !== 'TO_NEW_OT') {
-      throw new BadRequestException(
-        'Body.mode debe ser TO_TASK o TO_NEW_OT',
-      );
+      throw new BadRequestException('Body.mode debe ser TO_TASK o TO_NEW_OT');
     }
     return this.workOrdersService.promoteBacklogItem(
       req.user,

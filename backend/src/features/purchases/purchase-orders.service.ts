@@ -43,10 +43,7 @@ const SUBCONTRACT_SELECT = {
 } as const;
 
 /** OC que no bloquean nueva compra / re-adjudicación de líneas. */
-const PO_INACTIVE_STATUSES: PurchaseOrderStatus[] = [
-  'CANCELLED',
-  'REJECTED',
-];
+const PO_INACTIVE_STATUSES: PurchaseOrderStatus[] = ['CANCELLED', 'REJECTED'];
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -560,13 +557,10 @@ export class PurchaseOrdersService {
     const anyPurchased = items.some(
       (i) =>
         i.awardedQuotationItemId != null &&
-        bought.has(i.awardedQuotationItemId!),
+        bought.has(i.awardedQuotationItemId),
     );
-    let next:
-      | 'APPROVED'
-      | 'PARTIALLY_PURCHASED'
-      | 'PENDING_APPROVAL'
-      | null = null;
+    let next: 'APPROVED' | 'PARTIALLY_PURCHASED' | 'PENDING_APPROVAL' | null =
+      null;
     if (allHaveAward && everyLinePurchased) next = 'APPROVED';
     else if (anyPurchased) next = 'PARTIALLY_PURCHASED';
     else if (allHaveAward && !anyPurchased) {
@@ -655,17 +649,17 @@ export class PurchaseOrdersService {
           .filter(Boolean) as string[],
       );
 
-      const pendingAwardIds = awardIds.filter((id) => !alreadyPurchased.has(id));
+      const pendingAwardIds = awardIds.filter(
+        (id) => !alreadyPurchased.has(id),
+      );
       if (!pendingAwardIds.length) {
         const statusBefore = requisition.status;
         await this.applyRequisitionCoverageStatusAfterPurchase(
           tx,
           requisitionId,
         );
-        quotationStatusChanges = await syncPurchaseQuotationStatusesFromLineAwards(
-          tx,
-          requisitionId,
-        );
+        quotationStatusChanges =
+          await syncPurchaseQuotationStatusesFromLineAwards(tx, requisitionId);
         const refreshed = await tx.purchaseRequisition.findFirst({
           where: { id: requisitionId },
           select: { status: true },
@@ -728,11 +722,12 @@ export class PurchaseOrdersService {
       }
 
       const requisitionStatusBefore = requisition.status;
-      const createdOrders: Awaited<ReturnType<typeof tx.purchaseOrder.create>>[] =
-        [];
+      const createdOrders: Awaited<
+        ReturnType<typeof tx.purchaseOrder.create>
+      >[] = [];
 
       for (const [, group] of groups) {
-        const first = group[0]!;
+        const first = group[0];
         const quotation = first.quotation;
         let total = new Prisma.Decimal(0);
         for (const qi of group) {
@@ -785,10 +780,8 @@ export class PurchaseOrdersService {
       }
 
       await this.applyRequisitionCoverageStatusAfterPurchase(tx, requisitionId);
-      quotationStatusChanges = await syncPurchaseQuotationStatusesFromLineAwards(
-        tx,
-        requisitionId,
-      );
+      quotationStatusChanges =
+        await syncPurchaseQuotationStatusesFromLineAwards(tx, requisitionId);
       const refreshed = await tx.purchaseRequisition.findFirst({
         where: { id: requisitionId },
         select: { status: true },
@@ -934,7 +927,9 @@ export class PurchaseOrdersService {
         },
       });
       if (existingPO) {
-        throw new ConflictException('Ya existe una OC activa para esta cotización');
+        throw new ConflictException(
+          'Ya existe una OC activa para esta cotización',
+        );
       }
 
       let resolvedEquipmentId = quotation.requisition.equipmentId ?? undefined;
@@ -1014,10 +1009,11 @@ export class PurchaseOrdersService {
         });
       }
 
-      const quotationStatusChanges = await syncPurchaseQuotationStatusesFromLineAwards(
-        tx,
-        quotation.requisitionId,
-      );
+      const quotationStatusChanges =
+        await syncPurchaseQuotationStatusesFromLineAwards(
+          tx,
+          quotation.requisitionId,
+        );
 
       await this.applyRequisitionCoverageStatusAfterPurchase(
         tx,
@@ -1329,10 +1325,7 @@ export class PurchaseOrdersService {
                 tenantId,
                 id: { not: orderId },
                 status: { notIn: PO_INACTIVE_STATUSES },
-                OR: [
-                  { requisitionId },
-                  { quotation: { requisitionId } },
-                ],
+                OR: [{ requisitionId }, { quotation: { requisitionId } }],
               },
             },
           });
@@ -1888,10 +1881,7 @@ export class PurchaseOrdersService {
     });
     if (!orders.length) return;
 
-    const maxSig = Math.max(
-      1,
-      ...orders.map((o) => o.requiredSignatures),
-    );
+    const maxSig = Math.max(1, ...orders.map((o) => o.requiredSignatures));
     const policies = await this.prisma.approvalPolicy.findMany({
       where: { tenantId, level: { lte: maxSig } },
       include: { role: true },
@@ -1909,7 +1899,9 @@ export class PurchaseOrdersService {
       const relevantPolicies = policies.filter(
         (p) => p.level <= order.requiredSignatures,
       );
-      const nextPolicy = relevantPolicies.find((p) => !signedLevels.has(p.level));
+      const nextPolicy = relevantPolicies.find(
+        (p) => !signedLevels.has(p.level),
+      );
       if (!nextPolicy) continue;
 
       const cacheKey = `${order.contractId}|${nextPolicy.id}`;
@@ -1955,9 +1947,7 @@ export class PurchaseOrdersService {
       n === 1
         ? '1 orden de compra pendiente de firma'
         : `${n} órdenes de compra pendientes de firma`;
-    const body = `Se ${
-      n === 1 ? 'ha' : 'han'
-    } generado ${n} ${
+    const body = `Se ${n === 1 ? 'ha' : 'han'} generado ${n} ${
       n === 1 ? 'orden de compra' : 'órdenes de compra'
     } para el requerimiento ${
       summary.requisitionCorrelative

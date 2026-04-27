@@ -39,10 +39,13 @@ export class AuthAuditService {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), GEO_TIMEOUT_MS);
-      const res = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
-        signal: ctrl.signal,
-        headers: { Accept: 'application/json' },
-      });
+      const res = await fetch(
+        `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
+        {
+          signal: ctrl.signal,
+          headers: { Accept: 'application/json' },
+        },
+      );
       clearTimeout(t);
       if (!res.ok) return { city: '', country: '' };
       const data = (await res.json()) as Record<string, unknown>;
@@ -62,7 +65,9 @@ export class AuthAuditService {
     return email.trim().toLowerCase().slice(0, 100);
   }
 
-  private async markBruteForceClusterIfNeeded(emailNormalized: string): Promise<void> {
+  private async markBruteForceClusterIfNeeded(
+    emailNormalized: string,
+  ): Promise<void> {
     const since = new Date(Date.now() - FAILURE_WINDOW_MS);
     const count = await this.prisma.authAuditLog.count({
       where: {
@@ -161,13 +166,10 @@ export class AuthAuditService {
       const prevCountry = (lastSuccess.country ?? '').trim().toLowerCase();
       const curCountry = (params.country ?? '').trim().toLowerCase();
       const countryChanged =
-        !!prevCountry &&
-        !!curCountry &&
-        prevCountry !== curCountry;
+        !!prevCountry && !!curCountry && prevCountry !== curCountry;
       const prevIp = (lastSuccess.ipAddress ?? '').trim();
       const curIp = (params.ip ?? '').trim();
-      const ipChanged =
-        !!prevIp && !!curIp && prevIp !== curIp;
+      const ipChanged = !!prevIp && !!curIp && prevIp !== curIp;
       if (countryChanged || ipChanged) {
         isSuspicious = true;
         this.log.warn(
@@ -257,14 +259,11 @@ export class AuthAuditService {
       const older = rows[i + 1];
       const locKey = (c: string, co: string) =>
         `${(c || '').trim().toLowerCase()}|${(co || '').trim().toLowerCase()}`;
-      const ipChanged = older
-        ? older.ipAddress !== row.ipAddress
-        : false;
+      const ipChanged = older ? older.ipAddress !== row.ipAddress : false;
       const locChanged = older
         ? locKey(older.city, older.country) !== locKey(row.city, row.country)
         : false;
-      const unusualLocationOrIp =
-        !!older && (ipChanged || locChanged);
+      const unusualLocationOrIp = !!older && (ipChanged || locChanged);
 
       return {
         ...row,

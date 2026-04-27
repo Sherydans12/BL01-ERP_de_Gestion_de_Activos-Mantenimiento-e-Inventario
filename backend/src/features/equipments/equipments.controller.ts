@@ -67,11 +67,15 @@ export class EquipmentsController {
     @Query('limit') limit?: string,
   ) {
     const activeContract = contractId || siteId;
-    return this.equipmentsService.findMeterCaptureBoard(req.user, activeContract, {
-      type,
-      search,
-      limit: limit ? Number(limit) : undefined,
-    });
+    return this.equipmentsService.findMeterCaptureBoard(
+      req.user,
+      activeContract,
+      {
+        type,
+        search,
+        limit: limit ? Number(limit) : undefined,
+      },
+    );
   }
 
   /** Actualización masiva de lecturas en una sola transacción de base de datos. */
@@ -109,7 +113,11 @@ export class EquipmentsController {
     @Headers('x-contract-id') contractId?: string,
   ) {
     const activeContract = contractId || siteId;
-    return this.equipmentsService.getMeterSnapshot(req.user, id, activeContract);
+    return this.equipmentsService.getMeterSnapshot(
+      req.user,
+      id,
+      activeContract,
+    );
   }
 
   @Get(':id')

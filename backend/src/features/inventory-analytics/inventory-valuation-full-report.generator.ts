@@ -202,7 +202,10 @@ export function generateValuationFullReportPdfBuffer(
     const prRows = data.purchaseRequisitionExportRows ?? [];
     if (prRows.length > 0) {
       doc.addPage();
-      doc.fontSize(10).fillColor('#222').text('Requerimientos y OCs (compras)', left);
+      doc
+        .fontSize(10)
+        .fillColor('#222')
+        .text('Requerimientos y OCs (compras)', left);
       doc.moveDown(0.3);
       doc.fontSize(7).fillColor('#555');
       doc.text(

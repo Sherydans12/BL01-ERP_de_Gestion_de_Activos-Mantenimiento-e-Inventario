@@ -84,7 +84,9 @@ export class AuthService {
         `,
       });
     } catch (e) {
-      this.log.warn(`No se pudo enviar alerta SecurityEvent.UnusualLogin: ${e}`);
+      this.log.warn(
+        `No se pudo enviar alerta SecurityEvent.UnusualLogin: ${e}`,
+      );
     }
   }
 
@@ -243,7 +245,9 @@ export class AuthService {
       });
     } catch (e) {
       this.log.error(`No se pudo crear sesión de usuario: ${e}`);
-      throw new UnauthorizedException('No se pudo iniciar sesión de forma segura.');
+      throw new UnauthorizedException(
+        'No se pudo iniciar sesión de forma segura.',
+      );
     }
 
     // 7. Generación de Payload y Token

@@ -69,7 +69,8 @@ export class UsersController {
   )
   uploadAvatar(
     @Req() req: any,
-    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string },
+    @UploadedFile()
+    file: { buffer: Buffer; originalname: string; mimetype: string },
   ) {
     return this.usersService.uploadAvatar(req.user.id, file);
   }

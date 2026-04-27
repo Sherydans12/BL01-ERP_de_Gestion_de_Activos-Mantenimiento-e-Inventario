@@ -25,7 +25,8 @@ export class EmailService {
       this.config.get<string>('RESEND_FROM_EMAIL')?.trim() ??
       'alertas@mail.baselogic.cl';
     const fromName =
-      this.config.get<string>('RESEND_FROM_NAME')?.trim() ?? 'Sistema BaseLogic';
+      this.config.get<string>('RESEND_FROM_NAME')?.trim() ??
+      'Sistema BaseLogic';
 
     this.defaultFrom = `${fromName} <${fromEmail}>`;
 
