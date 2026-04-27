@@ -10,6 +10,7 @@ import { assertUserHasContractAccess } from './purchase-contract-access.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService, pickChanged } from '../../common/audit/audit.service';
 import { buildActivityLogDetails } from '../../common/audit/activity-log-details.util';
+import { StorageService } from '../../common/storage/storage.service';
 import {
   requisitionIdFromPurchaseOrder,
   tryAutoCloseRequisitionIfFullyReconciled,
@@ -89,6 +90,7 @@ export class PurchaseInvoicesService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   /** Valor recibido en bodega (recepciones confirmadas o parciales), por línea: cantidad × costo unitario OC. */
@@ -160,6 +162,7 @@ export class PurchaseInvoicesService {
     }
     return {
       ...inv,
+      pdfUrl: inv.pdfUrl ? await this.storage.getReadOnlyUrl(inv.pdfUrl) : null,
       hasDiscrepancy: inv.status === 'DISCREPANCY',
       discrepancyReason,
     };

@@ -36,6 +36,7 @@ import {
 } from '@prisma/client';
 import type { QuotationStatusChange } from './purchase-quotation-status-sync.util';
 import { EmailService } from '../../common/email/email.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 const SUBCONTRACT_SELECT = {
   select: { id: true, code: true, name: true },
@@ -57,6 +58,7 @@ export class PurchaseOrdersService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     private readonly emailService: EmailService,
+    private readonly storage: StorageService,
   ) {}
 
   private buildContractScope(user?: {
@@ -267,13 +269,39 @@ export class PurchaseOrdersService {
         : Promise.resolve([]),
     ]);
 
+    const resolvedQuotation = order.quotation
+      ? {
+          ...order.quotation,
+          attachmentUrl: order.quotation.attachmentUrl
+            ? await this.storage.getReadOnlyUrl(order.quotation.attachmentUrl)
+            : null,
+          requisition: order.quotation.requisition
+            ? {
+                ...order.quotation.requisition,
+                quotations: await Promise.all(
+                  order.quotation.requisition.quotations.map(async (q) => ({
+                    ...q,
+                    attachmentUrl: q.attachmentUrl
+                      ? await this.storage.getReadOnlyUrl(q.attachmentUrl)
+                      : null,
+                  })),
+                ),
+              }
+            : null,
+        }
+      : null;
+
     return {
       ...order,
+      quotation: resolvedQuotation,
       approvals: enrichedApprovals,
       purchaseDocuments: poDocuments,
       purchaseInvoice: order.purchaseInvoice
         ? {
             ...order.purchaseInvoice,
+            pdfUrl: order.purchaseInvoice.pdfUrl
+              ? await this.storage.getReadOnlyUrl(order.purchaseInvoice.pdfUrl)
+              : null,
             purchaseDocuments: invoiceDocuments,
           }
         : null,

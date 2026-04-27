@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import type { Readable } from 'stream';
+import { PrismaService } from '../../prisma/prisma.service';
 import type { StorageProvider } from './storage-provider.interface';
 import { LocalStorageProvider } from './providers/local-storage.provider';
 import { R2StorageProvider } from './providers/r2-storage.provider';
@@ -20,10 +21,16 @@ export type UploadedFileMeta = {
 export class StorageService {
   private static readonly log = new Logger(StorageService.name);
   private readonly provider: StorageProvider;
+  private readonly backendPublicUrl: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const driver = (config.get<string>('STORAGE_DRIVER') || 'local').toLowerCase();
     const basePath = config.get<string>('UPLOAD_PATH') || './uploads';
+    this.backendPublicUrl =
+      config.get<string>('BACKEND_PUBLIC_URL')?.trim().replace(/\/+$/, '') || '';
     if (driver === 'r2' || driver === 's3') {
       const accountId = this.getRequiredEnv('R2_ACCOUNT_ID');
       const accessKeyId = this.getRequiredEnv('R2_ACCESS_KEY_ID');
@@ -54,6 +61,124 @@ export class StorageService {
       throw new Error(`Configuración de storage incompleta: falta variable ${name}`);
     }
     return value;
+  }
+
+  private looksLikeHttp(value: string): boolean {
+    return /^https?:\/\//i.test(value);
+  }
+
+  private buildLocalUrl(pathOrUrl: string): string {
+    if (!pathOrUrl.startsWith('/')) return pathOrUrl;
+    if (!this.backendPublicUrl) return pathOrUrl;
+    return `${this.backendPublicUrl}${pathOrUrl}`;
+  }
+
+  normalizeStorageKey(input: string): string {
+    const raw = (input || '').trim();
+    if (!raw) return raw;
+
+    if (raw.startsWith('/uploads/')) {
+      return raw.slice('/uploads/'.length);
+    }
+
+    if (this.looksLikeHttp(raw)) {
+      try {
+        const parsed = new URL(raw);
+        if (parsed.pathname.startsWith('/uploads/')) {
+          return parsed.pathname.slice('/uploads/'.length);
+        }
+      } catch {
+        return raw;
+      }
+    }
+
+    return raw;
+  }
+
+  async getReadOnlyUrl(storageKey: string): Promise<string> {
+    const raw = (storageKey || '').trim();
+    if (!raw) return raw;
+
+    if (this.looksLikeHttp(raw)) {
+      return raw;
+    }
+
+    if (raw.startsWith('/uploads/')) {
+      return this.buildLocalUrl(raw);
+    }
+
+    const normalized = this.normalizeStorageKey(raw);
+    if (!normalized) return raw;
+
+    if (this.provider.kind === 'local') {
+      return this.buildLocalUrl(`/uploads/${normalized}`);
+    }
+
+    return this.getSignedDownloadUrl(normalized, 600);
+  }
+
+  async canTenantReadStorageKey(
+    tenantId: string,
+    storageKeyCandidate: string,
+  ): Promise<boolean> {
+    const raw = (storageKeyCandidate || '').trim();
+    if (!raw) return false;
+    const normalized = this.normalizeStorageKey(raw);
+    const uploadsVariant = normalized ? `/uploads/${normalized}` : null;
+
+    const [userAvatarCount, inventoryDocCount, purchaseDocCount, quotationCount, invoiceCount] =
+      await Promise.all([
+        this.prisma.user.count({
+          where: {
+            tenantId,
+            OR: [
+              { avatarUrl: raw },
+              { avatarUrl: normalized },
+              ...(uploadsVariant ? [{ avatarUrl: uploadsVariant }] : []),
+            ],
+          },
+        }),
+        this.prisma.inventoryItemAttachment.count({
+          where: {
+            tenantId,
+            storageKey: normalized,
+          },
+        }),
+        this.prisma.purchaseDocument.count({
+          where: {
+            tenantId,
+            storageKey: normalized,
+          },
+        }),
+        this.prisma.purchaseQuotation.count({
+          where: {
+            tenantId,
+            OR: [
+              { attachmentUrl: raw },
+              { attachmentUrl: normalized },
+              ...(uploadsVariant ? [{ attachmentUrl: uploadsVariant }] : []),
+            ],
+          },
+        }),
+        this.prisma.purchaseInvoice.count({
+          where: {
+            tenantId,
+            OR: [
+              { pdfUrl: raw },
+              { pdfUrl: normalized },
+              ...(uploadsVariant ? [{ pdfUrl: uploadsVariant }] : []),
+            ],
+          },
+        }),
+      ]);
+
+    return (
+      userAvatarCount > 0 ||
+      inventoryDocCount > 0 ||
+      purchaseDocCount > 0 ||
+      quotationCount > 0 ||
+      invoiceCount > 0
+    );
   }
 
   /** Clave con nombre único (UUID) + extensión segura. */
@@ -125,15 +250,23 @@ export class StorageService {
 
   /** @deprecated usar getPublicUrl(storageKey) */
   getFileUrl(key: string): string {
-    return this.getPublicUrl(key);
+    const normalized = this.normalizeStorageKey(key);
+    if (!normalized) return key;
+    if (this.provider.kind === 'local') {
+      return this.buildLocalUrl(`/uploads/${normalized}`);
+    }
+    return this.getPublicUrl(normalized);
   }
 
   async deleteFile(storageKey: string): Promise<void> {
-    return this.provider.delete(storageKey);
+    const normalized = this.normalizeStorageKey(storageKey);
+    if (!normalized) return;
+    return this.provider.delete(normalized);
   }
 
   async getFileStream(storageKey: string): Promise<Readable> {
-    return this.provider.readStream(storageKey);
+    const normalized = this.normalizeStorageKey(storageKey);
+    return this.provider.readStream(normalized);
   }
 
   get providerKind(): 'local' | 's3_compatible' {

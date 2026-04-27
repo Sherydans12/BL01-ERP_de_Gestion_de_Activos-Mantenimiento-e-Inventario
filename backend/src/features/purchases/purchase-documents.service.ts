@@ -64,7 +64,7 @@ export class PurchaseDocumentsService {
     if (entity === 'PURCHASE_INVOICE') {
       await this.prisma.purchaseInvoice.updateMany({
         where: { id: entityId, tenantId },
-        data: { pdfUrl: meta.publicUrl },
+        data: { pdfUrl: meta.storageKey },
       });
     }
 

@@ -341,7 +341,21 @@ export class PurchaseRequisitionsService {
       })),
     );
 
-    return { ...requisition, reconciliationSnapshot, purchaseDocuments };
+    const quotations = await Promise.all(
+      requisition.quotations.map(async (q) => ({
+        ...q,
+        attachmentUrl: q.attachmentUrl
+          ? await this.storageService.getReadOnlyUrl(q.attachmentUrl)
+          : null,
+      })),
+    );
+
+    return {
+      ...requisition,
+      quotations,
+      reconciliationSnapshot,
+      purchaseDocuments,
+    };
   }
 
   /**

@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CaptchaService } from './captcha.service';
 import { UserSessionService } from './user-session.service';
 import { EmailService } from '../../common/email/email.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -31,6 +32,7 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: CaptchaService, useValue: { validate: jest.fn() } },
         { provide: UserSessionService, useValue: {} },
+        { provide: StorageService, useValue: { getReadOnlyUrl: jest.fn() } },
       ],
     }).compile();
 

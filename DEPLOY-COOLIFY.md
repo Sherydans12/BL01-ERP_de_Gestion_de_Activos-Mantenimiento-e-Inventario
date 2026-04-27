@@ -12,7 +12,7 @@ El contenedor ejecuta `docker-entrypoint.sh`:
 ## Variables de entorno mínimas (Coolify)
 
 - `DATABASE_URL` — PostgreSQL del servicio (o base gestionada).
-- `JWT_SECRET`, `FRONTEND_URL`, y el resto que ya uses (SMTP, storage, etc.).
+- `JWT_SECRET`, `FRONTEND_URL`, `BACKEND_PUBLIC_URL` y el resto que ya uses (email, storage, etc.).
 
 Asegúrate de que `DATABASE_URL` apunte al mismo Postgres donde importarás el dump.
 

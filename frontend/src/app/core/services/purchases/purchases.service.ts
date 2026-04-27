@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { Observable, throwError } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { resolveUploadPublicUrl } from '../../utils/media-url';
 
 export interface CreateOrdersFromRequisitionResult {
   orders: PurchaseOrder[];
@@ -345,6 +346,34 @@ export class PurchasesService {
   private http = inject(HttpClient);
   private base = environment.apiUrl;
 
+  private normalizeQuotationMedia(quotation?: PurchaseQuotation | null): void {
+    if (!quotation) return;
+    if (quotation.attachmentUrl) {
+      quotation.attachmentUrl = resolveUploadPublicUrl(quotation.attachmentUrl) ?? undefined;
+    }
+  }
+
+  private normalizeInvoiceMedia(invoice?: PurchaseInvoice | null): void {
+    if (!invoice) return;
+    if (invoice.pdfUrl) {
+      invoice.pdfUrl = resolveUploadPublicUrl(invoice.pdfUrl);
+    }
+  }
+
+  private normalizeRequisitionMedia(req: PurchaseRequisition): PurchaseRequisition {
+    req.quotations?.forEach((q) => this.normalizeQuotationMedia(q));
+    return req;
+  }
+
+  private normalizeOrderMedia(order: PurchaseOrder): PurchaseOrder {
+    this.normalizeQuotationMedia(order.quotation);
+    order.quotation?.requisition?.quotations?.forEach((q) =>
+      this.normalizeQuotationMedia(q),
+    );
+    this.normalizeInvoiceMedia(order.purchaseInvoice ?? undefined);
+    return order;
+  }
+
   // -- Settings --
   getSettings(): Observable<PurchaseSettings> {
     return this.http.get<PurchaseSettings>(`${this.base}/purchase-settings`);
@@ -368,11 +397,15 @@ export class PurchasesService {
 
   // -- Requisitions --
   getRequisitions(params?: { contractId?: string; status?: string }): Observable<PurchaseRequisition[]> {
-    return this.http.get<PurchaseRequisition[]>(`${this.base}/purchase-requisitions`, { params: params as any });
+    return this.http
+      .get<PurchaseRequisition[]>(`${this.base}/purchase-requisitions`, { params: params as any })
+      .pipe(map((rows) => rows.map((r) => this.normalizeRequisitionMedia(r))));
   }
 
   getRequisition(id: string): Observable<PurchaseRequisition> {
-    return this.http.get<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}`);
+    return this.http
+      .get<PurchaseRequisition>(`${this.base}/purchase-requisitions/${id}`)
+      .pipe(map((row) => this.normalizeRequisitionMedia(row)));
   }
 
   getRequisitionActivityLogs(id: string): Observable<ActivityLogEntry[]> {
@@ -434,9 +467,17 @@ export class PurchasesService {
     const formData = new FormData();
     formData.append('data', JSON.stringify(data));
     if (file) formData.append('attachment', file);
-    return this.http.post<PurchaseQuotation>(
-      `${this.base}/purchase-requisitions/${requisitionId}/quotations`, formData,
-    );
+    return this.http
+      .post<PurchaseQuotation>(
+        `${this.base}/purchase-requisitions/${requisitionId}/quotations`,
+        formData,
+      )
+      .pipe(
+        map((q) => {
+          this.normalizeQuotationMedia(q);
+          return q;
+        }),
+      );
   }
 
   selectQuotation(requisitionId: string, quotationId: string): Observable<PurchaseQuotation> {
@@ -473,7 +514,9 @@ export class PurchasesService {
 
   // -- Purchase Orders --
   getOrders(params?: { status?: string }): Observable<PurchaseOrder[]> {
-    return this.http.get<PurchaseOrder[]>(`${this.base}/purchase-orders`, { params: params as any });
+    return this.http
+      .get<PurchaseOrder[]>(`${this.base}/purchase-orders`, { params: params as any })
+      .pipe(map((rows) => rows.map((o) => this.normalizeOrderMedia(o))));
   }
 
   /** OC en SENT | ORDERED | PARTIALLY_RECEIVED | SENT_TO_SUPPLIER (alcance contractual del usuario). */
@@ -484,7 +527,9 @@ export class PurchasesService {
   }
 
   getOrder(id: string): Observable<PurchaseOrder> {
-    return this.http.get<PurchaseOrder>(`${this.base}/purchase-orders/${id}`);
+    return this.http
+      .get<PurchaseOrder>(`${this.base}/purchase-orders/${id}`)
+      .pipe(map((row) => this.normalizeOrderMedia(row)));
   }
 
   linkOrderItemToCatalog(
@@ -627,7 +672,14 @@ export class PurchasesService {
 
   /** Detalle enriquecido (hasDiscrepancy, discrepancyReason, etc.). */
   getPurchaseInvoice(id: string): Observable<PurchaseInvoice> {
-    return this.http.get<PurchaseInvoice>(`${this.base}/purchase-invoices/${id}`);
+    return this.http
+      .get<PurchaseInvoice>(`${this.base}/purchase-invoices/${id}`)
+      .pipe(
+        map((invoice) => {
+          this.normalizeInvoiceMedia(invoice);
+          return invoice;
+        }),
+      );
   }
 
   deletePurchaseInvoice(id: string): Observable<void> {
@@ -646,7 +698,16 @@ export class PurchasesService {
     if (params.status?.trim()) q['status'] = params.status.trim();
     if (params.dueDateFrom?.trim()) q['dueDateFrom'] = params.dueDateFrom.trim();
     if (params.dueDateTo?.trim()) q['dueDateTo'] = params.dueDateTo.trim();
-    return this.http.get<PurchaseInvoice[]>(`${this.base}/purchase-invoices`, { params: q });
+    return this.http
+      .get<PurchaseInvoice[]>(`${this.base}/purchase-invoices`, { params: q })
+      .pipe(
+        map((rows) =>
+          rows.map((invoice) => {
+            this.normalizeInvoiceMedia(invoice);
+            return invoice;
+          }),
+        ),
+      );
   }
 
   // -- Analytics --

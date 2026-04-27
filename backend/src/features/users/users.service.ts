@@ -49,12 +49,10 @@ export class UsersService {
     private readonly userSessions: UserSessionService,
   ) {}
 
-  /** Convierte `/uploads/user-avatars/...` en clave interna de StorageService. */
   private avatarPublicUrlToStorageKey(publicUrl: string | null): string | null {
     if (!publicUrl) return null;
-    const prefix = '/uploads/';
-    if (!publicUrl.startsWith(prefix)) return null;
-    return publicUrl.slice(prefix.length);
+    if (/^https?:\/\//i.test(publicUrl.trim())) return null;
+    return this.storage.normalizeStorageKey(publicUrl);
   }
 
   private buildDisplayName(
@@ -79,7 +77,7 @@ export class UsersService {
     }
   }
 
-  mapMeRow(u: {
+  private async mapMeRow(u: {
     id: string;
     email: string;
     name: string;
@@ -98,7 +96,9 @@ export class UsersService {
       firstName: u.firstName,
       lastName: u.lastName,
       phone: u.phone,
-      avatarUrl: u.avatarUrl,
+      avatarUrl: u.avatarUrl
+        ? await this.storage.getReadOnlyUrl(u.avatarUrl)
+        : null,
       role: u.role,
       customRoleId: u.customRoleId,
       customRoleName: u.customRole?.name ?? null,
@@ -189,7 +189,7 @@ export class UsersService {
     const meta = await this.storage.uploadWithMeta(file, USER_AVATAR_STORAGE_FOLDER);
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { avatarUrl: meta.publicUrl },
+      data: { avatarUrl: meta.storageKey },
       select: meSelect,
     });
     return this.mapMeRow(updated);

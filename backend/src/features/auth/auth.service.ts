@@ -17,6 +17,7 @@ import { AuthAuditService, summarizeUserAgent } from './auth-audit.service';
 import type { LoginRequestMeta } from './auth-request.util';
 import { UserSessionService } from './user-session.service';
 import { EmailService } from '../../common/email/email.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
 const BCRYPT_DUMMY_HASH =
@@ -53,6 +54,7 @@ export class AuthService {
     private captcha: CaptchaService,
     private readonly authAudit: AuthAuditService,
     private readonly userSessions: UserSessionService,
+    private readonly storage: StorageService,
   ) {}
 
   private async sendUnusualLoginSecurityEmail(params: {
@@ -264,7 +266,9 @@ export class AuthService {
         firstName: user.firstName ?? null,
         lastName: user.lastName ?? null,
         phone: user.phone ?? null,
-        avatarUrl: user.avatarUrl ?? null,
+        avatarUrl: user.avatarUrl
+          ? await this.storage.getReadOnlyUrl(user.avatarUrl)
+          : null,
         role: user.role,
         customRoleId: user.customRoleId ?? null,
         customRoleName: user.customRole?.name ?? null,
@@ -366,7 +370,9 @@ export class AuthService {
         firstName: updatedUser.firstName ?? null,
         lastName: updatedUser.lastName ?? null,
         phone: updatedUser.phone ?? null,
-        avatarUrl: updatedUser.avatarUrl ?? null,
+        avatarUrl: updatedUser.avatarUrl
+          ? await this.storage.getReadOnlyUrl(updatedUser.avatarUrl)
+          : null,
         role: updatedUser.role,
         customRoleId: user.customRoleId ?? null,
         customRoleName: user.customRole?.name ?? null,

@@ -1141,15 +1141,17 @@ export class InventoryItemsService {
       },
     });
 
-    return rows.map((row) => ({
-      id: row.id,
-      fileName: row.fileName,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
-      createdAt: row.createdAt.toISOString(),
-      uploadedBy: row.uploadedBy,
-      url: this.storageService.getFileUrl(row.storageKey),
-    }));
+    return Promise.all(
+      rows.map(async (row) => ({
+        id: row.id,
+        fileName: row.fileName,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+        createdAt: row.createdAt.toISOString(),
+        uploadedBy: row.uploadedBy,
+        url: await this.storageService.getReadOnlyUrl(row.storageKey),
+      })),
+    );
   }
 
   async addAttachment(
@@ -1212,7 +1214,7 @@ export class InventoryItemsService {
       sizeBytes: row.sizeBytes,
       createdAt: row.createdAt.toISOString(),
       uploadedBy: row.uploadedBy,
-      url: this.storageService.getFileUrl(row.storageKey),
+      url: await this.storageService.getReadOnlyUrl(row.storageKey),
     };
   }
 
