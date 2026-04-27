@@ -16,13 +16,23 @@ El contenedor ejecuta `docker-entrypoint.sh`:
 
 Asegúrate de que `DATABASE_URL` apunte al mismo Postgres donde importarás el dump.
 
-## Almacenamiento local de adjuntos (20 MB máx. por archivo)
+## Almacenamiento de adjuntos (20 MB máx. por archivo)
 
 En Docker/Coolify, con **`STORAGE_DRIVER=local`** el backend guarda ficheros bajo **`UPLOAD_PATH`** (por defecto `./uploads`; en `docker-compose.prod.yml` suele ser **`/uploads`**).
 
 - Debe existir un **volumen Docker persistente** montado en esa ruta (en el repo: `backend_uploads:/uploads` mapeado al contenedor en `/uploads`), para que PDFs y adjuntos de compras/inventario **no se pierdan** al redeploy.
 - Si la carpeta no es escribible, el backend registra una **advertencia al arranque** en los logs.
-- Para object storage (R2/S3), use `STORAGE_DRIVER=r2` (u homólogo) cuando esté configurado en el servicio.
+- Para object storage en Cloudflare R2, use `STORAGE_DRIVER=r2` y configure:
+  - `R2_ACCOUNT_ID`
+  - `R2_ACCESS_KEY_ID`
+  - `R2_SECRET_ACCESS_KEY`
+  - `R2_BUCKET`
+  - `R2_ENDPOINT` (ej: `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`)
+  - `R2_REGION` (`auto` recomendado)
+  - `R2_PUBLIC_URL` (opcional; dominio custom/CDN si se desea URL pública)
+  - `R2_KEY_PREFIX` (opcional)
+
+Si `STORAGE_DRIVER=r2` y falta alguna variable crítica, el backend falla al iniciar para evitar fallback silencioso a disco local.
 
 ## Flujo recomendado tras un redeploy
 

@@ -5,6 +5,7 @@ import * as path from 'path';
 import type { Readable } from 'stream';
 import type { StorageProvider } from './storage-provider.interface';
 import { LocalStorageProvider } from './providers/local-storage.provider';
+import { R2StorageProvider } from './providers/r2-storage.provider';
 import { MAX_UPLOAD_FILE_BYTES } from './file-upload.constants';
 
 export type UploadedFileMeta = {
@@ -24,14 +25,35 @@ export class StorageService {
     const driver = (config.get<string>('STORAGE_DRIVER') || 'local').toLowerCase();
     const basePath = config.get<string>('UPLOAD_PATH') || './uploads';
     if (driver === 'r2' || driver === 's3') {
-      StorageService.log.warn(
-        `STORAGE_DRIVER=${driver}: R2/S3 aún no está cableado; usando almacenamiento local (${basePath}). ` +
-          'Implemente R2StorageProvider y reinicie.',
-      );
-      this.provider = new LocalStorageProvider(basePath);
+      const accountId = this.getRequiredEnv('R2_ACCOUNT_ID');
+      const accessKeyId = this.getRequiredEnv('R2_ACCESS_KEY_ID');
+      const secretAccessKey = this.getRequiredEnv('R2_SECRET_ACCESS_KEY');
+      const bucket = this.getRequiredEnv('R2_BUCKET');
+      this.provider = new R2StorageProvider({
+        accountId,
+        accessKeyId,
+        secretAccessKey,
+        bucket,
+        endpoint: this.config.get<string>('R2_ENDPOINT'),
+        region: this.config.get<string>('R2_REGION') || 'auto',
+        publicUrl: this.config.get<string>('R2_PUBLIC_URL'),
+        keyPrefix: this.config.get<string>('R2_KEY_PREFIX'),
+      });
+      StorageService.log.log(`Storage driver activo: ${driver} (bucket=${bucket})`);
     } else {
       this.provider = new LocalStorageProvider(basePath);
+      StorageService.log.log(
+        `Storage driver activo: local (path=${basePath})`,
+      );
     }
+  }
+
+  private getRequiredEnv(name: string): string {
+    const value = this.config.get<string>(name)?.trim();
+    if (!value) {
+      throw new Error(`Configuración de storage incompleta: falta variable ${name}`);
+    }
+    return value;
   }
 
   /** Clave con nombre único (UUID) + extensión segura. */
