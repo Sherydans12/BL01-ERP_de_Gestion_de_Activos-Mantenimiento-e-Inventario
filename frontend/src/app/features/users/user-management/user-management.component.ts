@@ -17,6 +17,7 @@ import {
   TenantRole,
 } from '../../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
 import { finalize } from 'rxjs';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
@@ -151,10 +152,18 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                         {{ user.isActive ? 'Activo' : 'Inactivo' }}
                       </span>
                       <button
+                        type="button"
                         (click)="toggleUserStatus(user)"
-                        [disabled]="isUpdatingStatus() === user.id"
+                        [disabled]="
+                          isUpdatingStatus() === user.id ||
+                          isSessionUser(user)
+                        "
                         class="p-1 rounded hover:bg-dark text-muted transition-all disabled:opacity-30"
-                        title="Cambiar Estado"
+                        [title]="
+                          isSessionUser(user)
+                            ? 'No puede cambiar el estado de su propia cuenta'
+                            : 'Cambiar Estado'
+                        "
                       >
                         @if (isUpdatingStatus() === user.id) {
                           <svg
@@ -198,6 +207,7 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                     <div class="flex justify-end items-center gap-2">
                       @if (!user.isActive) {
                         <button
+                          type="button"
                           (click)="resendInvitation(user)"
                           class="text-primary hover:text-primary/80 font-mono text-xs transition-colors p-1"
                           title="Reenviar invitación"
@@ -217,13 +227,25 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                           </svg>
                         </button>
                       }
+                      @if (!isSessionUser(user)) {
+                        <button
+                          type="button"
+                          (click)="openPasswordModal(user)"
+                          class="text-muted hover:text-primary transition-colors font-mono text-xs p-1"
+                          title="Establecer nueva contraseña"
+                        >
+                          CLAVE
+                        </button>
+                      }
                       <button
+                        type="button"
                         (click)="openEditModal(user)"
                         class="text-muted hover:text-primary transition-colors font-mono text-xs p-1"
                       >
                         EDITAR
                       </button>
                       <button
+                        type="button"
                         (click)="confirmDelete(user)"
                         class="text-muted hover:text-error transition-colors font-mono text-xs p-1"
                       >
@@ -422,11 +444,19 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                     <select
                       id="invite-active"
                       formControlName="isActive"
-                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      [disabled]="
+                        !!selectedUser() && isSessionUser(selectedUser()!)
+                      "
                     >
                       <option [value]="true">Activo</option>
                       <option [value]="false">Inactivo</option>
                     </select>
+                    @if (selectedUser() && isSessionUser(selectedUser()!)) {
+                      <p class="text-xs text-muted mt-1">
+                        No puede desactivar su propia cuenta desde esta pantalla.
+                      </p>
+                    }
                   </div>
                 }
                 <div>
@@ -525,6 +555,89 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
         </dialog>
       }
 
+      @if (passwordModalOpen()) {
+        <dialog
+          #passwordDialog
+          class="dialog-native-shell [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+          (close)="onPasswordDialogClose()"
+        >
+          <div
+            class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+            (click)="closePasswordModal()"
+          >
+            <div
+              class="bg-surface rounded-xl border border-border w-full max-w-md overflow-hidden backdrop-blur-xl"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="p-6 space-y-4">
+                <h3 class="text-lg font-bold text-main tracking-tight">
+                  Nueva contraseña
+                </h3>
+                <p class="text-sm text-muted">
+                  Usuario:
+                  <span class="text-main font-medium">{{
+                    passwordTargetUser()?.email
+                  }}</span>
+                </p>
+                <p class="text-xs text-muted leading-snug">
+                  La sesión de este usuario se cerrará en todos los
+                  dispositivos. No se solicita la contraseña anterior.
+                </p>
+                <form [formGroup]="passwordForm" class="space-y-3">
+                  <div>
+                    <label
+                      for="pw-new"
+                      class="block text-sm font-medium text-main mb-1"
+                      >Nueva contraseña</label
+                    >
+                    <input
+                      id="pw-new"
+                      type="password"
+                      formControlName="newPassword"
+                      autocomplete="new-password"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      for="pw-confirm"
+                      class="block text-sm font-medium text-main mb-1"
+                      >Confirmar</label
+                    >
+                    <input
+                      id="pw-confirm"
+                      type="password"
+                      formControlName="confirmPassword"
+                      autocomplete="new-password"
+                      class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </form>
+              </div>
+              <div
+                class="bg-dark/50 border-t border-border p-4 flex justify-end gap-3"
+              >
+                <button
+                  type="button"
+                  (click)="closePasswordModal()"
+                  class="px-4 py-2 text-sm font-medium text-muted hover:text-main"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  (click)="submitPasswordReset()"
+                  [disabled]="passwordForm.invalid || isSettingPassword()"
+                  class="bg-primary hover:bg-primary/90 text-zinc-950 font-bold font-mono text-sm py-2 px-6 rounded transition-colors disabled:opacity-50 uppercase"
+                >
+                  {{ isSettingPassword() ? 'Guardando…' : 'Guardar' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </dialog>
+      }
+
       @if (deleteModalOpen()) {
         <dialog
           #userDeleteDialog
@@ -612,10 +725,13 @@ export class UserManagementComponent implements OnInit {
   private tenantRolesService = inject(TenantRolesService);
   private fb = inject(FormBuilder);
   private notification = inject(NotificationService);
+  private authService = inject(AuthService);
 
   userFormDialog = viewChild<ElementRef<HTMLDialogElement>>('userFormDialog');
   userDeleteDialog =
     viewChild<ElementRef<HTMLDialogElement>>('userDeleteDialog');
+  passwordDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('passwordDialog');
 
   users = signal<User[]>([]);
   availableContracts = signal<Contract[]>([]);
@@ -641,6 +757,14 @@ export class UserManagementComponent implements OnInit {
   isDeleting = signal(false);
   isEditing = signal(false);
   isUpdatingStatus = signal<string | null>(null);
+  passwordModalOpen = signal(false);
+  passwordTargetUser = signal<User | null>(null);
+  isSettingPassword = signal(false);
+
+  passwordForm = this.fb.nonNullable.group({
+    newPassword: ['', [Validators.required, Validators.minLength(8)]],
+    confirmPassword: ['', [Validators.required, Validators.minLength(8)]],
+  });
 
   selectedUser = signal<User | null>(null);
   userToDelete = signal<User | null>(null);
@@ -656,6 +780,12 @@ export class UserManagementComponent implements OnInit {
     isActive: [true],
     contractIds: [[] as string[]], // Cambiado de siteIds
   });
+
+  /** Fila del usuario autenticado (no puede auto-desactivarse ni resetearse la clave aquí). */
+  isSessionUser(user: User): boolean {
+    const id = this.authService.currentUser()?.id;
+    return !!id && user.id === id;
+  }
 
   ngOnInit() {
     this.loadUsers();
@@ -694,6 +824,13 @@ export class UserManagementComponent implements OnInit {
    * Prepara el popup elegante de confirmación
    */
   toggleUserStatus(user: User) {
+    if (this.isSessionUser(user)) {
+      this.notification.warning(
+        'No puede cambiar el estado de su propia cuenta.',
+      );
+      return;
+    }
+
     const isDeactivating = user.isActive;
 
     this.confirmModalConfig.set({
@@ -1054,6 +1191,80 @@ export class UserManagementComponent implements OnInit {
 
     this.userForm.get('rut')?.setValue(value, { emitEvent: false });
     input.value = value;
+  }
+
+  openPasswordModal(user: User) {
+    if (this.isSessionUser(user)) return;
+    this.passwordTargetUser.set(user);
+    this.passwordForm.reset({
+      newPassword: '',
+      confirmPassword: '',
+    });
+    this.passwordModalOpen.set(true);
+    afterNextRender(
+      () => {
+        const el = this.passwordDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  closePasswordModal() {
+    const el = this.passwordDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.passwordModalOpen.set(false);
+      this.passwordTargetUser.set(null);
+    }
+  }
+
+  onPasswordDialogClose() {
+    this.passwordModalOpen.set(false);
+    this.passwordTargetUser.set(null);
+  }
+
+  submitPasswordReset() {
+    const target = this.passwordTargetUser();
+    if (!target || this.passwordForm.invalid) return;
+
+    const { newPassword, confirmPassword } = this.passwordForm.getRawValue();
+    if (newPassword !== confirmPassword) {
+      this.notification.error('Las contraseñas no coinciden.');
+      return;
+    }
+
+    const letter = /[A-Za-zÁÉÍÓÚÜáéíóúüÑñ]/;
+    const digit = /[0-9]/;
+    if (!letter.test(newPassword) || !digit.test(newPassword)) {
+      this.notification.error(
+        'La contraseña debe incluir al menos una letra y un número.',
+      );
+      return;
+    }
+
+    this.isSettingPassword.set(true);
+    this.usersService
+      .adminSetUserPassword(target.id, newPassword)
+      .pipe(finalize(() => this.isSettingPassword.set(false)))
+      .subscribe({
+        next: (res) => {
+          this.notification.success(res.message || 'Contraseña actualizada.');
+          this.closePasswordModal();
+        },
+        error: (err) => {
+          const raw = err.error?.message;
+          const msg = Array.isArray(raw)
+            ? raw[0]
+            : typeof raw === 'string'
+              ? raw
+              : 'No se pudo actualizar la contraseña';
+          this.notification.error(msg);
+        },
+      });
   }
 
   resendInvitation(user: User) {

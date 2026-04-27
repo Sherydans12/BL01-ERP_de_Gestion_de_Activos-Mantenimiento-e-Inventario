@@ -25,6 +25,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { AdminSetPasswordDto } from './dto/admin-set-password.dto';
 import { MAX_USER_AVATAR_BYTES } from './user-avatar.constants';
 import {
   avatarUploadPolicy,
@@ -92,6 +93,13 @@ export class UsersController {
     );
   }
 
+  /** Lista compacta para participantes / supervisores en OT (mecánicos y supervisores activos). */
+  @Get('assignable-for-ot')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'MECHANIC')
+  findAssignableForOt(@Req() req: any) {
+    return this.usersService.findAssignableForOt(req.user.tenantId);
+  }
+
   @Post()
   @Roles('ADMIN', 'SUPER_ADMIN')
   create(@Body() body: any, @Req() req: any) {
@@ -115,7 +123,13 @@ export class UsersController {
   update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     const requesterTenantId = req.user.tenantId;
     const requesterRole = req.user.role;
-    return this.usersService.update(id, body, requesterTenantId, requesterRole);
+    return this.usersService.update(
+      id,
+      body,
+      requesterTenantId,
+      requesterRole,
+      req.user.id,
+    );
   }
 
   @Delete(':id')
@@ -133,6 +147,31 @@ export class UsersController {
       id,
       req.user.tenantId,
       req.user.role,
+    );
+  }
+
+  /** Contraseña nueva sin pedir la actual (solo otro usuario del tenant). */
+  @Post(':id/set-password')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  adminSetPassword(
+    @Param('id') id: string,
+    @Body() dto: AdminSetPasswordDto,
+    @Req() req: any,
+  ) {
+    return this.usersService.adminSetUserPassword(
+      id,
+      dto.newPassword,
+      req.user.id,
+      req.user.tenantId,
+      req.user.role,
+      extractLoginMeta(req),
     );
   }
 }

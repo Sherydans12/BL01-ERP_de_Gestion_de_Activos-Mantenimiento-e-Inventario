@@ -66,4 +66,15 @@ export class UsersService {
       {}, // Body vacío ya que el ID va en la URL
     );
   }
+
+  /** Reset administrativo (solo otro usuario); no pide contraseña actual. */
+  adminSetUserPassword(
+    id: string,
+    newPassword: string,
+  ): Observable<{ success: boolean; message: string }> {
+    return this.http.post<{ success: boolean; message: string }>(
+      `${this.apiUrl}/${id}/set-password`,
+      { newPassword },
+    );
+  }
 }

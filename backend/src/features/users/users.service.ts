@@ -446,11 +446,43 @@ export class UsersService {
     };
   }
 
+  /** Usuarios activos del tenant con rol base mecánico o supervisor (asignación OT). */
+  async findAssignableForOt(tenantId: string) {
+    if (!tenantId) {
+      throw new BadRequestException('Tenant no disponible');
+    }
+    return this.prisma.user.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        OR: [
+          { role: { in: ['MECHANIC', 'SUPERVISOR'] } },
+          {
+            customRole: {
+              baseRole: { in: ['MECHANIC', 'SUPERVISOR'] },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        customRole: {
+          select: { id: true, name: true, baseRole: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async update(
     id: string,
     data: any,
     requesterTenantId?: string,
     requesterRole?: string,
+    requesterId?: string,
   ) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new BadRequestException('Usuario no encontrado');
@@ -461,6 +493,16 @@ export class UsersService {
     ) {
       throw new BadRequestException(
         'No tienes permisos para editar este usuario',
+      );
+    }
+
+    if (
+      requesterId &&
+      id === requesterId &&
+      data.isActive === false
+    ) {
+      throw new BadRequestException(
+        'No puede desactivar su propia cuenta.',
       );
     }
 
@@ -633,5 +675,65 @@ export class UsersService {
 
     await this.prisma.user.delete({ where: { id } });
     return { success: true };
+  }
+
+  /**
+   * Reset administrativo de contraseña (sin contraseña actual).
+   * No aplica al propio usuario autenticado (usar perfil / change-password).
+   */
+  async adminSetUserPassword(
+    targetUserId: string,
+    newPassword: string,
+    requesterId: string,
+    requesterTenantId: string | undefined,
+    requesterRole: string | undefined,
+    meta?: LoginRequestMeta,
+  ) {
+    if (targetUserId === requesterId) {
+      throw new BadRequestException(
+        'No puede establecer su contraseña desde aquí. Use su perfil o “Cambiar contraseña”.',
+      );
+    }
+
+    this.assertPasswordPolicy(newPassword);
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+    if (!target) throw new BadRequestException('Usuario no encontrado');
+
+    if (
+      requesterRole !== 'SUPER_ADMIN' &&
+      target.tenantId !== requesterTenantId
+    ) {
+      throw new BadRequestException(
+        'No tienes permisos para modificar este usuario',
+      );
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { password: hashed },
+    });
+    await this.userSessions.invalidateAllForUser(targetUserId);
+
+    if (meta) {
+      const geo = await this.authAudit.lookupGeo(meta.clientIp);
+      try {
+        await this.authAudit.recordPasswordChange({
+          userId: target.id,
+          email: target.email,
+          ip: (meta.clientIp || '').slice(0, 64),
+          userAgent: (meta.userAgent || '').slice(0, 512),
+          city: geo.city,
+          country: geo.country,
+        });
+      } catch {
+        /* no bloquear */
+      }
+    }
+
+    return { success: true, message: 'Contraseña actualizada correctamente' };
   }
 }
