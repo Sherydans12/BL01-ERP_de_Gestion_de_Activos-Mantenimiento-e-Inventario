@@ -52,8 +52,14 @@ import {
   CatalogService,
   type CatalogItem,
 } from '../../../core/services/catalog/catalog.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { UsersService, type User } from '../../../core/services/users/users.service';
 import {
-  CLASSIFICATION_OPTIONS,
+  OT_KIND_OPTIONS,
+  NO_PLAN_SUBTYPE_OPTIONS,
+  buildClassificationTagsFromKind,
+  inferOtKindFromTags,
+  type OtKindOption,
   FLUID_COMPARTMENTS_ORDER,
   FLUID_COMPARTMENT_LABELS,
 } from './work-order-form.constants';
@@ -91,10 +97,17 @@ export class WorkOrderFormComponent implements OnInit {
   private maintenanceKitsService = inject(MaintenanceKitsService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
   readonly catalogService = inject(CatalogService);
+  private authService = inject(AuthService);
+  private usersService = inject(UsersService);
 
   /** Diálogo nativo: `CatalogItem` categoría SYSTEM (catálogo global del tenant). */
   catalogSystemsDialog =
     viewChild<ElementRef<HTMLDialogElement>>('catalogSystemsDialog');
+  closeOtDialog = viewChild<ElementRef<HTMLDialogElement>>('closeOtDialog');
+  participantsDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('participantsDialog');
+  supervisorDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('supervisorDialog');
 
   otId: string | null = null;
   mode: 'CREATING' | 'EDITING' | 'READONLY' = 'CREATING';
@@ -124,13 +137,16 @@ export class WorkOrderFormComponent implements OnInit {
   showFluidPicker = signal(false);
   fluidPickerRowIndex = signal(-1);
 
-  classificationOptions = CLASSIFICATION_OPTIONS;
+  otKindOptions = OT_KIND_OPTIONS;
+  noPlanSubtypeOptions = NO_PLAN_SUBTYPE_OPTIONS;
 
-  readonly availabilityOptions: { v: 'SI' | 'NO' | 'STP'; l: string }[] = [
-    { v: 'SI', l: 'Sí' },
-    { v: 'NO', l: 'No' },
-    { v: 'STP', l: 'STP' },
+  readonly availabilityOptions: { v: 'SI' | 'NO'; l: string }[] = [
+    { v: 'NO', l: 'Operativo' },
+    { v: 'SI', l: 'Fuera de servicio' },
   ];
+
+  assignableUsers = signal<User[]>([]);
+  participantIds = signal<string[]>([]);
 
   pmSourceLabel(src: PmIntervalSource | undefined): string {
     return src ? pmIntervalSourceLabel(src) : '';
@@ -148,6 +164,30 @@ export class WorkOrderFormComponent implements OnInit {
     const raw = this.otForm.get('detentionStartedAt')?.value;
     return typeof raw === 'string' && raw.trim().length > 0;
   });
+
+  /** Mecánico no puede editar OT en curso o en pausa (solo supervisor/admin). */
+  formLockedForMechanic = computed(
+    () =>
+      this.authService.currentUser()?.role === 'MECHANIC' &&
+      (this.currentStatus === 'IN_PROGRESS' ||
+        this.currentStatus === 'ON_HOLD'),
+  );
+
+  mechanicsForPick = computed(() =>
+    this.assignableUsers().filter(
+      (u) =>
+        u.role === 'MECHANIC' ||
+        u.customRole?.baseRole === 'MECHANIC',
+    ),
+  );
+
+  supervisorsForPick = computed(() =>
+    this.assignableUsers().filter(
+      (u) =>
+        u.role === 'SUPERVISOR' ||
+        u.customRole?.baseRole === 'SUPERVISOR',
+    ),
+  );
 
   fluidCompartmentOrder = FLUID_COMPARTMENTS_ORDER;
 
@@ -187,10 +227,6 @@ export class WorkOrderFormComponent implements OnInit {
     /** Sin filas por defecto: el usuario agrega compartimientos solo si aplica. */
     const compartmentRows = this.fb.array([] as FormGroup[]);
 
-    const classificationTagsCtrl = this.fb.nonNullable.control<
-      OtClassificationTag[]
-    >([]);
-
     this.otForm = this.fb.group({
       equipmentId: ['', Validators.required],
       warehouseId: [''],
@@ -207,8 +243,12 @@ export class WorkOrderFormComponent implements OnInit {
       clientAttributedEnd: [''],
       clientAttributedReason: [''],
 
-      affectsAvailability: ['SI' as 'SI' | 'NO' | 'STP'],
-      classificationTags: classificationTagsCtrl,
+      affectsAvailability: [
+        '' as '' | 'SI' | 'NO',
+        Validators.required,
+      ],
+      otKind: ['PROGRAMADA' as OtKindOption, Validators.required],
+      noPlanSubtype: ['CORRECTIVO' as 'PREVENTIVO' | 'CORRECTIVO'],
 
       workLocation: ['TERRENO' as 'TALLER' | 'TERRENO'],
       personnelQuantity: [
@@ -218,7 +258,7 @@ export class WorkOrderFormComponent implements OnInit {
       workShift: ['DIA' as 'DIA' | 'NOCHE'],
 
       initialRequestDescription: [''],
-      symptomsText: [''],
+      symptomsText: ['', Validators.required],
       causeText: [''],
       workPerformedDescription: ['', Validators.required],
 
@@ -227,6 +267,7 @@ export class WorkOrderFormComponent implements OnInit {
       responsibleMechanicSignature: [''],
       shiftSupervisorName: [''],
       shiftSupervisorSignature: [''],
+      shiftSupervisorUserId: [''],
 
       pmCycleNumber: [''],
 
@@ -273,6 +314,22 @@ export class WorkOrderFormComponent implements OnInit {
     this.catalogService.loadCatalogs().subscribe({
       error: () => undefined,
     });
+
+    this.usersService.getAssignableForOt().subscribe({
+      next: (list) => this.assignableUsers.set(list),
+      error: () => this.assignableUsers.set([]),
+    });
+
+    const cu = this.authService.currentUser();
+    if (cu?.name) {
+      queueMicrotask(() => {
+        if (!this.otId) {
+          this.otForm.patchValue({
+            responsibleMechanicName: cu.name ?? '',
+          });
+        }
+      });
+    }
 
     this.fleetService.getEquipments({ limit: 1000 }).subscribe({
       next: (res) => this.fleet.set(res.data),
@@ -411,10 +468,19 @@ export class WorkOrderFormComponent implements OnInit {
         if (!tags.length && ot.category === 'PROGRAMADA') {
           tags = ['PROGRAMADA'];
         } else if (!tags.length && ot.category === 'NO_PROGRAMADA_CORRECTIVA') {
-          tags = ['NO_PROGRAMADA'];
+          tags = ['NO_PROGRAMADA', 'NP_CORRECTIVO'];
         } else if (!tags.length && ot.category === 'NO_PROGRAMADA_REACTIVA') {
-          tags = ['NO_PROGRAMADA'];
+          tags = ['NO_PROGRAMADA', 'NP_CORRECTIVO'];
+        } else if (!tags.length && ot.category === 'NO_PROGRAMADA_PREVENTIVO') {
+          tags = ['NO_PROGRAMADA', 'NP_PREVENTIVO'];
         }
+        const inferred = inferOtKindFromTags(
+          tags.length ? tags : ['PROGRAMADA'],
+        );
+
+        let aff = ot.affectsAvailability ?? '';
+        if (aff === 'STP') aff = 'NO';
+
         this.otForm.patchValue({
           equipmentId: ot.equipmentId,
           warehouseId: ot.warehouseId || '',
@@ -442,8 +508,9 @@ export class WorkOrderFormComponent implements OnInit {
             ? isoToDatetimeLocalValue(ot.clientAttributedEnd)
             : '',
           clientAttributedReason: ot.clientAttributedReason || '',
-          affectsAvailability: ot.affectsAvailability || 'SI',
-          classificationTags: tags,
+          affectsAvailability: aff,
+          otKind: inferred.kind,
+          noPlanSubtype: inferred.noPlanSubtype,
           workLocation: ot.workLocation || 'TERRENO',
           personnelQuantity: Math.max(1, Number(ot.personnelQuantity ?? 1)),
           workShift: ot.workShift || 'DIA',
@@ -458,6 +525,7 @@ export class WorkOrderFormComponent implements OnInit {
           responsibleMechanicSignature: ot.responsibleMechanicSignature || '',
           shiftSupervisorName: ot.shiftSupervisorName || '',
           shiftSupervisorSignature: ot.shiftSupervisorSignature || '',
+          shiftSupervisorUserId: ot.shiftSupervisorUserId || '',
           pmCycleNumber:
             ot.pmCycleNumber != null ? String(ot.pmCycleNumber) : '',
         });
@@ -471,6 +539,12 @@ export class WorkOrderFormComponent implements OnInit {
           }))
           .filter((x: { id: string }) => x.id.length > 0);
         this.pickedSystems.set(sysRows);
+
+        this.participantIds.set(
+          Array.isArray(ot.participantUserIds)
+            ? ot.participantUserIds.map(String)
+            : [],
+        );
 
         this.patchFluidRows(ot.fluidCompartments);
 
@@ -509,6 +583,15 @@ export class WorkOrderFormComponent implements OnInit {
         );
 
         if (this.mode === 'READONLY') this.otForm.disable();
+        else if (
+          this.authService.currentUser()?.role === 'MECHANIC' &&
+          (ot.status === 'IN_PROGRESS' || ot.status === 'ON_HOLD')
+        ) {
+          this.otForm.disable();
+          this.notificationService.warning(
+            'OT en curso o en pausa: solo un supervisor puede modificar el formulario.',
+          );
+        }
       },
       error: () => {
         this.notificationService.error('OT no encontrada');
@@ -535,24 +618,6 @@ export class WorkOrderFormComponent implements OnInit {
       });
       this.compartmentRowsArray.push(g);
     }
-  }
-
-  toggleClassification(tag: OtClassificationTag, checked: boolean) {
-    const ctrl = this.otForm.get('classificationTags') as FormControl<
-      OtClassificationTag[]
-    >;
-    const cur = new Set(ctrl.value ?? []);
-    if (checked) cur.add(tag);
-    else cur.delete(tag);
-    ctrl.setValue([...cur]);
-    ctrl.markAsTouched();
-  }
-
-  isTagChecked(tag: OtClassificationTag): boolean {
-    const v = this.otForm.get('classificationTags')?.value as
-      | OtClassificationTag[]
-      | undefined;
-    return (v ?? []).includes(tag);
   }
 
   fluidLabelForRow(val: unknown): string {
@@ -650,8 +715,11 @@ export class WorkOrderFormComponent implements OnInit {
         ? new Date(v.clientAttributedEnd).toISOString()
         : undefined,
       clientAttributedReason: v.clientAttributedReason?.trim() || undefined,
-      affectsAvailability: v.affectsAvailability,
-      classificationTags: v.classificationTags,
+      affectsAvailability: v.affectsAvailability as 'SI' | 'NO',
+      classificationTags: buildClassificationTagsFromKind(
+        v.otKind as OtKindOption,
+        v.noPlanSubtype as 'PREVENTIVO' | 'CORRECTIVO',
+      ),
       workLocation: v.workLocation,
       personnelQuantity: Math.max(1, Math.trunc(Number(v.personnelQuantity ?? 1))),
       workShift: v.workShift,
@@ -660,12 +728,24 @@ export class WorkOrderFormComponent implements OnInit {
       symptomsText: v.symptomsText?.trim() || undefined,
       causeText: v.causeText?.trim() || undefined,
       workPerformedDescription: v.workPerformedDescription?.trim() || '',
-      techniciansNames: v.techniciansNames?.trim() || undefined,
+      techniciansNames:
+        this.participantIds()
+          .map(
+            (pid) =>
+              this.assignableUsers().find((u) => u.id === pid)?.name ?? '',
+          )
+          .filter(Boolean)
+          .join(', ') ||
+        v.techniciansNames?.trim() ||
+        undefined,
       responsibleMechanicName: v.responsibleMechanicName?.trim() || '',
       responsibleMechanicSignature:
         v.responsibleMechanicSignature?.trim() || undefined,
       shiftSupervisorName: v.shiftSupervisorName?.trim() || undefined,
       shiftSupervisorSignature: v.shiftSupervisorSignature?.trim() || undefined,
+      participantUserIds:
+        this.participantIds().length > 0 ? this.participantIds() : undefined,
+      shiftSupervisorUserId: v.shiftSupervisorUserId?.trim() || undefined,
       pmCycleNumber: pmCycle ? Math.min(4, Math.max(1, parseInt(pmCycle, 10))) : null,
       fluidCompartments: this.collectFluidPayload(),
       parts: this.collectPartsPayload(),
@@ -696,11 +776,17 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   savePrimary() {
-    const tags = (this.otForm.get('classificationTags')?.value ??
-      []) as OtClassificationTag[];
-    if (tags.length === 0) {
+    const aff = this.otForm.get('affectsAvailability')?.value;
+    if (aff !== 'SI' && aff !== 'NO') {
       this.notificationService.error(
-        'Seleccione al menos un tipo de OT (clasificación).',
+        'Indique si el equipo queda operativo o fuera de servicio.',
+      );
+      this.otForm.get('affectsAvailability')?.markAsTouched();
+      return;
+    }
+    if (this.pickedSystems().length === 0) {
+      this.notificationService.error(
+        'Seleccione al menos un sistema intervenido.',
       );
       return;
     }
@@ -791,17 +877,23 @@ export class WorkOrderFormComponent implements OnInit {
     this.pickedSystems.update((list) => list.filter((s) => s.id !== id));
   }
 
-  closeWorkOrder() {
+  openCloseOperationalDialog() {
     if (!this.closeAllowed()) {
       this.notificationService.error(
         'Registre el inicio de detención (inicio del trabajo) antes de cerrar la OT.',
       );
       return;
     }
-    if (this.otForm.invalid || !this.otId || this.mode === 'READONLY') {
-      this.otForm.markAllAsTouched();
-      return;
-    }
+    if (!this.otId || this.mode === 'READONLY') return;
+    this.closeOtDialog()?.nativeElement.showModal();
+  }
+
+  closeCloseOperationalDialog() {
+    this.closeOtDialog()?.nativeElement.close();
+  }
+
+  closeWorkOrderAfterOperationalAnswer(equipmentOperational: boolean) {
+    this.closeCloseOperationalDialog();
     const wh = String(this.otForm.get('warehouseId')?.value ?? '').trim();
     const linked = this.partsForCloseCheck();
     if (linked.length > 0 && !wh) {
@@ -811,16 +903,96 @@ export class WorkOrderFormComponent implements OnInit {
       this.tab.set('datos');
       return;
     }
-    this.workOrdersService.updateStatus(this.otId, 'CLOSED', wh || undefined).subscribe({
-      next: () => {
-        this.notificationService.success('OT cerrada.');
-        this.router.navigate(['/app/ots']);
-      },
-      error: (err) =>
-        this.notificationService.error(
-          err.error?.message || 'No se pudo cerrar la OT',
-        ),
+    if (!this.otId) return;
+    this.workOrdersService
+      .updateStatus(this.otId, 'CLOSED', wh || undefined, equipmentOperational)
+      .subscribe({
+        next: () => {
+          this.notificationService.success('OT cerrada.');
+          this.router.navigate(['/app/ots']);
+        },
+        error: (err) =>
+          this.notificationService.error(
+            err.error?.message || 'No se pudo cerrar la OT',
+          ),
+      });
+  }
+
+  toggleParticipantUser(uid: string, checked: boolean) {
+    this.participantIds.update((ids) => {
+      const s = new Set(ids);
+      if (checked) s.add(uid);
+      else s.delete(uid);
+      return [...s];
     });
+  }
+
+  participantChecked(uid: string): boolean {
+    return this.participantIds().includes(uid);
+  }
+
+  openParticipantsModal() {
+    if (this.assignableUsers().length === 0) {
+      this.usersService.getAssignableForOt().subscribe({
+        next: (list) => {
+          this.assignableUsers.set(list);
+          queueMicrotask(() =>
+            this.participantsDialog()?.nativeElement.showModal(),
+          );
+        },
+        error: () =>
+          this.notificationService.error('No se pudo cargar el listado de usuarios.'),
+      });
+      return;
+    }
+    this.participantsDialog()?.nativeElement.showModal();
+  }
+
+  closeParticipantsModal() {
+    this.participantsDialog()?.nativeElement.close();
+  }
+
+  openSupervisorModal() {
+    if (this.assignableUsers().length === 0) {
+      this.usersService.getAssignableForOt().subscribe({
+        next: (list) => {
+          this.assignableUsers.set(list);
+          queueMicrotask(() =>
+            this.supervisorDialog()?.nativeElement.showModal(),
+          );
+        },
+        error: () =>
+          this.notificationService.error('No se pudo cargar el listado de usuarios.'),
+      });
+      return;
+    }
+    this.supervisorDialog()?.nativeElement.showModal();
+  }
+
+  closeSupervisorModal() {
+    this.supervisorDialog()?.nativeElement.close();
+  }
+
+  pickSupervisor(u: User) {
+    this.otForm.patchValue({
+      shiftSupervisorUserId: u.id,
+      shiftSupervisorName: u.name,
+    });
+    this.closeSupervisorModal();
+  }
+
+  supervisorLabel(): string {
+    const id = String(
+      this.otForm.get('shiftSupervisorUserId')?.value ?? '',
+    ).trim();
+    if (!id) return '';
+    const u = this.assignableUsers().find((x) => x.id === id);
+    return u ? `${u.name}` : id;
+  }
+
+  participantDisplayName(uid: string): string {
+    const u = this.assignableUsers().find((x) => x.id === uid);
+    return u?.name ?? uid;
   }
 
   addBacklogRow() {

@@ -35,6 +35,11 @@ export class UsersService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/users`;
 
+  /** Mecánicos y supervisores activos del tenant (OT: participantes / supervisor de turno). */
+  getAssignableForOt(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/assignable-for-ot`);
+  }
+
   getUsers(page: number = 1, limit: number = 10): Observable<PaginatedUsers> {
     const params = new HttpParams()
       .set('page', page.toString())

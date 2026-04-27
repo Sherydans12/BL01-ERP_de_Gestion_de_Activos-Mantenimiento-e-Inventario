@@ -156,9 +156,15 @@
                   title="Ver ficha y analítica del activo"
                 >
                   <div
-                    class="font-bold text-main text-base group-hover:text-primary transition-colors"
+                    class="font-bold text-main text-base group-hover:text-primary transition-colors flex flex-wrap items-center gap-2"
                   >
                     {{ eq.internalId }}
+                    @if (eq.isOperational === false) {
+                      <span
+                        class="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-mono uppercase text-warning"
+                        >Fuera de servicio</span
+                      >
+                    }
                   </div>
                   <div class="text-xs text-muted uppercase">
                     {{ eq.brand }} {{ eq.model }}

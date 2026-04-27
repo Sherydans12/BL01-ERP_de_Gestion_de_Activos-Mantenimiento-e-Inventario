@@ -90,7 +90,12 @@ export class WorkOrdersController {
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
-    @Body() body: { status: string; warehouseId?: string },
+    @Body()
+    body: {
+      status: string;
+      warehouseId?: string;
+      closureEquipmentOperational?: boolean;
+    },
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
   ) {

@@ -54,6 +54,11 @@ model Equipment {
   mechanicalCertExp     DateTime?   @map("mechanical_cert_exp") @db.Date
   liabilityPolicyExp    DateTime?   @map("liability_policy_exp") @db.Date
 
+  /** False cuando hay OT abierta/en curso que declara fuera de servicio al equipo. */
+  isOperational         Boolean     @default(true) @map("is_operational")
+  /** Horas acumuladas de indisponibilidad atribuibles a OT (detención con impacto disponibilidad). */
+  cumulativeDowntimeHours Decimal @default(0) @map("cumulative_downtime_hours") @db.Decimal(14, 4)
+
   // Auditoría
   createdAt             DateTime    @default(now()) @map("created_at")
   updatedAt             DateTime    @updatedAt @map("updated_at")
@@ -112,6 +117,8 @@ enum CatalogCategory {
 model WorkOrder {
   id                String            @id @default(uuid()) @db.Uuid
   tenantId          String            @map("tenant_id") @db.Uuid
+  /** Usuario que registró la OT (auditoría). */
+  createdByUserId   String?           @map("created_by_user_id") @db.Uuid
   subcontractId     String?           @map("subcontract_id") @db.Uuid
   warehouseId       String?           @map("warehouse_id") @db.Uuid // Bodega de consumo (Integración Fase C)
   correlative       String            @db.VarChar(30)
@@ -161,6 +168,10 @@ model WorkOrder {
   workPerformedDescription    String? @map("work_performed_description") @db.Text
 
   techniciansNames               String? @map("technicians_names") @db.Text
+  /** IDs de usuarios (mecánicos) asociados como participantes. */
+  participantUserIds             String[] @default([]) @map("participant_user_ids")
+  /** Usuario supervisor elegido para validación de turno. */
+  shiftSupervisorUserId          String? @map("shift_supervisor_user_id") @db.Uuid
   responsibleMechanicName        String? @map("responsible_mechanic_name") @db.VarChar(150)
   responsibleMechanicSignature    String? @map("responsible_mechanic_signature") @db.VarChar(255)
   shiftSupervisorName             String? @map("shift_supervisor_name") @db.VarChar(150)
@@ -169,6 +180,11 @@ model WorkOrder {
   /** Ciclo PM 1–4 cuando aplica */
   pmCycleNumber Int? @map("pm_cycle_number")
 
+  /** Primer paso a EN_CURSO (auditoría). */
+  inProgressAt      DateTime?         @map("in_progress_at")
+  /** Respuesta al cierre: equipo quedó operativo sí/no. */
+  closureEquipmentOperational Boolean? @map("closure_equipment_operational")
+
   // Auditoría
   createdAt         DateTime          @default(now()) @map("created_at")
   syncedAt          DateTime?         @map("synced_at")
@@ -176,6 +192,8 @@ model WorkOrder {
 
   // Relaciones
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser     User?             @relation("WorkOrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  shiftSupervisorUser User?           @relation("WorkOrderShiftSupervisor", fields: [shiftSupervisorUserId], references: [id], onDelete: SetNull)
   subcontract       Subcontract?      @relation(fields: [subcontractId], references: [id], onDelete: SetNull)
   equipment         Equipment         @relation(fields: [equipmentId], references: [id])
   warehouse         Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
@@ -236,6 +254,7 @@ enum OtCategory {
   PROGRAMADA
   NO_PROGRAMADA_CORRECTIVA
   NO_PROGRAMADA_REACTIVA
+  NO_PROGRAMADA_PREVENTIVO
 }
 
 enum MeterType {
@@ -516,6 +535,8 @@ model User {
   purchaseDocumentsUploaded PurchaseDocument[]
   authAuditLogs            AuthAuditLog[]
   sessions                 UserSession[]
+  workOrdersCreated        WorkOrder[]           @relation("WorkOrderCreatedBy")
+  workOrdersSupervised     WorkOrder[]           @relation("WorkOrderShiftSupervisor")
 
   @@unique([tenantId, rut])
   @@map("users")

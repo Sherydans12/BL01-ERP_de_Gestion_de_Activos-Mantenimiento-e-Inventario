@@ -315,8 +315,8 @@
           Condiciones y clasificación
         </h3>
         <div>
-          <span class="block text-xs text-muted mb-2">Afecta disponibilidad</span>
-          <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Afecta disponibilidad">
+          <span class="block text-xs text-muted mb-2">Disponibilidad del equipo <span class="text-red-400">*</span></span>
+          <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Disponibilidad del equipo">
             @for (opt of availabilityOptions; track opt.v) {
               <button
                 type="button"
@@ -333,21 +333,41 @@
         </div>
 
         <div>
-          <span class="block text-xs text-muted mb-2">Tipo de OT (multi) <span class="text-red-400">*</span></span>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            @for (c of classificationOptions; track c.id) {
+          <span class="block text-xs text-muted mb-2">Tipo de OT <span class="text-red-400">*</span></span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            @for (c of otKindOptions; track c.id) {
               <button
                 type="button"
-                role="checkbox"
-                [attr.aria-checked]="isTagChecked(c.id)"
-                (click)="toggleClassification(c.id, !isTagChecked(c.id))"
+                role="radio"
+                [attr.aria-checked]="otForm.get('otKind')?.value === c.id"
+                (click)="otForm.patchValue({ otKind: c.id }); otForm.get('otKind')?.markAsTouched()"
                 class="tpm-choice-chip"
-                [class.tpm-choice-chip--active]="isTagChecked(c.id)"
+                [class.tpm-choice-chip--active]="otForm.get('otKind')?.value === c.id"
               >
                 {{ c.label }}
               </button>
             }
           </div>
+          @if (otForm.get('otKind')?.value === 'NO_PROGRAMADA') {
+            <p class="text-[11px] text-muted mt-2 mb-1">Clasificación mantenimiento (no programada)</p>
+            <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Preventivo o correctivo">
+              @for (s of noPlanSubtypeOptions; track s.id) {
+                <button
+                  type="button"
+                  role="radio"
+                  [attr.aria-checked]="otForm.get('noPlanSubtype')?.value === s.id"
+                  (click)="otForm.patchValue({ noPlanSubtype: s.id })"
+                  class="tpm-choice-chip tpm-choice-chip--inline"
+                  [class.tpm-choice-chip--active]="otForm.get('noPlanSubtype')?.value === s.id"
+                >
+                  {{ s.label }}
+                </button>
+              }
+            </div>
+          }
+          @if (otForm.get('otKind')?.value === 'PROGRAMADA') {
+            <p class="text-[11px] text-muted mt-2">La OT programada se registra como mantenimiento <span class="text-main font-medium">preventivo</span>.</p>
+          }
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -369,6 +389,69 @@
         <p class="text-[11px] text-muted mt-2">
           HM y HH se calculan al cerrar la OT a partir de la ventana de detención y la cantidad de personal.
         </p>
+      </section>
+
+      <!-- Personal (debajo de condiciones) -->
+      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
+          Personal y validaciones
+        </h3>
+        <div class="max-w-xs">
+          <label class="block text-xs text-muted mb-1">Cantidad de personal <span class="text-red-400">*</span></label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            formControlName="personnelQuantity"
+            class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
+          />
+          <p class="text-[10px] text-muted mt-1">Usada para HH = HM × personal al cerrar.</p>
+        </div>
+        <div>
+          <span class="block text-xs text-muted mb-2">Técnicos participantes</span>
+          <div class="flex flex-wrap gap-2 min-h-[2rem]">
+            @for (uid of participantIds(); track uid) {
+              <span class="inline-flex items-center rounded-lg border border-border bg-dark/40 px-2 py-1 text-xs text-main">
+                {{ participantDisplayName(uid) }}
+              </span>
+            } @empty {
+              <span class="text-xs text-muted">Ninguno seleccionado.</span>
+            }
+          </div>
+          @if (mode !== "READONLY") {
+            <button type="button" (click)="openParticipantsModal()" class="mt-2 text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10">
+              Elegir participantes…
+            </button>
+          }
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-muted mb-1">Mecánico responsable <span class="text-red-400">*</span></label>
+            <input formControlName="responsibleMechanicName" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary uppercase" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Firma / nombre mecánico</label>
+            <input formControlName="responsibleMechanicSignature" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-muted mb-1">Validación jefe de turno (supervisor)</label>
+            @if (supervisorLabel()) {
+              <p class="text-sm text-main mb-2">{{ supervisorLabel() }}</p>
+            } @else {
+              <p class="text-xs text-muted mb-2">Ninguno seleccionado.</p>
+            }
+            @if (mode !== "READONLY") {
+              <button type="button" (click)="openSupervisorModal()" class="text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10">
+                Elegir supervisor…
+              </button>
+            }
+            <input type="hidden" formControlName="shiftSupervisorUserId" />
+          </div>
+          <div>
+            <label class="block text-xs text-muted mb-1">Firma supervisor (opcional)</label>
+            <input formControlName="shiftSupervisorSignature" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
+          </div>
+        </div>
       </section>
 
       <!-- Diagnóstico -->
@@ -404,7 +487,7 @@
         </div>
 
         <div>
-          <label class="block text-xs text-muted mb-1">Síntomas</label>
+          <label class="block text-xs text-muted mb-1">Síntomas <span class="text-red-400">*</span></label>
           <textarea formControlName="symptomsText" rows="2" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"></textarea>
         </div>
         <div>
@@ -559,46 +642,6 @@
         </div>
       </details>
 
-      <!-- Personal -->
-      <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
-        <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
-          Personal y validaciones
-        </h3>
-        <div class="max-w-xs">
-          <label class="block text-xs text-muted mb-1">Cantidad de personal <span class="text-red-400">*</span></label>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            formControlName="personnelQuantity"
-            class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
-          />
-          <p class="text-[10px] text-muted mt-1">Usada para HH = HM × personal al cerrar.</p>
-        </div>
-        <div>
-          <label class="block text-xs text-muted mb-1">Técnicos participantes</label>
-          <textarea formControlName="techniciansNames" rows="2" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none" placeholder="Nombres separados por coma"></textarea>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs text-muted mb-1">Mecánico responsable <span class="text-red-400">*</span></label>
-            <input formControlName="responsibleMechanicName" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary uppercase" />
-          </div>
-          <div>
-            <label class="block text-xs text-muted mb-1">Firma / nombre mecánico</label>
-            <input formControlName="responsibleMechanicSignature" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label class="block text-xs text-muted mb-1">Validación jefe de turno — nombre</label>
-            <input formControlName="shiftSupervisorName" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label class="block text-xs text-muted mb-1">Validación jefe de turno — firma</label>
-            <input formControlName="shiftSupervisorSignature" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary" />
-          </div>
-        </div>
-      </section>
-
       <div
         class="flex flex-wrap justify-end items-center gap-3 pt-5 mt-2 border-t border-border"
       >
@@ -610,7 +653,7 @@
           @if (mode === "EDITING" && otId) {
             <button
               type="button"
-              (click)="closeWorkOrder()"
+              (click)="openCloseOperationalDialog()"
               class="ot-btn-outline"
               [disabled]="!closeAllowed()"
               [attr.title]="!closeAllowed() ? 'Registre el inicio de detención antes de cerrar' : null"
@@ -870,6 +913,91 @@
               Ya agregó todos los sistemas disponibles.
             }
           </p>
+        }
+      </div>
+    </div>
+  </dialog>
+
+  <dialog
+    #closeOtDialog
+    class="ot-catalog-systems-dialog"
+    (click)="$event.target === $event.currentTarget && closeCloseOperationalDialog()"
+    (cancel)="closeCloseOperationalDialog()"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-xl w-[min(96vw,24rem)] p-5"
+      (click)="$event.stopPropagation()"
+    >
+      <h4 class="text-sm font-mono text-primary uppercase tracking-wide mb-2">Cerrar OT</h4>
+      <p class="text-sm text-main mb-4">¿El equipo quedó <span class="text-primary">operativo</span> al finalizar el trabajo?</p>
+      <div class="flex flex-wrap justify-end gap-2">
+        <button type="button" (click)="closeCloseOperationalDialog()" class="ot-btn-ghost">Cancelar</button>
+        <button type="button" (click)="closeWorkOrderAfterOperationalAnswer(false)" class="ot-btn-outline">No operativo</button>
+        <button type="button" (click)="closeWorkOrderAfterOperationalAnswer(true)" class="ot-btn-primary">Sí, operativo</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog
+    #participantsDialog
+    class="ot-catalog-systems-dialog"
+    (click)="$event.target === $event.currentTarget && closeParticipantsModal()"
+    (cancel)="closeParticipantsModal()"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-xl max-h-[min(80vh,28rem)] w-[min(96vw,26rem)] flex flex-col overflow-hidden"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="px-4 py-3 border-b border-border flex justify-between items-center">
+        <h4 class="text-sm font-mono text-primary uppercase">Participantes (mecánicos)</h4>
+        <button type="button" class="text-muted hover:text-main" (click)="closeParticipantsModal()" aria-label="Cerrar">×</button>
+      </header>
+      <div class="overflow-y-auto p-3 space-y-2">
+        @for (u of mechanicsForPick(); track u.id) {
+          <label class="flex items-center gap-3 rounded-lg border border-border px-3 py-2 cursor-pointer hover:border-primary/40">
+            <input
+              type="checkbox"
+              [checked]="participantChecked(u.id)"
+              (change)="toggleParticipantUser(u.id, $any($event.target).checked)"
+            />
+            <span class="text-sm text-main">{{ u.name }}</span>
+          </label>
+        } @empty {
+          <p class="text-xs text-muted">No hay usuarios con rol mecánico en el tenant.</p>
+        }
+      </div>
+      <footer class="px-4 py-3 border-t border-border flex justify-end">
+        <button type="button" (click)="closeParticipantsModal()" class="ot-btn-primary ot-btn--compact">Listo</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <dialog
+    #supervisorDialog
+    class="ot-catalog-systems-dialog"
+    (click)="$event.target === $event.currentTarget && closeSupervisorModal()"
+    (cancel)="closeSupervisorModal()"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-xl max-h-[min(80vh,28rem)] w-[min(96vw,26rem)] flex flex-col overflow-hidden"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="px-4 py-3 border-b border-border flex justify-between items-center">
+        <h4 class="text-sm font-mono text-primary uppercase">Supervisor de turno</h4>
+        <button type="button" class="text-muted hover:text-main" (click)="closeSupervisorModal()" aria-label="Cerrar">×</button>
+      </header>
+      <div class="overflow-y-auto p-2">
+        @for (u of supervisorsForPick(); track u.id) {
+          <button
+            type="button"
+            (click)="pickSupervisor(u)"
+            class="w-full text-left px-3 py-2 rounded-lg border border-transparent hover:border-primary/40 hover:bg-primary/5 mb-1"
+          >
+            <span class="text-sm text-main">{{ u.name }}</span>
+            <span class="block text-[10px] text-muted">{{ u.email }}</span>
+          </button>
+        } @empty {
+          <p class="text-xs text-muted px-2 py-4">No hay supervisores activos.</p>
         }
       </div>
     </div>

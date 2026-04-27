@@ -1,9 +1,12 @@
 import {
   InternalServerErrorException,
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EmailService } from '../../common/email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   Prisma,
@@ -124,24 +127,48 @@ function nearestLegalDocAlert(
   return { daysRemaining: bestDays, docLabel: bestLabel };
 }
 
-function deriveCategoryFromTags(tags: string[] | undefined): OtCategory {
-  const t = tags ?? [];
-  if (t.includes('PROGRAMADA')) return 'PROGRAMADA';
-  if (t.includes('NO_PROGRAMADA')) return 'NO_PROGRAMADA_CORRECTIVA';
-  return 'NO_PROGRAMADA_REACTIVA';
+/** Derivación única de categoría / mantenimiento desde chips del formulario (un solo tipo + subtipo NP). */
+function deriveCategoryMaintenanceFromTags(tags: string[] | undefined): {
+  category: OtCategory;
+  maintenanceType: MaintenanceType;
+} {
+  const t = new Set(tags ?? []);
+  if (t.has('POSIBLE_GARANTIA')) {
+    return {
+      category: 'NO_PROGRAMADA_CORRECTIVA',
+      maintenanceType: 'PREVENTIVO',
+    };
+  }
+  if (t.has('PROGRAMADA')) {
+    return { category: 'PROGRAMADA', maintenanceType: 'PREVENTIVO' };
+  }
+  if (t.has('NO_PROGRAMADA')) {
+    if (t.has('NP_PREVENTIVO')) {
+      return {
+        category: 'NO_PROGRAMADA_PREVENTIVO',
+        maintenanceType: 'PREVENTIVO',
+      };
+    }
+    return {
+      category: 'NO_PROGRAMADA_CORRECTIVA',
+      maintenanceType: 'CORRECTIVO',
+    };
+  }
+  if (t.has('ACCIDENTE_INCIDENTE')) {
+    return {
+      category: 'NO_PROGRAMADA_CORRECTIVA',
+      maintenanceType: 'CORRECTIVO',
+    };
+  }
+  return {
+    category: 'NO_PROGRAMADA_REACTIVA',
+    maintenanceType: 'CORRECTIVO',
+  };
 }
 
 function deriveOtTypeFromTags(tags: string[] | undefined): OtType {
   if ((tags ?? []).includes('OT_ABIERTA_CONTINUIDAD')) return 'CONTINUIDAD';
   return 'NUEVA';
-}
-
-function deriveMaintenanceTypeFromTags(
-  tags: string[] | undefined,
-): MaintenanceType {
-  return (tags ?? []).includes('ACCIDENTE_INCIDENTE')
-    ? 'CORRECTIVO'
-    : 'PREVENTIVO';
 }
 
 interface CreateWorkOrderDto {
@@ -152,7 +179,8 @@ interface CreateWorkOrderDto {
   category?:
     | 'PROGRAMADA'
     | 'NO_PROGRAMADA_CORRECTIVA'
-    | 'NO_PROGRAMADA_REACTIVA';
+    | 'NO_PROGRAMADA_REACTIVA'
+    | 'NO_PROGRAMADA_PREVENTIVO';
   maintenanceType?: 'PREVENTIVO' | 'CORRECTIVO';
   /** Si no viene, usa detención o lanza validación */
   initialMeter?: number;
@@ -202,6 +230,8 @@ interface CreateWorkOrderDto {
   responsibleMechanicSignature?: string;
   shiftSupervisorName?: string;
   shiftSupervisorSignature?: string;
+  participantUserIds?: string[];
+  shiftSupervisorUserId?: string | null;
   pmCycleNumber?: number;
   fluidCompartments?: {
     compartment: FluidCompartment;
@@ -242,6 +272,8 @@ export interface UpdateWorkOrderDto {
   responsibleMechanicSignature?: string | null;
   shiftSupervisorName?: string | null;
   shiftSupervisorSignature?: string | null;
+  participantUserIds?: string[] | null;
+  shiftSupervisorUserId?: string | null;
   pmCycleNumber?: number | null;
   responsible?: string | null;
   initialMeter?: number | null;
@@ -250,7 +282,8 @@ export interface UpdateWorkOrderDto {
   category?:
     | 'PROGRAMADA'
     | 'NO_PROGRAMADA_CORRECTIVA'
-    | 'NO_PROGRAMADA_REACTIVA';
+    | 'NO_PROGRAMADA_REACTIVA'
+    | 'NO_PROGRAMADA_PREVENTIVO';
   type?: 'NUEVA' | 'CONTINUIDAD';
   systems?: string[];
   fluids?: { fluidId: string; liters: number; action: 'RELLENO' | 'CAMBIO' }[];
@@ -280,7 +313,42 @@ export interface UpdateWorkOrderDto {
 export class WorkOrdersService {
   private readonly logger = new Logger(WorkOrdersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+    private readonly config: ConfigService,
+  ) {}
+
+  private async notifyWarrantyStakeholders(params: {
+    correlative: string;
+    equipmentLabel: string;
+    tenantName?: string;
+  }) {
+    const raw =
+      this.config.get<string>('WARRANTY_NOTIFY_EMAILS')?.trim() ?? '';
+    const recipients = raw
+      .split(/[,;\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.includes('@'));
+    if (recipients.length === 0) {
+      this.logger.warn(
+        'WARRANTY_NOTIFY_EMAILS no configurado; no se envía aviso de garantía.',
+      );
+      return;
+    }
+    try {
+      await this.emailService.sendMail({
+        to: recipients,
+        subject: `[TPM] Solicitud de garantía · ${params.correlative}`,
+        html: `<p>Se cerró una OT marcada como <strong>posible garantía</strong>.</p>
+<p><strong>OT:</strong> ${params.correlative}<br/>
+<strong>Equipo:</strong> ${params.equipmentLabel}</p>
+<p>${params.tenantName ? `Tenant: ${params.tenantName}<br/>` : ''}</p>`,
+      });
+    } catch (e) {
+      this.logger.error('Fallo envío correo garantía:', e);
+    }
+  }
 
   /** Filtro de equipo por contrato activo / permisos de usuario (OT y backlog). */
   private equipmentAccessWhere(
@@ -366,10 +434,23 @@ export class WorkOrdersService {
 
       const tags = dto.classificationTags ?? [];
       const derivedType = dto.type ?? deriveOtTypeFromTags(tags);
-      const derivedCategory = dto.category ?? deriveCategoryFromTags(tags);
-      const derivedMaintenanceType =
-        dto.maintenanceType ??
-        (tags.includes('ACCIDENTE_INCIDENTE') ? 'CORRECTIVO' : 'PREVENTIVO');
+      const cm = deriveCategoryMaintenanceFromTags(tags);
+      const derivedCategory = dto.category ?? cm.category;
+      const derivedMaintenanceType = dto.maintenanceType ?? cm.maintenanceType;
+
+      if (dto.affectsAvailability == null) {
+        throw new BadRequestException(
+          'Indique si el equipo queda operativo o fuera de servicio (afecta disponibilidad).',
+        );
+      }
+      if (!(dto.systems && dto.systems.length > 0)) {
+        throw new BadRequestException(
+          'Debe seleccionar al menos un sistema intervenido.',
+        );
+      }
+      if (!(dto.symptomsText ?? '').toString().trim()) {
+        throw new BadRequestException('El campo síntomas es obligatorio.');
+      }
 
       const ini = Number(dto.detentionInitialMeter ?? dto.initialMeter ?? NaN);
       const finRaw = dto.detentionFinalMeter ?? dto.finalMeter;
@@ -417,6 +498,41 @@ export class WorkOrdersService {
       const parseOptDate = (s?: string) =>
         s && String(s).trim() ? new Date(s) : undefined;
 
+      const creatorId =
+        typeof user?.sub === 'string'
+          ? user.sub
+          : typeof user?.id === 'string'
+            ? user.id
+            : undefined;
+
+      const participantIds = (dto.participantUserIds ?? []).filter(Boolean);
+      if (participantIds.length > 0) {
+        const cnt = await this.prisma.user.count({
+          where: { tenantId, id: { in: participantIds }, isActive: true },
+        });
+        if (cnt !== participantIds.length) {
+          throw new BadRequestException(
+            'Uno o más participantes no son usuarios válidos del tenant.',
+          );
+        }
+      }
+
+      if (dto.shiftSupervisorUserId) {
+        const sup = await this.prisma.user.findFirst({
+          where: {
+            id: dto.shiftSupervisorUserId,
+            tenantId,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        if (!sup) {
+          throw new BadRequestException(
+            'El supervisor de turno seleccionado no es válido.',
+          );
+        }
+      }
+
       // 1. Generar correlativo
       const year = new Date().getFullYear();
       const count = await this.prisma.workOrder.count({ where: { tenantId } });
@@ -427,6 +543,7 @@ export class WorkOrdersService {
         const workOrder = await tx.workOrder.create({
           data: {
             tenantId,
+            createdByUserId: creatorId ?? null,
             subcontractId: equipment.subcontractId,
             warehouseId: dto.warehouseId || null,
             correlative,
@@ -482,6 +599,8 @@ export class WorkOrdersService {
             shiftSupervisorName: dto.shiftSupervisorName?.trim() || null,
             shiftSupervisorSignature:
               dto.shiftSupervisorSignature?.trim() || null,
+            participantUserIds: participantIds,
+            shiftSupervisorUserId: dto.shiftSupervisorUserId ?? null,
             pmCycleNumber:
               dto.pmCycleNumber != null
                 ? Math.min(4, Math.max(1, Math.trunc(dto.pmCycleNumber)))
@@ -1152,6 +1271,15 @@ export class WorkOrdersService {
       throw new BadRequestException('No se puede editar una OT cerrada.');
     }
 
+    if (
+      user.role === 'MECHANIC' &&
+      (existing.status === 'IN_PROGRESS' || existing.status === 'ON_HOLD')
+    ) {
+      throw new ForbiddenException(
+        'En OT en curso o en pausa solo un supervisor o administrador puede modificar el formulario.',
+      );
+    }
+
     const parseOptDate = (s?: string | null) =>
       s && String(s).trim() ? new Date(s) : null;
 
@@ -1217,9 +1345,10 @@ export class WorkOrdersService {
         if (dto.classificationTags !== undefined) {
           data.classificationTags = dto.classificationTags;
           const tags = dto.classificationTags ?? [];
-          data.category = deriveCategoryFromTags(tags);
+          const cm = deriveCategoryMaintenanceFromTags(tags);
+          data.category = cm.category;
+          data.maintenanceType = cm.maintenanceType;
           data.type = deriveOtTypeFromTags(tags);
-          data.maintenanceType = deriveMaintenanceTypeFromTags(tags);
         }
         if (dto.workLocation !== undefined) {
           data.workLocation = dto.workLocation;
@@ -1271,6 +1400,45 @@ export class WorkOrdersService {
         }
         if (dto.shiftSupervisorSignature !== undefined) {
           data.shiftSupervisorSignature = dto.shiftSupervisorSignature;
+        }
+        if (dto.participantUserIds !== undefined) {
+          const p = dto.participantUserIds ?? [];
+          if (p.length > 0) {
+            const cnt = await tx.user.count({
+              where: {
+                tenantId: user.tenantId,
+                id: { in: p },
+                isActive: true,
+              },
+            });
+            if (cnt !== p.length) {
+              throw new BadRequestException(
+                'Uno o más participantes no son usuarios válidos del tenant.',
+              );
+            }
+          }
+          data.participantUserIds = { set: p };
+        }
+        if (dto.shiftSupervisorUserId !== undefined) {
+          const sid = dto.shiftSupervisorUserId;
+          if (sid) {
+            const sup = await tx.user.findFirst({
+              where: {
+                id: sid,
+                tenantId: user.tenantId,
+                isActive: true,
+              },
+              select: { id: true },
+            });
+            if (!sup) {
+              throw new BadRequestException(
+                'El supervisor de turno seleccionado no es válido.',
+              );
+            }
+          }
+          data.shiftSupervisorUser = sid
+            ? { connect: { id: sid } }
+            : { disconnect: true };
         }
         if (dto.pmCycleNumber !== undefined) {
           data.pmCycleNumber =
@@ -1479,6 +1647,7 @@ export class WorkOrdersService {
     } catch (error) {
       this.logger.error('Error at WorkOrdersService.update:', error);
       if (error instanceof BadRequestException) throw error;
+      if (error instanceof ForbiddenException) throw error;
       throw new InternalServerErrorException('Error al actualizar la OT');
     }
   }
@@ -1610,18 +1779,22 @@ export class WorkOrdersService {
   async updateStatus(
     user: any,
     id: string,
-    body: { status: string; warehouseId?: string },
+    body: {
+      status: string;
+      warehouseId?: string;
+      closureEquipmentOperational?: boolean;
+    },
     activeContract?: string,
   ) {
     const tenantId = user.tenantId;
-    const { status, warehouseId } = body;
+    const { status, warehouseId, closureEquipmentOperational } = body;
     const where = this.workOrderAccessWhere(user, id, activeContract);
 
     const userId = user.id || user.sub;
 
     try {
       if (status === 'CLOSED') {
-        return await this.prisma.$transaction(
+        const closedWo = await this.prisma.$transaction(
           async (tx: any) => {
             const workOrder = await tx.workOrder.findFirst({
               where,
@@ -1727,11 +1900,21 @@ export class WorkOrdersService {
               );
             }
 
+            if (
+              closureEquipmentOperational !== true &&
+              closureEquipmentOperational !== false
+            ) {
+              throw new BadRequestException(
+                'Debe indicar si el equipo quedó operativo al cerrar la OT.',
+              );
+            }
+
             const updateData: any = {
               status: 'CLOSED',
               closedAt: new Date(),
               metricHm: new Prisma.Decimal(String(hmHours.toFixed(4))),
               metricHh: new Prisma.Decimal(String(hhHours.toFixed(4))),
+              closureEquipmentOperational,
             };
             if (effectiveWarehouseId && !workOrder.warehouseId) {
               updateData.warehouseId = effectiveWarehouseId;
@@ -1892,6 +2075,20 @@ export class WorkOrdersService {
               where: { workOrderId: workOrder.id },
             });
 
+            await tx.equipment.update({
+              where: { id: workOrder.equipmentId },
+              data: {
+                isOperational: closureEquipmentOperational === true,
+                ...(workOrder.affectsAvailability === 'SI'
+                  ? {
+                      cumulativeDowntimeHours: {
+                        increment: hmHours,
+                      },
+                    }
+                  : {}),
+              },
+            });
+
             return updatedOt;
           },
           {
@@ -1900,18 +2097,64 @@ export class WorkOrdersService {
             timeout: 60_000,
           },
         );
+
+        const meta = await this.prisma.workOrder.findFirst({
+          where: { id, tenantId },
+          select: {
+            correlative: true,
+            classificationTags: true,
+            equipment: {
+              select: { internalId: true, brand: true, model: true },
+            },
+          },
+        });
+        const tenantRow = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true },
+        });
+        if (meta?.classificationTags?.includes('POSIBLE_GARANTIA')) {
+          const eq = meta.equipment;
+          await this.notifyWarrantyStakeholders({
+            correlative: meta.correlative,
+            equipmentLabel: eq
+              ? `${eq.internalId} · ${eq.brand} ${eq.model}`
+              : '—',
+            tenantName: tenantRow?.name,
+          });
+        }
+
+        return closedWo;
       } else {
         const existing = await this.prisma.workOrder.findFirst({ where });
         if (!existing) throw new BadRequestException('Orden no encontrada');
 
-        return await this.prisma.workOrder.update({
+        const data: Record<string, unknown> = { status };
+        if (status === 'IN_PROGRESS' && existing.status !== 'IN_PROGRESS') {
+          data.inProgressAt = existing.inProgressAt ?? new Date();
+        }
+
+        const updated = await this.prisma.workOrder.update({
           where: { id },
-          data: { status: status as any },
+          data: data as any,
         });
+
+        if (
+          status === 'IN_PROGRESS' &&
+          existing.status !== 'IN_PROGRESS' &&
+          existing.affectsAvailability === 'SI'
+        ) {
+          await this.prisma.equipment.update({
+            where: { id: existing.equipmentId },
+            data: { isOperational: false },
+          });
+        }
+
+        return updated;
       }
     } catch (error) {
       this.logger.error('Error at WorkOrdersService.updateStatus:', error);
       if (error instanceof BadRequestException) throw error;
+      if (error instanceof ForbiddenException) throw error;
       throw new InternalServerErrorException(
         'Error al actualizar estado de la OT',
       );

@@ -17,10 +17,12 @@ export type FluidCompartment =
   | 'REFRIGERANTE'
   | 'OTROS';
 
-/** Tags multi-selección alineados al backend */
+/** Chips de clasificación enviados al backend (tipo único + subtipo NP). */
 export type OtClassificationTag =
   | 'PROGRAMADA'
   | 'NO_PROGRAMADA'
+  | 'NP_PREVENTIVO'
+  | 'NP_CORRECTIVO'
   | 'ACCIDENTE_INCIDENTE'
   | 'OT_ABIERTA_CONTINUIDAD'
   | 'OT_ABIERTA_GEN_BCK'
@@ -72,6 +74,8 @@ export interface CreateWorkOrderExcelPayload {
   responsibleMechanicSignature?: string;
   shiftSupervisorName?: string;
   shiftSupervisorSignature?: string;
+  participantUserIds?: string[];
+  shiftSupervisorUserId?: string | null;
 
   pmCycleNumber?: number | null;
 
@@ -180,9 +184,17 @@ export class WorkOrdersService {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
   }
 
-  updateStatus(id: string, status: string, warehouseId?: string) {
-    const payload: Record<string, string> = { status };
+  updateStatus(
+    id: string,
+    status: string,
+    warehouseId?: string,
+    closureEquipmentOperational?: boolean,
+  ) {
+    const payload: Record<string, string | boolean> = { status };
     if (warehouseId) payload['warehouseId'] = warehouseId;
+    if (closureEquipmentOperational !== undefined) {
+      payload['closureEquipmentOperational'] = closureEquipmentOperational;
+    }
     return this.http.patch(`${this.apiUrl}/${id}/status`, payload);
   }
 

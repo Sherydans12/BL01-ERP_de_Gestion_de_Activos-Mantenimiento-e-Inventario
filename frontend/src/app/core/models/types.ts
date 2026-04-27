@@ -69,6 +69,10 @@ export interface Equipment {
   mechanicalCertExp?: string;
   liabilityPolicyExp?: string;
 
+  /** Indisponibilidad por OT en curso con impacto en disponibilidad (fuera de servicio). */
+  isOperational?: boolean;
+  cumulativeDowntimeHours?: string | number;
+
   // Relaciones Pobladas
   contract?: Contract; // Relación añadida para la vista 'ALL'
   subcontract?: Subcontract;
