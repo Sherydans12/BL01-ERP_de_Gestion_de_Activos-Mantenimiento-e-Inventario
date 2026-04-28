@@ -65,6 +65,18 @@ export const routes: Routes = [
             (m) => m.AdminSecurityComponent,
           ),
       },
+      {
+        path: 'admin/platform-data',
+        canActivate: [authGuard],
+        data: {
+          roles: ['SUPER_ADMIN'],
+          pageTitle: 'Datos plataforma',
+        },
+        loadComponent: () =>
+          import('./features/admin/platform-data-admin/platform-data-admin.component').then(
+            (m) => m.PlatformDataAdminComponent,
+          ),
+      },
       // Futura ruta: { path: 'flota', component: FleetMasterComponent }
       // ── Operaciones ────────────────────────────────────────────────────────
       {

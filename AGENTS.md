@@ -41,7 +41,7 @@ Fase actual descrita en el README raíz: **D — Hardening y lógica EAM**.
 
 Mantén acuerdos, glosario de negocio y notas de sesión en:
 
-**[`docs/agentes/`](docs/agentes/README.md)** — ritual memoria / paridad con claude-mem: [`docs/agentes/flujo-memoria-cursor.md`](docs/agentes/flujo-memoria-cursor.md). **Correos transaccionales y previsualización local:** [`docs/agentes/correos-transaccionales.md`](docs/agentes/correos-transaccionales.md) (`npm run email-previews` en `backend/`). **Hooks:** `.cursor/hooks.json` (memoria automática local al usar el agente en Cursor).
+**[`docs/agentes/`](docs/agentes/README.md)** — ritual memoria / paridad con claude-mem: [`docs/agentes/flujo-memoria-cursor.md`](docs/agentes/flujo-memoria-cursor.md). **Correos transaccionales y previsualización local:** [`docs/agentes/correos-transaccionales.md`](docs/agentes/correos-transaccionales.md) (`npm run email-previews` en `backend/`). **Purga de datos por tenant (solo SUPER_ADMIN):** [`docs/agentes/platform-data-admin.md`](docs/agentes/platform-data-admin.md). **Hooks:** `.cursor/hooks.json` (memoria automática local al usar el agente en Cursor).
 
 Convención sugerida:
 

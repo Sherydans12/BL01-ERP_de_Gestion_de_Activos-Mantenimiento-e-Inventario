@@ -26,6 +26,7 @@ import { InventoryAdjustmentModule } from './features/inventory-adjustment/inven
 import { InventoryTransferModule } from './features/inventory-transfer/inventory-transfer.module';
 import { WorkOrderAnalyticsModule } from './features/work-order-analytics/work-order-analytics.module';
 import { SecurityAdminModule } from './features/security-admin/security-admin.module';
+import { PlatformDataAdminModule } from './features/platform-data-admin/platform-data-admin.module';
 import { EmailModule } from './common/email/email.module';
 
 @Module({
@@ -55,6 +56,7 @@ import { EmailModule } from './common/email/email.module';
     InventoryTransferModule,
     WorkOrderAnalyticsModule,
     SecurityAdminModule,
+    PlatformDataAdminModule,
     EmailModule,
   ],
   controllers: [AppController],

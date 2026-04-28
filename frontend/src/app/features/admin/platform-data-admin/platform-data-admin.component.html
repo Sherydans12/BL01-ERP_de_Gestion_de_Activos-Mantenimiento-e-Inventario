@@ -1,0 +1,199 @@
+<div class="max-w-7xl mx-auto space-y-8 pb-12">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-main tracking-tight">Datos plataforma</h1>
+      <p class="text-sm text-muted mt-1 max-w-3xl">
+        Solo <span class="text-primary font-semibold">SUPER_ADMIN</span>. Herramientas destructivas por empresa: vaciado de
+        módulos completos (filas en base de datos). No crea ni elimina tablas. Los contratos/faenas y usuarios no se tocan desde aquí.
+      </p>
+    </div>
+    <button
+      type="button"
+      (click)="loadTenants()"
+      [disabled]="loading()"
+      class="px-4 py-2 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50 shrink-0"
+    >
+      Actualizar empresas
+    </button>
+  </div>
+
+  @if (loading() && tenants().length === 0) {
+    <p class="text-sm text-muted">Cargando empresas…</p>
+  } @else {
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div class="xl:col-span-4 rounded-2xl border border-border bg-surface overflow-hidden">
+        <div class="px-5 py-4 border-b border-border bg-dark/20">
+          <h2 class="text-sm font-semibold text-main">Empresas</h2>
+          <p class="text-xs text-muted mt-0.5">Seleccioná una fila para ver conteos y acciones.</p>
+        </div>
+        <div class="max-h-[32rem] overflow-y-auto divide-y divide-border">
+          @for (t of tenants(); track t.id) {
+            <button
+              type="button"
+              (click)="selectTenant(t.id)"
+              [ngClass]="[
+                'w-full text-left px-5 py-3 flex flex-col gap-0.5 transition-colors hover:bg-primary/5',
+                selectedTenantId() === t.id ? 'bg-primary/10' : '',
+              ]"
+            >
+              <span class="font-mono text-sm text-primary">{{ t.code }}</span>
+              <span class="text-sm text-main font-medium">{{ t.name }}</span>
+              <span class="text-xs text-muted">
+                {{ t.isActive ? 'Activa' : 'Inactiva' }}
+              </span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="xl:col-span-8 rounded-2xl border border-border bg-surface p-5 min-h-[12rem]">
+        @if (!selectedTenantId()) {
+          <p class="text-sm text-muted">Seleccioná una empresa a la izquierda.</p>
+        } @else if (summaryLoading()) {
+          <p class="text-sm text-muted">Cargando resumen…</p>
+        } @else if (summary()) {
+          <div class="space-y-6">
+            <div>
+              <h2 class="text-lg font-semibold text-main">{{ summary()!.name }}</h2>
+              <p class="text-xs font-mono text-muted">Código: {{ summary()!.code }}</p>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div class="rounded-xl border border-border p-3">
+                <p class="font-semibold text-muted uppercase tracking-wide mb-2">Compras</p>
+                <ul class="space-y-1 text-muted">
+                  <li>Docs: <span class="text-main font-mono">{{ summary()!.purchases.purchaseDocuments }}</span></li>
+                  <li>Facturas: <span class="text-main font-mono">{{ summary()!.purchases.purchaseInvoices }}</span></li>
+                  <li>Recepciones: <span class="text-main font-mono">{{ summary()!.purchases.warehouseReceipts }}</span></li>
+                  <li>OC: <span class="text-main font-mono">{{ summary()!.purchases.purchaseOrders }}</span></li>
+                  <li>Cotiz.: <span class="text-main font-mono">{{ summary()!.purchases.purchaseQuotations }}</span></li>
+                  <li>REQ: <span class="text-main font-mono">{{ summary()!.purchases.purchaseRequisitions }}</span></li>
+                  <li>Prov.: <span class="text-main font-mono">{{ summary()!.purchases.vendors }}</span></li>
+                  <li>Políticas: <span class="text-main font-mono">{{ summary()!.purchases.approvalPolicies }}</span></li>
+                </ul>
+              </div>
+              <div class="rounded-xl border border-border p-3">
+                <p class="font-semibold text-muted uppercase tracking-wide mb-2">Inventario</p>
+                <ul class="space-y-1 text-muted">
+                  <li>Kardex: <span class="text-main font-mono">{{ summary()!.inventory.inventoryTransactions }}</span></li>
+                  <li>Transf.: <span class="text-main font-mono">{{ summary()!.inventory.inventoryTransfers }}</span></li>
+                  <li>Reservas: <span class="text-main font-mono">{{ summary()!.inventory.stockReservations }}</span></li>
+                  <li>Artículos: <span class="text-main font-mono">{{ summary()!.inventory.inventoryItems }}</span></li>
+                  <li>Bodegas: <span class="text-main font-mono">{{ summary()!.inventory.warehouses }}</span></li>
+                  <li>Categorías: <span class="text-main font-mono">{{ summary()!.inventory.itemCategories }}</span></li>
+                  <li>UOM: <span class="text-main font-mono">{{ summary()!.inventory.unitOfMeasures }}</span></li>
+                </ul>
+              </div>
+              <div class="rounded-xl border border-border p-3">
+                <p class="font-semibold text-muted uppercase tracking-wide mb-2">Operaciones</p>
+                <ul class="space-y-1 text-muted">
+                  <li>OT: <span class="text-main font-mono">{{ summary()!.operations.workOrders }}</span></li>
+                  <li>Kits PM: <span class="text-main font-mono">{{ summary()!.operations.maintenanceKits }}</span></li>
+                  <li>Catálogo: <span class="text-main font-mono">{{ summary()!.operations.catalogItems }}</span></li>
+                  <li>Equipos: <span class="text-main font-mono">{{ summary()!.operations.equipments }}</span></li>
+                  <li>Contratos: <span class="text-main font-mono">{{ summary()!.operations.contracts }}</span></li>
+                  <li>Subcontratos: <span class="text-main font-mono">{{ summary()!.operations.subcontracts }}</span></li>
+                </ul>
+              </div>
+              <div class="rounded-xl border border-border p-3">
+                <p class="font-semibold text-muted uppercase tracking-wide mb-2">Plataforma</p>
+                <ul class="space-y-1 text-muted">
+                  <li>Activity log: <span class="text-main font-mono">{{ summary()!.platform.activityLogs }}</span></li>
+                  <li>Push: <span class="text-main font-mono">{{ summary()!.platform.pushSubscriptions }}</span></li>
+                </ul>
+                <p class="text-muted mt-2 leading-snug">
+                  Contratos/subcontratos son solo lectura aquí; no hay purga automática de faenas.
+                </p>
+              </div>
+            </div>
+
+            <div class="space-y-4 border-t border-border pt-4">
+              <p class="text-xs font-semibold text-muted uppercase tracking-wide">Acciones destructivas</p>
+              @for (g of purgeGroups; track g.title) {
+                <div class="space-y-2">
+                  <p class="text-sm font-medium text-main">{{ g.title }}</p>
+                  <div class="flex flex-wrap gap-2">
+                    @for (a of g.actions; track a.domain) {
+                      <button
+                        type="button"
+                        (click)="openPurgeModal(a.domain)"
+                        class="px-3 py-2 rounded-lg text-xs font-semibold bg-red-500/15 text-red-300 border border-red-500/40 hover:bg-red-500/25"
+                      >
+                        {{ a.label }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+              <p class="text-xs text-muted leading-relaxed">
+                Orden sugerido para “reset” duro: compras → inventario/bodegas → OT → kits / catálogo / flota → categorías+UOM → logs/push.
+                Catálogo maestro y flota exigen <span class="font-mono text-main">0 OT</span>. Categorías/UOM exigen <span class="font-mono text-main">0 artículos</span>.
+                Inventario/bodegas exige <span class="font-mono text-main">0 recepciones</span> de compra.
+              </p>
+            </div>
+
+            @if (lastPurgeResult()) {
+              <div class="rounded-lg border border-border bg-dark/30 p-3 text-xs font-mono text-muted overflow-x-auto">
+                Último resultado ({{ lastPurgeResult()!.domain }}):
+                {{ lastPurgeResult()!.deleted | json }}
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (purgeModalCopy(); as copy) {
+      <div
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purge-modal-title"
+        (click)="!purgeSubmitting() && closePurgeModal()"
+      >
+        <div
+          class="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl"
+          (click)="$event.stopPropagation()"
+        >
+          <h2 id="purge-modal-title" class="text-lg font-semibold text-main">
+            {{ copy.title }}
+          </h2>
+          <p class="text-sm text-muted mt-2">
+            Esta acción no se puede deshacer. Escribí el código de la empresa
+            <span class="font-mono text-primary font-semibold">{{ selectedTenant()?.code }}</span>
+            para confirmar.
+          </p>
+          <p class="text-xs text-amber-400/90 mt-2 leading-relaxed border border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/5">
+            {{ copy.hint }}
+          </p>
+          <input
+            type="text"
+            class="mt-4 w-full rounded-lg border border-border bg-dark/40 px-3 py-2 text-sm text-main placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+            placeholder="Código de empresa"
+            [value]="confirmCodeInput()"
+            (input)="onConfirmInput($event)"
+            autocomplete="off"
+          />
+          <div class="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              (click)="closePurgeModal()"
+              [disabled]="purgeSubmitting()"
+              class="px-4 py-2 rounded-lg border border-border text-sm text-main hover:bg-dark/40 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              (click)="executePurge()"
+              [disabled]="purgeSubmitting()"
+              class="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-500 disabled:opacity-50"
+            >
+              {{ purgeSubmitting() ? 'Ejecutando…' : 'Confirmar purga' }}
+            </button>
+          </div>
+        </div>
+      </div>
+  }
+</div>

@@ -66,6 +66,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | Archivo | Uso |
 |---------|-----|
 | `README.md` | Este índice |
+| [platform-data-admin.md](platform-data-admin.md) | Herramienta SUPER_ADMIN: purga por tenant, API `/api/super-admin/platform`, escalamiento |
 | [correos-transaccionales.md](correos-transaccionales.md) | Previsualizar plantillas de correo (`npm run email-previews` en `backend/`, salida en `docs/email-previews/`) |
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |

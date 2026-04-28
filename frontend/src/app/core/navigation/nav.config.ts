@@ -102,6 +102,12 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ICONS.shieldCheck,
         roles: ['SUPER_ADMIN', 'ADMIN'],
       },
+      {
+        label: 'Datos plataforma',
+        route: '/app/admin/platform-data',
+        icon: ICONS.collection,
+        roles: ['SUPER_ADMIN'],
+      },
     ],
   },
   {
