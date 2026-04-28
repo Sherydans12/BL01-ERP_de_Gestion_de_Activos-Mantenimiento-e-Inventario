@@ -81,7 +81,10 @@ export class StepUpPolicyService {
   /**
    * Snapshot para "Mi cuenta" y documentación de API.
    */
-  async getSecuritySnapshotForUserRole(role: string) {
+  async getSecuritySnapshotForUserRole(
+    role: string,
+    opts?: { totpEnabled?: boolean },
+  ) {
     const [platformEmailStepUpEnabled, localDevBypass] = await Promise.all([
       this.getPlatformStepUpEnabledFromDb(),
       Promise.resolve(this.isLocalOrExplicitBypass()),
@@ -94,6 +97,8 @@ export class StepUpPolicyService {
       platformEmailStepUpEnabled,
       localDevelopmentBypass: localDevBypass,
       emailStepUpAppliesToThisUser,
+      totpEnrollable: role === 'SUPER_ADMIN',
+      totpEnabled: opts?.totpEnabled ?? false,
     };
   }
 }

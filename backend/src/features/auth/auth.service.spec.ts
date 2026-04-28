@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthAuditService } from './auth-audit.service';
+import { TotpService } from './totp.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CaptchaService } from './captcha.service';
 import { UserSessionService } from './user-session.service';
@@ -52,6 +53,16 @@ describe('AuthService', () => {
           useValue: {
             userRoleUsesEmailStepUp: () => false,
             isGlobalStepUpPolicyEffective: jest.fn().mockResolvedValue(false),
+          },
+        },
+        {
+          provide: TotpService,
+          useValue: {
+            decryptSecret: jest.fn(),
+            verify: jest.fn(),
+            encryptSecret: jest.fn(),
+            generateSecret: jest.fn(),
+            keyUri: jest.fn(),
           },
         },
       ],

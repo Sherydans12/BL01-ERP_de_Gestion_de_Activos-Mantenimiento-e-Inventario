@@ -58,6 +58,10 @@ export interface GlobalAuthSettings {
   superAdminStepUpEmailEnabled: boolean;
   /** true si `AUTH_STEP_UP_BYPASS=true` en el backend (p. ej. local). */
   authStepUpLocalBypass: boolean;
+  /** Super admins con TOTP activo (Mi cuenta). */
+  superAdminTotpEnabledCount: number;
+  /** Total cuentas Super Admin en la plataforma. */
+  superAdminCount: number;
 }
 
 @Component({

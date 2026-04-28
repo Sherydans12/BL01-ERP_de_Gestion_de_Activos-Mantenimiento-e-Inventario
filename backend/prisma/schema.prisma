@@ -537,6 +537,11 @@ model User {
   /// Si true, envía correo cuando el login exitoso difiere en IP o país respecto al anterior.
   notifyUnusualLogin  Boolean         @default(true) @map("notify_unusual_login")
 
+  /// Segundo factor TOTP (Google Authenticator, etc.); hoy soportado en flujo Super Admin.
+  totpEnabled           Boolean         @default(false) @map("totp_enabled")
+  /// Secreto TOTP cifrado en reposo (AES-256-GCM + base64).
+  totpSecretEncrypted   String?         @map("totp_secret_encrypted") @db.Text
+
   rut                 String?         @db.VarChar(20)
   phone               String?         @db.VarChar(20)
   birthDate           DateTime?       @map("birth_date") @db.Date

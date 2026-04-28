@@ -31,6 +31,10 @@ export interface ProfileSecurityFlagsDto {
   localDevelopmentBypass: boolean;
   /** Política + rol: si aplica 2FA por correo en logins poco habituales. */
   emailStepUpAppliesToThisUser: boolean;
+  /** Solo rol Super Admin: puede enrolar TOTP en Mi cuenta. */
+  totpEnrollable?: boolean;
+  /** TOTP (app) activo para esta cuenta. */
+  totpEnabled?: boolean;
 }
 
 export interface ProfileMeDto {
@@ -101,6 +105,27 @@ export class ProfileService {
     return this.http.post<{ revoked: number }>(
       `${this.authBase}/sessions/revoke-others`,
       {},
+    );
+  }
+
+  beginTotp() {
+    return this.http.post<{ otpauthUrl: string; manualKey: string }>(
+      `${this.base}/me/totp/begin`,
+      {},
+    );
+  }
+
+  activateTotp(code: string) {
+    return this.http.post<{ success: boolean; message: string }>(
+      `${this.base}/me/totp/activate`,
+      { code },
+    );
+  }
+
+  disableTotp(body: { password: string; totpCode: string }) {
+    return this.http.post<{ success: boolean; message: string }>(
+      `${this.base}/me/totp/disable`,
+      body,
     );
   }
 }

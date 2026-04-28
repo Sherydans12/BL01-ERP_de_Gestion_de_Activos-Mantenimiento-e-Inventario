@@ -5,6 +5,7 @@ import {
   signal,
   ElementRef,
   viewChild,
+  computed,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -90,6 +91,33 @@ export class UserAccountSettingsComponent implements OnInit {
     },
     { validators: passwordMatchValidator },
   );
+
+  totpForm = this.fb.nonNullable.group({
+    code: [
+      '',
+      [Validators.required, Validators.pattern(/^\d{6}$/)],
+    ],
+  });
+
+  totpDisableForm = this.fb.nonNullable.group({
+    password: ['', [Validators.required]],
+    totpCode: [
+      '',
+      [Validators.required, Validators.pattern(/^\d{6}$/)],
+    ],
+  });
+
+  totpEnrollOpen = signal(false);
+  totpOtpauthUrl = signal<string | null>(null);
+  totpManualKey = signal<string | null>(null);
+  totpBusy = signal(false);
+  showTotpDisable = signal(false);
+
+  totpQrSrc = computed(() => {
+    const u = this.totpOtpauthUrl();
+    if (!u) return null;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(u)}`;
+  });
 
   readonly roleLabels = ROLE_LABELS;
 
@@ -364,5 +392,72 @@ export class UserAccountSettingsComponent implements OnInit {
         this.reloadProfile();
       },
     });
+  }
+
+  startTotpEnroll() {
+    this.totpBusy.set(true);
+    this.profileApi.beginTotp().subscribe({
+      next: (r) => {
+        this.totpOtpauthUrl.set(r.otpauthUrl);
+        this.totpManualKey.set(r.manualKey);
+        this.totpEnrollOpen.set(true);
+        this.totpForm.reset({ code: '' });
+        this.totpBusy.set(false);
+      },
+      error: (err) => {
+        this.totpBusy.set(false);
+        this.notify.error(
+          err.error?.message ?? 'No se pudo iniciar el registro TOTP',
+        );
+      },
+    });
+  }
+
+  cancelTotpEnroll() {
+    this.totpEnrollOpen.set(false);
+    this.totpOtpauthUrl.set(null);
+    this.totpManualKey.set(null);
+    this.totpForm.reset({ code: '' });
+  }
+
+  submitTotpActivate() {
+    if (this.totpForm.invalid) return;
+    this.totpBusy.set(true);
+    const code = this.totpForm.getRawValue().code;
+    this.profileApi.activateTotp(code).subscribe({
+      next: (r) => {
+        this.notify.success(r.message ?? 'TOTP activado');
+        this.cancelTotpEnroll();
+        this.reloadProfile();
+        this.totpBusy.set(false);
+      },
+      error: (err) => {
+        this.totpBusy.set(false);
+        this.notify.error(err.error?.message ?? 'Código no válido');
+      },
+    });
+  }
+
+  submitTotpDisable() {
+    if (this.totpDisableForm.invalid) return;
+    this.totpBusy.set(true);
+    const v = this.totpDisableForm.getRawValue();
+    this.profileApi
+      .disableTotp({ password: v.password!, totpCode: v.totpCode! })
+      .subscribe({
+        next: (r) => {
+          this.notify.success(r.message ?? 'TOTP desactivado');
+          this.showTotpDisable.set(false);
+          this.totpDisableForm.reset();
+          this.reloadProfile();
+          this.totpBusy.set(false);
+        },
+        error: (err) => {
+          this.totpBusy.set(false);
+          this.notify.error(
+            err.error?.message ?? 'No se pudo desactivar TOTP',
+          );
+        },
+      });
   }
 }

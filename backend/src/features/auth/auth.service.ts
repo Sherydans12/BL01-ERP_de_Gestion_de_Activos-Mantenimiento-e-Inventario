@@ -22,6 +22,7 @@ import { buildMailForgotPassword, buildMailUnusualLogin } from '../../common/ema
 import { StorageService } from '../../common/storage/storage.service';
 import { LoginStepUpService } from './login-step-up.service';
 import { StepUpPolicyService } from './step-up-policy.service';
+import { TotpService } from './totp.service';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
 const BCRYPT_DUMMY_HASH =
@@ -61,6 +62,7 @@ export class AuthService {
     private readonly storage: StorageService,
     private readonly loginStepUp: LoginStepUpService,
     private readonly stepUpPolicy: StepUpPolicyService,
+    private readonly totpService: TotpService,
   ) {}
 
   private async sendUnusualLoginSecurityEmail(params: {
@@ -98,6 +100,67 @@ export class AuthService {
     const elapsed = Date.now() - started;
     const wait = minMs + jitter - elapsed;
     if (wait > 0) await sleep(wait);
+  }
+
+  private signPreTotpLoginToken(userId: string, email: string): string {
+    return this.jwtService.sign(
+      { sub: userId, email, typ: 'pre_totp' },
+      { expiresIn: '5m' },
+    );
+  }
+
+  /**
+   * 2FA por correo (contexto poco habitual), tras contraseña o TOTP.
+   * Devuelve el payload de reto por correo o null si se sigue a sesión completa.
+   */
+  private async maybeSendEmailStepUp(
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+    },
+    ip: string,
+    geo: { country: string },
+    ua: string,
+  ): Promise<{
+    stepUpRequired: true;
+    stepUpToken: string;
+    message: string;
+  } | null> {
+    if (
+      !this.stepUpPolicy.userRoleUsesEmailStepUp(user.role) ||
+      !(await this.stepUpPolicy.isGlobalStepUpPolicyEffective()) ||
+      !(await this.authAudit.shouldRequireEmailContextStepUp({
+        userId: user.id,
+        role: user.role,
+        ip,
+        country: geo.country,
+      }))
+    ) {
+      return null;
+    }
+    try {
+      const { stepUpToken } =
+        await this.loginStepUp.createChallengeAndSendEmail({
+          userId: user.id,
+          userEmail: user.email,
+          name: user.name,
+          clientIp: ip,
+          userAgent: ua,
+        });
+      return {
+        stepUpRequired: true,
+        stepUpToken,
+        message:
+          'Se envió un código de verificación a tu correo. Ingresa el código de 6 dígitos para continuar.',
+      };
+    } catch (e) {
+      this.log.error(`Email step-up initiation failed: ${e}`);
+      throw new ServiceUnavailableException(
+        'No se pudo enviar el código de verificación. Intenta de nuevo en unos minutos.',
+      );
+    }
   }
 
   async login(dto: LoginDto, meta: LoginRequestMeta) {
@@ -205,38 +268,27 @@ export class AuthService {
       data: { lockoutUntil: null },
     });
 
-    // Segundo factor por correo (roles en `USER_ROLES_WITH_EMAIL_STEP_UP`, ver StepUpPolicyService)
-    if (
-      this.stepUpPolicy.userRoleUsesEmailStepUp(user.role) &&
-      (await this.stepUpPolicy.isGlobalStepUpPolicyEffective()) &&
-      (await this.authAudit.shouldRequireEmailContextStepUp({
-        userId: user.id,
-        role: user.role,
-        ip,
-        country: geo.country,
-      }))
-    ) {
-        try {
-          const { stepUpToken } =
-            await this.loginStepUp.createChallengeAndSendEmail({
-              userId: user.id,
-              userEmail: user.email,
-              name: user.name,
-              clientIp: ip,
-              userAgent: ua,
-            });
-          return {
-            stepUpRequired: true,
-            stepUpToken,
-            message:
-              'Se envió un código de verificación a tu correo. Ingresa el código de 6 dígitos para continuar.',
-          };
-        } catch (e) {
-          this.log.error(`Email step-up initiation failed: ${e}`);
-          throw new ServiceUnavailableException(
-            'No se pudo enviar el código de verificación. Intenta de nuevo en unos minutos.',
-          );
-        }
+    // TOTP (solo Super Admin con TOTP activo) — antes del 2FA por correo
+    if (user.role === 'SUPER_ADMIN' && user.totpEnabled) {
+      if (!user.totpSecretEncrypted) {
+        this.log.error(
+          `Usuario ${user.id} tiene totpEnabled sin secreto; no se puede continuar el login`,
+        );
+        throw new ServiceUnavailableException(
+          'Configuración de autenticación en dos pasos inconsistente. Contacta al administrador.',
+        );
+      }
+      return {
+        totpRequired: true,
+        preAuthToken: this.signPreTotpLoginToken(user.id, user.email),
+        message:
+          'Ingresa el código de 6 dígitos de tu aplicación de autenticación (Google Authenticator o similar).',
+      };
+    }
+
+    const emailStep = await this.maybeSendEmailStepUp(user, ip, geo, ua);
+    if (emailStep) {
+      return emailStep;
     }
 
     return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
@@ -352,6 +404,58 @@ export class AuthService {
         allowedContracts,
       },
     };
+  }
+
+  /**
+   * Tras contraseña correcta: verifica TOTP (6 dígitos) y continúa con
+   * posible 2FA por correo o sesión JWT.
+   */
+  async verifyTotpLogin(
+    body: { preAuthToken?: string; totpCode?: string },
+    meta: LoginRequestMeta,
+  ) {
+    if (!body.preAuthToken?.trim() || !body.totpCode?.length) {
+      throw new BadRequestException(
+        'Código o sesión de verificación requeridos.',
+      );
+    }
+    let userId: string;
+    try {
+      const p = this.jwtService.verify(body.preAuthToken) as {
+        sub: string;
+        typ?: string;
+      };
+      if (p.typ !== 'pre_totp') {
+        throw new Error('typ');
+      }
+      userId = p.sub;
+    } catch {
+      throw new UnauthorizedException(
+        'Sesión de verificación TOTP vencida o inválida.',
+      );
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true, contractAccess: true, customRole: true },
+    });
+    if (!user?.isActive || !user.totpEnabled || !user.totpSecretEncrypted) {
+      throw new UnauthorizedException('Cuenta no disponible o TOTP no activo.');
+    }
+    if (user.role !== 'SUPER_ADMIN') {
+      throw new UnauthorizedException();
+    }
+    const secret = this.totpService.decryptSecret(user.totpSecretEncrypted);
+    if (!this.totpService.verify(String(body.totpCode), secret)) {
+      throw new UnauthorizedException('Código TOTP incorrecto.');
+    }
+    const geo = await this.authAudit.lookupGeo(meta.clientIp);
+    const ip = (meta.clientIp || '').slice(0, 64);
+    const ua = (meta.userAgent || '').slice(0, 512);
+    const emailStep = await this.maybeSendEmailStepUp(user, ip, geo, ua);
+    if (emailStep) {
+      return emailStep;
+    }
+    return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
   }
 
   async verifySuperAdminStepUp(

@@ -89,6 +89,7 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                 <th class="px-6 py-4 font-medium">Email</th>
                 <th class="px-6 py-4 font-medium">Rol</th>
                 <th class="px-6 py-4 font-medium">2FA correo (política)</th>
+                <th class="px-6 py-4 font-medium">TOTP (app)</th>
                 <th class="px-6 py-4 font-medium">RUT</th>
                 <th class="px-6 py-4 font-medium">Cargo</th>
                 <th class="px-6 py-4 font-medium text-center">Estado</th>
@@ -145,6 +146,27 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                     >
                       {{ user.emailStepUpPolicyApplies ? 'Sí' : 'No' }}
                     </span>
+                  </td>
+                  <td class="px-6 py-4">
+                    @if (user.role === 'SUPER_ADMIN') {
+                      <span
+                        class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border"
+                        [ngClass]="{
+                          'bg-primary/10 text-primary border-primary/20':
+                            user.totpEnabled === true,
+                          'bg-dark text-muted border-border': !user.totpEnabled,
+                        }"
+                        [title]="
+                          user.totpEnabled
+                            ? 'TOTP activo (aplicación autenticadora)'
+                            : 'TOTP no activo'
+                        "
+                      >
+                        {{ user.totpEnabled ? 'Activo' : 'No' }}
+                      </span>
+                    } @else {
+                      <span class="text-xs text-muted">—</span>
+                    }
                   </td>
                   <td class="px-6 py-4 text-muted font-mono">
                     {{ user.rut || '-' }}

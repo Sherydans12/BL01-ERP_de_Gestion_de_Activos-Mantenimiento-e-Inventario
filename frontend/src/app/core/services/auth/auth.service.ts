@@ -18,6 +18,11 @@ export type LoginApiResult =
       stepUpRequired: true;
       stepUpToken: string;
       message: string;
+    }
+  | {
+      totpRequired: true;
+      preAuthToken: string;
+      message: string;
     };
 
 export interface UserPayload {
@@ -120,6 +125,13 @@ export class AuthService {
           next: (response) => {
             this.forceLogoutInProgress = false;
             if (
+              'totpRequired' in response &&
+              response.totpRequired === true
+            ) {
+              this.notification.info(response.message);
+              return;
+            }
+            if (
               'stepUpRequired' in response &&
               response.stepUpRequired === true
             ) {
@@ -155,6 +167,54 @@ export class AuthService {
               this.notification.error(msg);
             } else {
               this.notification.error('Credenciales inválidas.');
+            }
+          },
+        }),
+      );
+  }
+
+  verifyTotpLogin(body: { preAuthToken: string; totpCode: string }) {
+    return this.http
+      .post<LoginApiResult>(`${this.apiUrl}/login/verify-totp`, {
+        preAuthToken: body.preAuthToken,
+        totpCode: body.totpCode,
+      })
+      .pipe(
+        tap({
+          next: (response) => {
+            this.forceLogoutInProgress = false;
+            if (
+              'stepUpRequired' in response &&
+              response.stepUpRequired === true
+            ) {
+              this.notification.info(response.message);
+              return;
+            }
+            if (!('access_token' in response)) {
+              return;
+            }
+            this.setSession(response.access_token, response.user);
+            this.notification.success(`Bienvenido ${response.user.name}`);
+          },
+          error: (err) => {
+            if (err.status === 429) {
+              this.notification.error(
+                'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
+              );
+            } else if (err.status === 401) {
+              const msg =
+                typeof err.error?.message === 'string'
+                  ? err.error.message
+                  : 'Código TOTP incorrecto o sesión de verificación vencida.';
+              this.notification.error(msg);
+            } else if (err.status === 503) {
+              const msg =
+                typeof err.error?.message === 'string'
+                  ? err.error.message
+                  : 'Servicio de verificación no disponible. Reintenta más tarde.';
+              this.notification.error(msg);
+            } else {
+              this.notification.error('No se pudo verificar el código.');
             }
           },
         }),

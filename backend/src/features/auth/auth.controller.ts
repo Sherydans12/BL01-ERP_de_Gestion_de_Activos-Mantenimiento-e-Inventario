@@ -65,6 +65,19 @@ export class AuthController {
     );
   }
 
+  /** TOTP (6 dígitos) tras contraseña — Super Admin con TOTP activo. */
+  @Throttle({ default: { limit: 12, ttl: 60000 } })
+  @Post('login/verify-totp')
+  verifyTotpLogin(@Body() body: Record<string, unknown>, @Req() req: Request) {
+    return this.authService.verifyTotpLogin(
+      {
+        preAuthToken: body.preAuthToken as string | undefined,
+        totpCode: body.totpCode as string | undefined,
+      },
+      extractLoginMeta(req),
+    );
+  }
+
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('activate')
   activate(@Body() body: any, @Req() req: Request) {

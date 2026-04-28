@@ -324,7 +324,7 @@
         </div>
 
         <form
-          [formGroup]="showStepUp() ? stepUpForm : loginForm"
+          [formGroup]="showStepUp() ? stepUpForm : showTotp() ? totpForm : loginForm"
           (ngSubmit)="onSubmit()"
           class="relative space-y-3 sm:space-y-4 [@media(max-height:720px)]:space-y-2.5"
         >
@@ -367,6 +367,71 @@
               >
                 @if (!isLoading()) {
                   <span>Confirmar acceso</span>
+                } @else {
+                  <svg
+                    class="animate-spin h-5 w-5 text-zinc-950"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <span>Verificando…</span>
+                }
+              </button>
+            </div>
+          } @else if (showTotp()) {
+            <div class="space-y-2">
+              <p class="text-sm text-main font-medium">Código de autenticación (TOTP)</p>
+              <p class="text-xs text-muted leading-relaxed">
+                Ingresa el código de 6 dígitos de tu aplicación (Google Authenticator u otra compatible). La verificación de sesión vence en 5 minutos.
+              </p>
+            </div>
+            <div class="space-y-2">
+              <label
+                for="totpCode"
+                class="block text-xs font-medium uppercase tracking-wide text-muted"
+                >Código de 6 dígitos</label
+              >
+              <input
+                type="text"
+                id="totpCode"
+                formControlName="code"
+                inputmode="numeric"
+                maxlength="6"
+                autocomplete="one-time-code"
+                class="w-full rounded-xl border border-border bg-dark px-3 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-main placeholder:text-muted/60 outline-none transition-all min-h-[44px] focus:border-primary focus:ring-2 focus:ring-primary/40 sm:py-3"
+                placeholder="000000"
+              />
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row sm:justify-between">
+              <button
+                type="button"
+                (click)="backToPasswordStep()"
+                class="order-2 sm:order-1 px-3 py-2.5 rounded-xl text-sm font-semibold text-muted border border-border hover:text-main hover:border-primary/40 min-h-[44px]"
+              >
+                Volver
+              </button>
+              <button
+                type="submit"
+                [disabled]="totpForm.invalid || isLoading()"
+                class="order-1 sm:order-2 flex w-full sm:w-auto sm:min-w-[12rem] items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-zinc-950 shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-45 min-h-[44px] [@media(max-height:720px)]:py-2.5"
+              >
+                @if (!isLoading()) {
+                  <span>Continuar</span>
                 } @else {
                   <svg
                     class="animate-spin h-5 w-5 text-zinc-950"

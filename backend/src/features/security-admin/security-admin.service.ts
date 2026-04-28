@@ -215,11 +215,19 @@ export class SecurityAdminService {
     const row = await this.prisma.platformSecuritySettings.findUnique({
       where: { id: PLATFORM_SECURITY_SETTINGS_ID },
     });
+    const [superAdminTotpEnabledCount, superAdminCount] = await Promise.all([
+      this.prisma.user.count({
+        where: { role: 'SUPER_ADMIN', totpEnabled: true },
+      }),
+      this.prisma.user.count({ where: { role: 'SUPER_ADMIN' } }),
+    ]);
     return {
       superAdminStepUpEmailEnabled:
         row?.superAdminStepUpEmailEnabled ?? false,
       authStepUpLocalBypass:
         this.config.get<string>('AUTH_STEP_UP_BYPASS', '') === 'true',
+      superAdminTotpEnabledCount,
+      superAdminCount,
     };
   }
 
@@ -247,10 +255,18 @@ export class SecurityAdminService {
         superAdminStepUpEmailEnabled: body.superAdminStepUpEmailEnabled,
       },
     });
+    const [superAdminTotpEnabledCount, superAdminCount] = await Promise.all([
+      this.prisma.user.count({
+        where: { role: 'SUPER_ADMIN', totpEnabled: true },
+      }),
+      this.prisma.user.count({ where: { role: 'SUPER_ADMIN' } }),
+    ]);
     return {
       superAdminStepUpEmailEnabled: body.superAdminStepUpEmailEnabled,
       authStepUpLocalBypass:
         this.config.get<string>('AUTH_STEP_UP_BYPASS', '') === 'true',
+      superAdminTotpEnabledCount,
+      superAdminCount,
     };
   }
 }

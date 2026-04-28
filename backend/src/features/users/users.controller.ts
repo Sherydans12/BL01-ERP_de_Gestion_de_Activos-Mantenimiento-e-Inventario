@@ -26,6 +26,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AdminSetPasswordDto } from './dto/admin-set-password.dto';
+import { TotpActivateDto } from './dto/totp-activate.dto';
+import { TotpDisableDto } from './dto/totp-disable.dto';
 import { MAX_USER_AVATAR_BYTES } from './user-avatar.constants';
 import {
   avatarUploadPolicy,
@@ -91,6 +93,35 @@ export class UsersController {
       dto.newPassword,
       extractLoginMeta(req),
     );
+  }
+
+  @Post('me/totp/begin')
+  beginTotp(@Req() req: any) {
+    return this.usersService.beginTotpEnrollment(req.user.id);
+  }
+
+  @Post('me/totp/activate')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  activateTotp(@Req() req: any, @Body() dto: TotpActivateDto) {
+    return this.usersService.activateTotp(req.user.id, dto.code);
+  }
+
+  @Post('me/totp/disable')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  disableTotp(@Req() req: any, @Body() dto: TotpDisableDto) {
+    return this.usersService.disableTotp(req.user.id, dto);
   }
 
   /** Lista compacta para participantes / supervisores en OT (mecánicos y supervisores activos). */

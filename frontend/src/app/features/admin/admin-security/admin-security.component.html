@@ -238,6 +238,18 @@
               </span>
             </span>
           </label>
+
+          <div class="rounded-xl border border-border bg-dark/40 p-4 space-y-2 mt-6">
+            <p class="text-main font-semibold text-sm">TOTP (aplicación autenticadora)</p>
+            <p class="text-xs text-muted leading-relaxed">
+              Cuentas <span class="font-mono text-main/90">SUPER_ADMIN</span> con segundo factor por app activo
+              (registro en <strong class="text-main/90">Mi cuenta</strong>):
+              <span class="font-mono text-primary">{{ globalAuth()?.superAdminTotpEnabledCount ?? '—' }}</span>
+              de
+              <span class="font-mono text-main/90">{{ globalAuth()?.superAdminCount ?? '—' }}</span>.
+              No se activa ni desactiva desde aquí; solo visibilidad de plataforma.
+            </p>
+          </div>
         </div>
       }
     </div>

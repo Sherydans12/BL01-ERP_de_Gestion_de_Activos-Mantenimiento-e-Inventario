@@ -84,6 +84,13 @@ export class LoginComponent implements OnInit {
     ],
   });
 
+  totpForm = this.fb.nonNullable.group({
+    code: [
+      '',
+      [Validators.required, Validators.pattern(/^\d{6}$/)],
+    ],
+  });
+
   isLoading = signal(false);
   captchaQuestion = signal<string>('');
   /** Presente cuando GET /auth/captcha respondió OK. */
@@ -91,6 +98,8 @@ export class LoginComponent implements OnInit {
   /** Flujo 2FA por correo (Super Admin). */
   showStepUp = signal(false);
   stepUpToken = signal<string | null>(null);
+  showTotp = signal(false);
+  preAuthToken = signal<string | null>(null);
 
   ngOnInit() {
     if (this.authService.hasValidSession()) {
@@ -133,6 +142,10 @@ export class LoginComponent implements OnInit {
       this.submitStepUp();
       return;
     }
+    if (this.showTotp()) {
+      this.submitTotp();
+      return;
+    }
     const id = this.captchaId();
     if (this.loginForm.valid && id) {
       this.isLoading.set(true);
@@ -150,6 +163,16 @@ export class LoginComponent implements OnInit {
         .subscribe({
           next: (res) => {
             this.isLoading.set(false);
+            if (
+              res &&
+              'totpRequired' in res &&
+              res.totpRequired === true
+            ) {
+              this.preAuthToken.set(res.preAuthToken);
+              this.showTotp.set(true);
+              this.totpForm.reset({ code: '' });
+              return;
+            }
             if (
               res &&
               'stepUpRequired' in res &&
@@ -190,9 +213,44 @@ export class LoginComponent implements OnInit {
       });
   }
 
+  submitTotp() {
+    const t = this.preAuthToken();
+    if (!this.totpForm.valid || !t) {
+      return;
+    }
+    this.isLoading.set(true);
+    const code = this.totpForm.getRawValue().code;
+    this.authService
+      .verifyTotpLogin({ preAuthToken: t, totpCode: code })
+      .subscribe({
+        next: (res) => {
+          this.isLoading.set(false);
+          if (
+            res &&
+            'stepUpRequired' in res &&
+            res.stepUpRequired === true
+          ) {
+            this.stepUpToken.set(res.stepUpToken);
+            this.showTotp.set(false);
+            this.preAuthToken.set(null);
+            this.showStepUp.set(true);
+            this.stepUpForm.reset({ code: '' });
+            return;
+          }
+          this.router.navigateByUrl(this.returnUrl);
+        },
+        error: () => {
+          this.isLoading.set(false);
+        },
+      });
+  }
+
   backToPasswordStep(): void {
     this.showStepUp.set(false);
+    this.showTotp.set(false);
     this.stepUpToken.set(null);
+    this.preAuthToken.set(null);
     this.stepUpForm.reset({ code: '' });
+    this.totpForm.reset({ code: '' });
   }
 }

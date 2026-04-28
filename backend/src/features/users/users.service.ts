@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
   Logger,
   ServiceUnavailableException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -27,6 +28,7 @@ import {
   buildMailResendActivation,
 } from '../../common/email/transactional-mail.builder';
 import { StepUpPolicyService } from '../auth/step-up-policy.service';
+import { TotpService } from '../auth/totp.service';
 
 const meSelect = {
   id: true,
@@ -40,6 +42,7 @@ const meSelect = {
   customRoleId: true,
   customRole: { select: { id: true, name: true, baseRole: true } },
   notifyUnusualLogin: true,
+  totpEnabled: true,
 } as const;
 
 @Injectable()
@@ -54,6 +57,7 @@ export class UsersService {
     private readonly authAudit: AuthAuditService,
     private readonly userSessions: UserSessionService,
     private readonly stepUpPolicy: StepUpPolicyService,
+    private readonly totp: TotpService,
   ) {}
 
   private avatarPublicUrlToStorageKey(publicUrl: string | null): string | null {
@@ -122,7 +126,9 @@ export class UsersService {
     if (!u) throw new BadRequestException('Usuario no encontrado');
     const [base, security] = await Promise.all([
       this.mapMeRow(u),
-      this.stepUpPolicy.getSecuritySnapshotForUserRole(u.role),
+      this.stepUpPolicy.getSecuritySnapshotForUserRole(u.role, {
+        totpEnabled: u.totpEnabled,
+      }),
     ]);
     return { ...base, security };
   }
@@ -434,6 +440,7 @@ export class UsersService {
           customRoleId: true,
           customRole: { select: { id: true, name: true, baseRole: true } },
           contractAccess: { select: { contractId: true } },
+          totpEnabled: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -738,5 +745,82 @@ export class UsersService {
     }
 
     return { success: true, message: 'Contraseña actualizada correctamente' };
+  }
+
+  async beginTotpEnrollment(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('Usuario no encontrado');
+    if (user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'TOTP solo está disponible para super administradores de plataforma.',
+      );
+    }
+    if (user.totpEnabled) {
+      throw new BadRequestException(
+        'TOTP ya está activo. Desactívalo primero para generar un registro nuevo.',
+      );
+    }
+    const secret = this.totp.generateSecret();
+    const enc = this.totp.encryptSecret(secret);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { totpSecretEncrypted: enc, totpEnabled: false },
+    });
+    const otpauthUrl = this.totp.keyUri(user.email, secret);
+    return { otpauthUrl, manualKey: secret };
+  }
+
+  async activateTotp(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.totpSecretEncrypted) {
+      throw new BadRequestException(
+        'Inicia el registro de TOTP primero (obtener código QR).',
+      );
+    }
+    if (user.totpEnabled) {
+      throw new BadRequestException('TOTP ya está activo.');
+    }
+    if (user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException();
+    }
+    const plain = this.totp.decryptSecret(user.totpSecretEncrypted);
+    if (!this.totp.verify(code, plain)) {
+      throw new BadRequestException('Código TOTP inválido.');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { totpEnabled: true },
+    });
+    return { success: true, message: 'TOTP activado correctamente.' };
+  }
+
+  async disableTotp(
+    userId: string,
+    body: { password: string; totpCode: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.totpEnabled || !user.totpSecretEncrypted) {
+      throw new BadRequestException('TOTP no está activo.');
+    }
+    if (user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException();
+    }
+    const match = await bcrypt.compare(body.password, user.password);
+    if (!match) {
+      throw new BadRequestException('Contraseña incorrecta.');
+    }
+    const plain = this.totp.decryptSecret(user.totpSecretEncrypted);
+    if (!this.totp.verify(body.totpCode, plain)) {
+      throw new BadRequestException('Código TOTP inválido.');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { totpEnabled: false, totpSecretEncrypted: null },
+    });
+    await this.userSessions.invalidateAllForUser(userId);
+    return {
+      success: true,
+      message: 'TOTP desactivado. Puedes volver a activarlo desde Mi cuenta.',
+    };
   }
 }

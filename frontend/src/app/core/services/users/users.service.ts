@@ -19,6 +19,8 @@ export interface User {
   contractAccess?: { contractId: string }[];
   /** Política global: si a este rol podría exigírsele 2FA por correo (IP inusual), según config. */
   emailStepUpPolicyApplies?: boolean;
+  /** TOTP (app) activo — hoy relevante para Super Admin. */
+  totpEnabled?: boolean;
 }
 
 export interface PaginatedUsers {
