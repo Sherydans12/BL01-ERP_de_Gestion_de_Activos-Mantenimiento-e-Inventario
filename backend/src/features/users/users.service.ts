@@ -338,7 +338,11 @@ export class UsersService {
             password: '',
             isActive: false,
             activationToken,
-            tenantId: effectiveRole === 'SUPER_ADMIN' ? null : tenantId,
+            /** SUPER_ADMIN: tenant del invitador si existe (misma org); si no, null (solo plataforma). */
+            tenantId:
+              effectiveRole === 'SUPER_ADMIN'
+                ? tenantId?.trim() || null
+                : tenantId,
             rut: rutNorm,
             phone: phoneNorm,
             birthDate: data.birthDate ? new Date(data.birthDate) : null,
@@ -407,25 +411,50 @@ export class UsersService {
     }
   }
 
+  private buildUserListWhere(
+    tenantId: string | undefined,
+    userRole: string | undefined,
+    search?: string,
+  ): Prisma.UserWhereInput {
+    const parts: Prisma.UserWhereInput[] = [];
+    if (userRole !== 'SUPER_ADMIN') {
+      parts.push({ tenantId });
+    }
+    const q = search?.trim();
+    if (q) {
+      parts.push({
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+          { rut: { contains: q, mode: 'insensitive' } },
+          { position: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (parts.length === 0) return {};
+    if (parts.length === 1) return parts[0]!;
+    return { AND: parts };
+  }
+
   async findAll(
     tenantId?: string,
     userRole?: string,
     page: number = 1,
     limit: number = 10,
+    search?: string,
   ) {
-    const skip = (page - 1) * limit;
-    const where: any = {};
-
-    // Aislamiento Multi-tenant
-    if (userRole !== 'SUPER_ADMIN') {
-      where.tenantId = tenantId;
-    }
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
+    const safePage = Math.max(1, Number(page) || 1);
+    const skip = (safePage - 1) * safeLimit;
+    const where = this.buildUserListWhere(tenantId, userRole, search);
 
     const [items, total, listCtx] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
-        take: limit,
+        take: safeLimit,
         select: {
           id: true,
           email: true,
@@ -472,13 +501,54 @@ export class UsersService {
       }),
     );
 
+    const lastPage =
+      total === 0 ? 0 : Math.max(1, Math.ceil(total / safeLimit));
+
     return {
       items: itemsWithPolicy,
       meta: {
         total,
-        page,
-        lastPage: Math.ceil(total / limit),
+        page: safePage,
+        limit: safeLimit,
+        lastPage,
       },
+    };
+  }
+
+  /** Autocompletado ligero para búsqueda de usuarios (sin URLs de avatar). */
+  async searchSuggestions(
+    tenantId: string | undefined,
+    userRole: string | undefined,
+    q: string,
+    limit: number = 8,
+  ) {
+    const raw = q?.trim() ?? '';
+    if (raw.length < 2) {
+      return { items: [] as { id: string; name: string; email: string; roleLabel: string }[] };
+    }
+    const safeLimit = Math.min(20, Math.max(1, Number(limit) || 8));
+    const where = this.buildUserListWhere(tenantId, userRole, raw);
+
+    const rows = await this.prisma.user.findMany({
+      where,
+      take: safeLimit,
+      orderBy: [{ name: 'asc' }, { email: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        customRole: { select: { name: true } },
+      },
+    });
+
+    return {
+      items: rows.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        roleLabel: u.customRole?.name ?? u.role,
+      })),
     };
   }
 
