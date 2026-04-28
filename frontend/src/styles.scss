@@ -84,6 +84,22 @@
     @apply outline-none border-primary ring-1 ring-primary shadow-[0_0_10px_rgba(0,229,255,0.2)];
   }
 
+  /**
+   * `type="search"`: WebKit/Blink añaden decoración y botón cancelar propios del UA.
+   * Si el diseño ya pone iconos (lupa / limpiar) en HTML, quedan duplicados y desalineados.
+   */
+  input[type='search'] {
+    appearance: textfield;
+  }
+  input[type='search']::-webkit-search-decoration,
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-results-button,
+  input[type='search']::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
+
   input[type='checkbox']:focus-visible,
   input[type='radio']:focus-visible {
     outline: 2px solid rgb(var(--primary-rgb));

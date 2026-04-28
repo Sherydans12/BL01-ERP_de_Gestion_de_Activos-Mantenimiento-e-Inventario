@@ -90,9 +90,11 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
       >
         <div class="relative flex-1 min-w-0 max-w-2xl">
           <label for="user-search" class="sr-only">Buscar usuarios</label>
-          <div class="relative">
+          <div
+            class="grid grid-cols-[auto_1fr_2.5rem] items-center min-h-[2.75rem] rounded-lg bg-dark border border-border text-main shadow-sm focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary"
+          >
             <span
-              class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              class="pointer-events-none flex shrink-0 items-center justify-center pl-3 text-muted"
               aria-hidden="true"
             >
               <svg
@@ -111,38 +113,42 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
             </span>
             <input
               id="user-search"
-              type="search"
+              type="text"
+              role="searchbox"
               autocomplete="off"
               spellcheck="false"
+              inputmode="search"
               [value]="searchDraft()"
               (input)="onSearchInput($any($event.target).value)"
               (focus)="onSearchFocus()"
               (blur)="onSearchBlur()"
-              class="w-full pl-10 pr-10 py-2.5 rounded-lg bg-dark border border-border text-main placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary font-mono text-sm"
+              class="min-w-0 col-start-2 max-w-full border-0 bg-transparent py-2.5 pl-0 pr-2 text-main placeholder:text-muted/50 focus:outline-none focus:ring-0 font-mono text-sm rounded-none shadow-none"
               placeholder="Nombre, email, RUT, cargo…"
             />
-            @if (searchDraft().trim().length > 0) {
-              <button
-                type="button"
-                (mousedown)="clearSearch(); $event.preventDefault()"
-                class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted hover:text-main hover:bg-surface/80 transition-colors"
-                aria-label="Limpiar búsqueda"
-              >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+            <div class="col-start-3 flex h-full items-center justify-center pr-1.5">
+              @if (searchDraft().trim().length > 0) {
+                <button
+                  type="button"
+                  (mousedown)="clearSearch(); $event.preventDefault()"
+                  class="flex items-center justify-center rounded-md p-1.5 text-muted hover:text-main hover:bg-surface/80 transition-colors"
+                  aria-label="Limpiar búsqueda"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            }
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              }
+            </div>
           </div>
           @if (suggestionsOpen() && searchSuggestions().length > 0) {
             <ul
