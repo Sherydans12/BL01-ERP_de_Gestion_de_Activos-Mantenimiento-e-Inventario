@@ -268,8 +268,8 @@ export class AuthService {
       data: { lockoutUntil: null },
     });
 
-    // TOTP (solo Super Admin con TOTP activo) — antes del 2FA por correo
-    if (user.role === 'SUPER_ADMIN' && user.totpEnabled) {
+    // TOTP (cualquier cuenta con 2FA por app activo) — antes del 2FA por correo
+    if (user.totpEnabled) {
       if (!user.totpSecretEncrypted) {
         this.log.error(
           `Usuario ${user.id} tiene totpEnabled sin secreto; no se puede continuar el login`,
@@ -440,9 +440,6 @@ export class AuthService {
     });
     if (!user?.isActive || !user.totpEnabled || !user.totpSecretEncrypted) {
       throw new UnauthorizedException('Cuenta no disponible o TOTP no activo.');
-    }
-    if (user.role !== 'SUPER_ADMIN') {
-      throw new UnauthorizedException();
     }
     const secret = this.totpService.decryptSecret(user.totpSecretEncrypted);
     if (!this.totpService.verify(String(body.totpCode), secret)) {

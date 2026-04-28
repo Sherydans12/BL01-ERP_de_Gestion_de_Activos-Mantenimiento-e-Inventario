@@ -1,16 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { authenticator } from 'otplib';
+import * as crypto from 'crypto';
+import { Authenticator } from 'otplib';
 import {
   decryptTotpSecret,
   encryptTotpSecret,
 } from './totp-secret-crypto';
 
 const TOTP_ISSUER = 'BaseLogic TPM';
+/** Ventana de pasos de 30s aceptada a cada lado (1 = ±30s desfase de reloj). */
+const DEFAULT_TOTP_WINDOW_STEPS = 1;
+const MAX_TOTP_WINDOW_STEPS = 5;
 
 @Injectable()
 export class TotpService {
-  constructor(private readonly config: ConfigService) {}
+  private readonly authenticator: Authenticator;
+
+  constructor(private readonly config: ConfigService) {
+    this.authenticator = new Authenticator();
+    const raw = this.config.get<string>('TOTP_WINDOW_STEPS', '');
+    const parsed = parseInt(String(raw || DEFAULT_TOTP_WINDOW_STEPS), 10);
+    const window = Number.isFinite(parsed)
+      ? Math.min(
+          MAX_TOTP_WINDOW_STEPS,
+          Math.max(0, parsed),
+        )
+      : DEFAULT_TOTP_WINDOW_STEPS;
+    this.authenticator.options = {
+      crypto,
+      step: 30,
+      window,
+    };
+  }
 
   private getKeyMaterial(): string {
     const k = this.config.get<string>('TOTP_ENCRYPTION_KEY', '');
@@ -29,16 +50,16 @@ export class TotpService {
   }
 
   generateSecret(): string {
-    return authenticator.generateSecret();
+    return this.authenticator.generateSecret();
   }
 
   keyUri(accountEmail: string, secretBase32: string): string {
-    return authenticator.keyuri(accountEmail, TOTP_ISSUER, secretBase32);
+    return this.authenticator.keyuri(accountEmail, TOTP_ISSUER, secretBase32);
   }
 
   verify(token: string, secretPlainBase32: string): boolean {
     const t = String(token).replace(/\s/g, '');
     if (t.length < 6) return false;
-    return authenticator.verify({ token: t, secret: secretPlainBase32 });
+    return this.authenticator.verify({ token: t, secret: secretPlainBase32 });
   }
 }

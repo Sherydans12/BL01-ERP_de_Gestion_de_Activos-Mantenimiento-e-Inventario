@@ -137,139 +137,53 @@
       }
 
       @if (me()?.security?.totpEnrollable) {
+        <app-totp-enroll-wizard
+          (totpActivated)="onTotpProfileChanged()"
+        />
+        <app-totp-disable-dialog
+          (totpDisabled)="onTotpProfileChanged()"
+        />
         <div class="rounded-xl border border-border bg-dark/30 p-4 sm:p-5 space-y-4">
           <div>
-            <h3 class="text-sm font-semibold text-main">Autenticación TOTP (aplicación)</h3>
+            <h3 class="text-sm font-semibold text-main">App de autenticación (TOTP)</h3>
             <p class="text-xs text-muted mt-1 leading-relaxed max-w-2xl">
-              Segundo factor con código de 6 dígitos (Google Authenticator u otra app compatible). Solo aplica a
-              <span class="font-mono text-main/90">SUPER_ADMIN</span>. Tras activarlo, se pedirá en cada inicio de sesión
-              (antes de un posible código por correo, si aplica la política de plataforma).
+              Códigos de 6 dígitos (cada ~30 s), compatibles con Google/Microsoft Authenticator u otras apps
+              <span class="font-mono text-xs text-main/80">TOTP / RFC 6238</span>.
+              El asistente te guía en 3 pasos. En el inicio de sesión, si tu cuenta tiene TOTP activo, se pide
+              <strong class="text-main/90">antes</strong> que un posible código por <strong class="text-main/90">correo</strong> en accesos poco habituales
+              (esa política depende del rol y de la configuración de plataforma, ver recuadro de arriba). En el futuro, el mismo flujo podrá habilitarse
+              a más perfiles: la lista de roles la define el producto.
             </p>
           </div>
-          <p class="text-xs text-muted">
-            Estado:
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted">
+            <span>Estado</span>
             <span
-              class="ml-1 font-mono font-semibold"
+              class="font-mono font-semibold"
               [class.text-primary]="me()!.security!.totpEnabled"
               [class.text-main]="!me()!.security!.totpEnabled"
             >
-              {{ me()!.security!.totpEnabled ? 'Activo' : 'Inactivo' }}
+              {{ me()!.security!.totpEnabled ? 'TOTP activo' : 'TOTP no activo' }}
             </span>
-          </p>
-          @if (!me()!.security!.totpEnabled && !totpEnrollOpen()) {
-            <button
-              type="button"
-              (click)="startTotpEnroll()"
-              [disabled]="totpBusy()"
-              class="px-4 py-2 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50"
-            >
-              @if (totpBusy()) { Preparando… } @else { Configurar TOTP }
-            </button>
-          }
-          @if (totpEnrollOpen()) {
-            <div class="space-y-3 border border-border border-dashed rounded-xl p-4 bg-dark/20">
-              <p class="text-xs text-muted">Escanea el código con tu app o ingresa la clave manual en “Cuenta” / “Añadir”.</p>
-              @if (totpQrSrc(); as src) {
-                <div class="flex flex-col sm:flex-row gap-4 items-start">
-                  <img
-                    [src]="src"
-                    width="200"
-                    height="200"
-                    class="rounded-lg border border-border bg-white p-1"
-                    alt="Código QR TOTP"
-                  />
-                  <div class="min-w-0 space-y-2">
-                    <p class="text-[10px] font-mono uppercase text-muted">Clave manual (Base32)</p>
-                    <code class="block text-xs font-mono text-main break-all p-2 rounded bg-dark border border-border select-all">{{
-                      totpManualKey()
-                    }}</code>
-                  </div>
-                </div>
-              }
-              <form [formGroup]="totpForm" (ngSubmit)="submitTotpActivate()" class="space-y-2 max-w-xs">
-                <label class="text-xs text-muted" for="totpActiv">Código de 6 dígitos de la app</label>
-                <input
-                  id="totpActiv"
-                  type="text"
-                  formControlName="code"
-                  inputmode="numeric"
-                  maxlength="6"
-                  autocomplete="one-time-code"
-                  class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-center font-mono text-lg tracking-widest text-main"
-                  placeholder="000000"
-                />
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    [disabled]="totpForm.invalid || totpBusy()"
-                    class="px-4 py-2 rounded-lg bg-primary text-sm font-bold text-zinc-950 disabled:opacity-50"
-                  >
-                    Activar
-                  </button>
-                  <button
-                    type="button"
-                    (click)="cancelTotpEnroll()"
-                    class="px-4 py-2 rounded-lg border border-border text-sm text-muted"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
-          }
-          @if (me()!.security!.totpEnabled) {
-            <div class="space-y-3">
-              @if (!showTotpDisable()) {
-                <button
-                  type="button"
-                  (click)="showTotpDisable.set(true)"
-                  [disabled]="totpBusy()"
-                  class="px-4 py-2 rounded-lg border border-amber-500/40 text-sm font-semibold text-amber-200/90 hover:bg-amber-500/10 disabled:opacity-50"
-                >
-                  Desactivar TOTP
-                </button>
-              } @else {
-                <form
-                  [formGroup]="totpDisableForm"
-                  (ngSubmit)="submitTotpDisable()"
-                  class="space-y-3 max-w-sm border border-border rounded-xl p-4 bg-dark/20"
-                >
-                  <p class="text-xs text-muted">Indica tu contraseña y un código actual de la app.</p>
-                  <input
-                    type="password"
-                    formControlName="password"
-                    autocomplete="current-password"
-                    class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
-                    placeholder="Contraseña"
-                  />
-                  <input
-                    type="text"
-                    formControlName="totpCode"
-                    inputmode="numeric"
-                    maxlength="6"
-                    class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-center font-mono tracking-widest text-sm text-main"
-                    placeholder="Código TOTP"
-                  />
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      type="submit"
-                      [disabled]="totpDisableForm.invalid || totpBusy()"
-                      class="px-4 py-2 rounded-lg bg-red-500/20 text-sm font-semibold text-red-300 border border-red-400/40 disabled:opacity-50"
-                    >
-                      Confirmar desactivación
-                    </button>
-                    <button
-                      type="button"
-                      (click)="showTotpDisable.set(false); totpDisableForm.reset()"
-                      class="px-4 py-2 rounded-lg border border-border text-sm text-muted"
-                    >
-                      Cerrar
-                    </button>
-                  </div>
-                </form>
-              }
-            </div>
-          }
+          </div>
+          <div class="flex flex-wrap gap-2 pt-1">
+            @if (!me()!.security!.totpEnabled) {
+              <button
+                type="button"
+                (click)="openTotpEnrollDialog()"
+                class="px-4 py-2.5 rounded-lg bg-primary text-sm font-bold text-zinc-950 shadow-sm shadow-primary/20 hover:opacity-90"
+              >
+                Abrir asistente (3 pasos)
+              </button>
+            } @else {
+              <button
+                type="button"
+                (click)="openTotpDisableDialog()"
+                class="px-4 py-2.5 rounded-lg border border-amber-500/40 text-sm font-semibold text-amber-200/90 hover:bg-amber-500/10"
+              >
+                Desactivar TOTP…
+              </button>
+            }
+          </div>
         </div>
       }
 

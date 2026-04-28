@@ -29,6 +29,7 @@ import {
 } from '../../common/email/transactional-mail.builder';
 import { StepUpPolicyService } from '../auth/step-up-policy.service';
 import { TotpService } from '../auth/totp.service';
+import { userRoleCanEnrollTotp } from '../auth/totp-policy';
 
 const meSelect = {
   id: true,
@@ -750,9 +751,9 @@ export class UsersService {
   async beginTotpEnrollment(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('Usuario no encontrado');
-    if (user.role !== 'SUPER_ADMIN') {
+    if (!userRoleCanEnrollTotp(user.role)) {
       throw new ForbiddenException(
-        'TOTP solo está disponible para super administradores de plataforma.',
+        'La autenticación TOTP no está habilitada para tu perfil. Consulta con el administrador.',
       );
     }
     if (user.totpEnabled) {
@@ -780,7 +781,7 @@ export class UsersService {
     if (user.totpEnabled) {
       throw new BadRequestException('TOTP ya está activo.');
     }
-    if (user.role !== 'SUPER_ADMIN') {
+    if (!userRoleCanEnrollTotp(user.role)) {
       throw new ForbiddenException();
     }
     const plain = this.totp.decryptSecret(user.totpSecretEncrypted);
@@ -801,9 +802,6 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.totpEnabled || !user.totpSecretEncrypted) {
       throw new BadRequestException('TOTP no está activo.');
-    }
-    if (user.role !== 'SUPER_ADMIN') {
-      throw new ForbiddenException();
     }
     const match = await bcrypt.compare(body.password, user.password);
     if (!match) {

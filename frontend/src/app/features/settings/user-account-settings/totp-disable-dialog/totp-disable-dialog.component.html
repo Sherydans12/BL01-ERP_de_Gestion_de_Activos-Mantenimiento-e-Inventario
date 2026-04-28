@@ -1,0 +1,79 @@
+<dialog
+  #totpDisableDialog
+  class="m-0 max-h-[100dvh] w-full max-w-none border-0 bg-transparent p-0 shadow-none [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+  (cancel)="onDialogCancel($event)"
+>
+  <div
+    class="totp-disable-backdrop flex min-h-full w-full items-center justify-center p-3 sm:p-4"
+    (click)="onBackdropClick($event)"
+  >
+    <div
+      class="w-full max-w-md rounded-2xl border border-border bg-surface shadow-2xl"
+      (click)="$event.stopPropagation()"
+    >
+      <div
+        class="border-b border-border bg-dark/40 px-4 py-3 sm:px-5 flex items-center justify-between gap-2"
+      >
+        <div>
+          <p class="text-xs font-mono uppercase text-amber-400/90">Desactivar TOTP</p>
+          <h2 class="text-base font-bold text-main">Confirma identidad</h2>
+        </div>
+        <button
+          type="button"
+          (click)="close()"
+          class="shrink-0 rounded-lg p-1.5 text-muted hover:text-main"
+          [attr.aria-label]="'Cerrar'"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <form [formGroup]="form" (ngSubmit)="submit()" class="p-4 sm:p-5 space-y-3">
+        <p class="text-xs text-muted leading-relaxed">
+          Se cerrarán las sesiones activas de tu cuenta. Necesitamos tu
+          <strong class="text-main/90">contraseña</strong> y un
+          <strong class="text-main/90">código TOTP actual</strong> de la app.
+        </p>
+        <div>
+          <label class="block text-xs text-muted mb-1" for="tdPass">Contraseña</label>
+          <input
+            id="tdPass"
+            type="password"
+            formControlName="password"
+            autocomplete="current-password"
+            class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main"
+          />
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1" for="tdCode">Código TOTP (6 dígitos)</label>
+          <input
+            id="tdCode"
+            type="text"
+            formControlName="totpCode"
+            inputmode="numeric"
+            maxlength="6"
+            class="w-full rounded-lg border border-border bg-dark px-3 py-2 text-center font-mono tracking-widest text-sm text-main"
+          />
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 pt-1">
+          <button
+            type="button"
+            (click)="close()"
+            class="px-4 py-2 rounded-lg border border-border text-sm text-muted"
+            [disabled]="busy"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            [disabled]="form.invalid || busy"
+            class="px-4 py-2 rounded-lg bg-red-500/20 text-sm font-semibold text-red-300 border border-red-400/40 disabled:opacity-50"
+          >
+            @if (busy) { Procesando… } @else { Desactivar TOTP }
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</dialog>

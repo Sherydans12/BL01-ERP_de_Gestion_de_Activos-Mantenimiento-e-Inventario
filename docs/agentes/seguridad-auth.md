@@ -17,13 +17,17 @@ Registro de políticas y flujos que afectan login, sesión y factores adicionale
 
 ## TOTP (aplicación autenticadora, RFC 6238)
 
-**Alcance actual:** solo `SUPER_ADMIN` (mismo criterio de producto que el enrolamiento en **Mi cuenta** y la visibilidad en listados / **Seguridad global**).
+**Alcance de enrolamiento (Mi cuenta):** `USER_ROLES_WITH_TOTP_ENROLLMENT` en `backend/src/features/auth/totp-policy.ts` (hoy solo `SUPER_ADMIN`). Ampliar ese arreglo cuando se habilite a más perfiles. El **inicio de sesión** con TOTP aplica a **cualquier** usuario con `totp_enabled` y secreto cifrado, sin depender solo de ese listado (así, si un rol se añade al arreglo más tarde, quien ya activó TOTP no queda atrapado).
+
+**Algoritmo y tolerancia de reloj:** TOTP con periodo 30s (RFC 6238). `TotpService` usa una instancia aislada de `Authenticator` con `window` configurable vía `TOTP_WINDOW_STEPS` (por defecto `1` → ±1 intervalo de 30s respecto al instante, útil en relojes ligeramente desfasados; rango acotado 0–5 en código).
 
 **Orden en el login** (tras contraseña correcta y limpiar `lockout`):
 
-1. Si el usuario tiene `users.totp_enabled` y rol Super Admin → el API responde `totpRequired` + `preAuthToken` (JWT corto, `typ: 'pre_totp'`, ~5 min). No se emite sesión todavía.
+1. Si el usuario tiene `users.totp_enabled` y secreto cifrado → el API responde `totpRequired` + `preAuthToken` (JWT corto, `typ: 'pre_totp'`, ~5 min). No se emite sesión todavía. (Aplica a cualquier cuenta con TOTP activo, no solo al definir el enrolamiento en `totp-policy`.)
 2. El cliente llama `POST /api/auth/login/verify-totp` con `preAuthToken` y `totpCode`.
 3. Tras TOTP válido, se aplica la **misma** lógica de 2FA por correo que en un login “normal” (contexto poco habitual): si aplica, respuesta `stepUpRequired` + `stepUpToken`; si no, sesión completa (`access_token` + `user`).
+
+**UI (Mi cuenta):** asistente en 3 pasos y modales nativos en `frontend/src/app/features/settings/user-account-settings/totp-enroll-wizard/` y `totp-disable-dialog/`.
 
 **Enrolamiento / baja (perfil):** `POST /api/users/me/totp/begin` (genera secreto cifrado en `totp_secret_encrypted`, QR + clave manual), `.../activate` (confirma con 6 dígitos), `.../disable` (contraseña + código TOTP actual, invalida sesiones). Ver `users.service.ts` y `totp.service.ts`.
 
@@ -33,7 +37,7 @@ Registro de políticas y flujos que afectan login, sesión y factores adicionale
 
 | Objetivo | Dónde tocar |
 |----------|-------------|
-| **Otro rol con TOTP** | Ajustar comprobaciones en `users.service.ts` (`beginTotpEnrollment`, `activateTotp`, `disableTotp`) y en `auth.service.ts` (rama `user.totpEnabled` del `login` y `verifyTotpLogin`); alinear `getSecuritySnapshotForUserRole` en `step-up-policy.service.ts` (`totpEnrollable` / filtrado por rol). Opcional: constante `USER_ROLES_WITH_TOTP` análoga a `USER_ROLES_WITH_EMAIL_STEP_UP`. |
+| **Otro rol con TOTP (Mi cuenta)** | Editar `USER_ROLES_WITH_TOTP_ENROLLMENT` en `totp-policy.ts` y, si hace falta, copys en front. `getSecuritySnapshotForUserRole` ya usa `userRoleCanEnrollTotp`. El login con TOTP no requiere cambio: basta `totpEnabled` en BD. |
 | **Política “TOTP obligatorio” por tenant o plataforma** | Nuevo flag en `platform_security_settings` o en `tenants` + validación en `login` (rechazar login sin TOTP si la política lo exige) y UI en **Seguridad global** o ajustes de empresa. |
 | **Recuperación si pierde el teléfono** | Hoy: flujo admin (p. ej. `set-password` / soporte) o desactivar TOTP con credenciales; se puede añadir códigos de respaldo o flujo de verificación por correo solo en ese caso. |
 | **WebAuthn / passkeys** | Módulo aparte; no reutiliza columnas TOTP; mantener TOTP y WebAuthn como factores disjuntos en diseño. |
@@ -56,7 +60,7 @@ Mantener **transacciones** y **invalidación de sesiones** al desactivar factore
 | POST | `/api/auth/login` | Puede devolver `totpRequired` + `preAuthToken`, o `stepUpRequired` + `stepUpToken`, o `access_token`. |
 | POST | `/api/auth/login/verify-totp` | Tras `totpRequired`; luego puede devolver `stepUpRequired` o sesión completa. |
 | POST | `/api/auth/login/super-admin-step-up` | Valida el código de correo; emite JWT. |
-| POST | `/api/users/me/totp/begin` \| `.../activate` \| `.../disable` | TOTP solo Super Admin (ver servicio). |
+| POST | `/api/users/me/totp/begin` \| `.../activate` \| `.../disable` | Enrolar/activar: roles en `totp-policy.ts`. Desactivar: cualquier cuenta con TOTP activo. |
 | GET | `/api/users/me` | Incluye `security`: política, bypass local, `totpEnrollable` / `totpEnabled`, etc. |
 | GET | `/api/users` (paginado) | Cada ítem: `emailStepUpPolicyApplies`, `totpEnabled` (y columnas de siempre). |
 | GET/PATCH | `/api/admin/security/global-auth-settings` | Lectura ADMIN+; solo SUPER_ADMIN modifica. Incluye `superAdminTotpEnabledCount` y `superAdminCount`. |
@@ -67,6 +71,9 @@ Al añadir carpetas bajo `backend/prisma/migrations/`, aplicar en local (ver reg
 
 ## Referencia de archivos
 
-- Política y extensión de roles: `step-up-policy.service.ts`
+- Política 2FA por correo y listas de roles: `step-up-policy.service.ts`
+- Política de **quién puede enrolar TOTP** (Mi cuenta): `totp-policy.ts`
+- Códigos TOTP (ventana de reloj, cifrado): `totp.service.ts`, `totp-secret-crypto.ts`
 - Código de reto y correo: `login-step-up.service.ts`, `auth.service.ts`
-- Listado/“Mi cuenta”: `users.service.ts` (`getMe`, `findAll`)
+- Listado/“Mi cuenta”: `users.service.ts` (`getMe`, `findAll`, flujos TOTP)
+- Asistente TOTP en el front: `.../user-account-settings/totp-enroll-wizard/`, `.../totp-disable-dialog/`

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_SECURITY_SETTINGS_ID } from './platform-security.constants';
+import { userRoleCanEnrollTotp } from './totp-policy';
 
 /**
  * Roles a los que hoy aplica el segundo factor por correo (IP/país no habituales).
@@ -97,7 +98,7 @@ export class StepUpPolicyService {
       platformEmailStepUpEnabled,
       localDevelopmentBypass: localDevBypass,
       emailStepUpAppliesToThisUser,
-      totpEnrollable: role === 'SUPER_ADMIN',
+      totpEnrollable: userRoleCanEnrollTotp(role),
       totpEnabled: opts?.totpEnabled ?? false,
     };
   }
