@@ -49,6 +49,9 @@ export interface LoginDto {
 export class AuthService {
   private readonly loginErrorMessage =
     'Credenciales inválidas o cuenta no activa';
+  /** Mensaje explícito cuando el código de empresa no coincide (cliente + logs). */
+  private readonly loginTenantMismatchMessage =
+    'El código de empresa no coincide con el de tu cuenta. Verifica el código e inténtalo de nuevo.';
   private readonly log = new Logger(AuthService.name);
 
   constructor(
@@ -100,6 +103,43 @@ export class AuthService {
     const elapsed = Date.now() - started;
     const wait = minMs + jitter - elapsed;
     if (wait > 0) await sleep(wait);
+  }
+
+  /**
+   * Depuración en logs del contenedor: ISO timestamp, email intentado, resultado y motivo.
+   * No registrar contraseñas ni tokens.
+   */
+  private logLoginDiagnostic(payload: {
+    outcome: 'failure' | 'success';
+    reason: string;
+    email: string;
+    userId?: string | null;
+    tenantCodeInput?: string;
+    role?: string;
+    ip?: string;
+    detail?: string;
+  }): void {
+    const ts = new Date().toISOString();
+    const segments: string[] = [
+      '[LoginAttempt]',
+      `ts=${ts}`,
+      `outcome=${payload.outcome}`,
+      `reason=${payload.reason}`,
+      `email=${payload.email}`,
+      payload.userId ? `userId=${payload.userId}` : 'userId=(none)',
+    ];
+    if (payload.tenantCodeInput !== undefined) {
+      segments.push(`tenantCode=${payload.tenantCodeInput}`);
+    }
+    if (payload.role) segments.push(`role=${payload.role}`);
+    if (payload.ip) segments.push(`ip=${payload.ip}`);
+    if (payload.detail) segments.push(payload.detail);
+    const line = segments.join(' ');
+    if (payload.outcome === 'failure') {
+      this.log.warn(line);
+    } else {
+      this.log.log(line);
+    }
   }
 
   private signPreTotpLoginToken(userId: string, email: string): string {
@@ -169,6 +209,10 @@ export class AuthService {
     const ip = (meta.clientIp || '').slice(0, 64);
     const ua = (meta.userAgent || '').slice(0, 512);
 
+    const tenantCode = dto.tenantCode?.trim() ?? '';
+    const email = dto.email?.trim() ?? '';
+    const pass = dto.password ?? '';
+
     const auditFail = async (
       emailAttempted: string,
       userId: string | null,
@@ -187,32 +231,40 @@ export class AuthService {
       }
     };
 
-    const fail = async (
+    const rejectLogin = async (
+      reason: string,
       emailAttempted: string,
       userId: string | null,
+      opts?: { clientMessage?: string },
     ): Promise<never> => {
+      this.logLoginDiagnostic({
+        outcome: 'failure',
+        reason,
+        email: emailAttempted,
+        userId,
+        tenantCodeInput: tenantCode || '(vacío)',
+        ip,
+      });
       await auditFail(emailAttempted, userId);
       await this.ensureMinFailureDelay(started);
-      throw new UnauthorizedException(this.loginErrorMessage);
+      throw new UnauthorizedException(
+        opts?.clientMessage ?? this.loginErrorMessage,
+      );
     };
-
-    const tenantCode = dto.tenantCode?.trim() ?? '';
-    const email = dto.email?.trim() ?? '';
-    const pass = dto.password ?? '';
 
     if (dto.honeypot?.trim()) {
       await bcrypt.compare('x', BCRYPT_DUMMY_HASH);
-      await fail(email, null);
+      await rejectLogin('HONEYPOT_TRIGGERED', email || '(vacío)', null);
     }
 
     if (!this.captcha.validate(dto.challengeId, dto.challengeAnswer)) {
       await bcrypt.compare('x', BCRYPT_DUMMY_HASH);
-      await fail(email, null);
+      await rejectLogin('CAPTCHA_INVALID', email, null);
     }
 
     if (!email || !pass) {
       await bcrypt.compare('x', BCRYPT_DUMMY_HASH);
-      await fail(email || '(vacío)', null);
+      await rejectLogin('MISSING_CREDENTIALS', email || '(vacío)', null);
     }
 
     const userRow = await this.prisma.user.findUnique({
@@ -226,12 +278,22 @@ export class AuthService {
 
     if (!userRow) {
       await bcrypt.compare('x', BCRYPT_DUMMY_HASH);
-      await fail(email, null);
+      await rejectLogin('USER_NOT_FOUND', email, null);
     }
 
     const user = userRow!;
 
     if (user.lockoutUntil && user.lockoutUntil > new Date()) {
+      this.logLoginDiagnostic({
+        outcome: 'failure',
+        reason: 'ACCOUNT_LOCKOUT_ACTIVE',
+        email,
+        userId: user.id,
+        tenantCodeInput: tenantCode || '(vacío)',
+        role: user.role,
+        ip,
+        detail: `lockoutUntil=${user.lockoutUntil.toISOString()}`,
+      });
       await auditFail(email, user.id);
       await this.ensureMinFailureDelay(started);
       throw new HttpException(
@@ -247,19 +309,31 @@ export class AuthService {
       user.tenant?.code !== tenantCode.toUpperCase()
     ) {
       await bcrypt.compare('x', BCRYPT_DUMMY_HASH);
-      await fail(email, user.id);
+      this.logLoginDiagnostic({
+        outcome: 'failure',
+        reason: 'TENANT_CODE_MISMATCH',
+        email,
+        userId: user.id,
+        tenantCodeInput: tenantCode || '(vacío)',
+        role: user.role,
+        ip,
+        detail: `expectedTenantCode=${user.tenant?.code ?? '(sin tenant)'} supplied=${tenantCode.toUpperCase()}`,
+      });
+      await auditFail(email, user.id);
+      await this.ensureMinFailureDelay(started);
+      throw new UnauthorizedException(this.loginTenantMismatchMessage);
     }
 
     // 2. Validación de Estado (Diferenciando flujo de invitación vs suspensión)
     if (!user.isActive) {
       await bcrypt.compare('x', BCRYPT_DUMMY_HASH);
-      await fail(email, user.id);
+      await rejectLogin('ACCOUNT_INACTIVE', email, user.id);
     }
 
     // 3. Validación de Password
     const isMatch = await bcrypt.compare(pass, user.password);
     if (!isMatch) {
-      await fail(email, user.id);
+      await rejectLogin('INVALID_PASSWORD', email, user.id);
     }
 
     // Limpia bloqueo al autenticar credenciales correctamente (antes de 2FA o sesión)
@@ -278,6 +352,15 @@ export class AuthService {
           'Configuración de autenticación en dos pasos inconsistente. Contacta al administrador.',
         );
       }
+      this.logLoginDiagnostic({
+        outcome: 'success',
+        reason: 'PASSWORD_OK_PENDING_TOTP',
+        email: user.email,
+        userId: user.id,
+        tenantCodeInput: tenantCode || '(vacío)',
+        role: user.role,
+        ip,
+      });
       return {
         totpRequired: true,
         preAuthToken: this.signPreTotpLoginToken(user.id, user.email),
@@ -288,6 +371,15 @@ export class AuthService {
 
     const emailStep = await this.maybeSendEmailStepUp(user, ip, geo, ua);
     if (emailStep) {
+      this.logLoginDiagnostic({
+        outcome: 'success',
+        reason: 'PASSWORD_OK_PENDING_EMAIL_STEP_UP',
+        email: user.email,
+        userId: user.id,
+        tenantCodeInput: tenantCode || '(vacío)',
+        role: user.role,
+        ip,
+      });
       return emailStep;
     }
 
@@ -323,6 +415,15 @@ export class AuthService {
     },
   ) {
     const { ip, ua, geo } = ctx;
+
+    this.logLoginDiagnostic({
+      outcome: 'success',
+      reason: 'SESSION_JWT_ISSUED',
+      email: user.email,
+      userId: user.id,
+      role: user.role,
+      ip,
+    });
 
     let allowedContracts: string[] = [];
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {

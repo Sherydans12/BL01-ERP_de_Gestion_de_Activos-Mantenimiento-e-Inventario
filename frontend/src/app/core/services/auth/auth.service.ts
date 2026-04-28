@@ -65,6 +65,15 @@ function decodeJwtPayload(token: string): JwtPayload | null {
 /** Margen ante desfase de reloj (segundos). */
 const JWT_EXP_SKEW_SEC = 60;
 
+/** `message` del body JSON de Nest (`HttpException`), puede ser string o array (validación). */
+export function readNestHttpErrorMessage(err: unknown): string | null {
+  const e = err as { error?: { message?: string | string[] } };
+  const m = e?.error?.message;
+  if (typeof m === 'string' && m.trim()) return m;
+  if (Array.isArray(m) && m.length && typeof m[0] === 'string') return m[0];
+  return null;
+}
+
 export function isAccessTokenExpired(token: string): boolean {
   const payload = decodeJwtPayload(token);
   if (!payload?.exp) return true;
@@ -144,29 +153,36 @@ export class AuthService {
             this.setSession(response.access_token, response.user);
             this.notification.success(`Bienvenido ${response.user.name}`);
           },
-          error: (err) => {
-            if (err.status === 429) {
+          error: (err: unknown) => {
+            const status = (err as { status?: number }).status;
+            if (status === 429) {
               this.notification.error(
                 'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
               );
-            } else if (err.status === 423) {
+            } else if (status === 423) {
               const msg =
-                typeof err.error?.message === 'string'
-                  ? err.error.message
-                  : 'Cuenta bloqueada temporalmente por intentos fallidos.';
+                readNestHttpErrorMessage(err) ??
+                'Cuenta bloqueada temporalmente por intentos fallidos.';
               this.notification.error(msg);
-            } else if (err.status === 403) {
+            } else if (status === 403) {
               this.notification.error(
                 'Tu cuenta está desactivada. Contacta al administrador.',
               );
-            } else if (err.status === 503) {
+            } else if (status === 503) {
               const msg =
-                typeof err.error?.message === 'string'
-                  ? err.error.message
-                  : 'Servicio de verificación no disponible. Reintenta más tarde.';
+                readNestHttpErrorMessage(err) ??
+                'Servicio de verificación no disponible. Reintenta más tarde.';
+              this.notification.error(msg);
+            } else if (status === 401) {
+              const msg =
+                readNestHttpErrorMessage(err) ??
+                'Credenciales inválidas o cuenta no activa.';
               this.notification.error(msg);
             } else {
-              this.notification.error('Credenciales inválidas.');
+              const msg =
+                readNestHttpErrorMessage(err) ??
+                'No se pudo iniciar sesión. Reintenta en unos segundos.';
+              this.notification.error(msg);
             }
           },
         }),
