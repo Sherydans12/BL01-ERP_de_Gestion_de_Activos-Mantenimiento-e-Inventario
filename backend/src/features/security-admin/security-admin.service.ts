@@ -1,11 +1,15 @@
 import {
   ForbiddenException,
   Injectable,
+  BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import { AuthAuditAction } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+
+import { PLATFORM_SECURITY_SETTINGS_ID } from '../auth/platform-security.constants';
 
 const HOURS_24_MS = 24 * 60 * 60 * 1000;
 
@@ -22,7 +26,10 @@ export interface SecurityDashboardStatsDto {
 
 @Injectable()
 export class SecurityAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   private assertTenantScope(requester: {
     tenantId: string | null;
@@ -199,5 +206,51 @@ export class SecurityAdminService {
       orderBy: { createdAt: 'desc' },
       take: 500,
     });
+  }
+
+  async getGlobalAuthSettings(requester: { role: string }) {
+    if (requester.role !== 'SUPER_ADMIN' && requester.role !== 'ADMIN') {
+      throw new ForbiddenException();
+    }
+    const row = await this.prisma.platformSecuritySettings.findUnique({
+      where: { id: PLATFORM_SECURITY_SETTINGS_ID },
+    });
+    return {
+      superAdminStepUpEmailEnabled:
+        row?.superAdminStepUpEmailEnabled ?? false,
+      authStepUpLocalBypass:
+        this.config.get<string>('AUTH_STEP_UP_BYPASS', '') === 'true',
+    };
+  }
+
+  async updateGlobalAuthSettings(
+    body: { superAdminStepUpEmailEnabled: boolean },
+    requester: { role: string },
+  ) {
+    if (requester.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'Solo un super administrador de plataforma puede modificar esta política.',
+      );
+    }
+    if (typeof body.superAdminStepUpEmailEnabled !== 'boolean') {
+      throw new BadRequestException(
+        'superAdminStepUpEmailEnabled debe ser booleano.',
+      );
+    }
+    await this.prisma.platformSecuritySettings.upsert({
+      where: { id: PLATFORM_SECURITY_SETTINGS_ID },
+      create: {
+        id: PLATFORM_SECURITY_SETTINGS_ID,
+        superAdminStepUpEmailEnabled: body.superAdminStepUpEmailEnabled,
+      },
+      update: {
+        superAdminStepUpEmailEnabled: body.superAdminStepUpEmailEnabled,
+      },
+    });
+    return {
+      superAdminStepUpEmailEnabled: body.superAdminStepUpEmailEnabled,
+      authStepUpLocalBypass:
+        this.config.get<string>('AUTH_STEP_UP_BYPASS', '') === 'true',
+    };
   }
 }

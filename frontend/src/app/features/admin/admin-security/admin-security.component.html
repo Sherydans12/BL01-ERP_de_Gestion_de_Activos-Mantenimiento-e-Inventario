@@ -196,19 +196,48 @@
       }
 
       @if (tab() === 'policies') {
-        <div class="max-w-2xl space-y-4 text-sm text-muted">
-          <p class="text-main font-semibold text-base">Próximamente</p>
+        <div class="max-w-2xl space-y-5 text-sm text-muted">
+          @if (globalAuth()?.authStepUpLocalBypass) {
+            <div
+              class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200/95 text-sm"
+            >
+              <strong class="text-amber-100">Modo local / bypass:</strong> la variable
+              <code class="font-mono text-xs px-1">AUTH_STEP_UP_BYPASS</code> está activa en el
+              servidor. No se exigirá el segundo factor por correo aunque la política aparezca
+              activa.
+            </div>
+          }
+          <p class="text-main font-semibold text-base">
+            Autenticación de Super Admin (plataforma)
+          </p>
           <p>
-            Aquí se podrán definir políticas avanzadas del tenant, por ejemplo:
+            Si está activa, los usuarios con rol <span class="font-mono text-main/90">SUPER_ADMIN</span> recibirán un
+            <strong class="text-main">código de un solo uso por correo</strong> cuando el inicio de sesión venga
+            de una red poco habitual: sin historial previo, IP o país distintos al último acceso, o IP aún no
+            consolidada (menos de dos inicios recientes con la misma IP pública). En entornos con IP local/privada
+            no se exige este paso (útil en desarrollo).
           </p>
-          <ul class="list-disc pl-5 space-y-2">
-            <li>Bloqueo automático de direcciones IP tras patrones de abuso.</li>
-            <li>Obligatoriedad de contraseñas complejas y rotación periódica.</li>
-            <li>Límites de sesiones concurrentes por usuario o por rol.</li>
-          </ul>
-          <p class="text-xs border-t border-border pt-4">
-            La política actual de bloqueo por fuerza bruta y la revocación de sesiones siguen activas en backend.
-          </p>
+          <label
+            class="flex items-start gap-3 cursor-pointer select-none rounded-xl border border-border bg-dark/40 p-4 hover:border-primary/30 transition-colors"
+            [class.opacity-60]="!isSuperAdmin() || savingGlobalAuth()"
+          >
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+              [checked]="!!globalAuth()?.superAdminStepUpEmailEnabled"
+              [disabled]="!isSuperAdmin() || savingGlobalAuth() || !globalAuth()"
+              (change)="onToggleSuperAdminStepUp($event)"
+            />
+            <span>
+              <span class="block text-main font-medium"
+                >Exigir verificación por correo en accesos poco habituales (Super Admin)</span
+              >
+              <span class="block text-xs text-muted mt-1">
+                Solo un super administrador de plataforma puede activar o desactivar esta opción.
+                Los administradores de empresa pueden ver el estado.
+              </span>
+            </span>
+          </label>
         </div>
       }
     </div>

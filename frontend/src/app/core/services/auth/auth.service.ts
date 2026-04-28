@@ -6,6 +6,20 @@ import { environment } from '../../../../environments/environment';
 import { tap, finalize } from 'rxjs/operators';
 import { NotificationService } from '../notification/notification.service';
 
+/** Respuesta de POST /auth/login: JWT o requisito de segundo factor (Super Admin). */
+export type LoginApiResult =
+  | {
+      access_token: string;
+      user: UserPayload & {
+        tenant?: { id: string; name: string; logoUrl: string | null };
+      };
+    }
+  | {
+      stepUpRequired: true;
+      stepUpToken: string;
+      message: string;
+    };
+
 export interface UserPayload {
   id: string;
   email: string;
@@ -93,12 +107,7 @@ export class AuthService {
     honeypot?: string;
   }) {
     return this.http
-      .post<{
-        access_token: string;
-        user: UserPayload & {
-          tenant?: { id: string; name: string; logoUrl: string };
-        };
-      }>(`${this.apiUrl}/login`, {
+      .post<LoginApiResult>(`${this.apiUrl}/login`, {
         tenantCode: credentials.tenantCode,
         email: credentials.email,
         password: credentials.password,
@@ -110,8 +119,17 @@ export class AuthService {
         tap({
           next: (response) => {
             this.forceLogoutInProgress = false;
+            if (
+              'stepUpRequired' in response &&
+              response.stepUpRequired === true
+            ) {
+              this.notification.info(response.message);
+              return;
+            }
+            if (!('access_token' in response)) {
+              return;
+            }
             this.setSession(response.access_token, response.user);
-            // La navegación post-login la maneja LoginComponent (lee returnUrl del query param)
             this.notification.success(`Bienvenido ${response.user.name}`);
           },
           error: (err) => {
@@ -129,8 +147,48 @@ export class AuthService {
               this.notification.error(
                 'Tu cuenta está desactivada. Contacta al administrador.',
               );
+            } else if (err.status === 503) {
+              const msg =
+                typeof err.error?.message === 'string'
+                  ? err.error.message
+                  : 'Servicio de verificación no disponible. Reintenta más tarde.';
+              this.notification.error(msg);
             } else {
               this.notification.error('Credenciales inválidas.');
+            }
+          },
+        }),
+      );
+  }
+
+  verifySuperAdminStepUp(body: { stepUpToken: string; code: string }) {
+    return this.http
+      .post<{
+        access_token: string;
+        user: UserPayload & {
+          tenant?: { id: string; name: string; logoUrl: string | null };
+        };
+      }>(`${this.apiUrl}/login/super-admin-step-up`, body)
+      .pipe(
+        tap({
+          next: (response) => {
+            this.forceLogoutInProgress = false;
+            this.setSession(response.access_token, response.user);
+            this.notification.success(`Bienvenido ${response.user.name}`);
+          },
+          error: (err) => {
+            if (err.status === 429) {
+              this.notification.error(
+                'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
+              );
+            } else if (err.status === 401) {
+              const msg =
+                typeof err.error?.message === 'string'
+                  ? err.error.message
+                  : 'Código incorrecto o sesión de verificación vencida.';
+              this.notification.error(msg);
+            } else {
+              this.notification.error('No se pudo verificar el código.');
             }
           },
         }),

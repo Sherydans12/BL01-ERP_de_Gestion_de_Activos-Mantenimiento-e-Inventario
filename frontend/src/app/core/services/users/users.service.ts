@@ -17,6 +17,8 @@ export interface User {
   customRoleId?: string | null;
   customRole?: { id: string; name: string; baseRole: string } | null;
   contractAccess?: { contractId: string }[];
+  /** Política global: si a este rol podría exigírsele 2FA por correo (IP inusual), según config. */
+  emailStepUpPolicyApplies?: boolean;
 }
 
 export interface PaginatedUsers {

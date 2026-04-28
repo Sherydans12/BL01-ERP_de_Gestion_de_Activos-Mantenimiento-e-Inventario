@@ -10,6 +10,8 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { CaptchaService } from './captcha.service';
 import { AuthAuditModule } from './auth-audit.module';
 import { UserSessionModule } from './user-session.module';
+import { LoginStepUpService } from './login-step-up.service';
+import { StepUpPolicyService } from './step-up-policy.service';
 
 @Module({
   imports: [
@@ -32,7 +34,13 @@ import { UserSessionModule } from './user-session.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, CaptchaService],
-  exports: [AuthService, AuthAuditModule],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    CaptchaService,
+    LoginStepUpService,
+    StepUpPolicyService,
+  ],
+  exports: [AuthService, AuthAuditModule, StepUpPolicyService],
 })
 export class AuthModule {}

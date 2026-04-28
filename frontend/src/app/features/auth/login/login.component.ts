@@ -77,10 +77,20 @@ export class LoginComponent implements OnInit {
     honeypot: [''],
   });
 
+  stepUpForm = this.fb.nonNullable.group({
+    code: [
+      '',
+      [Validators.required, Validators.pattern(/^\d{6}$/)],
+    ],
+  });
+
   isLoading = signal(false);
   captchaQuestion = signal<string>('');
   /** Presente cuando GET /auth/captcha respondió OK. */
   captchaId = signal<string | null>(null);
+  /** Flujo 2FA por correo (Super Admin). */
+  showStepUp = signal(false);
+  stepUpToken = signal<string | null>(null);
 
   ngOnInit() {
     if (this.authService.hasValidSession()) {
@@ -119,6 +129,10 @@ export class LoginComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.showStepUp()) {
+      this.submitStepUp();
+      return;
+    }
     const id = this.captchaId();
     if (this.loginForm.valid && id) {
       this.isLoading.set(true);
@@ -134,8 +148,18 @@ export class LoginComponent implements OnInit {
           honeypot: raw.honeypot,
         })
         .subscribe({
-          next: () => {
+          next: (res) => {
             this.isLoading.set(false);
+            if (
+              res &&
+              'stepUpRequired' in res &&
+              res.stepUpRequired === true
+            ) {
+              this.stepUpToken.set(res.stepUpToken);
+              this.showStepUp.set(true);
+              this.stepUpForm.reset({ code: '' });
+              return;
+            }
             this.router.navigateByUrl(this.returnUrl);
           },
           error: () => {
@@ -144,5 +168,31 @@ export class LoginComponent implements OnInit {
           },
         });
     }
+  }
+
+  submitStepUp() {
+    const t = this.stepUpToken();
+    if (!this.stepUpForm.valid || !t) {
+      return;
+    }
+    this.isLoading.set(true);
+    const code = this.stepUpForm.getRawValue().code;
+    this.authService
+      .verifySuperAdminStepUp({ stepUpToken: t, code })
+      .subscribe({
+        next: () => {
+          this.isLoading.set(false);
+          this.router.navigateByUrl(this.returnUrl);
+        },
+        error: () => {
+          this.isLoading.set(false);
+        },
+      });
+  }
+
+  backToPasswordStep(): void {
+    this.showStepUp.set(false);
+    this.stepUpToken.set(null);
+    this.stepUpForm.reset({ code: '' });
   }
 }

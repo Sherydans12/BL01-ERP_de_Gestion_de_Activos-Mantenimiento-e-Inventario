@@ -6,6 +6,7 @@ import {
   Logger,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -19,6 +20,8 @@ import { UserSessionService } from './user-session.service';
 import { EmailService } from '../../common/email/email.service';
 import { buildMailForgotPassword, buildMailUnusualLogin } from '../../common/email/transactional-mail.builder';
 import { StorageService } from '../../common/storage/storage.service';
+import { LoginStepUpService } from './login-step-up.service';
+import { StepUpPolicyService } from './step-up-policy.service';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
 const BCRYPT_DUMMY_HASH =
@@ -56,6 +59,8 @@ export class AuthService {
     private readonly authAudit: AuthAuditService,
     private readonly userSessions: UserSessionService,
     private readonly storage: StorageService,
+    private readonly loginStepUp: LoginStepUpService,
+    private readonly stepUpPolicy: StepUpPolicyService,
   ) {}
 
   private async sendUnusualLoginSecurityEmail(params: {
@@ -194,21 +199,86 @@ export class AuthService {
       await fail(email, user.id);
     }
 
-    // 4. Extracción de Contratos Permitidos
-    let allowedContracts: string[] = [];
-    if (user.role === 'ADMIN' || user.role === ('SUPER_ADMIN' as any)) {
-      allowedContracts = ['ALL']; // Corregido: unificada la variable
-    } else {
-      allowedContracts = user.contractAccess.map((access) => access.contractId);
-    }
-
-    // 5. Limpia bloqueo al autenticar correctamente
+    // Limpia bloqueo al autenticar credenciales correctamente (antes de 2FA o sesión)
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lockoutUntil: null },
     });
 
-    // 6. Auditoría éxito + alerta email si inusual
+    // Segundo factor por correo (roles en `USER_ROLES_WITH_EMAIL_STEP_UP`, ver StepUpPolicyService)
+    if (
+      this.stepUpPolicy.userRoleUsesEmailStepUp(user.role) &&
+      (await this.stepUpPolicy.isGlobalStepUpPolicyEffective()) &&
+      (await this.authAudit.shouldRequireEmailContextStepUp({
+        userId: user.id,
+        role: user.role,
+        ip,
+        country: geo.country,
+      }))
+    ) {
+        try {
+          const { stepUpToken } =
+            await this.loginStepUp.createChallengeAndSendEmail({
+              userId: user.id,
+              userEmail: user.email,
+              name: user.name,
+              clientIp: ip,
+              userAgent: ua,
+            });
+          return {
+            stepUpRequired: true,
+            stepUpToken,
+            message:
+              'Se envió un código de verificación a tu correo. Ingresa el código de 6 dígitos para continuar.',
+          };
+        } catch (e) {
+          this.log.error(`Email step-up initiation failed: ${e}`);
+          throw new ServiceUnavailableException(
+            'No se pudo enviar el código de verificación. Intenta de nuevo en unos minutos.',
+          );
+        }
+    }
+
+    return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
+  }
+
+  private async completeLoginAfterPasswordOk(
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+      avatarUrl: string | null;
+      role: string;
+      customRoleId: string | null;
+      tenantId: string | null;
+      notifyUnusualLogin: boolean;
+      contractAccess: { contractId: string }[];
+      tenant: {
+        id: string;
+        name: string;
+        code: string;
+        logoUrl: string | null;
+      } | null;
+      customRole: { name: string } | null;
+    },
+    ctx: {
+      ip: string;
+      ua: string;
+      geo: { city: string; country: string };
+    },
+  ) {
+    const { ip, ua, geo } = ctx;
+
+    let allowedContracts: string[] = [];
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      allowedContracts = ['ALL'];
+    } else {
+      allowedContracts = user.contractAccess.map((access) => access.contractId);
+    }
+
     try {
       const r = await this.authAudit.recordLoginSuccess({
         userId: user.id,
@@ -247,7 +317,6 @@ export class AuthService {
       );
     }
 
-    // 7. Generación de Payload y Token
     const payload = {
       email: user.email,
       sub: user.id,
@@ -283,6 +352,37 @@ export class AuthService {
         allowedContracts,
       },
     };
+  }
+
+  async verifySuperAdminStepUp(
+    body: { stepUpToken?: string; code?: string },
+    meta: LoginRequestMeta,
+  ) {
+    if (!body.stepUpToken?.trim() || !body.code?.length) {
+      throw new BadRequestException('Código o sesión de verificación requeridos.');
+    }
+    const { userId } = await this.loginStepUp.verifyAndConsumeToken(
+      body.stepUpToken,
+      body.code,
+    );
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        tenant: true,
+        contractAccess: true,
+        customRole: true,
+      },
+    });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Cuenta no disponible o sesión de verificación inválida.');
+    }
+    if (user.role !== 'SUPER_ADMIN') {
+      throw new UnauthorizedException('Sesión de verificación no válida para este usuario.');
+    }
+    const geo = await this.authAudit.lookupGeo(meta.clientIp);
+    const ip = (meta.clientIp || '').slice(0, 64);
+    const ua = (meta.userAgent || '').slice(0, 512);
+    return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
   }
 
   /** Registro de logout explícito (cliente llama antes de borrar sesión). */

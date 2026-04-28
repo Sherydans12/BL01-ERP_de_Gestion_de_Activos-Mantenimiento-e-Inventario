@@ -24,6 +24,15 @@ export interface ActiveSessionRow {
   isCurrent: boolean;
 }
 
+export interface ProfileSecurityFlagsDto {
+  /** Valor en BD (módulo Seguridad global). */
+  platformEmailStepUpEnabled: boolean;
+  /** `AUTH_STEP_UP_BYPASS=true` en el servidor: no se exige 2FA aunque la política esté on. */
+  localDevelopmentBypass: boolean;
+  /** Política + rol: si aplica 2FA por correo en logins poco habituales. */
+  emailStepUpAppliesToThisUser: boolean;
+}
+
 export interface ProfileMeDto {
   id: string;
   email: string;
@@ -37,6 +46,8 @@ export interface ProfileMeDto {
   customRoleName: string | null;
   /** Correo ante login con IP o país distinto al anterior. */
   notifyUnusualLogin: boolean;
+  /** Política de plataforma y alcance para el rol actual. */
+  security?: ProfileSecurityFlagsDto;
 }
 
 @Injectable({

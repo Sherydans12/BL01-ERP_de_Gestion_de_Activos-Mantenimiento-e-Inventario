@@ -26,6 +26,7 @@ import {
   buildMailInviteUser,
   buildMailResendActivation,
 } from '../../common/email/transactional-mail.builder';
+import { StepUpPolicyService } from '../auth/step-up-policy.service';
 
 const meSelect = {
   id: true,
@@ -52,6 +53,7 @@ export class UsersService {
     private readonly storage: StorageService,
     private readonly authAudit: AuthAuditService,
     private readonly userSessions: UserSessionService,
+    private readonly stepUpPolicy: StepUpPolicyService,
   ) {}
 
   private avatarPublicUrlToStorageKey(publicUrl: string | null): string | null {
@@ -118,7 +120,11 @@ export class UsersService {
       select: meSelect,
     });
     if (!u) throw new BadRequestException('Usuario no encontrado');
-    return this.mapMeRow(u);
+    const [base, security] = await Promise.all([
+      this.mapMeRow(u),
+      this.stepUpPolicy.getSecuritySnapshotForUserRole(u.role),
+    ]);
+    return { ...base, security };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -408,8 +414,7 @@ export class UsersService {
       where.tenantId = tenantId;
     }
 
-    // Ejecutamos conteo y búsqueda en paralelo para optimizar performance
-    const [items, total] = await Promise.all([
+    const [items, total, listCtx] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
@@ -433,10 +438,19 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.user.count({ where }),
+      this.stepUpPolicy.getListEvaluationContext(),
     ]);
+    const itemsWithPolicy = items.map((u) => ({
+      ...u,
+      emailStepUpPolicyApplies: this.stepUpPolicy.appliesToUserRoleWithContext(
+        u.role,
+        listCtx.platformOn,
+        listCtx.bypass,
+      ),
+    }));
 
     return {
-      items,
+      items: itemsWithPolicy,
       meta: {
         total,
         page,

@@ -117,6 +117,25 @@
         <p class="text-xs text-muted mt-0.5">Actividad de accesos, alertas y contraseña.</p>
       </div>
 
+      @if (me()!.security) {
+        <div class="rounded-xl border border-border bg-dark/30 p-4 sm:p-5 space-y-2">
+          <h3 class="text-sm font-semibold text-main">Verificación adicional por correo (política de plataforma)</h3>
+          <p class="text-xs text-muted leading-relaxed max-w-2xl">
+            @if (me()!.security!.localDevelopmentBypass) {
+              <span class="text-primary/90">En este entorno el segundo paso por correo no se exige</span> (variable de servidor <code class="px-1 rounded bg-dark font-mono text-[11px]">AUTH_STEP_UP_BYPASS</code>), aunque el interruptor en Seguridad global muestre “activo”.
+            } @else if (me()!.security!.emailStepUpAppliesToThisUser) {
+              A tu rol puede exigirse un <strong class="text-main/90">código de un solo uso</strong> por correo si el inicio de sesión es desde una red poco habitual (ver configuración en Seguridad global del sistema).
+            } @else {
+              @if (me()!.security!.platformEmailStepUpEnabled) {
+                Política global: <span class="text-primary/90">activa</span>. <strong class="text-main/90">No aplica a tu rol actual</strong> (hoy se define solo para cuentas de super administrador de plataforma).
+              } @else {
+                Política global de verificación adicional por correo: <strong class="text-main/90">inactiva</strong>.
+              }
+            }
+          </p>
+        </div>
+      }
+
       <div
         class="rounded-xl border border-border bg-dark/30 p-4 sm:p-5"
       >

@@ -88,6 +88,7 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                 <th class="px-6 py-4 font-medium">Nombre</th>
                 <th class="px-6 py-4 font-medium">Email</th>
                 <th class="px-6 py-4 font-medium">Rol</th>
+                <th class="px-6 py-4 font-medium">2FA correo (política)</th>
                 <th class="px-6 py-4 font-medium">RUT</th>
                 <th class="px-6 py-4 font-medium">Cargo</th>
                 <th class="px-6 py-4 font-medium text-center">Estado</th>
@@ -125,6 +126,24 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                       }"
                     >
                       {{ user.customRole?.name || user.role }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span
+                      class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border"
+                      [title]="
+                        user.emailStepUpPolicyApplies
+                          ? 'Puede exigirse código por correo en logins poco habituales (si la política global está activa y sin bypass local)'
+                          : 'No aplica la política de 2FA por correo a este rol o está desactivada'
+                      "
+                      [ngClass]="{
+                        'bg-primary/10 text-primary border-primary/20':
+                          user.emailStepUpPolicyApplies === true,
+                        'bg-dark text-muted border-border':
+                          !user.emailStepUpPolicyApplies,
+                      }"
+                    >
+                      {{ user.emailStepUpPolicyApplies ? 'Sí' : 'No' }}
                     </span>
                   </td>
                   <td class="px-6 py-4 text-muted font-mono">

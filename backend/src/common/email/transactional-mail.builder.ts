@@ -87,3 +87,21 @@ export function buildMailUnusualLogin(params: {
             `,
   });
 }
+
+/** Segundo factor por correo (solo flujo Super Admin, IP o contexto no habitual). */
+export function buildMailSuperAdminStepUp(params: {
+  name: string;
+  code: string;
+  validMinutes: number;
+}): string {
+  return buildTpmEmailHtml({
+    headline: 'Código de verificación',
+    subhead: `Válido ${params.validMinutes} min · un solo uso · inicio de sesión con paso adicional`,
+    bodyHtml: `
+            <p style="margin:0 0 12px 0;">Hola <strong>${escapeHtml(params.name)}</strong>,</p>
+            <p style="margin:0 0 16px 0;">Se detectó un inicio de sesión como <strong>Super Admin</strong> desde una red o contexto distinto a lo habitual. Usa el código siguiente para continuar. Si tú no iniciaste sesión, no compartas este código y contacta a soporte.</p>
+            <p style="margin:0 0 8px 0;padding:16px 18px;border-radius:10px;background-color:#0f1419;border:1px solid #2a3441;border-left:3px solid #00e5ff;font-size:28px;letter-spacing:0.25em;font-weight:700;font-family:ui-monospace,monospace;color:#e4e4e7;text-align:center;">${escapeHtml(params.code)}</p>
+            <p style="margin:12px 0 0 0;font-size:13px;color:#94a3b8;">No reenvíes este correo. El código expira en ${params.validMinutes} minutos.</p>
+            `,
+  });
+}

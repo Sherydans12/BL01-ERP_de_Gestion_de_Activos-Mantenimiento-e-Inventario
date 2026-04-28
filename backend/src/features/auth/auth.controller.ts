@@ -49,6 +49,22 @@ export class AuthController {
     );
   }
 
+  /** Segundo factor (correo) tras login con contraseña — solo Super Admin si aplica política. */
+  @Throttle({ default: { limit: 8, ttl: 60000 } })
+  @Post('login/super-admin-step-up')
+  verifySuperAdminStepUp(
+    @Body() body: Record<string, unknown>,
+    @Req() req: Request,
+  ) {
+    return this.authService.verifySuperAdminStepUp(
+      {
+        stepUpToken: body.stepUpToken as string | undefined,
+        code: body.code as string | undefined,
+      },
+      extractLoginMeta(req),
+    );
+  }
+
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('activate')
   activate(@Body() body: any, @Req() req: Request) {

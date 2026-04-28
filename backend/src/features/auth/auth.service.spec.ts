@@ -8,6 +8,8 @@ import { CaptchaService } from './captcha.service';
 import { UserSessionService } from './user-session.service';
 import { EmailService } from '../../common/email/email.service';
 import { StorageService } from '../../common/storage/storage.service';
+import { LoginStepUpService } from './login-step-up.service';
+import { StepUpPolicyService } from './step-up-policy.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -21,7 +23,12 @@ describe('AuthService', () => {
           useValue: {
             lookupGeo: jest.fn().mockResolvedValue({ city: '', country: '' }),
             recordLoginFailure: jest.fn().mockResolvedValue(undefined),
-            recordLoginSuccess: jest.fn().mockResolvedValue(undefined),
+            recordLoginSuccess: jest
+              .fn()
+              .mockResolvedValue({ isSuspicious: false }),
+            shouldRequireEmailContextStepUp: jest
+              .fn()
+              .mockResolvedValue(false),
             recordPasswordChange: jest.fn().mockResolvedValue(undefined),
             recordLogout: jest.fn().mockResolvedValue(undefined),
           },
@@ -33,6 +40,20 @@ describe('AuthService', () => {
         { provide: CaptchaService, useValue: { validate: jest.fn() } },
         { provide: UserSessionService, useValue: {} },
         { provide: StorageService, useValue: { getReadOnlyUrl: jest.fn() } },
+        {
+          provide: LoginStepUpService,
+          useValue: {
+            createChallengeAndSendEmail: jest.fn(),
+            verifyAndConsumeToken: jest.fn(),
+          },
+        },
+        {
+          provide: StepUpPolicyService,
+          useValue: {
+            userRoleUsesEmailStepUp: () => false,
+            isGlobalStepUpPolicyEffective: jest.fn().mockResolvedValue(false),
+          },
+        },
       ],
     }).compile();
 

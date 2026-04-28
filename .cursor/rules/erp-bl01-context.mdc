@@ -21,7 +21,12 @@ Seguí **`.cursor/rules/tpm-arquitectura.mdc`** (persona, tenant/site, NestJS, A
 
 - Respetá **multi-tenant** (`tenantId`) y modelos de contrato/faena existentes.
 - No introduzcas dependencias o patrones que contradigan el código ya establecido en el mismo módulo; alineá con servicios y DTOs vecinos.
-- Documentación nueva de equipo o de “memoria de proyecto”: preferí **`docs/agentes/`** y enlazá desde ahí en lugar de dispersar notas sueltas.
+- Documentación nueva de equipo o de “memoria de proyecto”: preferí **`docs/agentes/`** y enlazá desde ahí en lugar de dispersar notas sueltas. Seguridad de auth y 2FA: **[`docs/agentes/seguridad-auth.md`](../../docs/agentes/seguridad-auth.md)**.
+
+## Prisma y migraciones
+
+- Tras **añadir o tocar** `backend/prisma/migrations/**` o `schema.prisma`, ejecutá en **local** (desde `backend/`) `npx prisma migrate deploy` o el flujo equivalente (`migrate dev`) para aplicar cambios y validar. Así la base local queda alineada con el historial de migraciones.
+- **Producción:** las migraciones se aplican en el **despliegue** (p. ej. Coolify ejecuta `prisma migrate deploy` en el build); no se asume que el push a `main` migre la DB de producción por separado.
 
 ## Memoria tipo claude-mem (Cursor)
 

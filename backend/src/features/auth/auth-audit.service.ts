@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthAuditAction } from '@prisma/client';
+import { USER_ROLES_WITH_EMAIL_STEP_UP } from './step-up-policy.service';
 
 export type GeoLookupResult = { city: string; country: string };
 
@@ -191,6 +192,89 @@ export class AuthAuditService {
       },
     });
     return { isSuspicious };
+  }
+
+  /**
+   * Contexto de acceso poco habitual para el segundo factor por correo (roles en
+   * `USER_ROLES_WITH_EMAIL_STEP_UP`). Hoy solo hay lógica de IP/historial para `SUPER_ADMIN`.
+   */
+  async shouldRequireEmailContextStepUp(params: {
+    userId: string;
+    role: string;
+    ip: string;
+    country: string;
+  }): Promise<boolean> {
+    if (
+      !(USER_ROLES_WITH_EMAIL_STEP_UP as readonly string[]).includes(
+        params.role,
+      )
+    ) {
+      return false;
+    }
+    if (params.role === 'SUPER_ADMIN') {
+      return this.shouldRequireSuperAdminLocationStepUp({
+        userId: params.userId,
+        ip: params.ip,
+        country: params.country,
+      });
+    }
+    return false;
+  }
+
+  /**
+   * @internal Lógica de “contexto poco habitual” para Super Admin (IP/país / frecuencia).
+   */
+  private async shouldRequireSuperAdminLocationStepUp(params: {
+    userId: string;
+    ip: string;
+    country: string;
+  }): Promise<boolean> {
+    if (this.isPrivateOrLocalIp(params.ip)) {
+      return false;
+    }
+    const lastSuccess = await this.prisma.authAuditLog.findFirst({
+      where: {
+        userId: params.userId,
+        action: AuthAuditAction.LOGIN_SUCCESS,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        country: true,
+        ipAddress: true,
+      },
+    });
+
+    if (!lastSuccess) {
+      return true;
+    }
+
+    const prevCountry = (lastSuccess.country ?? '').trim().toLowerCase();
+    const curCountry = (params.country ?? '').trim().toLowerCase();
+    const countryChanged =
+      !!prevCountry && !!curCountry && prevCountry !== curCountry;
+    const prevIp = (lastSuccess.ipAddress ?? '').trim();
+    const curIp = (params.ip ?? '').trim();
+    const ipChanged = !!prevIp && !!curIp && prevIp !== curIp;
+    if (countryChanged || ipChanged) {
+      return true;
+    }
+
+    const recent = await this.prisma.authAuditLog.findMany({
+      where: {
+        userId: params.userId,
+        action: AuthAuditAction.LOGIN_SUCCESS,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+      select: { ipAddress: true },
+    });
+    const sameIpCount = recent.filter(
+      (r) => (r.ipAddress ?? '').trim() === curIp,
+    ).length;
+    if (sameIpCount >= 2) {
+      return false;
+    }
+    return true;
   }
 
   async recordPasswordChange(params: {
