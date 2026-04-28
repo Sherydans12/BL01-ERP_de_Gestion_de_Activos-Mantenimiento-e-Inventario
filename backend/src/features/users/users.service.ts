@@ -24,6 +24,10 @@ import type { LoginRequestMeta } from '../auth/auth-request.util';
 import { UserSessionService } from '../auth/user-session.service';
 import { EmailService } from '../../common/email/email.service';
 import {
+  normalizeEmail,
+  prismaEmailInsensitive,
+} from '../../common/email/email-normalize';
+import {
   buildMailInviteUser,
   buildMailResendActivation,
 } from '../../common/email/transactional-mail.builder';
@@ -310,8 +314,10 @@ export class UsersService {
       );
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { email: data.email },
+    const emailNorm = normalizeEmail(data.email);
+
+    const existing = await this.prisma.user.findFirst({
+      where: { email: prismaEmailInsensitive(emailNorm) },
     });
     if (existing) {
       throw new ConflictException('El correo electrónico ya está registrado.');
@@ -332,7 +338,7 @@ export class UsersService {
       const newUser = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
-            email: data.email,
+            email: emailNorm,
             name: data.name,
             role: effectiveRole as any,
             password: '',

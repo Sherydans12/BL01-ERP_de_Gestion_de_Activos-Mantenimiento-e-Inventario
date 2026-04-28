@@ -18,7 +18,14 @@ import { AuthAuditService, summarizeUserAgent } from './auth-audit.service';
 import type { LoginRequestMeta } from './auth-request.util';
 import { UserSessionService } from './user-session.service';
 import { EmailService } from '../../common/email/email.service';
-import { buildMailForgotPassword, buildMailUnusualLogin } from '../../common/email/transactional-mail.builder';
+import {
+  buildMailForgotPassword,
+  buildMailUnusualLogin,
+} from '../../common/email/transactional-mail.builder';
+import {
+  normalizeEmail,
+  prismaEmailInsensitive,
+} from '../../common/email/email-normalize';
 import { StorageService } from '../../common/storage/storage.service';
 import { LoginStepUpService } from './login-step-up.service';
 import { StepUpPolicyService } from './step-up-policy.service';
@@ -290,7 +297,7 @@ export class AuthService {
     const ua = (meta.userAgent || '').slice(0, 512);
 
     const tenantCode = dto.tenantCode?.trim() ?? '';
-    const email = dto.email?.trim() ?? '';
+    const email = normalizeEmail(dto.email ?? '');
     const pass = dto.password ?? '';
 
     const auditFail = async (
@@ -841,12 +848,14 @@ export class AuthService {
       return genericOk();
     }
 
-    const email = dto.email?.trim() ?? '';
+    const email = normalizeEmail(dto.email ?? '');
     if (!email) {
       return genericOk();
     }
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findFirst({
+      where: { email: prismaEmailInsensitive(email) },
+    });
     if (!user || user.role === ('SUPER_ADMIN' as any)) {
       return genericOk();
     }
