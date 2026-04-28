@@ -22,11 +22,17 @@ import { finalize } from 'rxjs';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
+import { AvatarComponent } from '../../../shared/components/avatar/avatar.component';
 
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ConfirmModalComponent],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    ConfirmModalComponent,
+    AvatarComponent,
+  ],
   template: `
     <div class="space-y-6 animate-fade-in pb-10">
       <header
@@ -88,8 +94,6 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                 <th class="px-6 py-4 font-medium">Nombre</th>
                 <th class="px-6 py-4 font-medium">Email</th>
                 <th class="px-6 py-4 font-medium">Rol</th>
-                <th class="px-6 py-4 font-medium">2FA correo (política)</th>
-                <th class="px-6 py-4 font-medium">TOTP (app)</th>
                 <th class="px-6 py-4 font-medium">RUT</th>
                 <th class="px-6 py-4 font-medium">Cargo</th>
                 <th class="px-6 py-4 font-medium text-center">Estado</th>
@@ -99,17 +103,27 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
             <tbody class="divide-y divide-border/50 text-sm">
               @for (user of paginatedUsers(); track user.id) {
                 <tr class="hover:bg-dark/40 transition-colors duration-200">
-                  <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                      <div
-                        class="h-8 w-8 rounded bg-dark border border-border flex items-center justify-center text-xs font-bold text-main uppercase"
+                  <td class="px-6 py-4 max-w-xs">
+                    <button
+                      type="button"
+                      (click)="openUserDetail(user)"
+                      class="group flex items-center gap-3 text-left w-full min-w-0 rounded-lg -mx-1 px-1 py-0.5 hover:bg-dark/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors cursor-pointer"
+                      [attr.title]="'Ver ficha: ' + user.name"
+                    >
+                      <app-avatar
+                        [firstName]="user.firstName"
+                        [lastName]="user.lastName"
+                        [displayName]="user.name"
+                        [avatarUrl]="user.avatarUrl"
+                        [colorSeed]="user.email"
+                        sizeClass="h-8 w-8"
+                      />
+                      <span
+                        class="font-medium text-main min-w-0 truncate group-hover:text-primary group-hover:underline decoration-primary/50 underline-offset-2"
                       >
-                        {{ user.name.charAt(0) }}
-                      </div>
-                      <div class="font-medium text-main">
                         {{ user.name }}
-                      </div>
-                    </div>
+                      </span>
+                    </button>
                   </td>
                   <td class="px-6 py-4 text-muted">
                     {{ user.email }}
@@ -128,45 +142,6 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
                     >
                       {{ user.customRole?.name || user.role }}
                     </span>
-                  </td>
-                  <td class="px-6 py-4">
-                    <span
-                      class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border"
-                      [title]="
-                        user.emailStepUpPolicyApplies
-                          ? 'Puede exigirse código por correo en logins poco habituales (si la política global está activa y sin bypass local)'
-                          : 'No aplica la política de 2FA por correo a este rol o está desactivada'
-                      "
-                      [ngClass]="{
-                        'bg-primary/10 text-primary border-primary/20':
-                          user.emailStepUpPolicyApplies === true,
-                        'bg-dark text-muted border-border':
-                          !user.emailStepUpPolicyApplies,
-                      }"
-                    >
-                      {{ user.emailStepUpPolicyApplies ? 'Sí' : 'No' }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4">
-                    @if (user.role === 'SUPER_ADMIN') {
-                      <span
-                        class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border"
-                        [ngClass]="{
-                          'bg-primary/10 text-primary border-primary/20':
-                            user.totpEnabled === true,
-                          'bg-dark text-muted border-border': !user.totpEnabled,
-                        }"
-                        [title]="
-                          user.totpEnabled
-                            ? 'TOTP activo (aplicación autenticadora)'
-                            : 'TOTP no activo'
-                        "
-                      >
-                        {{ user.totpEnabled ? 'Activo' : 'No' }}
-                      </span>
-                    } @else {
-                      <span class="text-xs text-muted">—</span>
-                    }
                   </td>
                   <td class="px-6 py-4 text-muted font-mono">
                     {{ user.rut || '-' }}
@@ -725,6 +700,207 @@ import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
         </dialog>
       }
 
+      @if (detailUser(); as u) {
+        <dialog
+          #userDetailDialog
+          class="dialog-native-shell [&::backdrop]:bg-black/70 [&::backdrop]:backdrop-blur-sm"
+          (close)="onUserDetailDialogClose()"
+        >
+          <div
+            class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+            (click)="closeUserDetailModal()"
+          >
+            <div
+              class="bg-surface rounded-xl border border-border w-full max-w-2xl max-h-[min(90vh,720px)] flex flex-col overflow-hidden backdrop-blur-xl shadow-2xl"
+              (click)="$event.stopPropagation()"
+            >
+              <div
+                class="p-6 border-b border-border flex items-start justify-between gap-4 shrink-0"
+              >
+                <div class="flex items-center gap-4 min-w-0">
+                  <app-avatar
+                    [firstName]="u.firstName"
+                    [lastName]="u.lastName"
+                    [displayName]="u.name"
+                    [avatarUrl]="u.avatarUrl"
+                    [colorSeed]="u.email"
+                    sizeClass="h-16 w-16"
+                  />
+                  <div class="min-w-0">
+                    <h3
+                      class="text-xl font-bold text-main tracking-tight truncate"
+                    >
+                      {{ u.name }}
+                    </h3>
+                    <p class="text-sm text-muted font-mono break-all">
+                      {{ u.email }}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  (click)="closeUserDetailModal()"
+                  class="text-muted hover:text-main p-1 rounded-lg shrink-0"
+                  aria-label="Cerrar"
+                >
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <div class="p-6 overflow-y-auto text-sm space-y-4">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  <div class="sm:col-span-2">
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Nombre de perfil
+                    </dt>
+                    <dd class="text-main">
+                      @if (u.firstName || u.lastName) {
+                        {{ (u.firstName || '').trim() }}
+                        {{ (u.lastName || '').trim() }}
+                      } @else {
+                        <span class="text-muted"
+                          >— (no informado; se usa nombre completo)</span
+                        >
+                      }
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Rol (sistema)
+                    </dt>
+                    <dd class="text-main font-mono">{{ u.role }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Rol en organización
+                    </dt>
+                    <dd class="text-main">{{ u.customRole?.name || '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">RUT</dt>
+                    <dd class="text-main font-mono">{{ u.rut || '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Teléfono
+                    </dt>
+                    <dd class="text-main font-mono">{{ u.phone || '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Fecha de nacimiento
+                    </dt>
+                    <dd class="text-main">
+                      @if (u.birthDate) {
+                        {{ u.birthDate | date: 'dd/MM/yyyy' }}
+                      } @else {
+                        —
+                      }
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">Cargo</dt>
+                    <dd class="text-main">{{ u.position || '—' }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Estado de cuenta
+                    </dt>
+                    <dd>
+                      <span
+                        class="px-2 py-0.5 text-[10px] font-mono uppercase rounded border"
+                        [ngClass]="
+                          u.isActive
+                            ? 'bg-success/10 text-success border-success/20'
+                            : 'bg-warning/10 text-warning border-warning/20'
+                        "
+                      >
+                        {{ u.isActive ? 'Activo' : 'Inactivo' }}
+                      </span>
+                    </dd>
+                  </div>
+                  <div class="sm:col-span-2">
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Contratos con acceso
+                    </dt>
+                    <dd class="text-main">{{ contractsDisplay(u) }}</dd>
+                  </div>
+                  <div>
+                    <dt
+                      class="text-xs font-mono uppercase text-muted"
+                      title="Puede exigirse 2FA por correo en contextos poco habituales según política global"
+                    >
+                      2FA por correo (política)
+                    </dt>
+                    <dd class="text-main">
+                      {{ u.emailStepUpPolicyApplies ? 'Sí' : 'No' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      TOTP (aplicación)
+                    </dt>
+                    <dd class="text-main">
+                      @if (u.role === 'SUPER_ADMIN') {
+                        {{ u.totpEnabled ? 'Activo' : 'No activo' }}
+                      } @else {
+                        <span class="text-muted">No aplica a este rol</span>
+                      }
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Aviso login inusual
+                    </dt>
+                    <dd class="text-main">
+                      {{ u.notifyUnusualLogin ? 'Sí' : 'No' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-mono uppercase text-muted">Creado</dt>
+                    <dd class="text-main font-mono text-xs">
+                      {{ u.createdAt | date: 'medium' }}
+                    </dd>
+                  </div>
+                  @if (u.updatedAt) {
+                    <div>
+                      <dt class="text-xs font-mono uppercase text-muted">
+                        Actualizado
+                      </dt>
+                      <dd class="text-main font-mono text-xs">
+                        {{ u.updatedAt | date: 'medium' }}
+                      </dd>
+                    </div>
+                  }
+                </dl>
+              </div>
+              <div
+                class="bg-dark/50 border-t border-border p-4 flex justify-end shrink-0"
+              >
+                <button
+                  type="button"
+                  (click)="closeUserDetailModal()"
+                  class="px-4 py-2 text-sm font-medium text-main bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg font-mono"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </dialog>
+      }
+
       <app-confirm-modal
         [isOpen]="confirmModalOpen()"
         [title]="confirmModalConfig().title"
@@ -773,6 +949,8 @@ export class UserManagementComponent implements OnInit {
     viewChild<ElementRef<HTMLDialogElement>>('userDeleteDialog');
   passwordDialog =
     viewChild<ElementRef<HTMLDialogElement>>('passwordDialog');
+  userDetailDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('userDetailDialog');
 
   users = signal<User[]>([]);
   availableContracts = signal<Contract[]>([]);
@@ -809,6 +987,8 @@ export class UserManagementComponent implements OnInit {
 
   selectedUser = signal<User | null>(null);
   userToDelete = signal<User | null>(null);
+  /** Ficha de solo lectura (click en nombre). */
+  detailUser = signal<User | null>(null);
 
   userForm = this.fb.nonNullable.group({
     name: ['', Validators.required],
@@ -826,6 +1006,46 @@ export class UserManagementComponent implements OnInit {
   isSessionUser(user: User): boolean {
     const id = this.authService.currentUser()?.id;
     return !!id && user.id === id;
+  }
+
+  /** Nombres de contratos para la ficha de usuario. */
+  contractsDisplay(user: User): string {
+    const access = user.contractAccess ?? [];
+    if (access.length === 0) {
+      return '—';
+    }
+    const byId = new Map(
+      this.availableContracts().map((c) => [c.id, c.name] as const),
+    );
+    return access
+      .map((a) => byId.get(a.contractId) ?? a.contractId)
+      .join(', ');
+  }
+
+  openUserDetail(user: User) {
+    this.detailUser.set(user);
+    afterNextRender(
+      () => {
+        const el = this.userDetailDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  closeUserDetailModal() {
+    const el = this.userDetailDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.detailUser.set(null);
+    }
+  }
+
+  onUserDetailDialogClose() {
+    this.detailUser.set(null);
   }
 
   ngOnInit() {

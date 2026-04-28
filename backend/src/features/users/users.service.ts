@@ -430,9 +430,13 @@ export class UsersService {
           id: true,
           email: true,
           name: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
           role: true,
           isActive: true,
           createdAt: true,
+          updatedAt: true,
           tenantId: true,
           rut: true,
           phone: true,
@@ -442,20 +446,31 @@ export class UsersService {
           customRole: { select: { id: true, name: true, baseRole: true } },
           contractAccess: { select: { contractId: true } },
           totpEnabled: true,
+          notifyUnusualLogin: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.user.count({ where }),
       this.stepUpPolicy.getListEvaluationContext(),
     ]);
-    const itemsWithPolicy = items.map((u) => ({
-      ...u,
-      emailStepUpPolicyApplies: this.stepUpPolicy.appliesToUserRoleWithContext(
-        u.role,
-        listCtx.platformOn,
-        listCtx.bypass,
-      ),
-    }));
+    const itemsWithPolicy = await Promise.all(
+      items.map(async (u) => {
+        const emailStepUpPolicyApplies =
+          this.stepUpPolicy.appliesToUserRoleWithContext(
+            u.role,
+            listCtx.platformOn,
+            listCtx.bypass,
+          );
+        const avatarReadUrl = u.avatarUrl
+          ? await this.storage.getReadOnlyUrl(u.avatarUrl)
+          : null;
+        return {
+          ...u,
+          emailStepUpPolicyApplies,
+          avatarUrl: avatarReadUrl,
+        };
+      }),
+    );
 
     return {
       items: itemsWithPolicy,

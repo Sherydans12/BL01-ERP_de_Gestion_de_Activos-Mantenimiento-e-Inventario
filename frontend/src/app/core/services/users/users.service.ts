@@ -7,9 +7,14 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  /** URL firmada o pública para mostrar avatar (listado enriquecido en backend). */
+  avatarUrl?: string | null;
   role: string;
   isActive: boolean;
   createdAt: string;
+  updatedAt?: string;
   rut?: string;
   phone?: string;
   birthDate?: string;
@@ -21,6 +26,8 @@ export interface User {
   emailStepUpPolicyApplies?: boolean;
   /** TOTP (app) activo — hoy relevante para Super Admin. */
   totpEnabled?: boolean;
+  /** Aviso por correo en logins poco habituales (perfil de seguridad). */
+  notifyUnusualLogin?: boolean;
 }
 
 export interface PaginatedUsers {
