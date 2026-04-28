@@ -68,7 +68,8 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | `README.md` | Este índice |
 | [platform-data-admin.md](platform-data-admin.md) | Herramienta SUPER_ADMIN: purga por tenant, API `/api/super-admin/platform`, escalamiento |
 | [seguridad-auth.md](seguridad-auth.md) | 2FA por correo (Super Admin), TOTP (Super Admin), bypass local, API y notas de extensión |
-| [correos-transaccionales.md](correos-transaccionales.md) | Previsualizar plantillas de correo (`npm run email-previews` en `backend/`, salida en `docs/email-previews/`) |
+| [correos-transaccionales.md](correos-transaccionales.md) | Plantillas, `npm run email-previews`, reglas técnicas; el **inventario de envíos** vive en [CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md) |
+| [../CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md) | **Catálogo maestro** de todos los `sendMail` y plantillas; actualizar al añadir correos nuevos |
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |
 

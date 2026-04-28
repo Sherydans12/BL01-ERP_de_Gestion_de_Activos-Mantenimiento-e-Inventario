@@ -5,6 +5,7 @@ import {
   buildMailResendActivation,
   buildMailForgotPassword,
   buildMailUnusualLogin,
+  buildMailSuperAdminStepUp,
 } from './transactional-mail.builder';
 
 const SAMPLE_BASE = 'https://tpm.ejemplo.cl';
@@ -47,6 +48,16 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
         deviceLabel: 'Chrome · Windows',
         ip: '190.5.4.2',
         locationLine: 'Santiago, Chile',
+      }),
+  },
+  {
+    file: '05-codigo-verificacion-super-admin.html',
+    title: 'Código de verificación (2FA por correo — Super Admin, login inusual)',
+    build: () =>
+      buildMailSuperAdminStepUp({
+        name: 'Operador de plataforma',
+        code: '482917',
+        validMinutes: 10,
       }),
   },
 ];
@@ -92,11 +103,13 @@ function run() {
   <ul>
 ${links.join('\n')}
   </ul>
-  <div class="box">Otros avisos por email (garantía OT, resumen de compras) aún usan cuerpos HTML mínimos sin esta plantilla; no están en esta galería.</div>
+  <div class="box">Los envíos que <strong>no</strong> usan <code>buildTpmEmailHtml</code> (p. ej. garantía OT, resumen compras) figuran en el catálogo <code>docs/CORREOS-SISTEMA.md</code> en el repositorio; la meta es migrarlos a la plantilla unificada cuando toque.</div>
   <h2>Invitación (incrustado)</h2>
   <iframe title="Vista invitación" src="01-invitacion.html"></iframe>
   <h2>Recuperar contraseña (incrustado)</h2>
   <iframe title="Vista restablecimiento" src="03-recuperar-contrasena.html"></iframe>
+  <h2>Código Super Admin (incrustado)</h2>
+  <iframe title="Vista código verificación" src="05-codigo-verificacion-super-admin.html"></iframe>
   <p class="note">Abrí también <code>docs/email-previews/01-invitacion.html</code> (y demás) directamente en el navegador con doble clic o “Open with Live Server”.</p>
 </body>
 </html>

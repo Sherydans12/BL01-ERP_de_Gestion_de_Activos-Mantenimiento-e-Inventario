@@ -93,6 +93,7 @@ Definidos en `frontend/tailwind.config.js` y `frontend/src/styles.scss`. **Prefe
 - **Workflow "Schema-First Loop":** Cuando te pida una nueva funcionalidad (ej. Bodega), SIEMPRE genera primero el esquema de Prisma y pide confirmación antes de escribir Controladores/Servicios/Frontend.
 - **Workflow "Component Blueprinting":** Antes de escribir el HTML de un componente complejo de Angular, define primero la estructura de Signals (`input()`, `output()`, `computed()`) en el archivo `.ts` y pide confirmación.
 - **Skill "DTO & Interface Mirroring":** Cuando generes un DTO en NestJS, genera inmediatamente la interfaz equivalente en TypeScript para el Frontend, transformando los tipos `DateTime` de Prisma a `string` (formato ISO) en la interfaz del cliente.
+- **Workflow "Correos y catálogo de envíos":** Cualquier **nuevo** `EmailService.sendMail` o plantilla transaccional debe: (1) registrarse en **[`docs/CORREOS-SISTEMA.md`](../../docs/CORREOS-SISTEMA.md)**; (2) si usa `buildTpmEmailHtml` / `transactional-mail.builder.ts`, añadir una entrada al array `SAMPLES` de `backend/src/common/email/preview-renderer.ts` y ejecutar `npm run email-previews` en `backend/`. Guía: [`docs/agentes/correos-transaccionales.md`](../../docs/agentes/correos-transaccionales.md).
 
 ## 7. UI/UX PRO MAX (skill del proyecto)
 

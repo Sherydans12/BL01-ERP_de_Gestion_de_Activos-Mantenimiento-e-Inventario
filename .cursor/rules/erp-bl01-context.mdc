@@ -21,7 +21,7 @@ Seguí **`.cursor/rules/tpm-arquitectura.mdc`** (persona, tenant/site, NestJS, A
 
 - Respetá **multi-tenant** (`tenantId`) y modelos de contrato/faena existentes.
 - No introduzcas dependencias o patrones que contradigan el código ya establecido en el mismo módulo; alineá con servicios y DTOs vecinos.
-- Documentación nueva de equipo o de “memoria de proyecto”: preferí **`docs/agentes/`** y enlazá desde ahí en lugar de dispersar notas sueltas. Seguridad de auth y 2FA: **[`docs/agentes/seguridad-auth.md`](../../docs/agentes/seguridad-auth.md)**.
+- Documentación nueva de equipo o de “memoria de proyecto”: preferí **`docs/agentes/`** y enlazá desde ahí en lugar de dispersar notas sueltas. Seguridad de auth y 2FA: **[`docs/agentes/seguridad-auth.md`](../../docs/agentes/seguridad-auth.md)**. **Correos:** catálogo maestro [`docs/CORREOS-SISTEMA.md`](../../docs/CORREOS-SISTEMA.md) y flujo de previews [`docs/agentes/correos-transaccionales.md`](../../docs/agentes/correos-transaccionales.md) — al añadir envíos nuevos, actualizá el catálogo (y `preview-renderer` + `npm run email-previews` si aplica).
 
 ## Prisma y migraciones
 
