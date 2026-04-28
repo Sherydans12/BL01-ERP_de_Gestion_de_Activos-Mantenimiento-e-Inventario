@@ -191,6 +191,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
               >
                 <th class="px-6 py-4 font-medium">Nombre</th>
                 <th class="px-6 py-4 font-medium">Email</th>
+                <th class="px-6 py-4 font-medium">Empresa / tenant</th>
                 <th class="px-6 py-4 font-medium">Rol</th>
                 <th class="px-6 py-4 font-medium">RUT</th>
                 <th class="px-6 py-4 font-medium">Cargo</th>
@@ -225,6 +226,31 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                   </td>
                   <td class="px-6 py-4 text-muted">
                     {{ user.email }}
+                  </td>
+                  <td class="px-6 py-4 max-w-[13rem] align-top">
+                    @if (user.tenant) {
+                      <div class="flex flex-col gap-0.5">
+                        <span class="text-main text-xs font-medium truncate">{{
+                          user.tenant.name
+                        }}</span>
+                        <span class="font-mono text-[11px] text-primary"
+                          >{{ user.tenant.code }}</span
+                        >
+                        <span
+                          class="font-mono text-[10px] text-muted truncate block"
+                          [title]="user.tenant.id"
+                          >{{ user.tenant.id }}</span
+                        >
+                      </div>
+                    } @else if (user.tenantId) {
+                      <span
+                        class="font-mono text-[11px] text-muted truncate block"
+                        [title]="user.tenantId"
+                        >{{ user.tenantId }}</span
+                      >
+                    } @else {
+                      <span class="text-muted">—</span>
+                    }
                   </td>
                   <td class="px-6 py-4">
                     <span
@@ -371,7 +397,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
               } @empty {
                 <tr>
                   <td
-                    colspan="7"
+                    colspan="8"
                     class="px-6 py-12 text-center text-muted font-mono"
                   >
                     @if (appliedSearch().trim()) {
@@ -922,6 +948,34 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                         <span class="text-muted"
                           >— (no informado; se usa nombre completo)</span
                         >
+                      }
+                    </dd>
+                  </div>
+                  <div class="sm:col-span-2">
+                    <dt class="text-xs font-mono uppercase text-muted">
+                      Empresa (tenant)
+                    </dt>
+                    <dd class="text-main space-y-1">
+                      @if (u.tenant) {
+                        <div>
+                          <span class="font-medium">{{ u.tenant.name }}</span>
+                          <span class="text-muted"> · </span>
+                          <span class="font-mono text-primary">{{ u.tenant.code }}</span>
+                        </div>
+                        <div
+                          class="font-mono text-[11px] text-muted break-all"
+                          [title]="u.tenant.id"
+                        >
+                          {{ u.tenant.id }}
+                        </div>
+                      } @else if (u.tenantId) {
+                        <span
+                          class="font-mono text-[11px] text-muted break-all"
+                          [title]="u.tenantId"
+                          >{{ u.tenantId }}</span
+                        >
+                      } @else {
+                        <span class="text-muted">—</span>
                       }
                     </dd>
                   </div>

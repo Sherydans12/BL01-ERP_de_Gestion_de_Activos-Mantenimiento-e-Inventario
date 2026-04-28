@@ -354,8 +354,8 @@ export class AuthService {
       await rejectLogin('MISSING_CREDENTIALS', email || '(vacío)', null);
     }
 
-    const userRow = await this.prisma.user.findUnique({
-      where: { email },
+    const userRow = await this.prisma.user.findFirst({
+      where: { email: prismaEmailInsensitive(email) },
       include: {
         tenant: true,
         contractAccess: true,
@@ -855,6 +855,7 @@ export class AuthService {
 
     const user = await this.prisma.user.findFirst({
       where: { email: prismaEmailInsensitive(email) },
+      include: { tenant: true },
     });
     if (!user || user.role === ('SUPER_ADMIN' as any)) {
       return genericOk();
@@ -883,6 +884,10 @@ export class AuthService {
         html: buildMailForgotPassword({
           name: user.name,
           resetLink,
+          organizationLine:
+            user.tenant != null
+              ? `${user.tenant.name} — código ${user.tenant.code}`
+              : undefined,
         }),
       });
     } catch (err) {

@@ -377,19 +377,31 @@ export class UsersService {
         this.config.get('FRONTEND_URL') || 'http://localhost:4200';
       const activationLink = `${frontendUrl}/auth/activate?token=${activationToken}`;
 
+      let organizationLine: string | undefined;
+      if (tenantId && effectiveRole !== 'SUPER_ADMIN') {
+        const tn = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true, code: true },
+        });
+        if (tn) {
+          organizationLine = `${tn.name} — código ${tn.code}`;
+        }
+      }
+
       try {
         await this.emailService.sendMail({
-          to: data.email,
+          to: emailNorm,
           subject: 'Invitación a Sistema TPM',
           html: buildMailInviteUser({
             name: data.name,
             role: String(effectiveRole),
             activationLink,
+            organizationLine,
           }),
         });
       } catch (mailErr) {
         this.logger.warn(
-          `Fallo al enviar invitación a ${data.email}: ${mailErr instanceof Error ? mailErr.message : String(mailErr)}`,
+          `Fallo al enviar invitación a ${emailNorm}: ${mailErr instanceof Error ? mailErr.message : String(mailErr)}`,
         );
         try {
           await this.prisma.user.delete({ where: { id: newUser.id } });
@@ -477,6 +489,7 @@ export class UsersService {
           customRoleId: true,
           customRole: { select: { id: true, name: true, baseRole: true } },
           contractAccess: { select: { contractId: true } },
+          tenant: { select: { id: true, code: true, name: true } },
           totpEnabled: true,
           notifyUnusualLogin: true,
         },
@@ -621,7 +634,10 @@ export class UsersService {
           where: { id },
           data: {
             name: data.name,
-            email: data.email,
+            email:
+              data.email !== undefined
+                ? normalizeEmail(String(data.email))
+                : undefined,
             role: data.role,
             rut: data.rut,
             phone: data.phone,
@@ -672,6 +688,7 @@ export class UsersService {
             customRoleId: true,
             customRole: { select: { id: true, name: true, baseRole: true } },
             contractAccess: { select: { contractId: true } },
+            tenant: { select: { id: true, code: true, name: true } },
           },
         });
       });
@@ -686,8 +703,10 @@ export class UsersService {
     requesterTenantId?: string,
     requesterRole?: string,
   ) {
-    // 1. Buscar el usuario
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: { tenant: true },
+    });
 
     if (!user) throw new BadRequestException('Usuario no encontrado');
 
@@ -716,6 +735,11 @@ export class UsersService {
       this.config.get('FRONTEND_URL') || 'http://localhost:4200';
     const activationLink = `${frontendUrl}/auth/activate?token=${newToken}`;
 
+    const organizationLine =
+      user.tenant != null
+        ? `${user.tenant.name} — código ${user.tenant.code}`
+        : undefined;
+
     try {
       await this.emailService.sendMail({
         to: user.email,
@@ -724,6 +748,7 @@ export class UsersService {
           name: user.name,
           role: String(user.role),
           activationLink,
+          organizationLine,
         }),
       });
     } catch (mailErr) {

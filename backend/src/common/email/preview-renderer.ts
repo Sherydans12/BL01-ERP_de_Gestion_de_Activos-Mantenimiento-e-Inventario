@@ -18,6 +18,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
         name: 'María Ignacia Pérez',
         role: 'SUPERVISOR',
         activationLink: `${SAMPLE_BASE}/auth/activate?token=ejemplo_token_activacion_hex_64`,
+        organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),
   },
   {
@@ -28,6 +29,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
         name: 'Juan Mecánico',
         role: 'MECHANIC',
         activationLink: `${SAMPLE_BASE}/auth/activate?token=otro_token_reeenvio`,
+        organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),
   },
   {
@@ -37,6 +39,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
       buildMailForgotPassword({
         name: 'Nicolás Sena',
         resetLink: `${SAMPLE_BASE}/auth/reset-password?token=token_reset_1h`,
+        organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),
   },
   {
