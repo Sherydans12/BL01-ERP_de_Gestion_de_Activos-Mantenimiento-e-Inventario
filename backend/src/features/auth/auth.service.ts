@@ -142,11 +142,83 @@ export class AuthService {
     }
   }
 
-  private signPreTotpLoginToken(userId: string, email: string): string {
-    return this.jwtService.sign(
-      { sub: userId, email, typ: 'pre_totp' },
-      { expiresIn: '5m' },
-    );
+  /** Incluye `tc` (código empresa del formulario) para resolver tenant en SUPER_ADMIN sin tenant en BD. */
+  private signPreTotpLoginToken(
+    userId: string,
+    email: string,
+    tenantCode?: string,
+  ): string {
+    const payload: Record<string, string> = {
+      sub: userId,
+      email,
+      typ: 'pre_totp',
+    };
+    if (tenantCode?.trim()) {
+      payload.tc = tenantCode.trim();
+    }
+    return this.jwtService.sign(payload, { expiresIn: '5m' });
+  }
+
+  /**
+   * SUPER_ADMIN puede tener `tenant_id` null en BD; el código de empresa del login
+   * define el tenant operativo en JWT y en `req.user` (véase JwtStrategy).
+   */
+  private async resolveEffectiveTenantForSession(
+    user: {
+      tenantId: string | null;
+      role: string;
+      tenant: {
+        id: string;
+        name: string;
+        logoUrl: string | null;
+      } | null;
+    },
+    loginTenantCode?: string | null,
+  ): Promise<{
+    jwtTenantId: string | null;
+    tenantForResponse: {
+      id: string;
+      name: string;
+      logoUrl: string | null;
+    } | null;
+  }> {
+    if (user.tenantId && user.tenant) {
+      return {
+        jwtTenantId: user.tenantId,
+        tenantForResponse: {
+          id: user.tenant.id,
+          name: user.tenant.name,
+          logoUrl: user.tenant.logoUrl,
+        },
+      };
+    }
+    if (user.tenantId) {
+      const t = await this.prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { id: true, name: true, logoUrl: true },
+      });
+      return { jwtTenantId: user.tenantId, tenantForResponse: t };
+    }
+    const code = loginTenantCode?.trim();
+    if (user.role === 'SUPER_ADMIN' && code) {
+      const t = await this.prisma.tenant.findFirst({
+        where: { code: code.toUpperCase() },
+        select: { id: true, name: true, logoUrl: true },
+      });
+      if (t) {
+        return { jwtTenantId: t.id, tenantForResponse: t };
+      }
+    }
+    return {
+      jwtTenantId: user.tenantId,
+      tenantForResponse: user.tenant
+        ? {
+            id: user.tenant.id,
+            name: user.tenant.name,
+            logoUrl: user.tenant.logoUrl,
+          }
+        : null,
+    };
   }
 
   /**
@@ -363,7 +435,7 @@ export class AuthService {
       });
       return {
         totpRequired: true,
-        preAuthToken: this.signPreTotpLoginToken(user.id, user.email),
+        preAuthToken: this.signPreTotpLoginToken(user.id, user.email, tenantCode),
         message:
           'Ingresa el código de 6 dígitos de tu aplicación de autenticación (Google Authenticator o similar).',
       };
@@ -383,7 +455,12 @@ export class AuthService {
       return emailStep;
     }
 
-    return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
+    return this.completeLoginAfterPasswordOk(user, {
+      ip,
+      ua,
+      geo,
+      loginTenantCode: tenantCode,
+    });
   }
 
   private async completeLoginAfterPasswordOk(
@@ -412,6 +489,8 @@ export class AuthService {
       ip: string;
       ua: string;
       geo: { city: string; country: string };
+      /** Código empresa del formulario (sesión SUPER_ADMIN sin tenant en BD). */
+      loginTenantCode?: string;
     },
   ) {
     const { ip, ua, geo } = ctx;
@@ -455,6 +534,9 @@ export class AuthService {
       this.log.warn(`No se pudo registrar LOGIN_SUCCESS: ${e}`);
     }
 
+    const { jwtTenantId, tenantForResponse } =
+      await this.resolveEffectiveTenantForSession(user, ctx.loginTenantCode);
+
     const jti = crypto.randomUUID();
     try {
       await this.userSessions.create({
@@ -474,7 +556,7 @@ export class AuthService {
       email: user.email,
       sub: user.id,
       role: user.role,
-      tenantId: user.tenantId,
+      tenantId: jwtTenantId,
       allowedContracts,
       customRoleId: user.customRoleId ?? null,
       jti,
@@ -495,11 +577,11 @@ export class AuthService {
         role: user.role,
         customRoleId: user.customRoleId ?? null,
         customRoleName: user.customRole?.name ?? null,
-        tenant: user.tenant
+        tenant: tenantForResponse
           ? {
-              id: user.tenant.id,
-              name: user.tenant.name,
-              logoUrl: user.tenant.logoUrl,
+              id: tenantForResponse.id,
+              name: tenantForResponse.name,
+              logoUrl: tenantForResponse.logoUrl,
             }
           : null,
         allowedContracts,
@@ -521,15 +603,18 @@ export class AuthService {
       );
     }
     let userId: string;
+    let loginTc: string | undefined;
     try {
       const p = this.jwtService.verify(body.preAuthToken) as {
         sub: string;
         typ?: string;
+        tc?: string;
       };
       if (p.typ !== 'pre_totp') {
         throw new Error('typ');
       }
       userId = p.sub;
+      loginTc = typeof p.tc === 'string' ? p.tc : undefined;
     } catch {
       throw new UnauthorizedException(
         'Sesión de verificación TOTP vencida o inválida.',
@@ -553,11 +638,20 @@ export class AuthService {
     if (emailStep) {
       return emailStep;
     }
-    return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
+    return this.completeLoginAfterPasswordOk(user, {
+      ip,
+      ua,
+      geo,
+      loginTenantCode: loginTc,
+    });
   }
 
   async verifySuperAdminStepUp(
-    body: { stepUpToken?: string; code?: string },
+    body: {
+      stepUpToken?: string;
+      code?: string;
+      tenantCode?: string;
+    },
     meta: LoginRequestMeta,
   ) {
     if (!body.stepUpToken?.trim() || !body.code?.length) {
@@ -584,7 +678,12 @@ export class AuthService {
     const geo = await this.authAudit.lookupGeo(meta.clientIp);
     const ip = (meta.clientIp || '').slice(0, 64);
     const ua = (meta.userAgent || '').slice(0, 512);
-    return this.completeLoginAfterPasswordOk(user, { ip, ua, geo });
+    return this.completeLoginAfterPasswordOk(user, {
+      ip,
+      ua,
+      geo,
+      loginTenantCode: body.tenantCode?.trim(),
+    });
   }
 
   /** Registro de logout explícito (cliente llama antes de borrar sesión). */

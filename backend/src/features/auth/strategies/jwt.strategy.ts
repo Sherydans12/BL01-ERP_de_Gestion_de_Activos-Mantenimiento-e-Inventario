@@ -19,10 +19,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: Record<string, unknown>) {
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: { contractAccess: true }, // Extraemos los accesos del usuario
+      where: { id: payload.sub as string },
+      include: { contractAccess: true, tenant: true },
     });
 
     if (!user || (!user.isActive && payload.context !== 'activation')) {
@@ -36,9 +36,29 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     await this.userSessions.assertSessionValid(user.id, jti);
     void this.userSessions.touchLastActive(user.id, jti);
 
-    // Retornamos el usuario inyectando el array plano de allowedContracts
+    let effectiveTenantId = user.tenantId;
+    if (
+      user.role === 'SUPER_ADMIN' &&
+      typeof payload.tenantId === 'string' &&
+      payload.tenantId.length > 0
+    ) {
+      effectiveTenantId = payload.tenantId;
+    }
+
+    let tenant = user.tenant;
+    if (
+      effectiveTenantId &&
+      effectiveTenantId !== user.tenantId
+    ) {
+      tenant = await this.prisma.tenant.findUnique({
+        where: { id: effectiveTenantId },
+      });
+    }
+
     return {
       ...user,
+      tenantId: effectiveTenantId,
+      tenant,
       allowedContracts: user.contractAccess.map((access) => access.contractId),
       jti,
     };

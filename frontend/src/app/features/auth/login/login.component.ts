@@ -201,7 +201,11 @@ export class LoginComponent implements OnInit {
     this.isLoading.set(true);
     const code = this.stepUpForm.getRawValue().code;
     this.authService
-      .verifySuperAdminStepUp({ stepUpToken: t, code })
+      .verifySuperAdminStepUp({
+        stepUpToken: t,
+        code,
+        tenantCode: this.loginForm.getRawValue().tenantCode,
+      })
       .subscribe({
         next: () => {
           this.isLoading.set(false);

@@ -60,6 +60,7 @@ export class AuthController {
       {
         stepUpToken: body.stepUpToken as string | undefined,
         code: body.code as string | undefined,
+        tenantCode: body.tenantCode as string | undefined,
       },
       extractLoginMeta(req),
     );

@@ -237,7 +237,11 @@ export class AuthService {
       );
   }
 
-  verifySuperAdminStepUp(body: { stepUpToken: string; code: string }) {
+  verifySuperAdminStepUp(body: {
+    stepUpToken: string;
+    code: string;
+    tenantCode?: string;
+  }) {
     return this.http
       .post<{
         access_token: string;
