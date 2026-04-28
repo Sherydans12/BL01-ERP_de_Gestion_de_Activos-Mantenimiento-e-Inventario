@@ -131,6 +131,23 @@ export class UsersController {
     return this.usersService.findAssignableForOt(req.user.tenantId);
   }
 
+  /** Sugerencias de búsqueda (nombre, email, rol) para el listado admin. */
+  @Get('search-suggestions')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  searchSuggestions(
+    @Req() req: any,
+    @Query('q') q?: string,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+  ) {
+    const { tenantId, role } = req.user;
+    return this.usersService.searchSuggestions(
+      tenantId,
+      role,
+      q ?? '',
+      limit ?? 8,
+    );
+  }
+
   @Post()
   @Roles('ADMIN', 'SUPER_ADMIN')
   create(@Body() body: any, @Req() req: any) {
@@ -144,9 +161,10 @@ export class UsersController {
     @Req() req: any,
     @Query('page', new ParseIntPipe({ optional: true })) page: number = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 10,
+    @Query('search') search?: string,
   ) {
     const { tenantId, role } = req.user;
-    return this.usersService.findAll(tenantId, role, page, limit);
+    return this.usersService.findAll(tenantId, role, page, limit, search);
   }
 
   @Patch(':id')

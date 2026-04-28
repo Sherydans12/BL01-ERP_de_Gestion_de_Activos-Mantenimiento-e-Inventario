@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   OnInit,
@@ -11,14 +12,16 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { UsersService, User } from '../../../core/services/users/users.service';
+import { UsersService, User, UserSearchSuggestion } from '../../../core/services/users/users.service';
 import {
   TenantRolesService,
   TenantRole,
 } from '../../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
-import { finalize } from 'rxjs';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
@@ -81,6 +84,101 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
           INVITAR USUARIO
         </button>
       </header>
+
+      <div
+        class="flex flex-col gap-3 bg-surface p-4 rounded-xl border border-border shadow-sm"
+      >
+        <div class="relative flex-1 min-w-0 max-w-2xl">
+          <label for="user-search" class="sr-only">Buscar usuarios</label>
+          <div class="relative">
+            <span
+              class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              aria-hidden="true"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </span>
+            <input
+              id="user-search"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              [value]="searchDraft()"
+              (input)="onSearchInput($any($event.target).value)"
+              (focus)="onSearchFocus()"
+              (blur)="onSearchBlur()"
+              class="w-full pl-10 pr-10 py-2.5 rounded-lg bg-dark border border-border text-main placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary font-mono text-sm"
+              placeholder="Nombre, email, RUT, cargo…"
+            />
+            @if (searchDraft().trim().length > 0) {
+              <button
+                type="button"
+                (mousedown)="clearSearch(); $event.preventDefault()"
+                class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted hover:text-main hover:bg-surface/80 transition-colors"
+                aria-label="Limpiar búsqueda"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            }
+          </div>
+          @if (suggestionsOpen() && searchSuggestions().length > 0) {
+            <ul
+              class="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-border bg-dark shadow-xl py-1"
+              role="listbox"
+              aria-label="Sugerencias"
+            >
+              @for (s of searchSuggestions(); track s.id) {
+                <li role="option">
+                  <button
+                    type="button"
+                    class="w-full text-left px-3 py-2.5 hover:bg-surface/90 flex flex-col gap-0.5 border-b border-border/40 last:border-0 transition-colors"
+                    (mousedown)="pickSuggestion($event, s)"
+                  >
+                    <span
+                      class="text-sm text-main font-medium truncate"
+                      >{{ s.name }}</span
+                    >
+                    <span class="text-xs font-mono text-muted truncate">{{
+                      s.email
+                    }}</span>
+                    <span
+                      class="text-[10px] font-mono uppercase tracking-wider text-primary"
+                      >{{ s.roleLabel }}</span
+                    >
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+          <p class="text-[11px] text-muted mt-2 font-mono leading-relaxed">
+            Sugerencias desde 2 caracteres. El listado se filtra al dejar de
+            escribir (~0,4 s).
+          </p>
+        </div>
+      </div>
 
       <div
         class="bg-surface rounded-xl shadow-sm border border-border overflow-hidden backdrop-blur-xl"
@@ -276,7 +374,11 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                     colspan="7"
                     class="px-6 py-12 text-center text-muted font-mono"
                   >
-                    No hay usuarios registrados
+                    @if (appliedSearch().trim()) {
+                      Ningún usuario coincide con la búsqueda.
+                    } @else {
+                      No hay usuarios registrados
+                    }
                   </td>
                 </tr>
               }
@@ -286,35 +388,83 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
 
         @if (totalItems() > 0) {
           <div
-            class="px-6 py-4 flex items-center justify-between border-t border-border bg-dark/20 text-sm"
+            class="px-4 sm:px-6 py-4 flex flex-col gap-4 border-t border-border bg-dark/20 text-sm"
           >
-            <div class="text-muted font-mono">
-              Mostrando
-              <span class="font-bold text-main">{{
-                (currentPage() - 1) * pageSize() + 1
-              }}</span>
-              a
-              <span class="font-bold text-main">{{
-                mathMin(currentPage() * pageSize(), totalItems())
-              }}</span>
-              de
-              <span class="font-bold text-main">{{ totalItems() }}</span>
+            <div
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            >
+              <div class="text-muted font-mono text-xs sm:text-sm">
+                Mostrando
+                <span class="font-bold text-main">{{
+                  (currentPage() - 1) * pageSize() + 1
+                }}</span>
+                –
+                <span class="font-bold text-main">{{
+                  mathMin(currentPage() * pageSize(), totalItems())
+                }}</span>
+                de
+                <span class="font-bold text-main">{{ totalItems() }}</span>
+                @if (appliedSearch().trim()) {
+                  <span class="text-primary/90"> (filtrado)</span>
+                }
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <label class="text-xs font-mono text-muted whitespace-nowrap"
+                  >Por página</label
+                >
+                <select
+                  (change)="onPageSizeChange($event)"
+                  class="bg-dark border border-border rounded-lg px-2 py-1.5 text-main text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  @for (sz of pageSizeOptions; track sz) {
+                    <option [value]="sz" [selected]="pageSize() === sz">{{
+                      sz
+                    }}</option>
+                  }
+                </select>
+              </div>
             </div>
-            <div class="flex gap-2">
-              <button
-                (click)="changePage(currentPage() - 1)"
-                [disabled]="currentPage() === 1"
-                class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            <div
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            >
+              <span class="text-muted font-mono text-xs"
+                >Página {{ currentPage() }} de
+                {{ totalPages() || 1 }}</span
               >
-                ANTERIOR
-              </button>
-              <button
-                (click)="changePage(currentPage() + 1)"
-                [disabled]="currentPage() >= totalPages()"
-                class="px-3 py-1.5 rounded bg-dark border border-border text-muted font-mono text-xs hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                SIGUIENTE
-              </button>
+              <div class="flex flex-wrap gap-1.5 justify-end">
+                <button
+                  type="button"
+                  (click)="goToPage(1)"
+                  [disabled]="currentPage() === 1"
+                  class="px-2.5 py-1.5 rounded bg-dark border border-border text-muted font-mono text-[10px] sm:text-xs hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Primera
+                </button>
+                <button
+                  type="button"
+                  (click)="goToPage(currentPage() - 1)"
+                  [disabled]="currentPage() === 1"
+                  class="px-2.5 py-1.5 rounded bg-dark border border-border text-muted font-mono text-[10px] sm:text-xs hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  (click)="goToPage(currentPage() + 1)"
+                  [disabled]="currentPage() >= totalPages()"
+                  class="px-2.5 py-1.5 rounded bg-dark border border-border text-muted font-mono text-[10px] sm:text-xs hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Siguiente
+                </button>
+                <button
+                  type="button"
+                  (click)="goToPage(totalPages())"
+                  [disabled]="currentPage() >= totalPages() || totalPages() < 2"
+                  class="px-2.5 py-1.5 rounded bg-dark border border-border text-muted font-mono text-[10px] sm:text-xs hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Última
+                </button>
+              </div>
             </div>
           </div>
         }
@@ -962,6 +1112,16 @@ export class UserManagementComponent implements OnInit {
   // Paginación
   currentPage = signal(1);
   pageSize = signal(10);
+  readonly pageSizeOptions = [10, 25, 50] as const;
+
+  searchDraft = signal('');
+  appliedSearch = signal('');
+  searchSuggestions = signal<UserSearchSuggestion[]>([]);
+  suggestionsOpen = signal(false);
+
+  private searchInputFocused = signal(false);
+  private readonly searchDebounce$ = new Subject<string>();
+  private readonly destroyRef = inject(DestroyRef);
 
   paginatedUsers = computed(() => this.users());
   totalItems = signal(0);
@@ -1001,6 +1161,47 @@ export class UserManagementComponent implements OnInit {
     isActive: [true],
     contractIds: [[] as string[]], // Cambiado de siteIds
   });
+
+  constructor() {
+    this.searchDebounce$
+      .pipe(
+        debounceTime(380),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((raw) => {
+        if (raw.trim() !== this.searchDraft().trim()) {
+          return;
+        }
+        const term = raw.trim();
+        this.appliedSearch.set(term);
+        this.currentPage.set(1);
+        this.loadUsers();
+        if (term.length >= 2) {
+          this.usersService.getSearchSuggestions(term).subscribe({
+            next: (res) => {
+              if (raw.trim() !== this.searchDraft().trim()) {
+                return;
+              }
+              this.searchSuggestions.set(res.items);
+              this.suggestionsOpen.set(
+                this.searchInputFocused() && res.items.length > 0,
+              );
+            },
+            error: () => {
+              if (raw.trim() !== this.searchDraft().trim()) {
+                return;
+              }
+              this.searchSuggestions.set([]);
+              this.suggestionsOpen.set(false);
+            },
+          });
+        } else {
+          this.searchSuggestions.set([]);
+          this.suggestionsOpen.set(false);
+        }
+      });
+  }
 
   /** Fila del usuario autenticado (no puede auto-desactivarse ni resetearse la clave aquí). */
   isSessionUser(user: User): boolean {
@@ -1140,24 +1341,95 @@ export class UserManagementComponent implements OnInit {
   }
 
   loadUsers() {
-    this.usersService.getUsers(this.currentPage(), this.pageSize()).subscribe({
-      next: (res) => {
-        this.users.set(res.items);
-        this.totalItems.set(res.meta.total);
-
-        const total = res.meta.lastPage;
-        if (this.currentPage() > total && total > 0) {
-          this.currentPage.set(total);
-        }
-      },
-      error: () => this.notification.error('Error al cargar usuarios'),
-    });
+    const q = this.appliedSearch().trim();
+    this.usersService
+      .getUsers(this.currentPage(), this.pageSize(), q || undefined)
+      .subscribe({
+        next: (res) => {
+          this.users.set(res.items);
+          this.totalItems.set(res.meta.total);
+          const last = res.meta.lastPage;
+          if (res.meta.total > 0 && last > 0 && this.currentPage() > last) {
+            this.currentPage.set(last);
+            this.loadUsers();
+            return;
+          }
+        },
+        error: () => this.notification.error('Error al cargar usuarios'),
+      });
   }
 
-  changePage(page: number) {
-    if (page >= 1 && page <= this.totalPages()) {
-      this.currentPage.set(page);
+  goToPage(page: number) {
+    const last = this.totalPages();
+    if (last <= 0) {
+      if (this.currentPage() !== 1) {
+        this.currentPage.set(1);
+      }
+      return;
     }
+    const p = Math.min(Math.max(1, page), last);
+    if (p === this.currentPage()) {
+      return;
+    }
+    this.currentPage.set(p);
+    this.loadUsers();
+  }
+
+  onSearchInput(value: string) {
+    this.searchDraft.set(value);
+    this.searchDebounce$.next(value);
+  }
+
+  onSearchFocus() {
+    this.searchInputFocused.set(true);
+    const t = this.searchDraft().trim();
+    if (t.length >= 2) {
+      this.usersService.getSearchSuggestions(t).subscribe({
+        next: (res) => {
+          if (t !== this.searchDraft().trim()) {
+            return;
+          }
+          this.searchSuggestions.set(res.items);
+          this.suggestionsOpen.set(res.items.length > 0);
+        },
+        error: () => {},
+      });
+    }
+  }
+
+  onSearchBlur() {
+    this.searchInputFocused.set(false);
+    setTimeout(() => this.suggestionsOpen.set(false), 180);
+  }
+
+  pickSuggestion(ev: MouseEvent, s: UserSearchSuggestion) {
+    ev.preventDefault();
+    this.searchDraft.set(s.email);
+    this.appliedSearch.set(s.email.trim());
+    this.searchSuggestions.set([]);
+    this.suggestionsOpen.set(false);
+    this.currentPage.set(1);
+    this.loadUsers();
+  }
+
+  clearSearch() {
+    this.searchDraft.set('');
+    this.appliedSearch.set('');
+    this.searchSuggestions.set([]);
+    this.suggestionsOpen.set(false);
+    this.currentPage.set(1);
+    this.loadUsers();
+  }
+
+  onPageSizeChange(ev: Event) {
+    const sel = ev.target as HTMLSelectElement;
+    const n = Number(sel.value);
+    if (!Number.isFinite(n) || n <= 0) {
+      return;
+    }
+    this.pageSize.set(n);
+    this.currentPage.set(1);
+    this.loadUsers();
   }
 
   openInviteModal() {

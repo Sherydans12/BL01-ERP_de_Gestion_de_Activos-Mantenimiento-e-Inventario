@@ -338,11 +338,8 @@ export class UsersService {
             password: '',
             isActive: false,
             activationToken,
-            /** SUPER_ADMIN: tenant del invitador si existe (misma org); si no, null (solo plataforma). */
-            tenantId:
-              effectiveRole === 'SUPER_ADMIN'
-                ? tenantId?.trim() || null
-                : tenantId,
+            /** SUPER_ADMIN de plataforma: sin empresa en BD; contexto vía `x-tenant-id` en cada request. */
+            tenantId: effectiveRole === 'SUPER_ADMIN' ? null : tenantId,
             rut: rutNorm,
             phone: phoneNorm,
             birthDate: data.birthDate ? new Date(data.birthDate) : null,

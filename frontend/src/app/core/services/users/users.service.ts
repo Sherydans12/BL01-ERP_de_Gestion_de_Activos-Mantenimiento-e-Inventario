@@ -36,7 +36,16 @@ export interface PaginatedUsers {
     total: number;
     page: number;
     lastPage: number;
+    limit?: number;
   };
+}
+
+/** Respuesta ligera de `GET /users/search-suggestions`. */
+export interface UserSearchSuggestion {
+  id: string;
+  name: string;
+  email: string;
+  roleLabel: string;
 }
 
 @Injectable({
@@ -51,12 +60,32 @@ export class UsersService {
     return this.http.get<User[]>(`${this.apiUrl}/assignable-for-ot`);
   }
 
-  getUsers(page: number = 1, limit: number = 10): Observable<PaginatedUsers> {
-    const params = new HttpParams()
-      .set('page', page.toString())
-      .set('limit', limit.toString());
-
+  getUsers(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+  ): Observable<PaginatedUsers> {
+    let params = new HttpParams()
+      .set('page', String(page))
+      .set('limit', String(limit));
+    const q = search?.trim();
+    if (q) {
+      params = params.set('search', q);
+    }
     return this.http.get<PaginatedUsers>(this.apiUrl, { params });
+  }
+
+  getSearchSuggestions(
+    q: string,
+    limit = 8,
+  ): Observable<{ items: UserSearchSuggestion[] }> {
+    const params = new HttpParams()
+      .set('q', q.trim())
+      .set('limit', String(limit));
+    return this.http.get<{ items: UserSearchSuggestion[] }>(
+      `${this.apiUrl}/search-suggestions`,
+      { params },
+    );
   }
 
   createUser(data: any): Observable<User> {
