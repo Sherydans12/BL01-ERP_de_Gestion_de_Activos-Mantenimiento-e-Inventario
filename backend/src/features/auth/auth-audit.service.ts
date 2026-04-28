@@ -6,7 +6,7 @@ export type GeoLookupResult = { city: string; country: string };
 
 const GEO_TIMEOUT_MS = 2800;
 const FAILURE_WINDOW_MS = 10 * 60 * 1000;
-const FAILURE_THRESHOLD = 5;
+const FAILURE_THRESHOLD = 20;
 
 @Injectable()
 export class AuthAuditService {
