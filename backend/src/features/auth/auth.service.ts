@@ -160,8 +160,9 @@ export class AuthService {
   }
 
   /**
-   * SUPER_ADMIN puede tener `tenant_id` null en BD; el código de empresa del login
-   * define el tenant operativo en JWT y en `req.user` (véase JwtStrategy).
+   * Contexto de UI tras login: empresa inferida por código en formulario (SUPER_ADMIN)
+   * o por BD. El JWT **no** lleva tenant para SUPER_ADMIN (véase `completeLoginAfterPasswordOk`);
+   * el backend usa `x-tenant-id` por request (JwtStrategy).
    */
   private async resolveEffectiveTenantForSession(
     user: {
@@ -169,6 +170,7 @@ export class AuthService {
       role: string;
       tenant: {
         id: string;
+        code: string;
         name: string;
         logoUrl: string | null;
       } | null;
@@ -178,6 +180,7 @@ export class AuthService {
     jwtTenantId: string | null;
     tenantForResponse: {
       id: string;
+      code: string;
       name: string;
       logoUrl: string | null;
     } | null;
@@ -187,6 +190,7 @@ export class AuthService {
         jwtTenantId: user.tenantId,
         tenantForResponse: {
           id: user.tenant.id,
+          code: user.tenant.code,
           name: user.tenant.name,
           logoUrl: user.tenant.logoUrl,
         },
@@ -195,7 +199,7 @@ export class AuthService {
     if (user.tenantId) {
       const t = await this.prisma.tenant.findUnique({
         where: { id: user.tenantId },
-        select: { id: true, name: true, logoUrl: true },
+        select: { id: true, code: true, name: true, logoUrl: true },
       });
       return { jwtTenantId: user.tenantId, tenantForResponse: t };
     }
@@ -203,10 +207,13 @@ export class AuthService {
     if (user.role === 'SUPER_ADMIN' && code) {
       const t = await this.prisma.tenant.findFirst({
         where: { code: code.toUpperCase() },
-        select: { id: true, name: true, logoUrl: true },
+        select: { id: true, code: true, name: true, logoUrl: true },
       });
       if (t) {
-        return { jwtTenantId: t.id, tenantForResponse: t };
+        return {
+          jwtTenantId: t.id,
+          tenantForResponse: t,
+        };
       }
     }
     return {
@@ -214,6 +221,7 @@ export class AuthService {
       tenantForResponse: user.tenant
         ? {
             id: user.tenant.id,
+            code: user.tenant.code,
             name: user.tenant.name,
             logoUrl: user.tenant.logoUrl,
           }
@@ -552,11 +560,15 @@ export class AuthService {
       );
     }
 
+    /** SUPER_ADMIN: sin tenant en JWT; contexto operativo = cabecera `x-tenant-id` (cliente). */
+    const tokenTenantId =
+      user.role === 'SUPER_ADMIN' ? null : jwtTenantId ?? user.tenantId;
+
     const payload = {
       email: user.email,
       sub: user.id,
       role: user.role,
-      tenantId: jwtTenantId,
+      tenantId: tokenTenantId,
       allowedContracts,
       customRoleId: user.customRoleId ?? null,
       jti,
@@ -580,6 +592,7 @@ export class AuthService {
         tenant: tenantForResponse
           ? {
               id: tenantForResponse.id,
+              code: tenantForResponse.code,
               name: tenantForResponse.name,
               logoUrl: tenantForResponse.logoUrl,
             }
@@ -756,7 +769,10 @@ export class AuthService {
       email: updatedUser.email,
       sub: updatedUser.id,
       role: updatedUser.role,
-      tenantId: updatedUser.tenantId,
+      tenantId:
+        updatedUser.role === ('SUPER_ADMIN' as any)
+          ? null
+          : updatedUser.tenantId,
       allowedContracts,
       customRoleId: user.customRoleId ?? null,
       jti,
@@ -781,6 +797,7 @@ export class AuthService {
         tenant: user.tenant
           ? {
               id: user.tenant.id,
+              code: user.tenant.code,
               name: user.tenant.name,
               logoUrl: user.tenant.logoUrl,
             }

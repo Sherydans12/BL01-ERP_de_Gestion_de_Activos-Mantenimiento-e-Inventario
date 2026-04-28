@@ -1,9 +1,11 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { AuthService } from './auth.service';
+import { TenantService } from '../tenant/tenant.service';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
+  const tenantService = inject(TenantService);
   const token = authService.getToken();
   const contractId = authService.currentContractId();
 
@@ -11,6 +13,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   if (token) {
     headers = headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const tenantId = tenantService.getTenantId();
+  if (tenantId && !headers.has('x-tenant-id')) {
+    headers = headers.set('x-tenant-id', tenantId);
   }
 
   /** No sobrescribir si el caller fijó ya el contrato (p. ej. formulario con contrato distinto al contexto global). */

@@ -5,13 +5,19 @@ import { Router } from '@angular/router';
 import { environment } from '../../../../environments/environment';
 import { tap, finalize } from 'rxjs/operators';
 import { NotificationService } from '../notification/notification.service';
+import { TenantService } from '../tenant/tenant.service';
 
 /** Respuesta de POST /auth/login: JWT o requisito de segundo factor (Super Admin). */
 export type LoginApiResult =
   | {
       access_token: string;
       user: UserPayload & {
-        tenant?: { id: string; name: string; logoUrl: string | null };
+        tenant?: {
+          id: string;
+          code?: string;
+          name: string;
+          logoUrl: string | null;
+        };
       };
     }
   | {
@@ -39,6 +45,13 @@ export interface UserPayload {
   customRoleId?: string | null;
   /** Nombre del rol custom (informativo). */
   customRoleName?: string | null;
+  /** Empresa en sesión; SUPER_ADMIN sin fila tenant en BD igual puede tener snapshot desde login. */
+  tenant?: {
+    id: string;
+    code?: string;
+    name: string;
+    logoUrl?: string | null;
+  };
 }
 
 /** Payload mínimo del JWT de acceso (Nest/jwt exp en segundos). */
@@ -99,6 +112,7 @@ export class AuthService {
     private http: HttpClient,
     private router: Router,
     private notification: NotificationService,
+    private tenantService: TenantService,
     @Inject(PLATFORM_ID) private platformId: Object,
   ) {
     if (isPlatformBrowser(this.platformId)) {
@@ -381,6 +395,22 @@ export class AuthService {
     this.currentContractId.set(initialContract); // Modificado
     this.currentUser.set(user);
     this.isAuthenticated.set(true);
+    this.syncTenantContextFromUser(user);
+  }
+
+  /** SUPER_ADMIN: contexto operativo vía TenantService → interceptor envía x-tenant-id. */
+  private syncTenantContextFromUser(user: UserPayload): void {
+    const t = user.tenant;
+    if (!t?.id?.trim() || !t.name?.trim()) {
+      this.tenantService.currentTenant.set(null);
+      return;
+    }
+    this.tenantService.setTenant({
+      id: t.id,
+      code: (t.code && t.code.trim()) || '—',
+      name: t.name,
+      logoUrl: t.logoUrl ?? null,
+    });
   }
 
   private checkToken() {
@@ -423,6 +453,8 @@ export class AuthService {
           ];
           this.currentUser.set({ ...parsedUser });
         }
+
+        this.syncTenantContextFromUser(parsedUser);
       } catch (e) {
         this.logout();
       }
@@ -455,6 +487,7 @@ export class AuthService {
     this.currentUser.set(null);
     this.isAuthenticated.set(false);
     this.currentContractId.set(null);
+    this.tenantService.currentTenant.set(null);
   }
 
   setCurrentContract(contractId: string) {
