@@ -66,6 +66,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | Archivo | Uso |
 |---------|-----|
 | `README.md` | Este índice |
+| [correos-transaccionales.md](correos-transaccionales.md) | Previsualizar plantillas de correo (`npm run email-previews` en `backend/`, salida en `docs/email-previews/`) |
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |
 

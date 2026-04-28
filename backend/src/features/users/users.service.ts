@@ -22,6 +22,10 @@ import { AuthAuditService } from '../auth/auth-audit.service';
 import type { LoginRequestMeta } from '../auth/auth-request.util';
 import { UserSessionService } from '../auth/user-session.service';
 import { EmailService } from '../../common/email/email.service';
+import {
+  buildMailInviteUser,
+  buildMailResendActivation,
+} from '../../common/email/transactional-mail.builder';
 
 const meSelect = {
   id: true,
@@ -34,6 +38,7 @@ const meSelect = {
   role: true,
   customRoleId: true,
   customRole: { select: { id: true, name: true, baseRole: true } },
+  notifyUnusualLogin: true,
 } as const;
 
 @Injectable()
@@ -88,6 +93,7 @@ export class UsersService {
     role: string;
     customRoleId: string | null;
     customRole: { id: string; name: string; baseRole: string } | null;
+    notifyUnusualLogin: boolean;
   }) {
     return {
       id: u.id,
@@ -102,6 +108,7 @@ export class UsersService {
       role: u.role,
       customRoleId: u.customRoleId,
       customRoleName: u.customRole?.name ?? null,
+      notifyUnusualLogin: u.notifyUnusualLogin,
     };
   }
 
@@ -155,6 +162,10 @@ export class UsersService {
           : user.lastName,
         user.name,
       );
+    }
+
+    if (dto.notifyUnusualLogin !== undefined) {
+      data.notifyUnusualLogin = dto.notifyUnusualLogin;
     }
 
     const updated = await this.prisma.user.update({
@@ -350,23 +361,11 @@ export class UsersService {
         await this.emailService.sendMail({
           to: data.email,
           subject: 'Invitación a Sistema TPM',
-          html: `
-          <div style="font-family: sans-serif; color: #333;">
-            <h2>Bienvenido al Sistema de Gestión de Activos TPM</h2>
-            <p>Hola <strong>${data.name}</strong>,</p>
-            <p>Has sido invitado a participar en el sistema con el rol de <strong>${effectiveRole}</strong>.</p>
-            <p>Para activar tu cuenta y establecer tu contraseña, haz clic en el siguiente enlace:</p>
-            <p style="margin: 30px 0;">
-              <a href="${activationLink}" 
-                 style="padding: 12px 24px; background-color: #FF3366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
-                Activar Cuenta
-              </a>
-            </p>
-            <p style="font-size: 0.8em; color: #666;">Si el botón no funciona, copia y pega este enlace:<br>${activationLink}</p>
-            <br>
-            <p>Saludos,<br>Equipo TPM</p>
-          </div>
-        `,
+          html: buildMailInviteUser({
+            name: data.name,
+            role: String(effectiveRole),
+            activationLink,
+          }),
         });
       } catch (mailErr) {
         this.logger.warn(
@@ -611,21 +610,11 @@ export class UsersService {
       await this.emailService.sendMail({
         to: user.email,
         subject: 'Reenvío de Invitación - Sistema TPM',
-        html: `
-        <div style="font-family: sans-serif; color: #333;">
-          <h2>Invitación al Sistema de Gestión de Activos TPM</h2>
-          <p>Hola <strong>${user.name}</strong>,</p>
-          <p>Se ha solicitado el reenvío de tu invitación para el rol de <strong>${user.role}</strong>.</p>
-          <p>Haz clic abajo para activar tu cuenta:</p>
-          <p style="margin: 30px 0;">
-            <a href="${activationLink}" 
-               style="padding: 12px 24px; background-color: #FF3366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
-              Activar Cuenta
-            </a>
-          </p>
-          <p style="font-size: 0.8em; color: #666;">Enlace directo: ${activationLink}</p>
-        </div>
-      `,
+        html: buildMailResendActivation({
+          name: user.name,
+          role: String(user.role),
+          activationLink,
+        }),
       });
     } catch (mailErr) {
       this.logger.warn(

@@ -506,6 +506,8 @@ model User {
   resetPasswordExpires DateTime?      @map("reset_password_expires")
   /// Hasta cuándo no se permite login (fuerza bruta).
   lockoutUntil        DateTime?       @map("lockout_until")
+  /// Si true, envía correo cuando el login exitoso difiere en IP o país respecto al anterior.
+  notifyUnusualLogin  Boolean         @default(true) @map("notify_unusual_login")
 
   rut                 String?         @db.VarChar(20)
   phone               String?         @db.VarChar(20)

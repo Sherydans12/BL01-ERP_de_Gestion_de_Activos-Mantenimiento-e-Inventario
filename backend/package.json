@@ -19,6 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "email-previews": "ts-node -r tsconfig-paths/register --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" src/common/email/preview-renderer.ts",
     "seed:p2p-test-users": "ts-node prisma/seed-p2p-test-users.ts",
     "seed:catalog-masters": "ts-node prisma/seed-catalog-masters.ts",
     "seed:super-admin": "ts-node prisma/seed-super-admin-user.ts",

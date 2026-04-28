@@ -20,4 +20,9 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   removeAvatar?: boolean;
+
+  /** Recibir correo si el inicio de sesión difiere en IP o país respecto al anterior. */
+  @IsOptional()
+  @IsBoolean()
+  notifyUnusualLogin?: boolean;
 }

@@ -35,6 +35,8 @@ export interface ProfileMeDto {
   role: string;
   customRoleId: string | null;
   customRoleName: string | null;
+  /** Correo ante login con IP o país distinto al anterior. */
+  notifyUnusualLogin: boolean;
 }
 
 @Injectable({
@@ -58,6 +60,7 @@ export class ProfileService {
     lastName?: string;
     phone?: string | null;
     removeAvatar?: boolean;
+    notifyUnusualLogin?: boolean;
   }) {
     return this.http.put<ProfileMeDto>(`${this.base}/profile`, body);
   }

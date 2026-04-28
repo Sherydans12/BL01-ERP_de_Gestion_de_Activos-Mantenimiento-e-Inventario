@@ -17,6 +17,7 @@ import { AuthAuditService, summarizeUserAgent } from './auth-audit.service';
 import type { LoginRequestMeta } from './auth-request.util';
 import { UserSessionService } from './user-session.service';
 import { EmailService } from '../../common/email/email.service';
+import { buildMailForgotPassword, buildMailUnusualLogin } from '../../common/email/transactional-mail.builder';
 import { StorageService } from '../../common/storage/storage.service';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
@@ -65,23 +66,19 @@ export class AuthService {
     country: string;
     ip: string;
   }) {
+    const locationLine = [params.city, params.country]
+      .filter(Boolean)
+      .join(', ');
     try {
       await this.emailService.sendMail({
         to: params.toEmail,
         subject: 'Alerta de seguridad — acceso inusual en TPM',
-        html: `
-          <div style="font-family: sans-serif; color: #111;">
-            <h2>Acceso marcado como inusual</h2>
-            <p>Hola <strong>${params.name}</strong>,</p>
-            <p>Se registró un inicio de sesión en <strong>TPM</strong> con ubicación o IP distinta a la habitual.</p>
-            <ul>
-              <li><strong>Dispositivo:</strong> ${params.deviceLabel}</li>
-              <li><strong>IP:</strong> ${params.ip || '—'}</li>
-              <li><strong>Ubicación (aprox.):</strong> ${[params.city, params.country].filter(Boolean).join(', ') || '—'}</li>
-            </ul>
-            <p>Si no fuiste tú, cambia tu contraseña y usa <strong>Cerrar todas las demás sesiones</strong> en Mi cuenta → Seguridad.</p>
-          </div>
-        `,
+        html: buildMailUnusualLogin({
+          name: params.name,
+          deviceLabel: params.deviceLabel,
+          ip: params.ip,
+          locationLine,
+        }),
       });
     } catch (e) {
       this.log.warn(
@@ -221,7 +218,7 @@ export class AuthService {
         city: geo.city,
         country: geo.country,
       });
-      if (r.isSuspicious) {
+      if (r.isSuspicious && user.notifyUnusualLogin) {
         void this.sendUnusualLoginSecurityEmail({
           toEmail: user.email,
           name: user.name,
@@ -455,19 +452,11 @@ export class AuthService {
     try {
       await this.emailService.sendMail({
         to: user.email,
-        subject: 'Recuperación de Contraseña - Sistema TPM',
-        html: `
-        <div style="font-family: sans-serif; color: #333;">
-          <h2>Recuperación de Contraseña</h2>
-          <p>Hola <strong>${user.name}</strong>,</p>
-          <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace:</p>
-          <p style="margin: 30px 0;">
-            <a href="${resetLink}" style="padding: 12px 24px; background-color: #FF3366; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Restablecer Contraseña</a>
-          </p>
-          <p>Este enlace expirará en 1 hora.</p>
-          <p style="font-size: 0.8em; color: #666;">Si no fuiste tú, ignora este correo.</p>
-        </div>
-      `,
+        subject: 'Recuperación de contraseña — Sistema TPM',
+        html: buildMailForgotPassword({
+          name: user.name,
+          resetLink,
+        }),
       });
     } catch (err) {
       this.log.warn(

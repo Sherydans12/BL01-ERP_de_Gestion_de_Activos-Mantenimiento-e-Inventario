@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Previsualización — correos transaccionales TPM / BaseLogic</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background: #0f1419; color: #e4e4e7; margin: 0; padding: 24px 20px 48px; line-height: 1.5; }
+    h1 { font-size: 1.25rem; font-weight: 700; margin: 0 0 8px; }
+    p { color: #94a3b8; margin: 0 0 16px; max-width: 64ch; }
+    code { background: #0a0f14; padding: 2px 6px; border-radius: 4px; color: #00e5ff; font-size: 0.9em; }
+    ul { margin: 0 0 20px; padding-left: 1.2em; }
+    a { color: #00e5ff; }
+    a:hover { text-decoration: underline; }
+    .muted { color: #64748b; font-size: 0.85em; }
+    .box { border: 1px solid #2a3441; border-radius: 8px; padding: 10px 14px; background: #0a0f14; margin-top: 12px; font-size: 0.88rem; }
+    .note { margin-top: 32px; padding-top: 20px; border-top: 1px solid #2a3441; font-size: 0.8rem; color: #94a3b8; }
+    iframe { width: 100%; min-height: 720px; border: 1px solid #2a3441; border-radius: 10px; margin-top: 12px; display: block; }
+    h2 { font-size: 0.9rem; font-weight: 600; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>Previsualización local de correos</h1>
+  <p>Estos HTML salen de las mismas funciones que el backend: <code>transactional-mail.builder.ts</code> y <code>buildTpmEmailHtml</code>. Enlaces y datos son de ejemplo.</p>
+  <p>Regenerar (desde carpeta <code>backend</code>): <code>npm run email-previews</code></p>
+  <h2>Archivos</h2>
+  <ul>
+    <li><a href="01-invitacion.html">Invitación a usuario (alta de cuenta + activar)</a> <span class="muted">(01-invitacion.html)</span></li>
+    <li><a href="02-reenvio-invitacion.html">Reenvío de invitación</a> <span class="muted">(02-reenvio-invitacion.html)</span></li>
+    <li><a href="03-recuperar-contrasena.html">Olvidé mi contraseña (restablecimiento)</a> <span class="muted">(03-recuperar-contrasena.html)</span></li>
+    <li><a href="04-alerta-acceso-inusual.html">Alerta: acceso inusual</a> <span class="muted">(04-alerta-acceso-inusual.html)</span></li>
+  </ul>
+  <div class="box">Otros avisos por email (garantía OT, resumen de compras) aún usan cuerpos HTML mínimos sin esta plantilla; no están en esta galería.</div>
+  <h2>Invitación (incrustado)</h2>
+  <iframe title="Vista invitación" src="01-invitacion.html"></iframe>
+  <h2>Recuperar contraseña (incrustado)</h2>
+  <iframe title="Vista restablecimiento" src="03-recuperar-contrasena.html"></iframe>
+  <p class="note">Abrí también <code>docs/email-previews/01-invitacion.html</code> (y demás) directamente en el navegador con doble clic o “Open with Live Server”.</p>
+</body>
+</html>

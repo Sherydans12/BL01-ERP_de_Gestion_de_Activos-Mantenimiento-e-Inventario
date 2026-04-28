@@ -71,6 +71,7 @@ export class UserAccountSettingsComponent implements OnInit {
   sessionsLoading = signal(false);
   revokingSessionId = signal<string | null>(null);
   revokingOthers = signal(false);
+  savingNotifyPref = signal(false);
 
   personalForm = this.fb.group({
     firstName: ['', [Validators.maxLength(100)]],
@@ -342,5 +343,26 @@ export class UserAccountSettingsComponent implements OnInit {
   passwordHasUpper(): boolean {
     const v = this.passwordForm.get('newPassword')?.value as string | undefined;
     return !!v && /[A-ZÁÉÍÓÚÜÑ]/.test(v);
+  }
+
+  onNotifyUnusualLoginChange(checked: boolean) {
+    this.savingNotifyPref.set(true);
+    this.profileApi.updateProfile({ notifyUnusualLogin: checked }).subscribe({
+      next: (dto) => {
+        this.me.set(dto);
+        this.savingNotifyPref.set(false);
+        this.notify.success(
+          checked
+            ? 'Activaste las alertas por correo ante accesos inusuales.'
+            : 'Desactivaste el envío de alertas por accesos inusuales.',
+        );
+      },
+      error: (err) => {
+        this.savingNotifyPref.set(false);
+        const msg = err.error?.message ?? 'No se pudo actualizar la preferencia';
+        this.notify.error(msg);
+        this.reloadProfile();
+      },
+    });
   }
 }
