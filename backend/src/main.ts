@@ -53,6 +53,9 @@ async function bootstrap() {
       'X-Requested-With',
       'x-contract-id',
       'X-Contract-Id',
+      /** Contexto de tenant (JWT SUPER_ADMIN + JwtStrategy). Obligatorio en CORS preflight. */
+      'x-tenant-id',
+      'X-Tenant-Id',
     ],
     exposedHeaders: ['Authorization'],
     credentials: true,
