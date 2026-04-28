@@ -15,6 +15,7 @@ import {
   InventoryItemsService,
   ItemCategory,
   QuickCreateItemResult,
+  QuickCreateItemPayload,
 } from '../../../core/services/inventory-items/inventory-items.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import {
@@ -49,6 +50,12 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
   isSaving = signal(false);
 
   name = '';
+  inventoryCode = '';
+  partNumber = '';
+  description = '';
+  brand = '';
+  compatibilityInfo = '';
+  isSerialized = false;
   familyId = '';
   /** ID de la subcategoría (se envía como categoryId al API). */
   subcategoryId = '';
@@ -118,15 +125,28 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
     }
 
     this.isSaving.set(true);
+    const payload: QuickCreateItemPayload = {
+      name: this.name.trim(),
+      categoryId: this.subcategoryId,
+      unitOfMeasureId: this.unitOfMeasureId,
+      warehouseId: this.warehouseId?.trim() || undefined,
+      minStock: this.minStock ?? undefined,
+      maxStock: this.maxStock ?? undefined,
+    };
+    const ic = this.inventoryCode.trim();
+    if (ic) payload.inventoryCode = ic;
+    const pn = this.partNumber.trim();
+    if (pn) payload.partNumber = pn;
+    const desc = this.description.trim();
+    if (desc) payload.description = desc;
+    const br = this.brand.trim();
+    if (br) payload.brand = br;
+    const compat = this.compatibilityInfo.trim();
+    if (compat) payload.compatibilityInfo = compat;
+    if (this.isSerialized) payload.isSerialized = true;
+
     this.itemsService
-      .quickCreateItem({
-        name: this.name.trim(),
-        categoryId: this.subcategoryId,
-        unitOfMeasureId: this.unitOfMeasureId,
-        warehouseId: this.warehouseId?.trim() || undefined,
-        minStock: this.minStock ?? undefined,
-        maxStock: this.maxStock ?? undefined,
-      })
+      .quickCreateItem(payload)
       .subscribe({
         next: (item) => {
           this.notify.success(
@@ -146,6 +166,12 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
 
   private resetForm() {
     this.name = '';
+    this.inventoryCode = '';
+    this.partNumber = '';
+    this.description = '';
+    this.brand = '';
+    this.compatibilityInfo = '';
+    this.isSerialized = false;
     this.familyId = '';
     this.subcategoryId = '';
     this.subcategories.set([]);

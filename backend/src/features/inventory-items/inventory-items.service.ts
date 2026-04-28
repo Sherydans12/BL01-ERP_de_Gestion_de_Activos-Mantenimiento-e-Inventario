@@ -12,6 +12,7 @@ import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
+import type { QuickCreateItemDto } from './dto/quick-create-item.dto';
 import {
   generateInventoryItemLabelPdfBuffer,
   type InventoryLabelQrMode,
@@ -20,6 +21,8 @@ import {
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 const INV_SKU_PREFIX = 'INV';
+/** Secuencia N° de parte en quickCreate — max 10 chars (sequence_counters.document_type). */
+const INV_QUICK_PN_DOC_TYPE = 'INV_QCK_PN';
 
 const ITEM_CATEGORY_SELECT = {
   id: true,
@@ -40,16 +43,6 @@ const ITEM_CATALOG_ORDER_BY: Prisma.InventoryItemOrderByWithRelationInput[] = [
   { itemCategory: { name: 'asc' } },
   { name: 'asc' },
 ];
-
-export interface QuickCreateItemDto {
-  name: string;
-  /** Obligatorio: subcategoría (nivel 2). */
-  categoryId: string;
-  unitOfMeasureId: string;
-  warehouseId?: string;
-  minStock?: number;
-  maxStock?: number;
-}
 
 @Injectable()
 export class InventoryItemsService {
@@ -723,6 +716,69 @@ export class InventoryItemsService {
       throw new BadRequestException('Seleccione la unidad de medida.');
     }
 
+    const name = dto.name.trim();
+    if (!name) {
+      throw new BadRequestException('El nombre del artículo es obligatorio.');
+    }
+    if (name.length > 150) {
+      throw new BadRequestException(
+        'El nombre no puede superar 150 caracteres.',
+      );
+    }
+
+    const requestedPn = dto.partNumber?.trim() ?? '';
+    if (requestedPn.length > 50) {
+      throw new BadRequestException(
+        'El Número de Parte no puede superar 50 caracteres.',
+      );
+    }
+    const requestedSku = dto.inventoryCode?.trim() ?? '';
+    if (requestedSku.length > 60) {
+      throw new BadRequestException(
+        'El código de inventario no puede superar 60 caracteres.',
+      );
+    }
+    const brand = dto.brand?.trim() || undefined;
+    if (brand && brand.length > 50) {
+      throw new BadRequestException('La marca no puede superar 50 caracteres.');
+    }
+    const description = dto.description?.trim() || undefined;
+    const compatibilityInfo = dto.compatibilityInfo?.trim() || undefined;
+
+    if (requestedPn) {
+      const existingPn = await this.prisma.inventoryItem.findUnique({
+        where: {
+          tenantId_partNumber: {
+            tenantId: user.tenantId,
+            partNumber: requestedPn,
+          },
+        },
+      });
+      if (existingPn) {
+        throw new BadRequestException(
+          'Ya existe un artículo con este Número de Parte.',
+        );
+      }
+    }
+    if (requestedSku) {
+      const dupSku = await this.prisma.inventoryItem.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          inventoryCode: requestedSku,
+        },
+      });
+      if (dupSku) {
+        throw new BadRequestException(
+          'Ya existe un artículo con este Código de Inventario.',
+        );
+      }
+    }
+
+    const isSerialized = dto.isSerialized ?? false;
+    const isInventory = dto.isInventory ?? true;
+    const isAsset = dto.isAsset ?? false;
+    const isConsumable = dto.isConsumable ?? true;
+
     return this.prisma.$transaction(
       async (tx) => {
         await this.assertLeafCategoryWithTx(tx, dto.categoryId, user.tenantId);
@@ -732,18 +788,22 @@ export class InventoryItemsService {
           user.tenantId,
         );
 
-        const partNumber = await this.sequenceService.getNextCorrelative(
-          user.tenantId,
-          'INV_ITEM_AUTO',
-          'AUTO',
-          tx,
-        );
-        const inventoryCode = await this.sequenceService.getNextCorrelative(
-          user.tenantId,
-          INV_SKU_DOC_TYPE,
-          INV_SKU_PREFIX,
-          tx,
-        );
+        const partNumber = requestedPn
+          ? requestedPn
+          : await this.sequenceService.getNextCorrelative(
+              user.tenantId,
+              INV_QUICK_PN_DOC_TYPE,
+              'AUTO',
+              tx,
+            );
+        const inventoryCode = requestedSku
+          ? requestedSku
+          : await this.sequenceService.getNextCorrelative(
+              user.tenantId,
+              INV_SKU_DOC_TYPE,
+              INV_SKU_PREFIX,
+              tx,
+            );
 
         const id = randomUUID();
         const qrCode = `INV:${id}`;
@@ -755,11 +815,16 @@ export class InventoryItemsService {
             tenantId: user.tenantId,
             inventoryCode,
             partNumber,
-            name: dto.name.trim(),
+            name,
+            description: description ?? null,
             categoryId: dto.categoryId,
             unitOfMeasureId: dto.unitOfMeasureId,
-            isInventory: true,
-            isConsumable: true,
+            brand: brand ?? null,
+            compatibilityInfo: compatibilityInfo ?? null,
+            isSerialized,
+            isInventory,
+            isAsset,
+            isConsumable,
           },
           select: {
             id: true,

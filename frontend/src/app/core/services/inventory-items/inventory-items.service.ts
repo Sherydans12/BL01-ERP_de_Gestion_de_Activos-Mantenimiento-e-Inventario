@@ -35,6 +35,25 @@ export interface QuickCreateItemResult {
   } | null;
 }
 
+/** Cuerpo POST /inventory-items/quick-create. */
+export interface QuickCreateItemPayload {
+  name: string;
+  categoryId: string;
+  unitOfMeasureId: string;
+  warehouseId?: string;
+  minStock?: number;
+  maxStock?: number;
+  inventoryCode?: string;
+  partNumber?: string;
+  description?: string;
+  brand?: string;
+  compatibilityInfo?: string;
+  isSerialized?: boolean;
+  isInventory?: boolean;
+  isAsset?: boolean;
+  isConsumable?: boolean;
+}
+
 /** Fila devuelta por `GET /inventory-items/picker` (selector global). */
 export interface ItemPickerRow {
   id: string;
@@ -226,14 +245,7 @@ export class InventoryItemsService {
     return this.http.post<any>(this.apiUrl, data);
   }
 
-  quickCreateItem(data: {
-    name: string;
-    categoryId: string;
-    unitOfMeasureId: string;
-    warehouseId?: string;
-    minStock?: number;
-    maxStock?: number;
-  }): Observable<QuickCreateItemResult> {
+  quickCreateItem(data: QuickCreateItemPayload): Observable<QuickCreateItemResult> {
     return this.http.post<QuickCreateItemResult>(
       `${this.apiUrl}/quick-create`,
       data,

@@ -16,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InventoryItemsService } from './inventory-items.service';
-import type { QuickCreateItemDto } from './inventory-items.service';
+import type { QuickCreateItemDto } from './dto/quick-create-item.dto';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
