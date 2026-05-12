@@ -1,20 +1,29 @@
 <div class="max-w-7xl mx-auto space-y-8 pb-12">
   <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold text-main tracking-tight">Datos plataforma</h1>
+      <h1 class="text-2xl font-bold text-main tracking-tight">Gestión de Empresas (Plataforma)</h1>
       <p class="text-sm text-muted mt-1 max-w-3xl">
-        Solo <span class="text-primary font-semibold">SUPER_ADMIN</span>. Herramientas destructivas por empresa: vaciado de
-        módulos completos (filas en base de datos). No crea ni elimina tablas. Los contratos/faenas y usuarios no se tocan desde aquí.
+        Solo <span class="text-primary font-semibold">SUPER_ADMIN</span>. Creación de nuevas empresas y herramientas destructivas por empresa (vaciado de módulos completos).
       </p>
     </div>
-    <button
-      type="button"
-      (click)="loadTenants()"
-      [disabled]="loading()"
-      class="px-4 py-2 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50 shrink-0"
-    >
-      Actualizar empresas
-    </button>
+    <div class="flex items-center gap-3 shrink-0">
+      <button
+        type="button"
+        (click)="openCreateModal()"
+        [disabled]="loading()"
+        class="px-4 py-2 rounded-lg border border-primary bg-primary/10 text-sm font-semibold text-primary hover:bg-primary/20 disabled:opacity-50"
+      >
+        Crear Empresa
+      </button>
+      <button
+        type="button"
+        (click)="loadTenants()"
+        [disabled]="loading()"
+        class="px-4 py-2 rounded-lg border border-border text-sm font-semibold text-main hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50"
+      >
+        Actualizar
+      </button>
+    </div>
   </div>
 
   @if (loading() && tenants().length === 0) {
@@ -195,5 +204,83 @@
           </div>
         </div>
       </div>
+  }
+
+  @if (isCreateModalOpen()) {
+    <div
+      class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-modal-title"
+      (click)="!createSubmitting() && closeCreateModal()"
+    >
+      <div
+        class="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl"
+        (click)="$event.stopPropagation()"
+      >
+        <h2 id="create-modal-title" class="text-xl font-bold text-main mb-4">
+          Crear Nueva Empresa
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-main mb-1">Código (Ej: TPM)</label>
+            <input
+              type="text"
+              class="w-full rounded-lg border border-border bg-dark/40 px-3 py-2 text-sm text-main uppercase placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 transition-shadow"
+              placeholder="Código corto y sin espacios"
+              [value]="createForm().code"
+              (input)="updateCreateForm('code', $any($event.target).value)"
+              autocomplete="off"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-main mb-1">Nombre Comercial</label>
+            <input
+              type="text"
+              class="w-full rounded-lg border border-border bg-dark/40 px-3 py-2 text-sm text-main placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 transition-shadow"
+              placeholder="Ej: Transportes del Pacífico S.A."
+              [value]="createForm().name"
+              (input)="updateCreateForm('name', $any($event.target).value)"
+              autocomplete="off"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-main mb-1">Color Principal (Hex)</label>
+            <div class="flex gap-3">
+              <input
+                type="color"
+                class="h-10 w-12 rounded bg-dark/40 border border-border cursor-pointer shrink-0"
+                [value]="createForm().primaryColor"
+                (input)="updateCreateForm('primaryColor', $any($event.target).value)"
+              />
+              <input
+                type="text"
+                class="flex-1 rounded-lg border border-border bg-dark/40 px-3 py-2 text-sm text-main font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 transition-shadow"
+                [value]="createForm().primaryColor"
+                (input)="updateCreateForm('primaryColor', $any($event.target).value)"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="mt-8 flex justify-end gap-3">
+          <button
+            type="button"
+            (click)="closeCreateModal()"
+            [disabled]="createSubmitting()"
+            class="px-4 py-2 rounded-lg border border-border text-sm font-medium text-main hover:bg-dark/40 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="executeCreate()"
+            [disabled]="createSubmitting()"
+            class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-content hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {{ createSubmitting() ? 'Creando…' : 'Crear Empresa' }}
+          </button>
+        </div>
+      </div>
+    </div>
   }
 </div>

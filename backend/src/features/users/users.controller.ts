@@ -124,6 +124,16 @@ export class UsersController {
     return this.usersService.disableTotp(req.user.id, dto);
   }
 
+  @Post('me/email-2fa/enable')
+  enableEmail2fa(@Req() req: any) {
+    return this.usersService.toggleEmail2fa(req.user.id, true);
+  }
+
+  @Post('me/email-2fa/disable')
+  disableEmail2fa(@Req() req: any) {
+    return this.usersService.toggleEmail2fa(req.user.id, false);
+  }
+
   /** Lista compacta para participantes / supervisores en OT (mecánicos y supervisores activos). */
   @Get('assignable-for-ot')
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'MECHANIC')

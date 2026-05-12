@@ -50,6 +50,8 @@ export interface ProfileMeDto {
   customRoleName: string | null;
   /** Correo ante login con IP o país distinto al anterior. */
   notifyUnusualLogin: boolean;
+  /** 2FA por correo habilitado. */
+  email2faEnabled: boolean;
   /** Política de plataforma y alcance para el rol actual. */
   security?: ProfileSecurityFlagsDto;
 }
@@ -126,6 +128,20 @@ export class ProfileService {
     return this.http.post<{ success: boolean; message: string }>(
       `${this.base}/me/totp/disable`,
       body,
+    );
+  }
+
+  enableEmail2fa() {
+    return this.http.post<ProfileMeDto>(
+      `${this.base}/me/email-2fa/enable`,
+      {},
+    );
+  }
+
+  disableEmail2fa() {
+    return this.http.post<ProfileMeDto>(
+      `${this.base}/me/email-2fa/disable`,
+      {},
     );
   }
 }

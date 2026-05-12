@@ -539,6 +539,8 @@ model User {
 
   /// Segundo factor TOTP (Google Authenticator, etc.); hoy soportado en flujo Super Admin.
   totpEnabled           Boolean         @default(false) @map("totp_enabled")
+  /// 2FA por correo electrónico habilitado por el propio usuario o forzado por la empresa.
+  email2faEnabled       Boolean         @default(false) @map("email_2fa_enabled")
   /// Secreto TOTP cifrado en reposo (AES-256-GCM + base64).
   totpSecretEncrypted   String?         @map("totp_secret_encrypted") @db.Text
 

@@ -48,6 +48,7 @@ const meSelect = {
   customRole: { select: { id: true, name: true, baseRole: true } },
   notifyUnusualLogin: true,
   totpEnabled: true,
+  email2faEnabled: true,
 } as const;
 
 @Injectable()
@@ -491,6 +492,7 @@ export class UsersService {
           contractAccess: { select: { contractId: true } },
           tenant: { select: { id: true, code: true, name: true } },
           totpEnabled: true,
+          email2faEnabled: true,
           notifyUnusualLogin: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -933,5 +935,17 @@ export class UsersService {
       success: true,
       message: 'TOTP desactivado. Puedes volver a activarlo desde Mi cuenta.',
     };
+  }
+
+  async toggleEmail2fa(userId: string, enabled: boolean) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('Usuario no encontrado');
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { email2faEnabled: enabled },
+      select: meSelect,
+    });
+    return this.mapMeRow(updated);
   }
 }

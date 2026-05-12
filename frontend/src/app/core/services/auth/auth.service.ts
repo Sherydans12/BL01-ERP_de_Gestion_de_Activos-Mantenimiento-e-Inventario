@@ -402,6 +402,18 @@ export class AuthService {
   private syncTenantContextFromUser(user: UserPayload): void {
     const t = user.tenant;
     if (!t?.id?.trim() || !t.name?.trim()) {
+      if (user.role === 'SUPER_ADMIN') {
+        const savedTenantId = this.tenantService.getSuperAdminTenantId();
+        if (savedTenantId) {
+          this.tenantService.setTenant({
+            id: savedTenantId,
+            code: '—',
+            name: 'Cargando...',
+            logoUrl: null
+          });
+          return;
+        }
+      }
       this.tenantService.currentTenant.set(null);
       return;
     }

@@ -246,6 +246,7 @@ export class AuthService {
       email: string;
       name: string;
       role: string;
+      email2faEnabled: boolean;
     },
     ip: string,
     geo: { country: string },
@@ -255,16 +256,29 @@ export class AuthService {
     stepUpToken: string;
     message: string;
   } | null> {
-    if (
-      !this.stepUpPolicy.userRoleUsesEmailStepUp(user.role) ||
-      !(await this.stepUpPolicy.isGlobalStepUpPolicyEffective()) ||
-      !(await this.authAudit.shouldRequireEmailContextStepUp({
-        userId: user.id,
-        role: user.role,
-        ip,
-        country: geo.country,
-      }))
-    ) {
+    // Si el usuario lo activó explícitamente, SIEMPRE pide correo
+    let requiresEmailStepUp = user.email2faEnabled;
+
+    if (!requiresEmailStepUp) {
+      // Regla antigua (contextual basada en IP, o forzada global)
+      const roleApplies = this.stepUpPolicy.userRoleUsesEmailStepUp(user.role);
+      if (roleApplies) {
+        const globalEffective = await this.stepUpPolicy.isGlobalStepUpPolicyEffective();
+        if (globalEffective) {
+          const isContextUnusual = await this.authAudit.shouldRequireEmailContextStepUp({
+            userId: user.id,
+            role: user.role,
+            ip,
+            country: geo.country,
+          });
+          if (isContextUnusual) {
+            requiresEmailStepUp = true;
+          }
+        }
+      }
+    }
+
+    if (!requiresEmailStepUp) {
       return null;
     }
     try {

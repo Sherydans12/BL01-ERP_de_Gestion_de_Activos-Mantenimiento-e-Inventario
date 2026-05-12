@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PurgeTenantDomainDto } from './dto/purge-tenant-domain.dto';
+import { CreateTenantDto } from './dto/create-tenant.dto';
 import {
   PlatformDataAdminService,
   PURGE_DOMAINS,
@@ -30,6 +31,18 @@ export class PlatformDataAdminController {
   @Get('tenants')
   listTenants() {
     return this.platformData.listTenants();
+  }
+
+  @Post('tenants')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  createTenant(@Body() dto: CreateTenantDto) {
+    return this.platformData.createTenant(dto);
   }
 
   @Get('tenants/:tenantId/data-summary')

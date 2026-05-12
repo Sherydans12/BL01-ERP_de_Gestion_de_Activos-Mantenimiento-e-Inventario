@@ -103,7 +103,7 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ['SUPER_ADMIN', 'ADMIN'],
       },
       {
-        label: 'Datos plataforma',
+        label: 'Empresas (Tenants)',
         route: '/app/admin/platform-data',
         icon: ICONS.collection,
         roles: ['SUPER_ADMIN'],

@@ -192,6 +192,40 @@
       >
         <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div class="min-w-0 flex-1">
+            <h3 class="text-sm font-semibold text-main">Autenticación en dos pasos (Correo Electrónico)</h3>
+            <p class="text-xs text-muted mt-1 leading-relaxed max-w-xl">
+              Al activarlo, se enviará un código de 6 dígitos a tu correo cada vez que inicies sesión. Agrega una capa extra de seguridad para proteger tu cuenta de accesos no autorizados.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0 self-start sm:pt-0.5">
+            @if (savingEmail2fa()) {
+              <span class="text-xs text-muted">Guardando…</span>
+            }
+            <label
+              class="inline-flex items-center gap-2 cursor-pointer select-none"
+            >
+              <span class="text-xs font-mono text-muted uppercase tracking-wider">
+                {{ me()!.email2faEnabled ? 'Sí' : 'No' }}
+              </span>
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-border bg-dark text-primary focus:ring-2 focus:ring-primary/40"
+                [checked]="me()!.email2faEnabled"
+                (change)="
+                  onEmail2faChange($any($event.target).checked)
+                "
+                [disabled]="savingEmail2fa()"
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="rounded-xl border border-border bg-dark/30 p-4 sm:p-5"
+      >
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div class="min-w-0 flex-1">
             <h3 class="text-sm font-semibold text-main">Correo: acceso inusual</h3>
             <p class="text-xs text-muted mt-1 leading-relaxed max-w-xl">
               Recibir un aviso por correo cuando un inicio de sesión <strong class="text-main/90">exitoso</strong> se detecta con otra IP o país que la de tu acceso anterior. Útil para detectar accesos no autorizados; desactívalo si compartes el usuario (p. ej. varios administradores) y no quieres recibir avisos.

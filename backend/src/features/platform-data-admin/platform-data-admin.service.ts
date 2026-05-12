@@ -94,6 +94,26 @@ export class PlatformDataAdminService {
     });
   }
 
+  async createTenant(dto: { code: string; name: string; primaryColor?: string }): Promise<PlatformTenantRow> {
+    const codeUpper = dto.code.trim().toUpperCase();
+    const existing = await this.prisma.tenant.findUnique({
+      where: { code: codeUpper },
+    });
+    if (existing) {
+      throw new BadRequestException('Ya existe una empresa con ese código.');
+    }
+    
+    return this.prisma.tenant.create({
+      data: {
+        code: codeUpper,
+        name: dto.name.trim(),
+        primaryColor: dto.primaryColor?.trim() || '#FF3366',
+        isActive: true,
+      },
+      select: { id: true, code: true, name: true, isActive: true },
+    });
+  }
+
   async getTenantDataSummary(tenantId: string): Promise<TenantDataSummaryDto> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },

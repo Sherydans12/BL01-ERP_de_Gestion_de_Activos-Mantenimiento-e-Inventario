@@ -181,6 +181,61 @@
           </svg>
         </button>
 
+        @if (currentUser()?.role === 'SUPER_ADMIN') {
+          <div class="relative z-[60]">
+            <button
+              type="button"
+              (click)="toggleTenantDropdown()"
+              [attr.aria-expanded]="isTenantDropdownOpen()"
+              class="relative z-[65] flex items-center gap-2 px-3.5 py-1.5 bg-dark border border-border
+                     rounded-full text-sm text-muted hover:text-main hover:border-primary/40
+                     transition-all shadow-sm group"
+            >
+              <svg class="w-3.5 h-3.5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span class="font-medium font-mono truncate max-w-[120px] sm:max-w-[150px] text-xs text-main">
+                {{ getCurrentTenantName() }}
+              </span>
+              <svg class="w-3.5 h-3.5 transition-transform duration-200 shrink-0"
+                   [class.rotate-180]="isTenantDropdownOpen()"
+                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            @if (isTenantDropdownOpen()) {
+              <div class="contract-dropdown-backdrop fixed left-0 right-0 bottom-0 top-14 lg:top-16 z-[55]"
+                   (click)="isTenantDropdownOpen.set(false)"
+                   aria-hidden="true"></div>
+
+              <div class="absolute left-0 top-full z-[70] mt-1.5 w-64 max-w-[calc(100vw-2rem)] max-h-[min(24rem,70vh)]
+                          flex flex-col rounded-xl py-2 header-contract-popover divide-y divide-border overflow-hidden shadow-2xl"
+                   role="listbox">
+                <div class="py-1 max-h-60 overflow-y-auto overscroll-contain min-h-0">
+                  @for (tenant of availableTenants(); track tenant.id) {
+                    <button
+                      type="button"
+                      (click)="selectTenant(tenant.id)"
+                      class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2 group"
+                      [class]="tenantService.getSuperAdminTenantId() === tenant.id
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-main hover:bg-primary/10'"
+                    >
+                      <span class="truncate min-w-0">{{ tenant.name }}</span>
+                      <span class="text-[10px] font-mono shrink-0 opacity-70 group-hover:opacity-100 transition-opacity
+                                   px-1.5 py-0.5 rounded border border-border bg-dark/30 dark:bg-black/20"
+                            [ngClass]="tenantService.getSuperAdminTenantId() === tenant.id ? 'border-primary/40 text-primary' : 'border-border'">
+                        {{ tenant.code }}
+                      </span>
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+
         @if (
           currentUser()?.role === 'ADMIN' ||
           currentUser()?.role === 'SUPER_ADMIN' ||

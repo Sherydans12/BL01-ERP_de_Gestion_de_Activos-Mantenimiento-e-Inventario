@@ -166,6 +166,11 @@ export class PlatformDataAdminComponent implements OnInit {
   purgeSubmitting = signal(false);
   lastPurgeResult = signal<PurgeResultDto | null>(null);
 
+  // --- Modal de creación de Empresa ---
+  isCreateModalOpen = signal(false);
+  createForm = signal({ code: '', name: '', primaryColor: '#FF3366' });
+  createSubmitting = signal(false);
+
   purgeModalCopy = computed(() => {
     const d = this.purgeModalDomain();
     if (!d) return null;
@@ -272,6 +277,53 @@ export class PlatformDataAdminComponent implements OnInit {
       this.notify.error(msg);
     } finally {
       this.purgeSubmitting.set(false);
+    }
+  }
+
+  // --- Lógica de Creación de Empresa ---
+  openCreateModal() {
+    this.createForm.set({ code: '', name: '', primaryColor: '#FF3366' });
+    this.isCreateModalOpen.set(true);
+  }
+
+  closeCreateModal() {
+    this.isCreateModalOpen.set(false);
+  }
+
+  updateCreateForm(field: 'code' | 'name' | 'primaryColor', value: string) {
+    this.createForm.update(f => ({ ...f, [field]: value }));
+  }
+
+  async executeCreate() {
+    const form = this.createForm();
+    if (!form.code.trim() || !form.name.trim()) {
+      this.notify.error('El código y el nombre son obligatorios.');
+      return;
+    }
+
+    this.createSubmitting.set(true);
+    try {
+      await firstValueFrom(
+        this.http.post(`${this.base}/tenants`, form)
+      );
+      this.notify.success('Empresa creada correctamente.');
+      this.closeCreateModal();
+      await this.loadTenants();
+    } catch (err: unknown) {
+      let msg = 'No se pudo crear la empresa.';
+      if (err && typeof err === 'object' && 'error' in err) {
+        const e = (err as { error: unknown }).error;
+        if (typeof e === 'string') {
+          msg = e;
+        } else if (e && typeof e === 'object' && 'message' in e) {
+          const m = (e as { message: unknown }).message;
+          if (typeof m === 'string') msg = m;
+          else if (Array.isArray(m)) msg = m.join(', ');
+        }
+      }
+      this.notify.error(msg);
+    } finally {
+      this.createSubmitting.set(false);
     }
   }
 }

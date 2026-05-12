@@ -74,6 +74,7 @@ export class UserAccountSettingsComponent implements OnInit {
   revokingSessionId = signal<string | null>(null);
   revokingOthers = signal(false);
   savingNotifyPref = signal(false);
+  savingEmail2fa = signal(false);
 
   personalForm = this.fb.group({
     firstName: ['', [Validators.maxLength(100)]],
@@ -379,6 +380,29 @@ export class UserAccountSettingsComponent implements OnInit {
       error: (err) => {
         this.savingNotifyPref.set(false);
         const msg = err.error?.message ?? 'No se pudo actualizar la preferencia';
+        this.notify.error(msg);
+        this.reloadProfile();
+      },
+    });
+  }
+
+  onEmail2faChange(checked: boolean) {
+    this.savingEmail2fa.set(true);
+    const req = checked ? this.profileApi.enableEmail2fa() : this.profileApi.disableEmail2fa();
+    
+    req.subscribe({
+      next: (dto) => {
+        this.me.set(dto);
+        this.savingEmail2fa.set(false);
+        this.notify.success(
+          checked
+            ? 'Verificación en dos pasos por correo activada.'
+            : 'Verificación en dos pasos por correo desactivada.'
+        );
+      },
+      error: (err) => {
+        this.savingEmail2fa.set(false);
+        const msg = err.error?.message ?? 'No se pudo actualizar la configuración 2FA';
         this.notify.error(msg);
         this.reloadProfile();
       },

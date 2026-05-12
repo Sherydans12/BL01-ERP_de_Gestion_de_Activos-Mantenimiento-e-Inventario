@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 
 export interface Tenant {
   id: string;
@@ -40,7 +41,10 @@ export class TenantService {
   private apiUrl = `${environment.apiUrl}/catalogs/sites`;
   public currentTenant = signal<Tenant | null>(null);
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) {}
 
   // En el futuro, este método leerá el subdominio (ej: tpm.erp.com)
   // o recibirá el código del formulario de login.
@@ -62,5 +66,23 @@ export class TenantService {
 
   updateTenantConfig(data: Partial<Tenant>): Observable<Tenant> {
     return this.http.patch<Tenant>(`${environment.apiUrl}/tenant-config`, data);
+  }
+
+  // --- MÉTODOS PARA SUPER ADMIN ---
+  getPlatformTenants(): Observable<Tenant[]> {
+    return this.http.get<Tenant[]>(`${environment.apiUrl}/super-admin/platform/tenants`);
+  }
+
+  setSuperAdminTenantId(tenantId: string) {
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.setItem('tpm_superadmin_tenant_id', tenantId);
+    }
+  }
+
+  getSuperAdminTenantId(): string | null {
+    if (isPlatformBrowser(this.platformId)) {
+      return localStorage.getItem('tpm_superadmin_tenant_id');
+    }
+    return null;
   }
 }

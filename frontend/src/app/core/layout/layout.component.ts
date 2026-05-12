@@ -67,6 +67,8 @@ export class LayoutComponent implements OnInit {
 
   availableContracts = signal<Contract[]>([]);
   isContractDropdownOpen = signal(false);
+  availableTenants = signal<any[]>([]);
+  isTenantDropdownOpen = signal(false);
   isMobileMenuOpen = signal(false);
   /** Notificación push bloqueada en el navegador (aviso en perfil lateral). */
   pushNotificationsBlocked = signal(false);
@@ -185,6 +187,10 @@ export class LayoutComponent implements OnInit {
 
     this.loadContracts();
 
+    if (this.currentUser()?.role === 'SUPER_ADMIN') {
+      this.loadTenants();
+    }
+
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe(() => {
@@ -257,6 +263,32 @@ export class LayoutComponent implements OnInit {
     if (contractId === 'ALL') return 'Todos los Contratos';
     const contract = this.availableContracts().find((c) => c.id === contractId);
     return contract ? contract.name : 'Configurando...';
+  }
+
+  // --- Lógica Super Admin Tenant ---
+  loadTenants() {
+    this.tenantService.getPlatformTenants().subscribe({
+      next: (tenants) => {
+        this.availableTenants.set(tenants);
+      },
+      error: (err) => console.error('Error cargando tenants:', err),
+    });
+  }
+
+  toggleTenantDropdown() {
+    this.isTenantDropdownOpen.update((v) => !v);
+  }
+
+  selectTenant(tenantId: string) {
+    this.tenantService.setSuperAdminTenantId(tenantId);
+    window.location.reload();
+  }
+
+  getCurrentTenantName(): string {
+    const currentId = this.tenantService.getSuperAdminTenantId();
+    if (!currentId) return 'Empresa no seleccionada';
+    const t = this.availableTenants().find((x) => x.id === currentId);
+    return t ? t.name : (this.currentTenant()?.name || 'Cargando...');
   }
 
   @HostListener('window:keydown', ['$event'])
