@@ -5,7 +5,7 @@
     role="presentation"
   >
     <div
-      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[min(90vh,720px)] overflow-hidden flex flex-col mx-auto"
+      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl max-h-[min(92vh,860px)] overflow-hidden flex flex-col mx-auto"
       (click)="$event.stopPropagation()"
       role="dialog"
       aria-modal="true"
@@ -58,7 +58,40 @@
         </button>
       </div>
 
-      <div class="flex-1 overflow-y-auto px-5 py-4 text-sm">
+      @if (!loading && !errorMessage && item) {
+        <div
+          class="shrink-0 flex flex-wrap gap-1 border-b border-border bg-dark/25 px-3 pt-2"
+        >
+          <button
+            type="button"
+            (click)="setPanel('detail')"
+            class="px-3 py-2 rounded-t-lg text-xs font-mono border border-b-0 transition-colors"
+            [class.bg-primary]="activePanel() === 'detail'"
+            [class.text-dark]="activePanel() === 'detail'"
+            [class.border-primary]="activePanel() === 'detail'"
+            [class.bg-transparent]="activePanel() !== 'detail'"
+            [class.text-muted]="activePanel() !== 'detail'"
+            [class.border-transparent]="activePanel() !== 'detail'"
+          >
+            Ficha del artículo
+          </button>
+          <button
+            type="button"
+            (click)="setPanel('ledger')"
+            class="px-3 py-2 rounded-t-lg text-xs font-mono border border-b-0 transition-colors"
+            [class.bg-primary]="activePanel() === 'ledger'"
+            [class.text-dark]="activePanel() === 'ledger'"
+            [class.border-primary]="activePanel() === 'ledger'"
+            [class.bg-transparent]="activePanel() !== 'ledger'"
+            [class.text-muted]="activePanel() !== 'ledger'"
+            [class.border-transparent]="activePanel() !== 'ledger'"
+          >
+            Historial de movimientos
+          </button>
+        </div>
+      }
+
+      <div class="flex-1 overflow-y-auto min-h-0 px-5 py-4 text-sm">
         @if (loading) {
           <div class="space-y-3">
             @for (_ of [1, 2, 3, 4, 5, 6]; track $index) {
@@ -68,130 +101,369 @@
         } @else if (errorMessage) {
           <p class="text-red-400 text-sm">{{ errorMessage }}</p>
         } @else if (item) {
-          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-            <div class="sm:col-span-2">
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Descripción
-              </dt>
-              <dd class="mt-0.5 text-main whitespace-pre-wrap break-words">
-                {{ dash(item.description) }}
-              </dd>
-            </div>
+          @if (activePanel() === 'detail') {
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              <div class="sm:col-span-2">
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Descripción
+                </dt>
+                <dd class="mt-0.5 text-main whitespace-pre-wrap break-words">
+                  {{ dash(item.description) }}
+                </dd>
+              </div>
 
-            <div>
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                N° parte
-              </dt>
-              <dd class="mt-0.5 font-mono text-main">{{ dash(item.partNumber) }}</dd>
-            </div>
-            <div>
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Marca
-              </dt>
-              <dd class="mt-0.5 text-main">{{ dash(item.brand) }}</dd>
-            </div>
+              <div>
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  N° parte
+                </dt>
+                <dd class="mt-0.5 font-mono text-main">{{ dash(item.partNumber) }}</dd>
+              </div>
+              <div>
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Marca
+                </dt>
+                <dd class="mt-0.5 text-main">{{ dash(item.brand) }}</dd>
+              </div>
 
-            <div class="sm:col-span-2">
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Código QR (payload)
-              </dt>
-              <dd class="mt-0.5 font-mono text-xs text-main break-all">
-                {{ dash(item.qrCode) }}
-              </dd>
-            </div>
+              <div class="sm:col-span-2">
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Código QR (payload)
+                </dt>
+                <dd class="mt-0.5 font-mono text-xs text-main break-all">
+                  {{ dash(item.qrCode) }}
+                </dd>
+              </div>
 
-            <div class="sm:col-span-2">
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                ID interno
-              </dt>
-              <dd class="mt-0.5 font-mono text-xs text-muted break-all">{{ item.id }}</dd>
-            </div>
+              <div class="sm:col-span-2">
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  ID interno
+                </dt>
+                <dd class="mt-0.5 font-mono text-xs text-muted break-all">{{ item.id }}</dd>
+              </div>
 
-            <div>
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Familia
-              </dt>
-              <dd class="mt-0.5 text-main">
-                {{ dash(item.itemCategory?.parentCategory?.name) }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Subcategoría
-              </dt>
-              <dd class="mt-0.5 text-main font-medium uppercase">
-                {{ dash(item.itemCategory?.name) }}
-              </dd>
-            </div>
+              <div>
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Familia
+                </dt>
+                <dd class="mt-0.5 text-main">
+                  {{ dash(item.itemCategory?.parentCategory?.name) }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Subcategoría
+                </dt>
+                <dd class="mt-0.5 text-main font-medium uppercase">
+                  {{ dash(item.itemCategory?.name) }}
+                </dd>
+              </div>
 
-            <div>
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Unidad de medida
-              </dt>
-              <dd class="mt-0.5 text-main">
-                @if (item.unitOfMeasure) {
-                  {{ item.unitOfMeasure.name }}
-                  <span class="text-muted">({{ item.unitOfMeasure.abbreviation }})</span>
-                } @else {
-                  —
-                }
-              </dd>
-            </div>
-            <div>
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Proveedor habitual
-              </dt>
-              <dd class="mt-0.5 text-main">
-                {{ dash(item.inventorySupplier?.name) }}
-              </dd>
-            </div>
+              <div>
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Unidad de medida
+                </dt>
+                <dd class="mt-0.5 text-main">
+                  @if (item.unitOfMeasure) {
+                    {{ item.unitOfMeasure.name }}
+                    <span class="text-muted">({{ item.unitOfMeasure.abbreviation }})</span>
+                  } @else {
+                    —
+                  }
+                </dd>
+              </div>
+              <div>
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Proveedor habitual
+                </dt>
+                <dd class="mt-0.5 text-main">
+                  {{ dash(item.inventorySupplier?.name) }}
+                </dd>
+              </div>
 
-            <div class="sm:col-span-2">
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
-                Compatibilidad / equipos
-              </dt>
-              <dd class="mt-0.5 text-main whitespace-pre-wrap break-words">
-                {{ dash(item.compatibilityInfo) }}
-              </dd>
-            </div>
+              <div class="sm:col-span-2">
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                  Compatibilidad / equipos
+                </dt>
+                <dd class="mt-0.5 text-main whitespace-pre-wrap break-words">
+                  {{ dash(item.compatibilityInfo) }}
+                </dd>
+              </div>
 
-            <div class="sm:col-span-2 border-t border-border pt-4">
-              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted mb-2">
-                Comportamiento en inventario
-              </dt>
-              <dd class="flex flex-wrap gap-2">
-                @if (item.isSerialized) {
+              <div class="sm:col-span-2 border-t border-border pt-4">
+                <dt class="text-[10px] font-mono uppercase tracking-wider text-muted mb-2">
+                  Comportamiento en inventario
+                </dt>
+                <dd class="flex flex-wrap gap-2">
+                  @if (item.isSerialized) {
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/30"
+                      >Seriado</span
+                    >
+                  } @else {
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-mono bg-dark border border-border text-muted"
+                      >Granel</span
+                    >
+                  }
                   <span
-                    class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/30"
-                    >Seriado</span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
+                    [class.text-main]="item.isInventory"
+                    [class.text-muted]="!item.isInventory"
+                    >Inventariable: {{ boolLabel(item.isInventory) }}</span
                   >
-                } @else {
                   <span
-                    class="px-2 py-0.5 rounded text-[10px] font-mono bg-dark border border-border text-muted"
-                    >Granel</span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
+                    [class.text-main]="item.isAsset"
+                    [class.text-muted]="!item.isAsset"
+                    >Activo: {{ boolLabel(item.isAsset) }}</span
                   >
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
+                    [class.text-main]="item.isConsumable"
+                    [class.text-muted]="!item.isConsumable"
+                    >Consumible: {{ boolLabel(item.isConsumable) }}</span
+                  >
+                </dd>
+              </div>
+            </dl>
+          } @else {
+            <div class="rounded-lg border border-border bg-dark/20 overflow-hidden">
+              <div class="p-3 border-b border-border bg-dark/40">
+                <h4 class="text-xs font-mono font-bold text-primary uppercase tracking-wider">
+                  Kardex — movimientos por bodega
+                </h4>
+                @if (ledgerWarehouseScoped()) {
+                  <p class="text-[11px] text-muted mt-1 leading-snug">
+                    Solo movimientos registrados en
+                    <span class="text-main font-mono font-semibold">{{
+                      ledgerWarehouseLabel?.trim() || 'la bodega seleccionada'
+                    }}</span>
+                    (traslados: salida desde aquí o entrada hacia aquí).
+                  </p>
+                } @else {
+                  <p class="text-[11px] text-muted mt-1 leading-snug">
+                    Fecha, tipo, cantidad, bodega y documento de referencia (OT / recepción /
+                    transferencia).
+                  </p>
                 }
-                <span
-                  class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
-                  [class.text-main]="item.isInventory"
-                  [class.text-muted]="!item.isInventory"
-                  >Inventariable: {{ boolLabel(item.isInventory) }}</span
+              </div>
+              @if (ledgerError(); as le) {
+                <p class="p-4 text-sm text-red-400">{{ le }}</p>
+              }
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm border-collapse min-w-[680px]">
+                  <thead
+                    class="bg-dark text-muted font-mono text-[10px] uppercase tracking-wider"
+                  >
+                    <tr>
+                      <th class="py-2.5 px-3 border-b border-border">Fecha</th>
+                      <th class="py-2.5 px-3 border-b border-border">Tipo</th>
+                      <th class="py-2.5 px-3 border-b border-border text-right">Cantidad</th>
+                      @if (!ledgerWarehouseScoped()) {
+                        <th class="py-2.5 px-3 border-b border-border">Bodega</th>
+                      }
+                      <th class="py-2.5 px-3 border-b border-border">Referencia</th>
+                      <th class="py-2.5 px-3 border-b border-border">Usuario</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border/40 text-muted">
+                    @if (ledgerLoading()) {
+                      <tr>
+                        <td
+                          [attr.colspan]="ledgerWarehouseScoped() ? 5 : 6"
+                          class="py-10 text-center font-mono text-xs"
+                        >
+                          Cargando historial…
+                        </td>
+                      </tr>
+                    } @else if (ledgerRows().length === 0) {
+                      <tr>
+                        <td
+                          [attr.colspan]="ledgerWarehouseScoped() ? 5 : 6"
+                          class="py-10 text-center font-mono text-xs"
+                        >
+                          Sin movimientos registrados
+                          @if (ledgerWarehouseScoped()) {
+                            en esta bodega.
+                          } @else {
+                            para este artículo.
+                          }
+                        </td>
+                      </tr>
+                    } @else {
+                      @for (row of ledgerRows(); track row.id) {
+                        <tr class="hover:bg-dark/30 align-top">
+                          <td class="py-2.5 px-3 font-mono text-xs text-main whitespace-nowrap">
+                            {{ row.date | date: 'short' }}
+                          </td>
+                          <td class="py-2.5 px-3">
+                            @if (row.type === 'ADJUST') {
+                              <button
+                                type="button"
+                                (click)="openAdjustDetail(row)"
+                                class="text-primary hover:underline text-left font-medium text-xs"
+                              >
+                                {{ ledgerTypeLabel(row.type) }}
+                              </button>
+                            } @else {
+                              <span class="text-xs">{{ ledgerTypeLabel(row.type) }}</span>
+                            }
+                          </td>
+                          <td
+                            class="py-2.5 px-3 text-right font-mono text-xs"
+                            [class.text-emerald-400]="ledgerSignedQty(row) > 0"
+                            [class.text-error]="ledgerSignedQty(row) < 0"
+                          >
+                            @if (ledgerSignedQty(row) > 0) {
+                              +{{ ledgerSignedQty(row) | number: '1.0-4' }}
+                            } @else {
+                              {{ ledgerSignedQty(row) | number: '1.0-4' }}
+                            }
+                          </td>
+                          @if (!ledgerWarehouseScoped()) {
+                            <td class="py-2.5 px-3 text-xs">
+                              <span class="text-primary font-mono">{{ row.warehouse.code }}</span>
+                              <span class="text-muted"> — {{ row.warehouse.name }}</span>
+                            </td>
+                          }
+                          <td class="py-2.5 px-3 text-xs max-w-[18rem]">
+                            @if (row.reference; as ref) {
+                              <div class="flex flex-col gap-1">
+                                @if (
+                                  ref.kind === 'INVENTORY_ADJUSTMENT' && row.type === 'ADJUST'
+                                ) {
+                                  <button
+                                    type="button"
+                                    (click)="openAdjustDetail(row)"
+                                    class="text-left text-primary cursor-pointer hover:text-primary font-medium text-main transition-colors text-xs"
+                                    title="Hacer clic para vista rápida"
+                                  >
+                                    {{ ref.label }}
+                                  </button>
+                                } @else {
+                                  <span class="text-main">{{ ref.label }}</span>
+                                }
+                                @if (ref.kind === 'WORK_ORDER' && ref.workOrderId) {
+                                  <div
+                                    class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5"
+                                  >
+                                    <button
+                                      type="button"
+                                      (click)="openLedgerOtModal(ref.workOrderId!)"
+                                      class="text-primary hover:underline font-mono text-[11px] w-fit"
+                                    >
+                                      Vista OT
+                                    </button>
+                                    <a
+                                      [routerLink]="['/app/mantenimiento/ot', ref.workOrderId]"
+                                      class="text-muted hover:text-main font-mono text-[10px] w-fit"
+                                      >Formulario</a
+                                    >
+                                  </div>
+                                }
+                                @if (ref.kind === 'PURCHASE_RECEIPT') {
+                                  <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                    @if (ref.warehouseReceiptId) {
+                                      <app-entity-link
+                                        kind="WR"
+                                        [id]="ref.warehouseReceiptId"
+                                        [label]="ref.label.trim() || 'Recepción'"
+                                        variant="link"
+                                      />
+                                    } @else {
+                                      <span class="text-[11px] text-muted">Sin recepción</span>
+                                    }
+                                    @if (ref.purchaseOrderId) {
+                                      <app-entity-link
+                                        kind="PO"
+                                        [id]="ref.purchaseOrderId"
+                                        [label]="ref.purchaseOrderCorrelative || 'OC'"
+                                        variant="link"
+                                      />
+                                    } @else {
+                                      <span class="text-[11px] text-muted">OC N/A</span>
+                                    }
+                                  </div>
+                                }
+                                @if (ref.kind === 'INVENTORY_TRANSFER') {
+                                  <div
+                                    class="mt-1.5 space-y-1 rounded border border-primary/25 bg-primary/5 px-2 py-1.5"
+                                  >
+                                    <p class="text-[10px] font-mono uppercase tracking-wide text-primary/90">
+                                      {{ ledgerTypeLabel(row.type) }}
+                                    </p>
+                                    <p class="text-[11px] text-main leading-snug">
+                                      {{ ref.label }}
+                                    </p>
+                                    @if (row.notes?.trim()) {
+                                      <p
+                                        class="text-[10px] text-muted font-mono leading-snug whitespace-pre-wrap"
+                                      >
+                                        {{ row.notes }}
+                                      </p>
+                                    }
+                                    <a
+                                      routerLink="/app/inventario/transferencias"
+                                      class="inline-block text-[11px] text-primary hover:underline font-mono"
+                                      >Ir a transferencias entre bodegas</a
+                                    >
+                                  </div>
+                                }
+                              </div>
+                            } @else if (row.type === 'ADJUST' && row.notes) {
+                              <button
+                                type="button"
+                                (click)="openAdjustDetail(row)"
+                                class="text-left text-primary hover:text-primary cursor-pointer text-xs transition-colors"
+                                title="Hacer clic para vista rápida"
+                              >
+                                Ver detalle de ajuste
+                              </button>
+                            } @else if (row.notes) {
+                              <span class="text-muted">{{ row.notes }}</span>
+                            } @else {
+                              —
+                            }
+                          </td>
+                          <td class="py-2.5 px-3 text-xs truncate max-w-[9rem]">
+                            {{ row.user.name }}
+                          </td>
+                        </tr>
+                      }
+                    }
+                  </tbody>
+                </table>
+              </div>
+              @if (!ledgerLoading() && ledgerTotal() > 0) {
+                <div
+                  class="flex items-center justify-between gap-3 px-3 py-2.5 border-t border-border bg-dark/40"
                 >
-                <span
-                  class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
-                  [class.text-main]="item.isAsset"
-                  [class.text-muted]="!item.isAsset"
-                  >Activo: {{ boolLabel(item.isAsset) }}</span
-                >
-                <span
-                  class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
-                  [class.text-main]="item.isConsumable"
-                  [class.text-muted]="!item.isConsumable"
-                  >Consumible: {{ boolLabel(item.isConsumable) }}</span
-                >
-              </dd>
+                  <span class="font-mono text-[11px] text-muted">
+                    {{ ledgerTotal() }} movimiento(s) · Pág. {{ ledgerPage() }} /
+                    {{ ledgerTotalPages() }}
+                  </span>
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      (click)="prevLedgerPage()"
+                      [disabled]="ledgerPage() <= 1"
+                      class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-main hover:bg-dark disabled:opacity-40"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      (click)="nextLedgerPage()"
+                      [disabled]="ledgerPage() >= ledgerTotalPages()"
+                      class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-main hover:bg-dark disabled:opacity-40"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              }
             </div>
-          </dl>
+          }
         }
       </div>
 
@@ -217,6 +489,57 @@
           }
         </div>
       }
+
+      @if (adjustDetailOpen() && adjustDetailRow(); as adj) {
+        <div
+          class="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          (click)="closeAdjustDetail()"
+        >
+          <div
+            (click)="$event.stopPropagation()"
+            class="bg-surface border border-border rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4"
+          >
+            <h4 class="text-lg font-bold text-main">Detalle de ajuste</h4>
+            <dl class="space-y-3 text-sm">
+              <div>
+                <dt class="text-muted text-xs uppercase font-mono">Usuario</dt>
+                <dd class="text-main">{{ adj.user.name }}</dd>
+              </div>
+              <div>
+                <dt class="text-muted text-xs uppercase font-mono">Motivo</dt>
+                <dd class="text-main">
+                  {{ parseAdjustmentNotes(adj.notes).reason || '—' }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted text-xs uppercase font-mono">Comentario</dt>
+                <dd
+                  class="text-main whitespace-pre-wrap break-words max-h-60 overflow-y-auto"
+                >
+                  {{ parseAdjustmentNotes(adj.notes).comment || '—' }}
+                </dd>
+              </div>
+            </dl>
+            <div class="flex justify-end pt-2">
+              <button
+                type="button"
+                (click)="closeAdjustDetail()"
+                class="rounded-lg border border-border px-4 py-2 text-sm hover:bg-dark"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <app-work-order-detail-modal
+        [workOrderId]="ledgerOtModalId()"
+        [isOpen]="ledgerOtModalOpen()"
+        (close)="closeLedgerOtModal()"
+      />
     </div>
   </div>
 }

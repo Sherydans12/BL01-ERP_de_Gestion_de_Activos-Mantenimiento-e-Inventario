@@ -132,10 +132,14 @@
                   </td>
                   <td
                     class="py-3 px-4 text-right font-mono"
-                    [class.text-emerald-400]="row.quantity > 0"
-                    [class.text-error]="row.quantity < 0"
+                    [class.text-emerald-400]="ledgerSignedQty(row) > 0"
+                    [class.text-error]="ledgerSignedQty(row) < 0"
                   >
-                    {{ row.quantity > 0 ? "+" : "" }}{{ row.quantity }}
+                    @if (ledgerSignedQty(row) > 0) {
+                      +{{ ledgerSignedQty(row) | number: "1.0-4" }}
+                    } @else {
+                      {{ ledgerSignedQty(row) | number: "1.0-4" }}
+                    }
                   </td>
                   <td class="py-3 px-4 text-xs">
                     <span class="text-primary font-mono">{{ row.warehouse.code }}</span>
@@ -156,7 +160,7 @@
                           >
                             {{ ref.label }}
                           </button>
-                        } @else {
+                        } @else if (ref.kind !== "INVENTORY_TRANSFER") {
                           <span class="text-main">{{ ref.label }}</span>
                         }
                         @if (ref.kind === "WORK_ORDER" && ref.workOrderId) {
@@ -197,6 +201,23 @@
                             } @else {
                               <span class="text-[11px] text-muted">OC N/A</span>
                             }
+                          </div>
+                        }
+                        @if (ref.kind === "INVENTORY_TRANSFER") {
+                          <div class="mt-1.5 space-y-1 rounded border border-primary/25 bg-primary/5 px-2 py-1.5">
+                            <p class="text-[11px] text-main leading-snug">
+                              {{ ref.label }}
+                            </p>
+                            @if (row.notes?.trim()) {
+                              <p class="text-[10px] text-muted font-mono leading-snug whitespace-pre-wrap">
+                                {{ row.notes }}
+                              </p>
+                            }
+                            <a
+                              routerLink="/app/inventario/transferencias"
+                              class="inline-block text-[11px] text-primary hover:underline font-mono"
+                              >Ir a transferencias entre bodegas</a
+                            >
                           </div>
                         }
                       </div>

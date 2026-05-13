@@ -151,11 +151,21 @@ export class InventoryTransferService {
         for (const line of dto.lines) {
           const item = await tx.inventoryItem.findFirst({
             where: { id: line.itemId, tenantId },
-            select: { id: true, partNumber: true },
+            select: {
+              id: true,
+              partNumber: true,
+              unitOfMeasure: { select: { abbreviation: true, allowsDecimals: true } },
+            },
           });
           if (!item) {
             throw new BadRequestException(
               `El artículo no existe o no pertenece a su empresa.`,
+            );
+          }
+
+          if (!item.unitOfMeasure?.allowsDecimals && !Number.isInteger(line.quantity)) {
+            throw new BadRequestException(
+              `El artículo "${item.partNumber ?? item.id}" usa unidad "${item.unitOfMeasure?.abbreviation ?? 'UN'}" que no admite fracciones. La cantidad debe ser un número entero.`,
             );
           }
 

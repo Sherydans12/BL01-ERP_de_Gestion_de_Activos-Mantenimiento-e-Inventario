@@ -20,12 +20,12 @@ const prisma = new PrismaClient({ adapter });
 // ─────────────────────────────────────────────────────────────────────────────
 // Unidades de medida
 // ─────────────────────────────────────────────────────────────────────────────
-const UOM_ROWS: ReadonlyArray<{ name: string; abbreviation: string }> = [
-  { name: 'Unidades',    abbreviation: 'UN'  },
-  { name: 'Kilogramos',  abbreviation: 'KG'  },
-  { name: 'Litros',      abbreviation: 'LT'  },
-  { name: 'Litros',      abbreviation: 'LTS' }, // alias usado en algunos Excel
-  { name: 'Metros',      abbreviation: 'MT'  },
+const UOM_ROWS: ReadonlyArray<{ name: string; abbreviation: string; allowsDecimals: boolean }> = [
+  { name: 'Unidades',    abbreviation: 'UN',  allowsDecimals: false },
+  { name: 'Kilogramos',  abbreviation: 'KG',  allowsDecimals: true  },
+  { name: 'Litros',      abbreviation: 'LT',  allowsDecimals: true  },
+  { name: 'Litros',      abbreviation: 'LTS', allowsDecimals: true  }, // alias usado en algunos Excel
+  { name: 'Metros',      abbreviation: 'MT',  allowsDecimals: true  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,8 +91,8 @@ async function main() {
           abbreviation: row.abbreviation,
         },
       },
-      update: { name: row.name },
-      create: { tenantId: tenant.id, name: row.name, abbreviation: row.abbreviation },
+      update: { name: row.name, allowsDecimals: row.allowsDecimals },
+      create: { tenantId: tenant.id, name: row.name, abbreviation: row.abbreviation, allowsDecimals: row.allowsDecimals },
     });
     console.log(`  ✅  ${row.abbreviation} — ${row.name}`);
   }

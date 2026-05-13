@@ -76,6 +76,15 @@ export class GlobalItemPickerComponent
   /** Familia de catálogo fija (oculta el selector de familia). */
   @Input() lockedFamilyId: string | null = null;
 
+  /** Muestra el flujo «+ Nuevo artículo» (quick-add). Desactivar p. ej. en transferencias W2W. */
+  @Input() allowQuickAdd = true;
+
+  /**
+   * Con `warehouseId`, limita a artículos con stock físico &gt; 0 en esa bodega.
+   * Requiere soporte en API (`onlyWithStock`).
+   */
+  @Input() onlyWithStockInWarehouse = false;
+
   @Output() closed = new EventEmitter<void>();
   @Output() itemPicked = new EventEmitter<ItemPickerRow>();
 
@@ -113,13 +122,12 @@ export class GlobalItemPickerComponent
 
   ngOnChanges(changes: SimpleChanges) {
     queueMicrotask(() => this.syncDialogFromInput());
-    if (
-      changes['warehouseId'] &&
-      !changes['warehouseId'].firstChange &&
-      this.open &&
-      this.pickerDialog?.nativeElement?.open
-    ) {
-      this.fetch();
+    if (this.open && this.pickerDialog?.nativeElement?.open) {
+      const wh = changes['warehouseId'];
+      const ow = changes['onlyWithStockInWarehouse'];
+      if ((wh && !wh.firstChange) || (ow && !ow.firstChange)) {
+        this.fetch();
+      }
     }
   }
 
@@ -195,6 +203,8 @@ export class GlobalItemPickerComponent
         search: q || undefined,
         categoryId: this.categoryParam(),
         warehouseId: this.warehouseId?.trim() || undefined,
+        onlyWithStockInWarehouse:
+          this.onlyWithStockInWarehouse && !!this.warehouseId?.trim(),
         page: this.page(),
         pageSize: this.pageSize,
       })
@@ -263,6 +273,8 @@ export class GlobalItemPickerComponent
         search: q || undefined,
         categoryId: this.categoryParam(),
         warehouseId: this.warehouseId?.trim() || undefined,
+        onlyWithStockInWarehouse:
+          this.onlyWithStockInWarehouse && !!this.warehouseId?.trim(),
         page: this.page(),
         pageSize: this.pageSize,
       })

@@ -450,13 +450,14 @@ export class InventoryStockService {
   }
 
   /**
-   * Enriquece transacciones con datos para trazabilidad (recepción/OC, OT).
+   * Enriquece transacciones con datos para trazabilidad (recepción/OC, OT, transferencias W2W).
    */
   private async enrichTransactionsTrace<
     T extends {
       type: TransactionType;
       referenceId: string | null;
       referenceType: string | null;
+      warehouseId: string;
     },
   >(
     rows: T[],
@@ -516,6 +517,52 @@ export class InventoryStockService {
       }
     }
 
+    const transferIds = [
+      ...new Set(
+        rows
+          .filter(
+            (r) =>
+              r.referenceType === 'INVENTORY_TRANSFER' && r.referenceId,
+          )
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    const transferMap = new Map<
+      string,
+      {
+        id: string;
+        originWarehouseId: string;
+        destinationWarehouseId: string;
+        originCode: string;
+        destCode: string;
+        originName: string;
+        destName: string;
+      }
+    >();
+    if (transferIds.length > 0) {
+      const trs = await this.prisma.inventoryTransfer.findMany({
+        where: { id: { in: transferIds }, tenantId },
+        select: {
+          id: true,
+          originWarehouseId: true,
+          destinationWarehouseId: true,
+          originWarehouse: { select: { code: true, name: true } },
+          destinationWarehouse: { select: { code: true, name: true } },
+        },
+      });
+      for (const t of trs) {
+        transferMap.set(t.id, {
+          id: t.id,
+          originWarehouseId: t.originWarehouseId,
+          destinationWarehouseId: t.destinationWarehouseId,
+          originCode: t.originWarehouse.code,
+          destCode: t.destinationWarehouse.code,
+          originName: t.originWarehouse.name,
+          destName: t.destinationWarehouse.name,
+        });
+      }
+    }
+
     return rows.map((row) => {
       const trace: Record<string, unknown> = {};
       if (row.type === 'PURCHASE_RECEIPT' && row.referenceId) {
@@ -532,6 +579,22 @@ export class InventoryStockService {
         const wo = woMap.get(row.referenceId);
         if (wo) {
           trace.workOrder = wo;
+        }
+      }
+      if (row.referenceType === 'INVENTORY_TRANSFER' && row.referenceId) {
+        const tr = transferMap.get(row.referenceId);
+        if (tr) {
+          trace.transfer = {
+            ...tr,
+            direction:
+              row.type === 'TRANSFER_OUT' &&
+              row.warehouseId === tr.originWarehouseId
+                ? ('OUT' as const)
+                : row.type === 'TRANSFER_IN' &&
+                    row.warehouseId === tr.destinationWarehouseId
+                  ? ('IN' as const)
+                  : ('OTHER' as const),
+          };
         }
       }
       return {

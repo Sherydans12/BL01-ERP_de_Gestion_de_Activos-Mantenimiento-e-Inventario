@@ -82,6 +82,14 @@ export class StockDashboardComponent implements OnInit {
   warehousesLoading = signal(true);
   selectedWarehouseId = signal<string>('');
 
+  /** Etiqueta de la bodega seleccionada (código — nombre) para el modal de detalle. */
+  selectedWarehouseSummary = computed(() => {
+    const id = this.selectedWarehouseId();
+    if (!id) return '';
+    const w = this.warehouses().find((x: { id: string }) => x.id === id);
+    return w ? `${w.code} — ${w.name}` : id;
+  });
+
   stockItems = signal<any[]>([]);
   stockLoading = signal(false);
   families = signal<ItemCategory[]>([]);
@@ -1256,9 +1264,29 @@ export class StockDashboardComponent implements OnInit {
       PURCHASE_RECEIPT: 'Recepción compra',
       WORK_ORDER_ISSUE: 'Consumo OT',
       WORK_ORDER_RETURN: 'Devolución desde OT',
-      TRANSFER_OUT: 'Transferencia salida',
-      TRANSFER_IN: 'Transferencia ingreso',
+      TRANSFER_OUT: 'Transferencia (envío)',
+      TRANSFER_IN: 'Transferencia (recepción)',
     };
     return m[String(type ?? '').toUpperCase()] ?? String(type ?? '—');
+  }
+
+  /** Cantidad con signo en kardex por bodega (consumos/salidas negativos). */
+  kardexSignedQty(t: { type?: string; quantity?: number }): number {
+    const typ = String(t.type ?? '').toUpperCase();
+    const q = Number(t.quantity ?? 0);
+    switch (typ) {
+      case 'TRANSFER_OUT':
+      case 'OUT':
+      case 'WORK_ORDER_ISSUE':
+        return -Math.abs(q);
+      case 'TRANSFER_IN':
+      case 'IN':
+      case 'PURCHASE_RECEIPT':
+      case 'RETURN':
+      case 'WORK_ORDER_RETURN':
+        return Math.abs(q);
+      default:
+        return q;
+    }
   }
 }

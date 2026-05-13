@@ -17,6 +17,7 @@ export interface UnitOfMeasureRef {
   id: string;
   name: string;
   abbreviation: string;
+  allowsDecimals?: boolean;
 }
 
 export interface QuickCreateItemResult {
@@ -174,6 +175,8 @@ export class InventoryItemsService {
     search?: string;
     categoryId?: string;
     warehouseId?: string;
+    /** Solo ítems con cantidad &gt; 0 en la bodega indicada (requiere warehouseId). */
+    onlyWithStockInWarehouse?: boolean;
     page?: number;
     pageSize?: number;
   }): Observable<ItemPickerPage> {
@@ -186,6 +189,9 @@ export class InventoryItemsService {
     }
     if (params.warehouseId?.trim()) {
       p = p.set('warehouseId', params.warehouseId.trim());
+    }
+    if (params.onlyWithStockInWarehouse === true) {
+      p = p.set('onlyWithStock', '1');
     }
     if (params.page != null) {
       p = p.set('page', String(params.page));
@@ -227,7 +233,7 @@ export class InventoryItemsService {
   /** Kardex paginado del artículo. */
   getItemLedger(
     id: string,
-    params?: { page?: number; pageSize?: number },
+    params?: { page?: number; pageSize?: number; warehouseId?: string },
   ): Observable<ItemLedgerPage> {
     let p = new HttpParams();
     if (params?.page != null) {
@@ -235,6 +241,9 @@ export class InventoryItemsService {
     }
     if (params?.pageSize != null) {
       p = p.set('pageSize', String(params.pageSize));
+    }
+    if (params?.warehouseId?.trim()) {
+      p = p.set('warehouseId', params.warehouseId.trim());
     }
     return this.http.get<ItemLedgerPage>(`${this.apiUrl}/${id}/ledger`, {
       params: p,

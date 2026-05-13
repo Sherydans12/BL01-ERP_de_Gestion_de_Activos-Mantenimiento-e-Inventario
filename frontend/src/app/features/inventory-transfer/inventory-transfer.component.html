@@ -57,34 +57,106 @@
         </button>
       </div>
 
-      <div class="overflow-hidden rounded-xl border border-border">
-        <table class="w-full border-collapse text-sm">
+      <div class="overflow-x-auto rounded-xl border border-border">
+        <table class="w-full min-w-[640px] border-collapse text-sm">
           <thead>
             <tr class="bg-dark text-xs uppercase tracking-wider text-muted font-mono">
-              <th class="px-4 py-2.5 text-left">N° Parte / Ítem</th>
-              <th class="px-4 py-2.5 text-center">Cantidad</th>
+              <th class="px-4 py-2.5 text-left">Artículo</th>
+              <th class="px-4 py-2.5 text-right">Saldo en origen</th>
+              <th class="px-4 py-2.5 text-center">A transferir</th>
               <th class="px-4 py-2.5 text-center">Acción</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border/50">
             @for (line of lines(); track line.itemId) {
               <tr>
-                <td class="px-4 py-2.5">
-                  <div class="font-mono text-primary">{{ line.partNumber }}</div>
-                  <div class="text-main">{{ line.name }}</div>
+                <td class="px-4 py-2.5 align-top">
+                  @if (line.inventoryCode) {
+                    <div class="font-mono text-xs text-emerald-400/90">
+                      {{ line.inventoryCode }}
+                      <span class="text-[10px] uppercase tracking-wide text-muted"> · código inv.</span>
+                    </div>
+                  }
+                  <div class="font-mono text-sm text-primary">{{ line.partNumber }}</div>
+                  <div class="text-main font-medium">{{ line.name }}</div>
+                  @if (line.brand) {
+                    <div class="mt-0.5 text-xs text-muted">Marca: {{ line.brand }}</div>
+                  }
+                  @if (line.stockLocation) {
+                    <div
+                      class="mt-1 inline-flex max-w-full items-center rounded border border-primary/25 bg-primary/5 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary"
+                      [title]="'Ubicación en bodega origen: ' + line.stockLocation"
+                    >
+                      Ubic. {{ line.stockLocation }}
+                    </div>
+                  }
+                  @if (line.stockCritical) {
+                    <div
+                      class="mt-1 rounded border border-amber-500/35 bg-amber-500/10 px-2 py-1 font-mono text-[10px] leading-snug text-amber-300"
+                    >
+                      Stock bajo el mínimo en esta bodega
+                    </div>
+                  }
                 </td>
-                <td class="px-4 py-2.5 text-center">
-                  <input
-                    type="number"
-                    min="0.0001"
-                    step="0.0001"
-                    [value]="line.quantity"
-                    (input)="setLineQty(line.itemId, $any($event.target).value)"
-                    class="w-28 rounded border border-border bg-dark px-2 py-1 text-right font-mono text-main outline-none focus:border-primary"
-                  />
-                  <span class="ml-2 text-xs text-muted">{{ line.unitOfMeasure }}</span>
+                <td class="px-4 py-2.5 align-top text-right">
+                  @if (line.originStockPhysical !== null) {
+                    <div class="font-mono text-sm text-main">
+                      @if (line.allowsDecimals) {
+                        {{ line.originStockPhysical | number: "1.0-3" }}
+                      } @else {
+                        {{ line.originStockPhysical | number: "1.0-0" }}
+                      }
+                      <span class="text-xs font-normal text-muted"> {{ line.unitOfMeasure }}</span>
+                    </div>
+                    <div class="text-[10px] text-muted">físico en origen</div>
+                    @if (line.quantity > 0 && remainingOriginStock(line) !== null) {
+                      <div class="mt-1 text-[10px] text-muted">
+                        Tras envío:
+                        <span class="font-mono text-main">
+                          @if (line.allowsDecimals) {
+                            {{ remainingOriginStock(line)! | number: "1.0-3" }}
+                          } @else {
+                            {{ remainingOriginStock(line)! | number: "1.0-0" }}
+                          }
+                        </span>
+                        {{ line.unitOfMeasure }}
+                      </div>
+                    }
+                  } @else {
+                    <span class="font-mono text-xs text-muted">—</span>
+                    <div class="text-[10px] text-muted">sin dato de saldo</div>
+                  }
                 </td>
-                <td class="px-4 py-2.5 text-center">
+                <td class="px-4 py-2.5 align-top text-center">
+                  <div class="inline-flex flex-col items-center gap-1">
+                    @if (line.allowsDecimals) {
+                      <input
+                        type="number"
+                        min="0.001"
+                        step="0.001"
+                        [value]="line.quantity"
+                        (input)="setLineQty(line.itemId, $any($event.target).value)"
+                        class="w-28 rounded border border-border bg-dark px-2 py-1 text-right font-mono text-main outline-none focus:border-primary"
+                      />
+                    } @else {
+                      <input
+                        type="text"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        [value]="line.quantity ? '' + line.quantity : ''"
+                        (input)="setLineQtyInteger(line.itemId, $any($event.target).value)"
+                        class="w-28 rounded border border-border bg-dark px-2 py-1 text-right font-mono text-main outline-none focus:border-primary"
+                      />
+                    }
+                    <span class="text-[10px] uppercase tracking-wide text-muted">{{ line.unitOfMeasure }}</span>
+                    @if (exceedsOriginStock(line)) {
+                      <span class="max-w-[10rem] text-center text-[10px] leading-tight text-error">
+                        Supera el saldo en origen
+                      </span>
+                    }
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 align-top text-center">
                   <button
                     type="button"
                     (click)="removeLine(line.itemId)"
@@ -96,7 +168,7 @@
               </tr>
             } @empty {
               <tr>
-                <td colspan="3" class="px-4 py-8 text-center text-sm font-mono text-muted">
+                <td colspan="4" class="px-4 py-8 text-center text-sm font-mono text-muted">
                   No hay ítems agregados.
                 </td>
               </tr>
@@ -184,9 +256,11 @@
 
   <app-global-item-picker
     [open]="pickerOpen()"
-    [warehouseId]="transferForm.get('originWarehouseId')?.value || null"
+    [warehouseId]="originWarehouseIdForPicker()"
     [strictFamilyFirst]="true"
-    title="Catálogo Maestro de Artículos"
+    [allowQuickAdd]="false"
+    [onlyWithStockInWarehouse]="true"
+    title="Artículos con stock en bodega origen"
     (closed)="onPickerClosed()"
     (itemPicked)="onItemPicked($event)"
   />

@@ -7,5 +7,6 @@ Términos internos del dominio para que los agentes no inventen sinónimos disti
 | TPM | Nombre del producto / gestión de activos y EAM (ver README raíz) |
 | CPP | Costo promedio ponderado (valorización de inventario) |
 | OT | Orden de trabajo (mantenimiento) |
-
-_(Ampliar cuando surjan faenas, kits, reservas, etc.)_
+| W2W | Traslado **warehouse to warehouse** (transferencia entre bodegas del mismo tenant; ver [`inventario-stock-transferencias-kardex.md`](inventario-stock-transferencias-kardex.md)). |
+| Kardex (inventario) | Historial inmutable en `inventory_transactions` por artículo y/o por bodega. |
+| Transferencia (inventario) | Flujo `InventoryTransfer` + líneas + movimientos `TRANSFER_OUT` / `TRANSFER_IN` con `referenceType = INVENTORY_TRANSFER`. |

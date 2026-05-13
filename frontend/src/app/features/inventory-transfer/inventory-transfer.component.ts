@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { merge } from 'rxjs';
 import { AuthService } from '../../core/services/auth/auth.service';
 import { InventoryTransferRow, InventoryTransferService } from '../../core/services/inventory-transfer/inventory-transfer.service';
 import { NotificationService } from '../../core/services/notification/notification.service';
@@ -12,10 +14,18 @@ import { GlobalItemPickerComponent } from '../../shared/components/global-item-p
 
 type DraftLine = {
   itemId: string;
+  /** SKU / código de inventario (si existe). */
+  inventoryCode: string | null;
   partNumber: string;
   name: string;
+  brand: string | null;
   unitOfMeasure: string;
+  allowsDecimals: boolean;
   quantity: number;
+  /** Saldo físico en bodega origen al momento de elegir el ítem (picker). */
+  originStockPhysical: number | null;
+  stockLocation: string | null;
+  stockCritical: boolean;
 };
 
 type PendingAction =
@@ -62,7 +72,21 @@ export class InventoryTransferComponent implements OnInit {
     destinationWarehouseId: ['', Validators.required],
   });
 
+  /**
+   * Los Reactive Forms no notifican a `computed()` por sí solos.
+   * Cada emisión de value/status invalida el grafo de señales.
+   */
+  private formRevision = signal(0);
+
+  /** Bodega origen para el picker (lectura reactiva al formulario). */
+  originWarehouseIdForPicker = computed(() => {
+    this.formRevision();
+    const v = this.transferForm.get('originWarehouseId')?.value;
+    return v && String(v).trim() ? String(v).trim() : null;
+  });
+
   canSubmit = computed(() => {
+    this.formRevision();
     const v = this.transferForm.getRawValue();
     return (
       this.transferForm.valid &&
@@ -70,11 +94,19 @@ export class InventoryTransferComponent implements OnInit {
       !!v.destinationWarehouseId &&
       v.originWarehouseId !== v.destinationWarehouseId &&
       this.lines().length > 0 &&
-      this.lines().every((l) => l.quantity > 0)
+      this.lines().every(
+        (l) =>
+          l.quantity > 0 &&
+          !this.exceedsOriginStock(l),
+      )
     );
   });
 
   constructor() {
+    merge(this.transferForm.valueChanges, this.transferForm.statusChanges)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.formRevision.update((n) => n + 1));
+
     effect(
       () => {
         this.authService.currentContractId();
@@ -85,7 +117,9 @@ export class InventoryTransferComponent implements OnInit {
     );
   }
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    queueMicrotask(() => this.formRevision.update((n) => n + 1));
+  }
 
   loadWarehouses() {
     this.warehousesLoading.set(true);
@@ -96,6 +130,7 @@ export class InventoryTransferComponent implements OnInit {
         const origen = this.route.snapshot.queryParamMap.get('origen');
         if (origen && rows.some((w) => w.id === origen)) {
           this.transferForm.patchValue({ originWarehouseId: origen });
+          this.formRevision.update((n) => n + 1);
         }
       },
       error: () => {
@@ -135,28 +170,78 @@ export class InventoryTransferComponent implements OnInit {
 
   onItemPicked(row: ItemPickerRow) {
     this.pickerOpen.set(false);
+    const allowsDecimals = row.unitOfMeasure?.allowsDecimals ?? false;
+    const invCode = row.inventoryCode?.trim() || null;
+    const brand = row.brand?.trim() || null;
+    const loc = row.stockLocation?.trim() || null;
+    const stockPhys =
+      row.stockQuantity != null && Number.isFinite(Number(row.stockQuantity))
+        ? Number(row.stockQuantity)
+        : null;
+    const critical = !!row.stockCritical;
+
     this.lines.update((curr) => {
       const idx = curr.findIndex((line) => line.itemId === row.id);
       if (idx >= 0) {
         const updated = [...curr];
-        updated[idx] = { ...updated[idx], quantity: updated[idx].quantity + 1 };
+        const prev = updated[idx];
+        updated[idx] = {
+          ...prev,
+          quantity: prev.quantity + 1,
+          originStockPhysical: stockPhys ?? prev.originStockPhysical,
+          stockLocation: loc || prev.stockLocation,
+          stockCritical: critical || prev.stockCritical,
+        };
         return updated;
       }
       return [
         ...curr,
         {
           itemId: row.id,
-          partNumber: row.partNumber,
+          inventoryCode: invCode,
+          partNumber: row.partNumber?.trim() || '—',
           name: row.name,
-          unitOfMeasure: row.unitOfMeasure?.abbreviation ?? 'u',
+          brand,
+          unitOfMeasure: row.unitOfMeasure?.abbreviation ?? 'UN',
+          allowsDecimals,
           quantity: 1,
+          originStockPhysical: stockPhys,
+          stockLocation: loc,
+          stockCritical: critical,
         },
       ];
     });
   }
 
+  /** Saldo estimado en origen después de descontar la cantidad a transferir. */
+  remainingOriginStock(line: DraftLine): number | null {
+    if (line.originStockPhysical == null) return null;
+    const r = line.originStockPhysical - line.quantity;
+    return line.allowsDecimals ? Math.max(0, r) : Math.max(0, Math.floor(r));
+  }
+
+  /** Cantidad a enviar supera el saldo físico mostrado (el backend valida igual). */
+  exceedsOriginStock(line: DraftLine): boolean {
+    if (line.originStockPhysical == null) return false;
+    return line.quantity > line.originStockPhysical + 1e-9;
+  }
+
   setLineQty(itemId: string, value: string) {
-    const qty = Number(value);
+    const raw = Number(value);
+    this.lines.update((curr) =>
+      curr.map((line) => {
+        if (line.itemId !== itemId) return line;
+        let qty = Number.isFinite(raw) ? raw : 0;
+        if (!line.allowsDecimals) qty = Math.floor(qty);
+        return { ...line, quantity: qty };
+      }),
+    );
+  }
+
+  /** Cantidad solo enteros: evita `type="number"` que muestra decimales en el navegador. */
+  setLineQtyInteger(itemId: string, value: string) {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    const qty = digits === '' ? 0 : Number.parseInt(digits, 10);
     this.lines.update((curr) =>
       curr.map((line) =>
         line.itemId === itemId

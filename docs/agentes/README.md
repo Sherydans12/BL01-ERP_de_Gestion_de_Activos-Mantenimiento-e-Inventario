@@ -72,5 +72,6 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [../CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md) | **Catálogo maestro** de todos los `sendMail` y plantillas; actualizar al añadir correos nuevos |
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |
+| [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md) | **Inventario:** maestro de artículos, `ItemStock`, kardex (`InventoryTransaction`), ajustes, transferencias W2W, picker y rutas de código |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.

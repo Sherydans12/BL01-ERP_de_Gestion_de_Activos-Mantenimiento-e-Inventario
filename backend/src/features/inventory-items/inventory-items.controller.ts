@@ -53,16 +53,23 @@ export class InventoryItemsController {
     @Query('search') search?: string,
     @Query('categoryId') categoryId?: string,
     @Query('warehouseId') warehouseId?: string,
+    @Query('onlyWithStock') onlyWithStock?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
     const p = page !== undefined ? Number.parseInt(page, 10) : undefined;
     const ps =
       pageSize !== undefined ? Number.parseInt(pageSize, 10) : undefined;
+    const ows = String(onlyWithStock ?? '')
+      .trim()
+      .toLowerCase();
+    const onlyWithStockInWarehouse =
+      ows === '1' || ows === 'true' || ows === 'yes';
     return this.inventoryItemsService.findForPicker(req.user, {
       search,
       categoryId,
       warehouseId,
+      onlyWithStockInWarehouse,
       page: Number.isFinite(p) ? p : undefined,
       pageSize: Number.isFinite(ps) ? ps : undefined,
     });
@@ -130,6 +137,7 @@ export class InventoryItemsController {
     @Req() req: any,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('warehouseId') warehouseId?: string,
   ) {
     const parseNum = (s?: string) => {
       const n = s !== undefined ? Number.parseInt(s, 10) : NaN;
@@ -138,6 +146,7 @@ export class InventoryItemsController {
     return this.inventoryItemsService.findItemLedger(id, req.user, {
       page: parseNum(page),
       pageSize: parseNum(pageSize),
+      warehouseId: warehouseId?.trim() || undefined,
     });
   }
 

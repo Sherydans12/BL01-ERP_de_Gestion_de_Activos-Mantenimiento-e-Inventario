@@ -1240,6 +1240,42 @@
                             }
                           </a>
                         }
+                        @if ($any(t).trace?.transfer; as trf) {
+                          <div
+                            class="mt-1.5 rounded border border-primary/25 bg-primary/5 px-2 py-1.5 text-[11px] text-main leading-snug"
+                          >
+                            @if (trf.direction === "OUT") {
+                              <span class="text-muted uppercase tracking-wide text-[10px]">Transferencia · salida</span>
+                              <div class="mt-0.5 font-mono">
+                                Hacia <span class="text-primary">{{ trf.destCode }}</span>
+                                <span class="text-muted"> — {{ trf.destName }}</span>
+                              </div>
+                            } @else if (trf.direction === "IN") {
+                              <span class="text-muted uppercase tracking-wide text-[10px]">Transferencia · ingreso</span>
+                              <div class="mt-0.5 font-mono">
+                                Desde <span class="text-primary">{{ trf.originCode }}</span>
+                                <span class="text-muted"> — {{ trf.originName }}</span>
+                              </div>
+                            } @else {
+                              <span class="text-muted uppercase tracking-wide text-[10px]">Transferencia W2W</span>
+                              <div class="mt-0.5 font-mono">
+                                {{ trf.originCode }} → {{ trf.destCode }}
+                              </div>
+                            }
+                            @if (t.notes?.trim()) {
+                              <p
+                                class="mt-1 text-[10px] text-muted font-mono whitespace-pre-wrap border-t border-border/40 pt-1"
+                              >
+                                {{ t.notes }}
+                              </p>
+                            }
+                            <a
+                              routerLink="/app/inventario/transferencias"
+                              class="mt-1 inline-block text-[10px] text-primary hover:underline font-mono"
+                              >Módulo transferencias</a
+                            >
+                          </div>
+                        }
                         @if (t.type === 'ADJUST' && t.notes) {
                           <div
                             class="mt-1.5 rounded border border-amber-500/35 bg-amber-950/25 px-2 py-1.5 text-[11px] text-amber-50/95 font-mono leading-snug"
@@ -1252,8 +1288,16 @@
                           </div>
                         }
                       </td>
-                      <td class="py-2 pr-2 text-right font-mono">
-                        {{ t.quantity | number: "1.0-4" }}
+                      <td
+                        class="py-2 pr-2 text-right font-mono"
+                        [class.text-emerald-400]="kardexSignedQty(t) > 0"
+                        [class.text-error]="kardexSignedQty(t) < 0"
+                      >
+                        @if (kardexSignedQty(t) > 0) {
+                          +{{ kardexSignedQty(t) | number: "1.0-4" }}
+                        } @else {
+                          {{ kardexSignedQty(t) | number: "1.0-4" }}
+                        }
                       </td>
                       <td class="py-2 pr-2 text-right font-mono text-muted">
                         {{ t.previousStock | number: "1.0-4" }}
@@ -1370,6 +1414,8 @@
     [item]="catalogDetailItem()"
     [errorMessage]="catalogDetailError()"
     [showEditLink]="false"
+    [ledgerWarehouseId]="selectedWarehouseId() || null"
+    [ledgerWarehouseLabel]="selectedWarehouseId() ? selectedWarehouseSummary() : null"
     (closed)="closeCatalogDetail()"
   />
 

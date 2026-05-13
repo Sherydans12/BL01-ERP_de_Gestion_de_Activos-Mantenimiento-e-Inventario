@@ -35,6 +35,7 @@ const UOM_SELECT = {
   id: true,
   name: true,
   abbreviation: true,
+  allowsDecimals: true,
 } as const;
 
 /** Familia (nombre padre) → subcategoría → artículo (PostgreSQL / Prisma). */
@@ -295,6 +296,8 @@ export class InventoryItemsService {
       search?: string;
       categoryId?: string;
       warehouseId?: string;
+      /** Solo artículos con fila de stock y quantity &gt; 0 en esa bodega. */
+      onlyWithStockInWarehouse?: boolean;
       page?: number;
       pageSize?: number;
     },
@@ -316,6 +319,25 @@ export class InventoryItemsService {
         warehouseIdForStock = wh.id;
       }
     }
+
+    const onlyWithStock =
+      opts.onlyWithStockInWarehouse === true && !!warehouseIdForStock;
+
+    const stockWhere: Prisma.InventoryItemWhereInput | undefined = onlyWithStock
+      ? {
+          stocks: {
+            some: {
+              warehouseId: warehouseIdForStock as string,
+              quantity: { gt: 0 },
+            },
+          },
+        }
+      : undefined;
+
+    const mergeStockWhere = (
+      base: Prisma.InventoryItemWhereInput,
+    ): Prisma.InventoryItemWhereInput =>
+      stockWhere ? { AND: [base, stockWhere] } : base;
 
     const include: Prisma.InventoryItemInclude = {
       itemCategory: { select: ITEM_CATEGORY_SELECT },
@@ -351,10 +373,12 @@ export class InventoryItemsService {
           pageSize,
         };
       }
-      const where = await this.buildInventoryItemWhere(tenantId, {
-        categoryId: opts.categoryId,
-        searchIds: orderedSearchIds,
-      });
+      const where = mergeStockWhere(
+        await this.buildInventoryItemWhere(tenantId, {
+          categoryId: opts.categoryId,
+          searchIds: orderedSearchIds,
+        }),
+      );
       const matching = await this.prisma.inventoryItem.findMany({
         where,
         select: { id: true },
@@ -377,9 +401,11 @@ export class InventoryItemsService {
       });
       rows = this.sortRowsBySearchIdOrder(rows, pageIds);
     } else {
-      const where = await this.buildInventoryItemWhere(tenantId, {
-        categoryId: opts.categoryId,
-      });
+      const where = mergeStockWhere(
+        await this.buildInventoryItemWhere(tenantId, {
+          categoryId: opts.categoryId,
+        }),
+      );
       const [r, t] = await Promise.all([
         this.prisma.inventoryItem.findMany({
           where,
@@ -954,7 +980,7 @@ export class InventoryItemsService {
   async findItemLedger(
     itemId: string,
     user: any,
-    opts: { page?: number; pageSize?: number },
+    opts: { page?: number; pageSize?: number; warehouseId?: string },
   ) {
     const tenantId = user.tenantId as string;
     const exists = await this.prisma.inventoryItem.findFirst({
@@ -968,7 +994,18 @@ export class InventoryItemsService {
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 25));
     const skip = (page - 1) * pageSize;
-    const where = { itemId };
+    const where: Prisma.InventoryTransactionWhereInput = { itemId };
+    const whId = opts.warehouseId?.trim();
+    if (whId) {
+      const wh = await this.prisma.warehouse.findFirst({
+        where: { id: whId, tenantId },
+        select: { id: true },
+      });
+      if (!wh) {
+        throw new BadRequestException('Bodega no válida para el historial.');
+      }
+      where.warehouseId = whId;
+    }
 
     const [rows, total] = await Promise.all([
       this.prisma.inventoryTransaction.findMany({
@@ -1046,6 +1083,8 @@ export class InventoryItemsService {
             where: { id: { in: trfIds }, tenantId },
             select: {
               id: true,
+              originWarehouseId: true,
+              destinationWarehouseId: true,
               originWarehouse: { select: { code: true, name: true } },
               destinationWarehouse: { select: { code: true, name: true } },
             },
@@ -1069,8 +1108,12 @@ export class InventoryItemsService {
       transfers.map((t) => [
         t.id,
         {
+          originWarehouseId: t.originWarehouseId,
+          destinationWarehouseId: t.destinationWarehouseId,
           originCode: t.originWarehouse.code,
           destCode: t.destinationWarehouse.code,
+          originName: t.originWarehouse.name,
+          destName: t.destinationWarehouse.name,
         },
       ]),
     );
@@ -1106,17 +1149,19 @@ export class InventoryItemsService {
           };
         } else if (r.referenceType === 'INVENTORY_TRANSFER') {
           const tr = trfMap.get(r.referenceId);
-          const side =
-            r.type === 'TRANSFER_OUT'
-              ? 'Salida traslado'
-              : r.type === 'TRANSFER_IN'
-                ? 'Entrada traslado'
-                : 'Transferencia';
+          let label = 'Transferencia entre bodegas (W2W)';
+          if (tr) {
+            if (r.type === 'TRANSFER_OUT') {
+              label = `Salida por transferencia → ${tr.destCode} · ${tr.destName}`;
+            } else if (r.type === 'TRANSFER_IN') {
+              label = `Entrada por transferencia ← ${tr.originCode} · ${tr.originName}`;
+            } else {
+              label = `Transferencia W2W · ${tr.originCode} → ${tr.destCode}`;
+            }
+          }
           reference = {
             kind: 'INVENTORY_TRANSFER',
-            label: tr
-              ? `${side}: ${tr.originCode} → ${tr.destCode}`
-              : 'Transferencia entre bodegas',
+            label,
             transferId: r.referenceId,
           };
         } else if (r.referenceType === 'INVENTORY_ADJUSTMENT') {

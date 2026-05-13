@@ -763,10 +763,12 @@ model ItemCategory {
 
 /// Unidades de medida configurables por tenant (maestro).
 model UnitOfMeasure {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  name          String   @db.VarChar(100)
-  abbreviation  String   @db.VarChar(20)
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  abbreviation   String   @db.VarChar(20)
+  /// Si true, permite cantidades fraccionarias (ej. KG, LT, MT). Si false, solo enteros (ej. UN).
+  allowsDecimals Boolean  @default(false) @map("allows_decimals")
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]

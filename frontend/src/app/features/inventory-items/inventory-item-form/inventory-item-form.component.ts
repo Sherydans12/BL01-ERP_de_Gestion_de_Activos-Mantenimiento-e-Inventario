@@ -246,10 +246,32 @@ export class InventoryItemFormComponent implements OnInit {
       RETURN: 'Devolución',
       PURCHASE_RECEIPT: 'Recepción compra',
       WORK_ORDER_ISSUE: 'Consumo OT',
-      TRANSFER_OUT: 'Traslado salida',
-      TRANSFER_IN: 'Traslado entrada',
+      WORK_ORDER_RETURN: 'Devolución a bodega (OT)',
+      TRANSFER_OUT: 'Transferencia (salida)',
+      TRANSFER_IN: 'Transferencia (ingreso)',
     };
     return map[type] ?? type;
+  }
+
+  /**
+   * Cantidad con signo para lectura de kardex (salidas/consumos negativos).
+   */
+  ledgerSignedQty(row: ItemLedgerRow): number {
+    const q = Number(row.quantity);
+    switch (row.type) {
+      case 'TRANSFER_OUT':
+      case 'OUT':
+      case 'WORK_ORDER_ISSUE':
+        return -Math.abs(q);
+      case 'TRANSFER_IN':
+      case 'IN':
+      case 'PURCHASE_RECEIPT':
+      case 'RETURN':
+      case 'WORK_ORDER_RETURN':
+        return Math.abs(q);
+      default:
+        return q;
+    }
   }
 
   openAdjustDetail(row: ItemLedgerRow) {
