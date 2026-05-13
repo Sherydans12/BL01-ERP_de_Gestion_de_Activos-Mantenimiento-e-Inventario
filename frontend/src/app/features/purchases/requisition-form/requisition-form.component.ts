@@ -452,6 +452,11 @@ export class RequisitionFormComponent implements OnInit {
     this.showItemPicker.set(true);
   }
 
+  /** Campos de línea editables solo con artículo del catálogo vinculado. */
+  isRowCatalogLinked(row: RequisitionFormItemRow): boolean {
+    return isUuid(row.inventoryItemId ?? undefined);
+  }
+
   onPickerClosed() {
     this.showItemPicker.set(false);
     this.pickerRowIndex.set(null);
@@ -474,21 +479,14 @@ export class RequisitionFormComponent implements OnInit {
               ...row,
               inventoryItemId: item.id,
               inventoryItemName: item.name,
-              description: item.name,
-              partNumber: item.partNumber || '',
+              description:
+                (item.description && item.description.trim()) || item.name,
+              partNumber: item.partNumber?.trim() || '',
               unitOfMeasure:
                 item.unitOfMeasure?.abbreviation ?? row.unitOfMeasure,
+              itemNotes: item.compatibilityInfo?.trim() || '',
+              estimatedCost: null,
             }
-          : row,
-      ),
-    );
-  }
-
-  unlinkInventoryItem(index: number) {
-    this.items.update((items) =>
-      items.map((row, i) =>
-        i === index
-          ? { ...row, inventoryItemId: null, inventoryItemName: undefined }
           : row,
       ),
     );
@@ -510,14 +508,6 @@ export class RequisitionFormComponent implements OnInit {
 
   removeItem(index: number) {
     this.items.update((items) => items.filter((_, i) => i !== index));
-  }
-
-  updateItem(index: number, field: string, value: unknown) {
-    this.items.update((items) =>
-      items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item,
-      ),
-    );
   }
 
   private mapItemsPayload(): Array<{
@@ -549,6 +539,15 @@ export class RequisitionFormComponent implements OnInit {
     }
     if (this.items().some((i) => !i.description)) {
       this.notify.error('Todos los \u00EDtems deben tener descripci\u00F3n');
+      return;
+    }
+    const missingCatalog = this.items().findIndex(
+      (i) => !isUuid(i.inventoryItemId ?? undefined),
+    );
+    if (missingCatalog !== -1) {
+      this.notify.error(
+        `L\u00EDnea ${missingCatalog + 1}: debe vincular un art\u00EDculo del cat\u00E1logo maestro (buscar existente o «+ Nuevo art\u00EDculo» en el selector).`,
+      );
       return;
     }
 

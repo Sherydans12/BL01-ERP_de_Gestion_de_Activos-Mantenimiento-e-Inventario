@@ -782,6 +782,13 @@ export class RequisitionDetailComponent implements OnInit {
   requestSubmitRequisition() {
     const req = this.requisition();
     if (!req || req.status !== 'DRAFT') return;
+    const missingCatalog = req.items.some((it) => !it.inventoryItemId?.trim());
+    if (missingCatalog) {
+      this.notify.error(
+        'Todas las líneas deben estar vinculadas al catálogo maestro. Use «Editar requerimiento» y elija o cree un artículo por línea.',
+      );
+      return;
+    }
     this.showSubmitConfirmModal.set(true);
   }
 

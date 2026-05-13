@@ -201,7 +201,7 @@
     <div class="bg-surface rounded-xl border border-border overflow-hidden mb-6">
       <div class="px-4 py-3 border-b border-border">
         <h2 class="text-lg font-semibold text-main">Ítems solicitados</h2>
-        <p class="text-xs text-muted mt-1">Detalle completo de cada línea (descripción, parte, notas, cantidades y vínculo a inventario si aplica).</p>
+        <p class="text-xs text-muted mt-1">Cada línea debe tener un artículo del catálogo maestro (obligatorio al crear o editar el requerimiento).</p>
       </div>
       <div class="divide-y divide-border/60">
         @for (item of requisition()!.items; track item.id) {
@@ -228,6 +228,11 @@
                 <div class="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 sm:col-span-2 xl:col-span-1">
                   <p class="text-[10px] uppercase tracking-wider text-primary/80 mb-0.5">Ítem de inventario</p>
                   <p class="text-main text-sm">{{ item.inventoryItem.partNumber }} — {{ item.inventoryItem.name }}</p>
+                </div>
+              } @else {
+                <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 sm:col-span-2 xl:col-span-1">
+                  <p class="text-[10px] uppercase tracking-wider text-amber-300/90 mb-0.5">Catálogo maestro</p>
+                  <p class="text-amber-100/90 text-sm">Sin vínculo — edite el requerimiento para asociar un artículo del catálogo antes de enviar.</p>
                 </div>
               }
             </div>

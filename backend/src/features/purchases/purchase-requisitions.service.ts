@@ -31,6 +31,10 @@ function isUuid(value: string | undefined | null): boolean {
   return typeof value === 'string' && UUID_RE.test(value);
 }
 
+type RequisitionItemCatalogInput = {
+  inventoryItemId?: string | null;
+};
+
 const SUBCONTRACT_SELECT = {
   select: { id: true, code: true, name: true },
 } as const;
@@ -98,6 +102,44 @@ export class PurchaseRequisitionsService {
     private readonly storageService: StorageService,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * Cada línea debe referenciar un `inventory_items` del mismo tenant (catálogo maestro).
+   */
+  private async ensureRequisitionItemsCatalogLinked(
+    tenantId: string,
+    items: RequisitionItemCatalogInput[],
+  ) {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException(
+        'El requerimiento debe tener al menos un ítem',
+      );
+    }
+    for (let i = 0; i < items.length; i++) {
+      const raw = items[i].inventoryItemId;
+      const id =
+        raw === null || raw === undefined ? '' : String(raw).trim();
+      if (!id || !isUuid(id)) {
+        throw new BadRequestException(
+          'Cada línea del requerimiento debe estar vinculada a un artículo del catálogo maestro (seleccione un ítem existente o cree uno nuevo).',
+        );
+      }
+    }
+    const uniqueIds = [
+      ...new Set(
+        items.map((it) => String(it.inventoryItemId).trim()),
+      ),
+    ];
+    const found = await this.prisma.inventoryItem.findMany({
+      where: { tenantId, id: { in: uniqueIds } },
+      select: { id: true },
+    });
+    if (found.length !== uniqueIds.length) {
+      throw new BadRequestException(
+        'Uno o más artículos del catálogo no existen o no pertenecen a su organización',
+      );
+    }
+  }
 
   private assertEquipmentBelongsToContract(
     equipment: {
@@ -457,6 +499,13 @@ export class PurchaseRequisitionsService {
       eqIn,
     );
 
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      throw new BadRequestException(
+        'El requerimiento debe tener al menos un ítem',
+      );
+    }
+    await this.ensureRequisitionItemsCatalogLinked(tenantId, data.items);
+
     const created = await this.prisma.$transaction(async (tx) => {
       const correlative = await this.sequenceService.getNextCorrelative(
         tenantId,
@@ -694,6 +743,13 @@ export class PurchaseRequisitionsService {
       );
     }
 
+    if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+      await this.ensureRequisitionItemsCatalogLinked(
+        user.tenantId,
+        data.items,
+      );
+    }
+
     let resolvedAssets:
       | { equipmentId: string | null; workOrderId: string | null }
       | undefined;
@@ -904,6 +960,11 @@ export class PurchaseRequisitionsService {
         'El requerimiento debe tener al menos un ítem',
       );
     }
+
+    await this.ensureRequisitionItemsCatalogLinked(
+      user.tenantId,
+      requisition.items,
+    );
 
     const prevStatus = requisition.status;
     const updated = await this.prisma.purchaseRequisition.update({
