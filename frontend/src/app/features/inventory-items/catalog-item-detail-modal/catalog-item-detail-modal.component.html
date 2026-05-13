@@ -206,13 +206,15 @@
           >
             Cerrar
           </button>
-          <a
-            [routerLink]="['/app/articulos', item.id]"
-            (click)="close()"
-            class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-dark text-sm font-bold font-mono transition-colors"
-          >
-            Editar artículo
-          </a>
+          @if (showEditLink) {
+            <a
+              [routerLink]="['/app/articulos', item.id]"
+              (click)="close()"
+              class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-dark text-sm font-bold font-mono transition-colors"
+            >
+              Editar artículo
+            </a>
+          }
         </div>
       }
     </div>

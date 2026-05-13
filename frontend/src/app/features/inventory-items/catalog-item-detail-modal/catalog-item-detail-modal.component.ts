@@ -35,6 +35,8 @@ export class CatalogItemDetailModalComponent {
   @Input() loading = false;
   @Input() item: CatalogItemDetailRow | null = null;
   @Input() errorMessage: string | null = null;
+  /** En vistas de solo lectura (p. ej. control de stock) ocultar enlace a edición. */
+  @Input() showEditLink = true;
 
   @Output() closed = new EventEmitter<void>();
 

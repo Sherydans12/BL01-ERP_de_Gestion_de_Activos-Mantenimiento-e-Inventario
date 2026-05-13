@@ -41,6 +41,10 @@ import type { PendingRegularizationRowDto } from '../pending-regularization-moda
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import {
+  CatalogItemDetailModalComponent,
+  CatalogItemDetailRow,
+} from '../../inventory-items/catalog-item-detail-modal/catalog-item-detail-modal.component';
 
 @Component({
   selector: 'app-stock-dashboard',
@@ -54,6 +58,7 @@ import { WorkOrdersService } from '../../../core/services/work-orders/work-order
     PendingRegularizationModalComponent,
     EntityLinkComponent,
     ConfirmModalComponent,
+    CatalogItemDetailModalComponent,
   ],
   templateUrl: './stock-dashboard.component.html',
 })
@@ -243,6 +248,11 @@ export class StockDashboardComponent implements OnInit {
   );
   reservationsDialog =
     viewChild<ElementRef<HTMLDialogElement>>('reservationsDialog');
+
+  catalogDetailOpen = signal(false);
+  catalogDetailLoading = signal(false);
+  catalogDetailItem = signal<CatalogItemDetailRow | null>(null);
+  catalogDetailError = signal<string | null>(null);
 
   constructor() {
     this.transactionForm = this.fb.group({
@@ -1209,6 +1219,32 @@ export class StockDashboardComponent implements OnInit {
       );
     }
     return this.transactionForm.valid && !!itemId;
+  }
+
+  openCatalogDetailFromRow(itemId: string) {
+    this.catalogDetailOpen.set(true);
+    this.catalogDetailLoading.set(true);
+    this.catalogDetailItem.set(null);
+    this.catalogDetailError.set(null);
+    this.itemsService.getItem(itemId).subscribe({
+      next: (row) => {
+        this.catalogDetailItem.set(row as CatalogItemDetailRow);
+        this.catalogDetailLoading.set(false);
+      },
+      error: (err) => {
+        this.catalogDetailError.set(
+          err.error?.message || 'No se pudo cargar el artículo.',
+        );
+        this.catalogDetailLoading.set(false);
+      },
+    });
+  }
+
+  closeCatalogDetail() {
+    this.catalogDetailOpen.set(false);
+    this.catalogDetailItem.set(null);
+    this.catalogDetailError.set(null);
+    this.catalogDetailLoading.set(false);
   }
 
   transactionTypeLabel(type: string | undefined): string {

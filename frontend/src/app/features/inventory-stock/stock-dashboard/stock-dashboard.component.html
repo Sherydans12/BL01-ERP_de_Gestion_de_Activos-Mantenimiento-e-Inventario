@@ -511,23 +511,30 @@
           } @else {
             @for (s of filteredStockItems(); track s.id) {
               <tr [class]="stockRowClasses(s)">
-                <td class="py-4 px-6">
-                  @if (s.item.inventoryCode?.trim()) {
-                    <div class="font-mono text-[11px] text-emerald-400/90 font-semibold">
-                      {{ s.item.inventoryCode }}
+                <td class="py-3 px-5 align-top">
+                  <button
+                    type="button"
+                    class="group w-full max-w-md text-left rounded-xl border border-transparent -mx-0.5 px-2 py-2 transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 active:scale-[0.995]"
+                    (click)="openCatalogDetailFromRow(s.item.id)"
+                    title="Ver detalle del artículo (catálogo maestro)"
+                  >
+                    @if (s.item.inventoryCode?.trim()) {
+                      <div class="font-mono text-[11px] text-emerald-400/90 font-semibold group-hover:text-emerald-300/95 transition-colors">
+                        {{ s.item.inventoryCode }}
+                      </div>
+                    }
+                    <div class="font-mono text-primary font-bold group-hover:text-primary/95 transition-colors">
+                      {{ s.item.partNumber }}
                     </div>
-                  }
-                  <div class="font-mono text-primary font-bold">
-                    {{ s.item.partNumber }}
-                  </div>
-                  <div class="text-main truncate max-w-xs">
-                    {{ s.item.name }}
-                  </div>
-                  @if (itemDescriptionLabel(s.item); as itemDesc) {
-                    <div class="text-[11px] text-muted uppercase tracking-wide max-w-xs truncate">
-                      {{ itemDesc }}
+                    <div class="text-main truncate max-w-xs group-hover:text-main transition-colors">
+                      {{ s.item.name }}
                     </div>
-                  }
+                    @if (itemDescriptionLabel(s.item); as itemDesc) {
+                      <div class="text-[11px] text-muted uppercase tracking-wide max-w-xs truncate">
+                        {{ itemDesc }}
+                      </div>
+                    }
+                  </button>
                 </td>
                 <td class="py-4 px-6 text-xs hidden lg:table-cell align-top">
                   @if (s.linkedRequisition?.id && s.linkedRequisition?.correlative) {
@@ -1355,6 +1362,15 @@
     title="Catálogo Maestro de Artículos"
     (closed)="onTransactionItemPickerClosed()"
     (itemPicked)="onTransactionItemPicked($event)"
+  />
+
+  <app-catalog-item-detail-modal
+    [open]="catalogDetailOpen()"
+    [loading]="catalogDetailLoading()"
+    [item]="catalogDetailItem()"
+    [errorMessage]="catalogDetailError()"
+    [showEditLink]="false"
+    (closed)="closeCatalogDetail()"
   />
 
   <app-pending-regularization-modal
