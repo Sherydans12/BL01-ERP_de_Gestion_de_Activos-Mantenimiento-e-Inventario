@@ -1,0 +1,220 @@
+@if (open) {
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 sm:p-6"
+    (click)="close()"
+    role="presentation"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[min(90vh,720px)] overflow-hidden flex flex-col mx-auto"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-labelledby]="'catalog-detail-title'"
+    >
+      <div
+        class="flex shrink-0 items-start justify-between gap-3 border-b border-border bg-dark/40 px-5 py-4"
+      >
+        <div class="min-w-0">
+          <p
+            id="catalog-detail-title"
+            class="text-xs font-mono uppercase tracking-wider text-muted"
+          >
+            Detalle — Catálogo maestro
+          </p>
+          @if (loading) {
+            <div class="mt-2 h-6 w-4/5 max-w-md rounded bg-dark animate-pulse"></div>
+            <div class="mt-1 h-4 w-1/3 rounded bg-dark/80 animate-pulse"></div>
+          } @else if (item) {
+            <h3 class="mt-1 text-lg font-bold text-main leading-snug break-words">
+              {{ item.name }}
+            </h3>
+            <p class="mt-1 font-mono text-sm text-primary font-semibold">
+              {{ dash(item.inventoryCode) }}
+            </p>
+          } @else {
+            <h3 class="mt-1 text-lg font-bold text-main">Artículo</h3>
+          }
+        </div>
+        <button
+          type="button"
+          (click)="close()"
+          class="shrink-0 rounded-lg p-2 text-muted hover:bg-dark hover:text-main transition-colors"
+          aria-label="Cerrar"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 py-4 text-sm">
+        @if (loading) {
+          <div class="space-y-3">
+            @for (_ of [1, 2, 3, 4, 5, 6]; track $index) {
+              <div class="h-12 rounded-lg bg-dark/60 animate-pulse"></div>
+            }
+          </div>
+        } @else if (errorMessage) {
+          <p class="text-red-400 text-sm">{{ errorMessage }}</p>
+        } @else if (item) {
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            <div class="sm:col-span-2">
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Descripción
+              </dt>
+              <dd class="mt-0.5 text-main whitespace-pre-wrap break-words">
+                {{ dash(item.description) }}
+              </dd>
+            </div>
+
+            <div>
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                N° parte
+              </dt>
+              <dd class="mt-0.5 font-mono text-main">{{ dash(item.partNumber) }}</dd>
+            </div>
+            <div>
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Marca
+              </dt>
+              <dd class="mt-0.5 text-main">{{ dash(item.brand) }}</dd>
+            </div>
+
+            <div class="sm:col-span-2">
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Código QR (payload)
+              </dt>
+              <dd class="mt-0.5 font-mono text-xs text-main break-all">
+                {{ dash(item.qrCode) }}
+              </dd>
+            </div>
+
+            <div class="sm:col-span-2">
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                ID interno
+              </dt>
+              <dd class="mt-0.5 font-mono text-xs text-muted break-all">{{ item.id }}</dd>
+            </div>
+
+            <div>
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Familia
+              </dt>
+              <dd class="mt-0.5 text-main">
+                {{ dash(item.itemCategory?.parentCategory?.name) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Subcategoría
+              </dt>
+              <dd class="mt-0.5 text-main font-medium uppercase">
+                {{ dash(item.itemCategory?.name) }}
+              </dd>
+            </div>
+
+            <div>
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Unidad de medida
+              </dt>
+              <dd class="mt-0.5 text-main">
+                @if (item.unitOfMeasure) {
+                  {{ item.unitOfMeasure.name }}
+                  <span class="text-muted">({{ item.unitOfMeasure.abbreviation }})</span>
+                } @else {
+                  —
+                }
+              </dd>
+            </div>
+            <div>
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Proveedor habitual
+              </dt>
+              <dd class="mt-0.5 text-main">
+                {{ dash(item.inventorySupplier?.name) }}
+              </dd>
+            </div>
+
+            <div class="sm:col-span-2">
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted">
+                Compatibilidad / equipos
+              </dt>
+              <dd class="mt-0.5 text-main whitespace-pre-wrap break-words">
+                {{ dash(item.compatibilityInfo) }}
+              </dd>
+            </div>
+
+            <div class="sm:col-span-2 border-t border-border pt-4">
+              <dt class="text-[10px] font-mono uppercase tracking-wider text-muted mb-2">
+                Comportamiento en inventario
+              </dt>
+              <dd class="flex flex-wrap gap-2">
+                @if (item.isSerialized) {
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/30"
+                    >Seriado</span
+                  >
+                } @else {
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono bg-dark border border-border text-muted"
+                    >Granel</span
+                  >
+                }
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
+                  [class.text-main]="item.isInventory"
+                  [class.text-muted]="!item.isInventory"
+                  >Inventariable: {{ boolLabel(item.isInventory) }}</span
+                >
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
+                  [class.text-main]="item.isAsset"
+                  [class.text-muted]="!item.isAsset"
+                  >Activo: {{ boolLabel(item.isAsset) }}</span
+                >
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-mono border border-border"
+                  [class.text-main]="item.isConsumable"
+                  [class.text-muted]="!item.isConsumable"
+                  >Consumible: {{ boolLabel(item.isConsumable) }}</span
+                >
+              </dd>
+            </div>
+          </dl>
+        }
+      </div>
+
+      @if (!loading && item) {
+        <div
+          class="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-dark/30 px-5 py-3"
+        >
+          <button
+            type="button"
+            (click)="close()"
+            class="px-4 py-2 rounded-lg bg-dark border border-border text-main text-sm font-medium hover:bg-surface transition-colors"
+          >
+            Cerrar
+          </button>
+          <a
+            [routerLink]="['/app/articulos', item.id]"
+            (click)="close()"
+            class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-dark text-sm font-bold font-mono transition-colors"
+          >
+            Editar artículo
+          </a>
+        </div>
+      }
+    </div>
+  </div>
+}

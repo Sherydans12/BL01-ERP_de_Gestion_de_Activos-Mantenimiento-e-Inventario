@@ -48,7 +48,7 @@
           [ngModel]="searchQuery()"
           (ngModelChange)="onSearchChange($event)"
           (keydown.enter)="onSearchEnter($event)"
-          placeholder="N° parte, QR, descripción o compatibilidad…"
+          placeholder="Código de inventario, N° parte, QR, descripción o compatibilidad…"
           class="w-full bg-surface border border-border text-main rounded-lg px-3 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm"
           autocomplete="off"
         />
@@ -99,7 +99,9 @@
         <tr
           class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
         >
-          <th class="py-3 px-6 border-b border-border font-medium">N° Parte</th>
+          <th class="py-3 px-6 border-b border-border font-medium">
+            Código de Inventario
+          </th>
           <th class="py-3 px-6 border-b border-border font-medium">
             Descripción
           </th>
@@ -134,9 +136,12 @@
           </tr>
         } @else {
           @for (item of items(); track item.id) {
-            <tr class="hover:bg-dark/40 transition-colors">
+            <tr
+              class="hover:bg-dark/40 transition-colors cursor-pointer"
+              (click)="openCatalogDetailFromRow(item)"
+            >
               <td class="py-4 px-6 font-mono text-primary font-bold">
-                {{ item.partNumber }}
+                {{ item.inventoryCode?.trim() || "—" }}
               </td>
               <td class="py-4 px-6">
                 <div class="flex flex-wrap items-center gap-2 min-w-0">
@@ -197,14 +202,17 @@
                   >
                 }
               </td>
-              <td class="py-4 px-6 text-right space-x-2">
+              <td
+                class="py-4 px-6 text-right space-x-2"
+                (click)="$event.stopPropagation()"
+              >
                 <a
                   [routerLink]="['/app/articulos', item.id]"
                   class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs px-2 py-1"
                   >EDITAR</a
                 >
                 <button
-                  (click)="deleteItem(item.id, item.partNumber)"
+                  (click)="deleteItem(item.id, item.inventoryCode, item.partNumber)"
                   class="text-error hover:text-red-400 transition-colors font-mono text-xs px-2 py-1"
                 >
                   ELIMINAR
@@ -237,13 +245,21 @@
   </div>
 </div>
 
+<app-catalog-item-detail-modal
+  [open]="catalogDetailOpen()"
+  [loading]="catalogDetailLoading()"
+  [item]="catalogDetailItem()"
+  [errorMessage]="catalogDetailError()"
+  (closed)="closeCatalogDetail()"
+/>
+
 <app-confirm-modal
   [isOpen]="showDeleteConfirmModal()"
   title="Eliminar ítem del catálogo maestro"
   message="Advertencia de alto impacto: la eliminación es irreversible y afectará la trazabilidad histórica del catálogo."
   [consequenceSummary]="
-    'Se intentará eliminar el artículo N/P ' +
-    (deleteTarget()?.partNumber ?? '—') +
+    'Se intentará eliminar el artículo ' +
+    (deleteTarget()?.codeLabel ?? '—') +
     '. Solo es posible si no tiene transacciones asociadas.'
   "
   confirmText="Sí, eliminar ítem"

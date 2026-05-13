@@ -17,6 +17,10 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { SkeletonRowComponent } from '../../../shared/components/skeleton-row/skeleton-row.component';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import {
+  CatalogItemDetailModalComponent,
+  CatalogItemDetailRow,
+} from '../catalog-item-detail-modal/catalog-item-detail-modal.component';
+import {
   Subject,
   Subscription,
   debounceTime,
@@ -32,6 +36,7 @@ import {
     FormsModule,
     SkeletonRowComponent,
     ConfirmModalComponent,
+    CatalogItemDetailModalComponent,
   ],
   templateUrl: './inventory-item-list.component.html',
 })
@@ -95,7 +100,12 @@ export class InventoryItemListComponent implements OnInit, OnDestroy {
 
   familiesCatalogReady = signal(false);
   showDeleteConfirmModal = signal(false);
-  deleteTarget = signal<{ id: string; partNumber: string } | null>(null);
+  deleteTarget = signal<{ id: string; codeLabel: string } | null>(null);
+
+  catalogDetailOpen = signal(false);
+  catalogDetailLoading = signal(false);
+  catalogDetailItem = signal<CatalogItemDetailRow | null>(null);
+  catalogDetailError = signal<string | null>(null);
 
   hasNoCategoryFamilies = computed(
     () => this.familiesCatalogReady() && this.families().length === 0,
@@ -221,8 +231,42 @@ export class InventoryItemListComponent implements OnInit, OnDestroy {
     this.loadPage(false);
   }
 
-  deleteItem(id: string, partNumber: string) {
-    this.deleteTarget.set({ id, partNumber });
+  openCatalogDetailFromRow(item: { id: string }) {
+    this.catalogDetailOpen.set(true);
+    this.catalogDetailLoading.set(true);
+    this.catalogDetailItem.set(null);
+    this.catalogDetailError.set(null);
+    this.inventoryItemsService.getItem(item.id).subscribe({
+      next: (row) => {
+        this.catalogDetailItem.set(row as CatalogItemDetailRow);
+        this.catalogDetailLoading.set(false);
+      },
+      error: (err) => {
+        this.catalogDetailError.set(
+          err.error?.message || 'No se pudo cargar el artículo.',
+        );
+        this.catalogDetailLoading.set(false);
+      },
+    });
+  }
+
+  closeCatalogDetail() {
+    this.catalogDetailOpen.set(false);
+    this.catalogDetailItem.set(null);
+    this.catalogDetailError.set(null);
+    this.catalogDetailLoading.set(false);
+  }
+
+  deleteItem(
+    id: string,
+    inventoryCode?: string | null,
+    partNumber?: string | null,
+  ) {
+    const codeLabel =
+      String(inventoryCode ?? '').trim() ||
+      String(partNumber ?? '').trim() ||
+      '—';
+    this.deleteTarget.set({ id, codeLabel });
     this.showDeleteConfirmModal.set(true);
   }
 
