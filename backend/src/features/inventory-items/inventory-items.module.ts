@@ -4,16 +4,23 @@ import { InventoryItemsController } from './inventory-items.controller';
 import { ItemCategoriesService } from './item-categories.service';
 import { ItemCategoriesController } from './item-categories.controller';
 import { ItemCategoryBootstrapService } from './item-category-bootstrap.service';
+import { InventorySuppliersService } from './inventory-suppliers.service';
+import { InventorySuppliersController } from './inventory-suppliers.controller';
 import { StorageModule } from '../../common/storage/storage.module';
 
 @Module({
   imports: [StorageModule],
-  controllers: [InventoryItemsController, ItemCategoriesController],
+  controllers: [
+    InventoryItemsController,
+    ItemCategoriesController,
+    InventorySuppliersController,
+  ],
   providers: [
     InventoryItemsService,
     ItemCategoriesService,
     ItemCategoryBootstrapService,
+    InventorySuppliersService,
   ],
-  exports: [InventoryItemsService, ItemCategoriesService],
+  exports: [InventoryItemsService, ItemCategoriesService, InventorySuppliersService],
 })
 export class InventoryItemsModule {}

@@ -606,6 +606,7 @@ model Tenant {
   catalogs              CatalogItem[]
   warehouses            Warehouse[]
   inventoryItems        InventoryItem[]
+  inventorySuppliers    InventorySupplier[]
   itemCategories        ItemCategory[]
   unitOfMeasures       UnitOfMeasure[]
   tenantRoles           TenantRole[]
@@ -725,6 +726,21 @@ model UserContract {
 // 8. MÓDULO DE INVENTARIO Y BODEGA (FASE C)
 // ==========================================
 
+/// Proveedor habitual asociado a artículos de inventario (catálogo por tenant).
+/// Independiente del módulo de compras (PurchaseOrder / Quotation).
+model InventorySupplier {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  name      String  @db.VarChar(150)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryItems InventoryItem[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("inventory_suppliers")
+}
+
 model ItemCategory {
   id               String         @id @default(uuid()) @db.Uuid
   tenantId         String         @map("tenant_id") @db.Uuid
@@ -811,7 +827,8 @@ model InventoryItem {
 
   /// Payload estable para QR / pistola (típicamente INV:<uuid>).
   qrCode          String        @map("qr_code") @db.VarChar(120)
-  partNumber      String        @map("part_number") @db.VarChar(50)
+  /// Número de parte (opcional; obligatorio para repuestos, innecesario en insumos sin referencia).
+  partNumber      String?       @map("part_number") @db.VarChar(50)
   name            String        @db.VarChar(150)
   description     String?       @db.Text
   /// Subcategoría (nivel 2); la familia se obtiene vía itemCategory.parentCategory.
@@ -820,14 +837,17 @@ model InventoryItem {
   brand            String?        @db.VarChar(50)
   /// Equipos / marcas / modelos compatibles (texto libre para cruce con flota).
   compatibilityInfo String?     @map("compatibility_info") @db.Text
+  /// Proveedor habitual del artículo (distinto al proveedor de OC en módulo de compras).
+  supplierId        String?      @map("supplier_id") @db.Uuid
 
   isSerialized    Boolean       @default(false) @map("is_serialized")
   isInventory     Boolean       @default(true)  @map("is_inventory")
   isAsset         Boolean       @default(false) @map("is_asset")
   isConsumable    Boolean       @default(true)  @map("is_consumable")
 
-  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  itemCategory      ItemCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemCategory      ItemCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  inventorySupplier InventorySupplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   unitOfMeasure     UnitOfMeasure  @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
   stocks            ItemStock[]
   transactions      InventoryTransaction[]

@@ -779,7 +779,7 @@ export class InventoryAnalyticsService {
     const itemRankForGlobal = (
       normQuery: string,
       item: {
-        partNumber: string;
+        partNumber: string | null;
         name: string;
         inventoryCode: string | null;
       },
@@ -787,7 +787,7 @@ export class InventoryAnalyticsService {
       const ic = (item.inventoryCode ?? '')
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
-      const pn = item.partNumber.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const pn = (item.partNumber ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (normQuery.length < 2) return 0;
       if (ic && ic === normQuery) return 100;
       if (ic && ic.startsWith(normQuery)) return 85;
@@ -814,10 +814,10 @@ export class InventoryAnalyticsService {
       results.push({
         kind: 'ITEM',
         id: item.id,
-        code: sku || item.partNumber,
+        code: sku || item.partNumber || item.id.slice(0, 8),
         title: sku
-          ? `Repuesto ${sku} · P/N ${item.partNumber} · ${item.name}`
-          : `Repuesto ${item.partNumber} · ${item.name}`,
+          ? `Repuesto ${sku}${item.partNumber ? ` · P/N ${item.partNumber}` : ''} · ${item.name}`
+          : `${item.partNumber ? `Repuesto ${item.partNumber} · ` : ''}${item.name}`,
       });
     }
     for (const wh of docRows[5]) {

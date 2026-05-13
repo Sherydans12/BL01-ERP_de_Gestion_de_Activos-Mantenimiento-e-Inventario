@@ -12,9 +12,16 @@ export class CreateInventoryItemDto {
   @MaxLength(60)
   inventoryCode?: string;
 
+  /** Número de parte — opcional (repuestos sí; insumos sin referencia, no). */
   @IsString()
+  @IsOptional()
   @MaxLength(50)
-  partNumber: string;
+  partNumber?: string;
+
+  /** Proveedor habitual del artículo (catálogo inventory_suppliers). */
+  @IsUUID()
+  @IsOptional()
+  supplierId?: string;
 
   @IsString()
   @MaxLength(150)

@@ -322,14 +322,17 @@
       <div class="hidden md:block"></div>
       <div>
         <label class="block text-sm font-medium text-muted mb-1"
-          >N° de Parte (Part Number) <span class="text-error">*</span></label
+          >N° de Parte (Part Number)</label
         >
         <input
           type="text"
           formControlName="partNumber"
           class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase font-mono"
-          placeholder="Ej: 1R-0716"
+          placeholder="Ej: 1R-0716 (opcional para insumos sin referencia)"
         />
+        <p class="text-[11px] text-muted mt-1 font-mono">
+          Obligatorio para repuestos; opcional para insumos sin número de referencia.
+        </p>
       </div>
       <div>
         <label class="block text-sm font-medium text-muted mb-1"
@@ -511,15 +514,66 @@
       </div>
     }
 
-    <div class="border-t border-border pt-6">
-      <div
-        class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border"
-      >
+    <div class="border-t border-border pt-6 space-y-3">
+      <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Clasificación del artículo</p>
+
+      <div class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border">
+        <input
+          type="checkbox"
+          formControlName="isInventory"
+          id="isInventory"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer bg-dark border-border checked:bg-primary checked:border-primary after:content-['✓'] after:font-black after:text-[11px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        />
+        <div>
+          <label for="isInventory" class="text-sm font-bold text-main cursor-pointer block"
+            >Ítem de Inventario</label
+          >
+          <p class="text-xs text-muted font-mono mt-0.5">
+            Se gestiona con stock, movimientos y kardex. Activo por defecto.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border">
+        <input
+          type="checkbox"
+          formControlName="isConsumable"
+          id="isConsumable"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer bg-dark border-border checked:bg-primary checked:border-primary after:content-['✓'] after:font-black after:text-[11px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        />
+        <div>
+          <label for="isConsumable" class="text-sm font-bold text-main cursor-pointer block"
+            >Consumible</label
+          >
+          <p class="text-xs text-muted font-mono mt-0.5">
+            El artículo se consume al usarse (insumos, filtros, EPP). Activo por defecto.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border">
+        <input
+          type="checkbox"
+          formControlName="isAsset"
+          id="isAsset"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer bg-dark border-border checked:bg-primary checked:border-primary after:content-['✓'] after:font-black after:text-[11px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        />
+        <div>
+          <label for="isAsset" class="text-sm font-bold text-main cursor-pointer block"
+            >Activo Fijo</label
+          >
+          <p class="text-xs text-muted font-mono mt-0.5">
+            Se deprecia contablemente (maquinaria, equipos de valor). Inactivo por defecto.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 p-3 bg-dark/30 rounded border border-border">
         <input
           type="checkbox"
           formControlName="isSerialized"
           id="isSerialized"
-          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['✓'] after:font-black after:text-[11px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2"
         />
         <div>
           <label

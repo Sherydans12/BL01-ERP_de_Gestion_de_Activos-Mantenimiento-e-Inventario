@@ -78,7 +78,7 @@ export class InventoryItemFormComponent implements OnInit {
   constructor() {
     this.itemForm = this.fb.group({
       inventoryCode: [''],
-      partNumber: ['', Validators.required],
+      partNumber: [''],
       name: ['', Validators.required],
       description: [''],
       compatibilityInfo: [''],
@@ -87,6 +87,9 @@ export class InventoryItemFormComponent implements OnInit {
       unitOfMeasureId: ['', Validators.required],
       brand: [''],
       isSerialized: [false],
+      isInventory: [true],
+      isAsset: [false],
+      isConsumable: [true],
     });
   }
 
@@ -341,7 +344,7 @@ export class InventoryItemFormComponent implements OnInit {
           (typeof item.unitOfMeasureId === 'string' ? item.unitOfMeasureId : '');
         const base = {
           inventoryCode: (item as { inventoryCode?: string | null }).inventoryCode ?? '',
-          partNumber: item.partNumber,
+          partNumber: item.partNumber ?? '',
           name: item.name,
           description: item.description,
           compatibilityInfo:
@@ -350,6 +353,9 @@ export class InventoryItemFormComponent implements OnInit {
           unitOfMeasureId: uomId,
           brand: item.brand,
           isSerialized: item.isSerialized,
+          isInventory: (item as any).isInventory ?? true,
+          isAsset: (item as any).isAsset ?? false,
+          isConsumable: (item as any).isConsumable ?? true,
         };
         if (famId) {
           this.inventoryItemsService.getCategoryChildren(famId).subscribe({
@@ -395,8 +401,9 @@ export class InventoryItemFormComponent implements OnInit {
 
     const raw = this.itemForm.value;
     const sku = String(raw.inventoryCode ?? '').trim();
+    const pn  = String(raw.partNumber ?? '').trim();
     const payload: Record<string, unknown> = {
-      partNumber: raw.partNumber,
+      partNumber: pn || null,
       name: raw.name,
       description: raw.description,
       compatibilityInfo: String(raw.compatibilityInfo ?? '').trim() || null,
@@ -404,6 +411,9 @@ export class InventoryItemFormComponent implements OnInit {
       unitOfMeasureId: raw.unitOfMeasureId,
       brand: raw.brand,
       isSerialized: raw.isSerialized,
+      isInventory: raw.isInventory ?? true,
+      isAsset: raw.isAsset ?? false,
+      isConsumable: raw.isConsumable ?? true,
     };
     if (sku) {
       payload['inventoryCode'] = sku;

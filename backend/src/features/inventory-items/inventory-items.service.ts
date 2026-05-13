@@ -471,6 +471,7 @@ export class InventoryItemsService {
       include: {
         itemCategory: { select: ITEM_CATEGORY_SELECT },
         unitOfMeasure: { select: UOM_SELECT },
+        inventorySupplier: { select: { id: true, name: true } },
       },
     });
     if (!item) throw new NotFoundException('Artículo no encontrado');
@@ -544,19 +545,17 @@ export class InventoryItemsService {
     await this.assertLeafCategory(dto.categoryId, user.tenantId);
     await this.assertUnitOfMeasure(dto.unitOfMeasureId, user.tenantId);
 
-    const existingPn = await this.prisma.inventoryItem.findUnique({
-      where: {
-        tenantId_partNumber: {
-          tenantId: user.tenantId,
-          partNumber: dto.partNumber,
-        },
-      },
-    });
-
-    if (existingPn) {
-      throw new BadRequestException(
-        'Ya existe un artículo con este Número de Parte.',
-      );
+    const pn = dto.partNumber?.trim() || null;
+    if (pn) {
+      const existingPn = await this.prisma.inventoryItem.findFirst({
+        where: { tenantId: user.tenantId, partNumber: pn },
+        select: { id: true },
+      });
+      if (existingPn) {
+        throw new BadRequestException(
+          'Ya existe un artículo con este Número de Parte.',
+        );
+      }
     }
 
     const requestedSku = dto.inventoryCode?.trim();
@@ -593,12 +592,13 @@ export class InventoryItemsService {
           qrCode,
           tenantId: user.tenantId,
           inventoryCode,
-          partNumber: dto.partNumber,
+          partNumber: pn,
           name: dto.name,
           description: dto.description,
           categoryId: dto.categoryId,
           unitOfMeasureId: dto.unitOfMeasureId,
           brand: dto.brand,
+          supplierId: dto.supplierId ?? null,
           isSerialized: dto.isSerialized ?? false,
           isInventory: dto.isInventory ?? true,
           isAsset: dto.isAsset ?? false,
@@ -608,6 +608,7 @@ export class InventoryItemsService {
         include: {
           itemCategory: { select: ITEM_CATEGORY_SELECT },
           unitOfMeasure: { select: UOM_SELECT },
+          inventorySupplier: { select: { id: true, name: true } },
         },
       });
     });
@@ -620,7 +621,14 @@ export class InventoryItemsService {
         dto.inventoryCode !== undefined
           ? dto.inventoryCode
           : (existing.inventoryCode ?? undefined),
-      partNumber: dto.partNumber ?? existing.partNumber,
+      partNumber:
+        dto.partNumber !== undefined
+          ? dto.partNumber
+          : (existing.partNumber ?? undefined),
+      supplierId:
+        dto.supplierId !== undefined
+          ? dto.supplierId
+          : ((existing as any).supplierId ?? undefined),
       name: dto.name ?? existing.name,
       description:
         dto.description !== undefined
@@ -651,18 +659,17 @@ export class InventoryItemsService {
     await this.assertLeafCategory(merged.categoryId, user.tenantId);
     await this.assertUnitOfMeasure(merged.unitOfMeasureId, user.tenantId);
 
-    const existingPn = await this.prisma.inventoryItem.findFirst({
-      where: {
-        tenantId: user.tenantId,
-        partNumber: merged.partNumber,
-        id: { not: id },
-      },
-    });
-
-    if (existingPn) {
-      throw new BadRequestException(
-        'El Número de Parte ya está siendo usado por otro artículo.',
-      );
+    const mergedPn = merged.partNumber?.trim() || null;
+    if (mergedPn) {
+      const existingPn = await this.prisma.inventoryItem.findFirst({
+        where: { tenantId: user.tenantId, partNumber: mergedPn, id: { not: id } },
+        select: { id: true },
+      });
+      if (existingPn) {
+        throw new BadRequestException(
+          'El Número de Parte ya está siendo usado por otro artículo.',
+        );
+      }
     }
 
     const skuIn = merged.inventoryCode?.trim();
@@ -687,12 +694,13 @@ export class InventoryItemsService {
         ...(dto.inventoryCode !== undefined
           ? { inventoryCode: skuIn || null }
           : {}),
-        partNumber: merged.partNumber,
+        partNumber: mergedPn,
         name: merged.name,
         description: merged.description,
         categoryId: merged.categoryId,
         unitOfMeasureId: merged.unitOfMeasureId,
         brand: merged.brand,
+        supplierId: merged.supplierId ?? null,
         isSerialized: merged.isSerialized ?? false,
         isInventory: merged.isInventory ?? true,
         isAsset: merged.isAsset ?? false,
@@ -702,6 +710,7 @@ export class InventoryItemsService {
       include: {
         itemCategory: { select: ITEM_CATEGORY_SELECT },
         unitOfMeasure: { select: UOM_SELECT },
+        inventorySupplier: { select: { id: true, name: true } },
       },
     });
   }

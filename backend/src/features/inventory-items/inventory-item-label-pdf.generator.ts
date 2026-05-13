@@ -7,7 +7,7 @@ export type InventoryLabelQrMode = 'url' | 'json';
 
 export type InventoryLabelInput = {
   inventoryCode: string | null;
-  partNumber: string;
+  partNumber: string | null;
   name: string;
   qrPayload: string;
   size: InventoryLabelSize;
@@ -55,7 +55,7 @@ export async function generateInventoryItemLabelPdfBuffer(
     const pad = input.size === '50x25' ? 3 : 8;
     const sku = input.inventoryCode?.trim() || '—';
     const nameTrunc = truncate(input.name, input.size === '50x25' ? 28 : 48);
-    const pn = input.partNumber.trim() || '—';
+    const pn = input.partNumber?.trim() || '—';
 
     if (input.size === '100x50') {
       const qrDraw = Math.min(mm(42), h - pad * 2);

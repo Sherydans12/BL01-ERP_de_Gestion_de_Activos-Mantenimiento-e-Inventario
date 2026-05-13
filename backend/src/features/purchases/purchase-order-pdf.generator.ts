@@ -20,7 +20,7 @@ type PoPdfOrder = {
     description: string;
     quantity: unknown;
     unitCost: { toString: () => string };
-    inventoryItem?: { partNumber?: string; name?: string } | null;
+    inventoryItem?: { partNumber?: string | null; name?: string } | null;
   }>;
 };
 
