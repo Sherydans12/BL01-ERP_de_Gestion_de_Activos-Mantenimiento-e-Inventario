@@ -15,6 +15,9 @@ lerna-debug.log*
 # OS
 .DS_Store
 
+# Snapshots de datos de negocio (generados por export-inventory-snapshot.ts)
+prisma/inventory-snapshot-*.sql
+
 # Tests
 /coverage
 /.nyc_output
