@@ -370,10 +370,75 @@
     <div
       class="bg-surface backdrop-blur-xl border border-border rounded-xl shadow-lg overflow-hidden flex flex-col"
     >
-      <div class="p-4 border-b border-border bg-dark/50">
-        <h3 class="text-sm font-mono text-primary font-bold">
+      <div
+        class="p-4 border-b border-border bg-dark/50 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
+      >
+        <h3 class="text-sm font-mono text-primary font-bold shrink-0">
           INVENTARIO ACTUAL
         </h3>
+        <div class="w-full lg:max-w-md flex flex-col gap-1 min-w-0">
+          <label
+            class="text-[10px] font-mono text-muted uppercase tracking-widest"
+            for="stock-article-quick-search"
+            >Buscar artículo</label
+          >
+          <div class="relative">
+            <span
+              class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              aria-hidden="true"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </span>
+            <input
+              id="stock-article-quick-search"
+              type="text"
+              [value]="articleQuickSearch()"
+              (input)="onArticleQuickSearchInput($any($event.target).value)"
+              (keydown)="onArticleQuickSearchKeydown($event)"
+              placeholder="Código, N° parte, nombre, QR, marca, compatibilidad… (varias palabras = todas)"
+              autocomplete="off"
+              class="w-full bg-surface border border-border text-main rounded-lg pl-9 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm placeholder:text-muted/60"
+            />
+            @if (articleQuickSearch().trim()) {
+              <button
+                type="button"
+                (click)="clearArticleQuickSearch()"
+                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted hover:text-main hover:bg-dark/80 transition-colors"
+                title="Limpiar búsqueda"
+                aria-label="Limpiar búsqueda"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            }
+          </div>
+          @if (articleQuickSearch().trim() && !stockLoading()) {
+            <p class="text-[10px] text-muted font-mono leading-snug">
+              @if (articleSearchExcludedAll()) {
+                Sin coincidencias para esos términos en la categoría actual.
+              } @else if (stockStatusFilter() === 'critical') {
+                {{ totalItemCount() }} crítico(s) que coinciden (de
+                {{ afterFamilyAndArticleFilter().length }} con la búsqueda).
+              } @else {
+                {{ afterFamilyAndArticleFilter().length }} artículo(s) con la búsqueda
+                (de {{ familyFilteredStockItems().length }} en categoría actual).
+              }
+            </p>
+          }
+        </div>
       </div>
 
       <table class="w-full text-left border-collapse">
@@ -434,7 +499,9 @@
                 colspan="10"
                 class="py-12 text-center text-muted font-mono text-sm"
               >
-                @if (stockStatusFilter() === 'critical') {
+                @if (articleSearchExcludedAll()) {
+                  Ningún artículo coincide con la búsqueda. Pruebe otras palabras o limpie el campo (Escape).
+                } @else if (stockStatusFilter() === 'critical') {
                   No hay posiciones críticas (disponible ≤ mínimo) con los filtros actuales.
                 } @else {
                   No hay artículos en esta bodega para la familia / subcategoría seleccionada.

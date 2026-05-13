@@ -85,6 +85,11 @@ export class StockDashboardComponent implements OnInit {
   selectedSubcategoryId = signal<string>('');
   /** Filtro de texto sobre ubicación física (consulta al backend con ILIKE). */
   locationSearch = signal('');
+  /**
+   * Búsqueda rápida sobre el listado ya cargado (código, N° parte, nombre, QR, etc.).
+   * Varios términos separados por espacio: todos deben aparecer (AND) en algún campo del artículo.
+   */
+  articleQuickSearch = signal('');
   /** Solo filas en o bajo el umbral mínimo (según stock disponible). */
   stockStatusFilter = signal<'all' | 'critical'>('all');
   private locationFilterReload$ = new Subject<void>();
@@ -135,12 +140,29 @@ export class StockDashboardComponent implements OnInit {
     return items;
   });
 
+  /** Tras familia/subcategoría y búsqueda de artículo (sin filtro “solo críticos”). */
+  afterFamilyAndArticleFilter = computed(() => {
+    const rows = this.familyFilteredStockItems();
+    const tokens = this.articleQuickSearchTokens();
+    if (!tokens.length) return rows;
+    return rows.filter((s: any) => this.stockRowMatchesArticleTokens(s, tokens));
+  });
+
   filteredStockItems = computed(() => {
-    let rows = this.familyFilteredStockItems();
+    let rows = this.afterFamilyAndArticleFilter();
     if (this.stockStatusFilter() === 'critical') {
       rows = rows.filter((s: any) => this.isAvailabilityCritical(s));
     }
     return rows;
+  });
+
+  /** Búsqueda de artículo eliminó todas las filas que aún pasaban familia/subcategoría. */
+  articleSearchExcludedAll = computed(() => {
+    if (!this.articleQuickSearch().trim()) return false;
+    return (
+      this.familyFilteredStockItems().length > 0 &&
+      this.afterFamilyAndArticleFilter().length === 0
+    );
   });
 
   totalItemCount = computed(() => this.filteredStockItems().length);
@@ -262,6 +284,7 @@ export class StockDashboardComponent implements OnInit {
         this.selectedSubcategoryId.set('');
         this.subcategories.set([]);
         this.locationSearch.set('');
+        this.articleQuickSearch.set('');
         this.stockStatusFilter.set('all');
         this.loadInventoryValuation();
         this.refreshPendingCount();
@@ -293,6 +316,62 @@ export class StockDashboardComponent implements OnInit {
     if (this.selectedWarehouseId()) {
       this.locationFilterReload$.next();
     }
+  }
+
+  onArticleQuickSearchInput(value: string) {
+    this.articleQuickSearch.set(value);
+  }
+
+  onArticleQuickSearchKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && this.articleQuickSearch().trim()) {
+      event.preventDefault();
+      this.articleQuickSearch.set('');
+    }
+  }
+
+  clearArticleQuickSearch() {
+    this.articleQuickSearch.set('');
+  }
+
+  private articleQuickSearchTokens(): string[] {
+    return this.articleQuickSearch()
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  /**
+   * Cada token debe coincidir con al menos un campo del artículo (insensible a mayúsculas).
+   * UUID: acepta con o sin guiones si el término parece fragmento de UUID.
+   */
+  private stockRowMatchesArticleTokens(s: any, tokens: string[]): boolean {
+    const item = s?.item;
+    if (!item) return false;
+    const idLower = String(item.id ?? '').toLowerCase();
+    const idNoHyphen = idLower.replace(/-/g, '');
+    const fieldBlob = [
+      item.inventoryCode,
+      item.partNumber,
+      item.name,
+      item.description,
+      item.qrCode,
+      item.brand,
+      item.compatibilityInfo,
+      idLower,
+    ]
+      .map((x: unknown) => String(x ?? '').toLowerCase())
+      .join('\u0000');
+
+    return tokens.every((tok) => {
+      const t = tok.replace(/\s+/g, '');
+      if (!t) return true;
+      if (fieldBlob.includes(t)) return true;
+      if (idNoHyphen.length && t.replace(/-/g, '').length >= 6) {
+        if (idNoHyphen.includes(t.replace(/-/g, ''))) return true;
+      }
+      return false;
+    });
   }
 
   canSeeValuationReport(): boolean {
@@ -648,6 +727,7 @@ export class StockDashboardComponent implements OnInit {
     this.selectedSubcategoryId.set('');
     this.subcategories.set([]);
     this.locationSearch.set('');
+    this.articleQuickSearch.set('');
     this.stockStatusFilter.set('all');
     if (wId) {
       this.loadStock(wId);
