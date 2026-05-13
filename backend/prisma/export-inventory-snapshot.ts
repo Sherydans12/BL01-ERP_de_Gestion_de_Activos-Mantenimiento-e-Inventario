@@ -181,8 +181,8 @@ async function main() {
   // ── UoM ──
   lines.push(`  -- ── 2. Unidades de medida ─────────────────────────────────────────────`);
   for (const u of uoms) {
-    lines.push(`  INSERT INTO unit_of_measures (id, tenant_id, name, abbreviation, created_at, updated_at)`);
-    lines.push(`    VALUES (gen_random_uuid(), v_tenant_id, ${sql(u.name)}, ${sql(u.abbreviation)}, NOW(), NOW())`);
+    lines.push(`  INSERT INTO unit_of_measures (id, tenant_id, name, abbreviation)`);
+    lines.push(`    VALUES (gen_random_uuid(), v_tenant_id, ${sql(u.name)}, ${sql(u.abbreviation)})`);
     lines.push(`    ON CONFLICT (tenant_id, abbreviation) DO NOTHING;`);
   }
   lines.push('');
@@ -199,9 +199,9 @@ async function main() {
     lines.push(`    FROM warehouses w WHERE w.tenant_id = v_tenant_id AND w.code = ${sql(wh.code)};`);
     lines.push(`  IF ${varName} IS NULL THEN`);
     lines.push(`    ${varName} := gen_random_uuid();`);
-    lines.push(`    INSERT INTO warehouses (id, tenant_id, contract_id, code, name, location, type, is_active, created_at, updated_at)`);
+    lines.push(`    INSERT INTO warehouses (id, tenant_id, contract_id, code, name, location, type, is_active)`);
     lines.push(`      SELECT ${varName}, v_tenant_id, c.id, ${sql(wh.code)}, ${sql(wh.name)},`);
-    lines.push(`             ${sql(wh.location || null)}, 'PHYSICAL', TRUE, NOW(), NOW()`);
+    lines.push(`             ${sql(wh.location || null)}, 'PHYSICAL', TRUE`);
     lines.push(`      FROM contracts c`);
     lines.push(`      WHERE c.tenant_id = v_tenant_id AND c.code = ${sql(contractCode)}`);
     lines.push(`      LIMIT 1;`);
@@ -222,8 +222,8 @@ async function main() {
     lines.push(`    WHERE tenant_id = v_tenant_id AND name = ${sql(f.name)} AND parent_category_id IS NULL;`);
     lines.push(`  IF ${vname} IS NULL THEN`);
     lines.push(`    ${vname} := gen_random_uuid();`);
-    lines.push(`    INSERT INTO item_categories (id, tenant_id, name, parent_category_id, is_global, created_at, updated_at)`);
-    lines.push(`      VALUES (${vname}, v_tenant_id, ${sql(f.name)}, NULL, FALSE, NOW(), NOW());`);
+    lines.push(`    INSERT INTO item_categories (id, tenant_id, name, parent_category_id, is_global)`);
+    lines.push(`      VALUES (${vname}, v_tenant_id, ${sql(f.name)}, NULL, FALSE);`);
     lines.push(`  END IF;`);
     lines.push('');
   }
@@ -234,8 +234,8 @@ async function main() {
     const parent = families.find((f) => f.id === sub.parentCategoryId);
     if (!parent) continue;
     const parentVar = `cat_${parent.name.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}`;
-    lines.push(`  INSERT INTO item_categories (id, tenant_id, name, parent_category_id, is_global, created_at, updated_at)`);
-    lines.push(`    SELECT gen_random_uuid(), v_tenant_id, ${sql(sub.name)}, ${parentVar}, FALSE, NOW(), NOW()`);
+    lines.push(`  INSERT INTO item_categories (id, tenant_id, name, parent_category_id, is_global)`);
+    lines.push(`    SELECT gen_random_uuid(), v_tenant_id, ${sql(sub.name)}, ${parentVar}, FALSE`);
     lines.push(`    WHERE ${parentVar} IS NOT NULL`);
     lines.push(`      AND NOT EXISTS (`);
     lines.push(`        SELECT 1 FROM item_categories`);
@@ -247,8 +247,8 @@ async function main() {
   // ── Proveedores de inventario ──
   lines.push(`  -- ── 6. Proveedores de inventario ────────────────────────────────────────`);
   for (const s of suppliers) {
-    lines.push(`  INSERT INTO inventory_suppliers (id, tenant_id, name, created_at, updated_at)`);
-    lines.push(`    VALUES (gen_random_uuid(), v_tenant_id, ${sql(s.name)}, NOW(), NOW())`);
+    lines.push(`  INSERT INTO inventory_suppliers (id, tenant_id, name)`);
+    lines.push(`    VALUES (gen_random_uuid(), v_tenant_id, ${sql(s.name)})`);
     lines.push(`    ON CONFLICT (tenant_id, name) DO NOTHING;`);
   }
   lines.push('');
@@ -296,15 +296,13 @@ async function main() {
     lines.push(`      INSERT INTO inventory_items (`);
     lines.push(`        id, tenant_id, qr_code, inventory_code, part_number, name, description,`);
     lines.push(`        category_id, unit_of_measure_id, brand, supplier_id,`);
-    lines.push(`        compatibility_info, is_serialized, is_inventory, is_asset, is_consumable,`);
-    lines.push(`        created_at, updated_at`);
+    lines.push(`        compatibility_info, is_serialized, is_inventory, is_asset, is_consumable`);
     lines.push(`      ) VALUES (`);
     lines.push(`        v_item_id, v_tenant_id, 'INV:' || v_item_id,`);
     lines.push(`        ${sql(item.inventoryCode)}, ${sql(item.partNumber)}, ${sql(item.name)}, ${sql(item.description)},`);
     lines.push(`        v_cat_id, v_uom_id, ${sql(item.brand)}, v_sup_id,`);
     lines.push(`        ${sql(item.compatibilityInfo)},`);
-    lines.push(`        ${sqlBool(item.isSerialized)}, ${sqlBool(item.isInventory)}, ${sqlBool(item.isAsset)}, ${sqlBool(item.isConsumable)},`);
-    lines.push(`        NOW(), NOW()`);
+    lines.push(`        ${sqlBool(item.isSerialized)}, ${sqlBool(item.isInventory)}, ${sqlBool(item.isAsset)}, ${sqlBool(item.isConsumable)}`);
     lines.push(`      );`);
     lines.push(`    END IF;`);
     lines.push('');
@@ -319,13 +317,13 @@ async function main() {
     lines.push(`    IF ${whVar} IS NOT NULL THEN`);
     lines.push(`      SELECT id INTO v_item_id FROM inventory_items WHERE tenant_id = v_tenant_id AND inventory_code = ${sql(invCode)} LIMIT 1;`);
     lines.push(`      IF v_item_id IS NOT NULL THEN`);
-    lines.push(`        INSERT INTO item_stocks (id, warehouse_id, item_id, quantity, min_stock, unit_cost, location, created_at, updated_at)`);
+    lines.push(`        INSERT INTO item_stocks (id, warehouse_id, item_id, quantity, min_stock, unit_cost, location)`);
     lines.push(`          VALUES (gen_random_uuid(), ${whVar}, v_item_id,`);
     lines.push(`            ${sqlNum(s.quantity.toString())}, ${sqlNum(s.minStock?.toString())},`);
-    lines.push(`            ${sqlNum(s.unitCost?.toString() ?? '0')}, ${sql(s.location)}, NOW(), NOW())`);
+    lines.push(`            ${sqlNum(s.unitCost?.toString() ?? '0')}, ${sql(s.location)})`);
     lines.push(`          ON CONFLICT (warehouse_id, item_id) DO UPDATE SET`);
     lines.push(`            quantity = EXCLUDED.quantity, min_stock = EXCLUDED.min_stock,`);
-    lines.push(`            unit_cost = EXCLUDED.unit_cost, location = EXCLUDED.location, updated_at = NOW();`);
+    lines.push(`            unit_cost = EXCLUDED.unit_cost, location = EXCLUDED.location;`);
     lines.push(`      END IF;`);
     lines.push(`    END IF;`);
   }
@@ -340,11 +338,11 @@ async function main() {
       const whVar = `wh_${(tx as any).warehouse.code.replace(/[^a-zA-Z0-9]/g, '_')}`;
       lines.push(`      SELECT id INTO v_tx_item FROM inventory_items WHERE tenant_id = v_tenant_id AND inventory_code = ${sql((tx as any).item.inventoryCode)} LIMIT 1;`);
       lines.push(`      IF ${whVar} IS NOT NULL AND v_tx_item IS NOT NULL THEN`);
-      lines.push(`        INSERT INTO inventory_transactions (id, warehouse_id, item_id, user_id, type, quantity, previous_stock, new_stock, notes, created_at, updated_at)`);
+      lines.push(`        INSERT INTO inventory_transactions (id, warehouse_id, item_id, user_id, type, quantity, previous_stock, new_stock, notes, date)`);
       lines.push(`          SELECT gen_random_uuid(), ${whVar}, v_tx_item, u.id,`);
       lines.push(`            'ADJUST', ${sqlNum(tx.quantity.toString())}, ${sqlNum(tx.previousStock.toString())}, ${sqlNum(tx.newStock.toString())},`);
-      lines.push(`            ${sql(tx.notes)}, NOW(), NOW()`);
-      lines.push(`          FROM users u WHERE u.tenant_id = v_tenant_id ORDER BY u.created_at LIMIT 1;`);
+      lines.push(`            ${sql(tx.notes)}, NOW()`);
+      lines.push(`          FROM users u WHERE u.tenant_id = v_tenant_id LIMIT 1;`);
       lines.push(`      END IF;`);
     }
     lines.push(`    END;`);
