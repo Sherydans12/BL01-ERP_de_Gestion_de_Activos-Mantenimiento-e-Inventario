@@ -62,8 +62,6 @@ export class RequisitionDetailComponent implements OnInit {
   isDuplicating = signal(false);
   isStartingQuotation = signal(false);
   isSavingQuotation = signal(false);
-  /** Generación de OC en curso (evita doble clic y asegura recarga al terminar). */
-  isCreatingOrder = signal(false);
   /** Modal de advertencia antes de enviar un requerimiento en borrador. */
   showSubmitConfirmModal = signal(false);
   /** Iniciar fase de cotización (cambia el flujo del requerimiento). */
@@ -71,10 +69,10 @@ export class RequisitionDetailComponent implements OnInit {
   /** Elegir cotización ganadora (rechaza las demás de forma persistente). */
   showSelectWinnerModal = signal(false);
   pendingSelectWinnerQuotationId = signal<string | null>(null);
-  /** Generar OC desde la cotización ganadora (flujo legado). */
-  showCreateOrderModal = signal(false);
-  /** Confirmar generación split (varias OC desde adjudicación por ítem). */
+  /** Confirmar generación de OC(s): split por ítem o legado ganadora única. */
   showGenerateSplitOrdersModal = signal(false);
+  /** `split` = adjudicación guardada; `legacy` = cotización ganadora sin matriz persistida. */
+  orderGenerationConfirmMode = signal<'split' | 'legacy' | null>(null);
   /** Registrar cotización definitiva. */
   showSubmitQuotationModal = signal(false);
   showCancelRequisitionModal = signal(false);
@@ -330,6 +328,17 @@ export class RequisitionDetailComponent implements OnInit {
     );
   });
 
+  /** OC activa ya creada desde la cotización ganadora (flujo legado `createOrder`). */
+  hasActivePoForWinnerQuotation = computed(() => {
+    const w = this.winnerQuotation();
+    if (!w) return false;
+    for (const po of this.requisition()?.purchaseOrders ?? []) {
+      if (PO_INACTIVE.has(po.status)) continue;
+      if (po.quotationId === w.id) return true;
+    }
+    return false;
+  });
+
   canSaveLineAwards = computed(() => {
     if (!this.canManagePurchases()) return false;
     const s = this.requisition()?.status;
@@ -352,15 +361,40 @@ export class RequisitionDetailComponent implements OnInit {
     if (this.selectionDirty()) return false;
     const s = this.requisition()?.status;
     if (!s) return false;
-    if (!this.hasPendingOcGeneration()) return false;
+
+    const splitReady = this.hasPendingOcGeneration();
+    const legacyWinnerReady =
+      s === 'PENDING_APPROVAL' &&
+      !!this.winnerQuotation() &&
+      !this.hasLineAwardsSaved() &&
+      !this.hasActivePoForWinnerQuotation();
+
+    if (!splitReady && !legacyWinnerReady) return false;
+
     if (['QUOTING', 'PENDING_APPROVAL', 'PARTIALLY_PURCHASED'].includes(s)) {
       return true;
     }
     if (s === 'APPROVED') {
-      return this.hasPendingOcGeneration();
+      return splitReady;
     }
     return false;
   });
+
+  generateOrdersModalTitle = computed(() =>
+    this.orderGenerationConfirmMode() === 'legacy'
+      ? 'Generar orden de compra'
+      : 'Generar órdenes de compra',
+  );
+
+  generateOrdersModalMessage = computed(() =>
+    this.orderGenerationConfirmMode() === 'legacy'
+      ? 'Se creará la orden de compra desde la cotización ganadora; el requerimiento avanzará según reglas de firma y compromiso frente al proveedor. Verifique montos e ítems en el cuadro comparativo. ¿Desea continuar?'
+      : 'Se crearán una o más órdenes de compra agrupadas por proveedor según la adjudicación por ítem ya guardada. Las líneas que ya tienen OC activa se omiten. Se abrirá el flujo de firmas por cada OC nueva. ¿Desea continuar?',
+  );
+
+  generateOrdersModalConfirmText = computed(() =>
+    this.orderGenerationConfirmMode() === 'legacy' ? 'Generar OC' : 'Generar OCs',
+  );
 
   /** Permite cambiar adjudicación en la matriz (no lectura). */
   matrixInteractive = computed(() => {
@@ -629,17 +663,45 @@ export class RequisitionDetailComponent implements OnInit {
 
   requestGenerateSplitOrders() {
     if (!this.canGenerateSplitOrders()) return;
+    const mode = this.hasPendingOcGeneration() ? 'split' : 'legacy';
+    this.orderGenerationConfirmMode.set(mode);
     this.showGenerateSplitOrdersModal.set(true);
   }
 
   cancelGenerateSplitOrders() {
     this.showGenerateSplitOrdersModal.set(false);
+    this.orderGenerationConfirmMode.set(null);
   }
 
   confirmGenerateSplitOrders() {
     this.showGenerateSplitOrdersModal.set(false);
     const req = this.requisition();
+    const mode = this.orderGenerationConfirmMode();
+    this.orderGenerationConfirmMode.set(null);
     if (!req) return;
+
+    if (mode === 'legacy') {
+      const winner = this.winnerQuotation();
+      if (!winner) return;
+      this.isGeneratingSplitOrders.set(true);
+      this.purchasesService.createOrder(winner.id).subscribe({
+        next: (order) => {
+          this.notify.success(`Orden de compra ${order.correlative} creada`);
+          this.load(req.id);
+          this.isGeneratingSplitOrders.set(false);
+        },
+        error: (err: unknown) => {
+          const msg =
+            err && typeof err === 'object' && 'error' in err
+              ? (err as { error?: { message?: string } }).error?.message
+              : undefined;
+          this.notify.error(typeof msg === 'string' ? msg : 'Error al crear OC');
+          this.isGeneratingSplitOrders.set(false);
+        },
+      });
+      return;
+    }
+
     this.isGeneratingSplitOrders.set(true);
     this.purchasesService.createOrdersFromRequisition(req.id).subscribe({
       next: (res) => {
@@ -962,34 +1024,6 @@ export class RequisitionDetailComponent implements OnInit {
             ? (err as { error?: { message?: string } }).error?.message
             : undefined;
         this.notify.error(typeof msg === 'string' ? msg : 'Error al seleccionar cotización');
-      },
-    });
-  }
-
-  requestCreateOrder() {
-    if (!this.winnerQuotation()) return;
-    this.showCreateOrderModal.set(true);
-  }
-
-  cancelCreateOrder() {
-    this.showCreateOrderModal.set(false);
-  }
-
-  confirmCreateOrder() {
-    this.showCreateOrderModal.set(false);
-    const winner = this.winnerQuotation();
-    const req = this.requisition();
-    if (!winner || !req) return;
-    this.isCreatingOrder.set(true);
-    this.purchasesService.createOrder(winner.id).subscribe({
-      next: (order) => {
-        this.notify.success(`Orden de compra ${order.correlative} creada`);
-        this.load(req.id);
-        this.isCreatingOrder.set(false);
-      },
-      error: (err: any) => {
-        this.notify.error(err?.error?.message || 'Error al crear OC');
-        this.isCreatingOrder.set(false);
       },
     });
   }

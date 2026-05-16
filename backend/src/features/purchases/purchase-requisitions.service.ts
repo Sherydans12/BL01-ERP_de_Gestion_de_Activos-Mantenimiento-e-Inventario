@@ -141,6 +141,20 @@ export class PurchaseRequisitionsService {
     }
   }
 
+  /** Cantidad solicitada por línea: fluye a OC y recepción (esperado en bodega). */
+  private assertRequisitionLineQuantities(
+    items: Array<{ quantity?: unknown }>,
+  ) {
+    for (let i = 0; i < items.length; i++) {
+      const q = Number(items[i].quantity);
+      if (!Number.isFinite(q) || q <= 0) {
+        throw new BadRequestException(
+          `Línea ${i + 1}: la cantidad solicitada debe ser un número mayor a cero.`,
+        );
+      }
+    }
+  }
+
   private assertEquipmentBelongsToContract(
     equipment: {
       contractId: string | null;
@@ -505,6 +519,7 @@ export class PurchaseRequisitionsService {
       );
     }
     await this.ensureRequisitionItemsCatalogLinked(tenantId, data.items);
+    this.assertRequisitionLineQuantities(data.items);
 
     const created = await this.prisma.$transaction(async (tx) => {
       const correlative = await this.sequenceService.getNextCorrelative(
@@ -748,6 +763,7 @@ export class PurchaseRequisitionsService {
         user.tenantId,
         data.items,
       );
+      this.assertRequisitionLineQuantities(data.items);
     }
 
     let resolvedAssets:
@@ -965,6 +981,7 @@ export class PurchaseRequisitionsService {
       user.tenantId,
       requisition.items,
     );
+    this.assertRequisitionLineQuantities(requisition.items);
 
     const prevStatus = requisition.status;
     const updated = await this.prisma.purchaseRequisition.update({

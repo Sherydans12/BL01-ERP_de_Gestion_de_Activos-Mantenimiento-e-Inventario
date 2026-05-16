@@ -510,6 +510,18 @@ export class RequisitionFormComponent implements OnInit {
     this.items.update((items) => items.filter((_, i) => i !== index));
   }
 
+  onItemQuantityChange(index: number, raw: string | number) {
+    const parsed =
+      typeof raw === 'number'
+        ? raw
+        : parseFloat(String(raw ?? '').trim().replace(',', '.'));
+    const prev = this.items()[index]?.quantity ?? 1;
+    const qty = Number.isFinite(parsed) ? parsed : prev;
+    this.items.update((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, quantity: qty } : row)),
+    );
+  }
+
   private mapItemsPayload(): Array<{
     id?: string;
     inventoryItemId?: string | null;
@@ -547,6 +559,16 @@ export class RequisitionFormComponent implements OnInit {
     if (missingCatalog !== -1) {
       this.notify.error(
         `L\u00EDnea ${missingCatalog + 1}: debe vincular un art\u00EDculo del cat\u00E1logo maestro (buscar existente o «+ Nuevo art\u00EDculo» en el selector).`,
+      );
+      return;
+    }
+
+    const badQty = this.items().findIndex(
+      (i) => !Number.isFinite(i.quantity) || i.quantity <= 0,
+    );
+    if (badQty !== -1) {
+      this.notify.error(
+        `L\u00EDnea ${badQty + 1}: la cantidad solicitada debe ser un n\u00FAmero mayor a cero.`,
       );
       return;
     }

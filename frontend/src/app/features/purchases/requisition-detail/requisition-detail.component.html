@@ -74,12 +74,6 @@
             {{ isStartingQuotation() ? 'Iniciando...' : 'Iniciar Cotización' }}
           </button>
         }
-        @if (winnerQuotation() && requisition()!.status === 'PENDING_APPROVAL' && !hasLineAwardsSaved()) {
-          <button type="button" (click)="requestCreateOrder()" [disabled]="isCreatingOrder()"
-                  class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ isCreatingOrder() ? 'Generando OC...' : 'Generar OC (ganadora única)' }}
-          </button>
-        }
       </div>
     </div>
 
@@ -553,7 +547,7 @@
                   (click)="requestGenerateSplitOrders()"
                   [disabled]="!canGenerateSplitOrders() || isGeneratingSplitOrders()"
                   class="w-full px-3 py-2.5 rounded-lg border border-green-500/45 text-green-300 text-sm font-medium hover:bg-green-500/10 disabled:opacity-45 disabled:cursor-not-allowed transition-colors">
-            {{ isGeneratingSplitOrders() ? 'Generando…' : 'Generar órdenes de compra' }}
+            {{ isGeneratingSplitOrders() ? 'Generando…' : 'Generar orden(es) de compra' }}
           </button>
         </div>
         <p class="text-[10px] text-muted leading-relaxed">Guarde la selección antes de generar OCs. Con requerimiento aprobado solo podrá generar si quedan líneas adjudicadas sin OC activa.</p>
@@ -608,22 +602,10 @@
 />
 
 <app-confirm-modal
-  [isOpen]="showCreateOrderModal()"
-  title="Generar orden de compra"
-  message="Esta acción es irreversible a nivel de flujo: se creará la orden de compra y el requerimiento pasará a aprobado; se iniciará el circuito de firmas y compromiso de compra frente al proveedor. Afecta inventario previsto y presupuesto. Verifique contrato, proveedor, montos e ítems en el cuadro comparativo. ¿Desea continuar?"
-  confirmText="Generar OC"
-  cancelText="Cancelar"
-  [isDanger]="true"
-  [confirmDelayMs]="1000"
-  (confirm)="confirmCreateOrder()"
-  (cancel)="cancelCreateOrder()"
-/>
-
-<app-confirm-modal
   [isOpen]="showGenerateSplitOrdersModal()"
-  title="Generar órdenes de compra (split)"
-  message="Se crearán una o más órdenes de compra agrupadas por proveedor según la adjudicación por ítem ya guardada. Las líneas que ya tienen OC activa se omiten. Se abrirá el flujo de firmas por cada OC nueva. ¿Desea continuar?"
-  confirmText="Generar OCs"
+  [title]="generateOrdersModalTitle()"
+  [message]="generateOrdersModalMessage()"
+  [confirmText]="generateOrdersModalConfirmText()"
   cancelText="Cancelar"
   [isDanger]="true"
   [confirmDelayMs]="1000"
