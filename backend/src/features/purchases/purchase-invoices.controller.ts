@@ -261,6 +261,17 @@ export class PurchaseInvoicesController {
     );
   }
 
+  /** Excepción manual 3-way (short shipment): solo ADMIN / SUPERVISOR. */
+  @Post(':id/three-way-match/overrule')
+  @Roles('ADMIN', 'SUPERVISOR')
+  overruleThreeWayMatch(
+    @Param('id') id: string,
+    @Body() body: { notes?: string },
+    @Req() req: any,
+  ) {
+    return this.service.overruleThreeWayMatch(id, body?.notes ?? '', req.user);
+  }
+
   @Post(':id/mark-paid')
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
   markPaid(@Param('id') id: string, @Req() req: any) {

@@ -325,6 +325,18 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
     return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
   });
 
+  showOverruleThreeWayModal = signal(false);
+  overruleThreeWayNotes = signal('');
+  isOverrulingThreeWay = signal(false);
+
+  /** Misma gobernanza que `POST .../three-way-match/overrule` en backend. */
+  canOverruleShortShipment = computed(() => {
+    const inv = this.order()?.purchaseInvoice;
+    if (!inv || inv.status !== 'DISCREPANCY') return false;
+    if (!this.authService.hasRole(['ADMIN', 'SUPERVISOR'])) return false;
+    return inv.match?.matchReceived === true;
+  });
+
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id');
     if (this.route.snapshot.queryParamMap.get('tab') === 'billing') {
@@ -585,6 +597,43 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
             ? (err as { error?: { message?: string } }).error?.message
             : undefined;
         this.notify.error(typeof msg === 'string' ? msg : 'Error al validar');
+      },
+    });
+  }
+
+  openOverruleThreeWayModal() {
+    this.overruleThreeWayNotes.set('');
+    this.showOverruleThreeWayModal.set(true);
+  }
+
+  cancelOverruleThreeWayModal() {
+    this.showOverruleThreeWayModal.set(false);
+  }
+
+  confirmOverruleThreeWay() {
+    const notes = this.overruleThreeWayNotes().trim();
+    if (notes.length < 15) {
+      this.notify.error('La justificación debe tener al menos 15 caracteres.');
+      return;
+    }
+    const inv = this.order()?.purchaseInvoice;
+    const oid = this.order()?.id;
+    if (!inv?.id || !oid) return;
+    this.isOverrulingThreeWay.set(true);
+    this.purchasesService.overrulePurchaseInvoiceThreeWayMatch(inv.id, notes).subscribe({
+      next: () => {
+        this.notify.success('Discrepancia aceptada: factura conciliada con excepción registrada.');
+        this.showOverruleThreeWayModal.set(false);
+        this.isOverrulingThreeWay.set(false);
+        this.load(oid);
+      },
+      error: (err: unknown) => {
+        this.isOverrulingThreeWay.set(false);
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string } }).error?.message
+            : undefined;
+        this.notify.error(typeof msg === 'string' ? msg : 'Error al autorizar excepción');
       },
     });
   }

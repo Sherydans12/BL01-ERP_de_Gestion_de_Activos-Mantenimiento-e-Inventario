@@ -190,6 +190,11 @@ export interface PurchaseInvoice {
   pdfUrl?: string | null;
   paymentReference?: string | null;
   paidAt?: string | null;
+  /** Excepción manual 3-way (short shipment). */
+  threeWayMatchOverruled?: boolean;
+  threeWayMatchOverruledAt?: string | null;
+  threeWayMatchOverruledById?: string | null;
+  threeWayMatchOverruleNotes?: string | null;
   vendor?: { id: string; name: string; code: string };
   purchaseOrder?: {
     id: string;
@@ -641,6 +646,16 @@ export class PurchasesService {
     return this.http.post<PurchaseInvoice & { match: NonNullable<PurchaseInvoice['match']> }>(
       `${this.base}/purchase-invoices/${id}/validate`,
       {},
+    );
+  }
+
+  overrulePurchaseInvoiceThreeWayMatch(
+    id: string,
+    notes: string,
+  ): Observable<PurchaseInvoice & { match: NonNullable<PurchaseInvoice['match']> }> {
+    return this.http.post<PurchaseInvoice & { match: NonNullable<PurchaseInvoice['match']> }>(
+      `${this.base}/purchase-invoices/${id}/three-way-match/overrule`,
+      { notes },
     );
   }
 

@@ -483,6 +483,11 @@
               Conciliación exitosa: la factura hace match con la orden de compra y con lo recepcionado en bodega.
             </p>
             <p class="text-sm text-emerald-100/90 mt-2">OC y recepción vinculadas en el control de tres vías (3-way match).</p>
+            @if (order()!.purchaseInvoice!.threeWayMatchOverruled) {
+              <p class="text-sm text-amber-100/95 mt-3 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2">
+                Conciliación aceptada con <span class="font-semibold">excepción manual</span> (causa documentada en historial de actividad).
+              </p>
+            }
             @if (order()!.purchaseInvoice!.status === 'MATCHED') {
               <p class="text-sm text-emerald-100/85 mt-2">Puede registrar el pago cuando corresponda.</p>
             } @else {
@@ -498,6 +503,15 @@
               }
             </ul>
             <p class="text-xs text-red-200/80 mt-3">Revise montos y recepciones; el evento quedó registrado en el historial de actividad.</p>
+            @if (canOverruleShortShipment()) {
+              <button
+                type="button"
+                (click)="openOverruleThreeWayModal()"
+                class="mt-4 inline-flex items-center px-4 py-2.5 rounded-lg bg-primary text-black text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                Aceptar Discrepancia y Forzar Cierre
+              </button>
+            }
           </div>
         } @else if (billingTrafficLight() === 'pending') {
           <div class="flex items-start gap-4 mb-6">
@@ -675,6 +689,47 @@
             <button (click)="confirmForceClose()"
                     class="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors">
               Cerrar Orden
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (showOverruleThreeWayModal()) {
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelOverruleThreeWayModal()"></div>
+        <div class="relative bg-white dark:bg-[#161C24] border border-border rounded-2xl shadow-xl w-full max-w-md p-6">
+          <h3 class="text-lg font-semibold text-main mb-2">Aceptar discrepancia (3-way)</h3>
+          <p class="text-sm text-muted mb-4">
+            Solo disponible cuando el monto facturado no supera lo recepcionado en bodega. La justificación queda auditada (mín. 15 caracteres).
+          </p>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-muted mb-1">Justificación obligatoria</label>
+            <textarea
+              [ngModel]="overruleThreeWayNotes()"
+              (ngModelChange)="overruleThreeWayNotes.set($event)"
+              rows="4"
+              placeholder="Ej. Proveedor entregó 8/10 unidades; factura y recepción coinciden en 8…"
+              class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none"
+            ></textarea>
+            <p class="text-xs text-muted mt-1">{{ overruleThreeWayNotes().trim().length }} / 15 mín.</p>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button
+              type="button"
+              (click)="cancelOverruleThreeWayModal()"
+              [disabled]="isOverrulingThreeWay()"
+              class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              (click)="confirmOverruleThreeWay()"
+              [disabled]="isOverrulingThreeWay()"
+              class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            >
+              {{ isOverrulingThreeWay() ? 'Procesando…' : 'Confirmar excepción' }}
             </button>
           </div>
         </div>

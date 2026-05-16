@@ -73,6 +73,16 @@ type InvoiceEntity = Prisma.PurchaseInvoiceGetPayload<{
 export type PurchaseInvoiceApi = InvoiceEntity & {
   hasDiscrepancy: boolean;
   discrepancyReason: string;
+  /** Snapshot 3-way (lectura; no persiste). */
+  match?: {
+    poAmount: number;
+    invoiceAmount: number;
+    receivedAmount: number;
+    tolerancePercent: number;
+    matchPo: boolean;
+    matchReceived: boolean;
+    reasons: string[];
+  };
   /** Adjuntos unificados (PDF, imágenes, etc.). */
   purchaseDocuments?: Array<{
     id: string;
@@ -119,6 +129,68 @@ export class PurchaseInvoicesService {
       }
     }
     return total;
+  }
+
+  private buildThreeWayDiscrepancyReasons(
+    tolPct: number,
+    poNum: number,
+    invNum: number,
+    recNum: number,
+    matchPo: boolean,
+    matchReceived: boolean,
+  ): string[] {
+    const reasons: string[] = [];
+    if (!matchPo) {
+      reasons.push(
+        `El monto de la factura (${invNum.toFixed(2)}) no coincide con el de la OC (${poNum.toFixed(2)}) dentro del margen del ${tolPct}%.`,
+      );
+    }
+    if (!matchReceived) {
+      reasons.push(
+        `El monto facturado (${invNum.toFixed(2)}) supera el valor recepcionado acumulado (${recNum.toFixed(2)}); no se puede reconocer pago por bienes no ingresados a bodega.`,
+      );
+    }
+    return reasons;
+  }
+
+  /** Cálculo 3-way (montos) sin escribir en DB. */
+  private async computeThreeWayMatchNumbers(
+    tenantId: string,
+    purchaseOrderId: string,
+    poAmount: Prisma.Decimal,
+    invAmount: Prisma.Decimal,
+  ): Promise<{
+    tolPct: number;
+    poNum: number;
+    invNum: number;
+    recNum: number;
+    matchPo: boolean;
+    matchReceived: boolean;
+  }> {
+    const settings = await this.prisma.purchaseSettings.findUnique({
+      where: { tenantId },
+    });
+    const tolPct = settings?.invoiceMatchTolerancePercent
+      ? new Prisma.Decimal(settings.invoiceMatchTolerancePercent).toNumber()
+      : 1;
+    const tol = tolPct / 100;
+
+    const receivedAmount = await this.computeReceivedAmountForPurchaseOrder(
+      purchaseOrderId,
+    );
+
+    const poNum = poAmount.toNumber();
+    const invNum = invAmount.toNumber();
+    const recNum = receivedAmount.toNumber();
+
+    const diffPo = Math.abs(invNum - poNum);
+    const poMargin = Math.abs(poNum) * tol;
+    const matchPo = poNum === 0 ? invNum === 0 : diffPo <= poMargin;
+
+    const recMargin = Math.abs(recNum) * tol;
+    const matchReceived = invNum <= recNum + recMargin;
+
+    return { tolPct, poNum, invNum, recNum, matchPo, matchReceived };
   }
 
   private async fetchDiscrepancyReasonsMap(
@@ -383,7 +455,36 @@ export class PurchaseInvoicesService {
     ]);
     assertUserHasContractAccess(user, inv.purchaseOrder.contractId);
     const meta = await this.attachInvoiceMeta(inv, user.tenantId);
-    return { ...meta, purchaseDocuments };
+    const nums = await this.computeThreeWayMatchNumbers(
+      user.tenantId,
+      inv.purchaseOrderId,
+      inv.purchaseOrder.totalAmount,
+      inv.totalAmount,
+    );
+    const reasons =
+      inv.threeWayMatchOverruled && nums.matchReceived
+        ? []
+        : this.buildThreeWayDiscrepancyReasons(
+            nums.tolPct,
+            nums.poNum,
+            nums.invNum,
+            nums.recNum,
+            nums.matchPo,
+            nums.matchReceived,
+          );
+    return {
+      ...meta,
+      purchaseDocuments,
+      match: {
+        poAmount: nums.poNum,
+        invoiceAmount: nums.invNum,
+        receivedAmount: nums.recNum,
+        tolerancePercent: nums.tolPct,
+        matchPo: nums.matchPo,
+        matchReceived: nums.matchReceived,
+        reasons,
+      },
+    };
   }
 
   /**
@@ -394,7 +495,7 @@ export class PurchaseInvoicesService {
     tenantId: string,
     userId: string,
   ) {
-    const invoice = await this.prisma.purchaseInvoice.findFirst({
+    let invoice = await this.prisma.purchaseInvoice.findFirst({
       where: { id: invoiceId, tenantId },
       include: {
         purchaseOrder: true,
@@ -408,51 +509,104 @@ export class PurchaseInvoicesService {
       );
     }
 
-    const settings = await this.prisma.purchaseSettings.findUnique({
-      where: { tenantId },
-    });
-    const tolPct = settings?.invoiceMatchTolerancePercent
-      ? new Prisma.Decimal(settings.invoiceMatchTolerancePercent).toNumber()
-      : 1;
-    const tol = tolPct / 100;
-
-    const poAmount = new Prisma.Decimal(invoice.purchaseOrder.totalAmount);
-    const invAmount = new Prisma.Decimal(invoice.totalAmount);
-    const receivedAmount = await this.computeReceivedAmountForPurchaseOrder(
+    let nums = await this.computeThreeWayMatchNumbers(
+      tenantId,
       invoice.purchaseOrderId,
+      invoice.purchaseOrder.totalAmount,
+      invoice.totalAmount,
     );
 
-    const poNum = poAmount.toNumber();
-    const invNum = invAmount.toNumber();
-    const recNum = receivedAmount.toNumber();
-
-    const diffPo = Math.abs(invNum - poNum);
-    const poMargin = Math.abs(poNum) * tol;
-    const matchPo = poNum === 0 ? invNum === 0 : diffPo <= poMargin;
-
-    const recMargin = Math.abs(recNum) * tol;
-    const matchReceived = invNum <= recNum + recMargin;
-
-    const reasons: string[] = [];
-    if (!matchPo) {
-      reasons.push(
-        `El monto de la factura (${invNum.toFixed(2)}) no coincide con el de la OC (${poNum.toFixed(2)}) dentro del margen del ${tolPct}%.`,
+    if (invoice.threeWayMatchOverruled && !nums.matchReceived) {
+      await this.prisma.purchaseInvoice.update({
+        where: { id: invoiceId },
+        data: {
+          threeWayMatchOverruled: false,
+          threeWayMatchOverruledAt: null,
+          threeWayMatchOverruleNotes: null,
+          threeWayMatchOverruledBy: { disconnect: true },
+        },
+      });
+      invoice = (await this.prisma.purchaseInvoice.findFirst({
+        where: { id: invoiceId, tenantId },
+        include: {
+          purchaseOrder: true,
+          vendor: { select: { id: true, name: true, code: true } },
+        },
+      }))!;
+      nums = await this.computeThreeWayMatchNumbers(
+        tenantId,
+        invoice.purchaseOrderId,
+        invoice.purchaseOrder.totalAmount,
+        invoice.totalAmount,
       );
     }
-    if (!matchReceived) {
-      reasons.push(
-        `El monto facturado (${invNum.toFixed(2)}) supera el valor recepcionado acumulado (${recNum.toFixed(2)}); no se puede reconocer pago por bienes no ingresados a bodega.`,
-      );
+
+    if (
+      invoice.threeWayMatchOverruled &&
+      invoice.status !== 'PAID' &&
+      nums.matchReceived
+    ) {
+      const newStatus = 'MATCHED' as const;
+      const updated = await this.prisma.$transaction(async (tx) => {
+        return tx.purchaseInvoice.update({
+          where: { id: invoiceId },
+          data: { status: newStatus },
+          include: this.invoiceInclude(),
+        });
+      });
+
+      const enriched = await this.attachInvoiceMeta(updated, tenantId);
+
+      const poLink = await this.prisma.purchaseOrder.findFirst({
+        where: { id: invoice.purchaseOrderId, tenantId },
+        select: {
+          requisitionId: true,
+          quotation: { select: { requisitionId: true } },
+        },
+      });
+      const rid = requisitionIdFromPurchaseOrder(poLink);
+      if (rid) {
+        void tryAutoCloseRequisitionIfFullyReconciled(
+          this.prisma,
+          tenantId,
+          rid,
+          userId,
+        ).catch((e) =>
+          this.logger.warn(`Auto-cierre SRC tras factura/3-way: ${String(e)}`),
+        );
+      }
+
+      return {
+        ...enriched,
+        match: {
+          poAmount: nums.poNum,
+          invoiceAmount: nums.invNum,
+          receivedAmount: nums.recNum,
+          tolerancePercent: nums.tolPct,
+          matchPo: nums.matchPo,
+          matchReceived: nums.matchReceived,
+          reasons: [],
+        },
+      };
     }
+
+    const reasons = this.buildThreeWayDiscrepancyReasons(
+      nums.tolPct,
+      nums.poNum,
+      nums.invNum,
+      nums.recNum,
+      nums.matchPo,
+      nums.matchReceived,
+    );
 
     /** Exposición para prevención de sobrepagos (analítica / auditoría). */
     const overpaymentExposureAmount = Math.max(
       0,
-      invNum - Math.min(poNum, recNum),
+      nums.invNum - Math.min(nums.poNum, nums.recNum),
     );
 
     const newStatus =
-      matchPo && matchReceived
+      nums.matchPo && nums.matchReceived
         ? ('MATCHED' as const)
         : ('DISCREPANCY' as const);
 
@@ -485,12 +639,12 @@ export class PurchaseInvoicesService {
                 purchaseOrderId: invoice.purchaseOrderId,
                 purchaseOrderCorrelative: invoice.purchaseOrder.correlative,
                 previousStatus,
-                poAmount: poNum,
-                invoiceAmount: invNum,
-                receivedAmount: recNum,
-                tolerancePercent: tolPct,
-                matchPo,
-                matchReceived,
+                poAmount: nums.poNum,
+                invoiceAmount: nums.invNum,
+                receivedAmount: nums.recNum,
+                tolerancePercent: nums.tolPct,
+                matchPo: nums.matchPo,
+                matchReceived: nums.matchReceived,
                 overpaymentExposureAmount,
                 reasons,
               },
@@ -534,7 +688,7 @@ export class PurchaseInvoicesService {
         }
         const overpaymentPreventionAmount =
           priorInvoiceFromDiscrepancy != null
-            ? Math.max(0, priorInvoiceFromDiscrepancy - invNum)
+            ? Math.max(0, priorInvoiceFromDiscrepancy - nums.invNum)
             : 0;
 
         await tx.activityLog.create({
@@ -551,9 +705,9 @@ export class PurchaseInvoicesService {
                 event: 'invoice_three_way_match_resolved',
                 invoiceId: invoice.id,
                 purchaseOrderId: invoice.purchaseOrderId,
-                poAmount: poNum,
-                invoiceAmount: invNum,
-                receivedAmount: recNum,
+                poAmount: nums.poNum,
+                invoiceAmount: nums.invNum,
+                receivedAmount: nums.recNum,
                 priorInvoiceAmountFromDiscrepancy: priorInvoiceFromDiscrepancy,
                 overpaymentPreventionAmount,
               },
@@ -613,13 +767,151 @@ export class PurchaseInvoicesService {
     return {
       ...enriched,
       match: {
-        poAmount: poNum,
-        invoiceAmount: invNum,
-        receivedAmount: recNum,
-        tolerancePercent: tolPct,
-        matchPo,
-        matchReceived,
+        poAmount: nums.poNum,
+        invoiceAmount: nums.invNum,
+        receivedAmount: nums.recNum,
+        tolerancePercent: nums.tolPct,
+        matchPo: nums.matchPo,
+        matchReceived: nums.matchReceived,
         reasons,
+      },
+    };
+  }
+
+  /**
+   * Excepción manual: acepta discrepancia factura vs OC cuando factura ≤ recepcionado (short shipment).
+   */
+  async overruleThreeWayMatch(
+    id: string,
+    notes: string,
+    user: {
+      id: string;
+      tenantId: string;
+      role?: string;
+      allowedContracts?: string[];
+    },
+  ) {
+    const trimmed = (notes ?? '').trim();
+    if (trimmed.length < 15) {
+      throw new BadRequestException(
+        'La justificación debe tener al menos 15 caracteres.',
+      );
+    }
+
+    const existing = await this.prisma.purchaseInvoice.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        purchaseOrder: true,
+        vendor: { select: { id: true, name: true, code: true } },
+      },
+    });
+    if (!existing) throw new NotFoundException('Factura no encontrada');
+    assertUserHasContractAccess(user, existing.purchaseOrder.contractId);
+
+    if (existing.status !== 'DISCREPANCY') {
+      throw new BadRequestException(
+        'Solo se puede aceptar discrepancia cuando la factura está en estado DISCREPANCY.',
+      );
+    }
+
+    const nums = await this.computeThreeWayMatchNumbers(
+      user.tenantId,
+      existing.purchaseOrderId,
+      existing.purchaseOrder.totalAmount,
+      existing.totalAmount,
+    );
+
+    if (!nums.matchReceived) {
+      throw new BadRequestException(
+        'No se puede autorizar una factura que supera el stock físico ingresado a bodega.',
+      );
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const inv = await tx.purchaseInvoice.update({
+        where: { id },
+        data: {
+          status: 'MATCHED',
+          threeWayMatchOverruled: true,
+          threeWayMatchOverruledAt: now,
+          threeWayMatchOverruleNotes: trimmed,
+          threeWayMatchOverruledBy: { connect: { id: user.id } },
+        },
+        include: this.invoiceInclude(),
+      });
+
+      await tx.activityLog.create({
+        data: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          action: 'STATUS_CHANGE',
+          entityType: 'PURCHASE_INVOICE',
+          entityId: id,
+          details: buildActivityLogDetails(
+            { status: 'DISCREPANCY' },
+            {
+              status: 'MATCHED',
+              event: 'invoice_three_way_match_overruled',
+              invoiceId: id,
+              invoiceNumber: existing.invoiceNumber,
+              purchaseOrderId: existing.purchaseOrderId,
+              purchaseOrderCorrelative: existing.purchaseOrder.correlative,
+              poAmount: nums.poNum,
+              invoiceAmount: nums.invNum,
+              receivedAmount: nums.recNum,
+              tolerancePercent: nums.tolPct,
+              matchPo: nums.matchPo,
+              matchReceived: nums.matchReceived,
+              notes: trimmed,
+            },
+            {
+              field: 'status',
+              prev: 'DISCREPANCY',
+              next: 'MATCHED',
+              metadata: {
+                invoiceNumber: existing.invoiceNumber,
+                purchaseOrderId: existing.purchaseOrderId,
+              },
+            },
+          ),
+        },
+      });
+
+      return inv;
+    });
+
+    const enriched = await this.attachInvoiceMeta(updated, user.tenantId);
+
+    const poLink = await this.prisma.purchaseOrder.findFirst({
+      where: { id: existing.purchaseOrderId, tenantId: user.tenantId },
+      select: {
+        requisitionId: true,
+        quotation: { select: { requisitionId: true } },
+      },
+    });
+    const rid = requisitionIdFromPurchaseOrder(poLink);
+    if (rid) {
+      void tryAutoCloseRequisitionIfFullyReconciled(
+        this.prisma,
+        user.tenantId,
+        rid,
+        user.id,
+      ).catch((e) =>
+        this.logger.warn(`Auto-cierre SRC tras overrule 3-way: ${String(e)}`),
+      );
+    }
+
+    return {
+      ...enriched,
+      match: {
+        poAmount: nums.poNum,
+        invoiceAmount: nums.invNum,
+        receivedAmount: nums.recNum,
+        tolerancePercent: nums.tolPct,
+        matchPo: nums.matchPo,
+        matchReceived: nums.matchReceived,
+        reasons: [],
       },
     };
   }
@@ -825,6 +1117,17 @@ export class PurchaseInvoicesService {
     }
     if (data.pdfUrl !== undefined) {
       updateData.pdfUrl = data.pdfUrl;
+    }
+
+    const totalAmountChanged =
+      data.totalAmount !== undefined &&
+      !new Prisma.Decimal(data.totalAmount).equals(existing.totalAmount);
+
+    if (existing.threeWayMatchOverruled && totalAmountChanged) {
+      updateData.threeWayMatchOverruled = false;
+      updateData.threeWayMatchOverruledAt = null;
+      updateData.threeWayMatchOverruleNotes = null;
+      updateData.threeWayMatchOverruledBy = { disconnect: true };
     }
 
     const beforeSnap: Record<string, unknown> = {

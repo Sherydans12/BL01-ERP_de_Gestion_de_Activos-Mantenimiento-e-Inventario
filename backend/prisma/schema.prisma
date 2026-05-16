@@ -576,6 +576,7 @@ model User {
   sessions                 UserSession[]
   workOrdersCreated        WorkOrder[]           @relation("WorkOrderCreatedBy")
   workOrdersSupervised     WorkOrder[]           @relation("WorkOrderShiftSupervisor")
+  purchaseInvoiceThreeWayOverrules PurchaseInvoice[] @relation("PurchaseInvoiceThreeWayOverruleApprover")
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -1451,12 +1452,19 @@ model PurchaseInvoice {
   /** Momento en que se registró el pago efectivo. */
   paidAt          DateTime?             @map("paid_at")
 
+  /// Excepción manual (short shipment, etc.): 3-way forzado a MATCHED si factura ≤ recepcionado.
+  threeWayMatchOverruled     Boolean   @default(false) @map("three_way_match_overruled")
+  threeWayMatchOverruledAt   DateTime? @map("three_way_match_overruled_at")
+  threeWayMatchOverruledById String?   @map("three_way_match_overruled_by_id") @db.Uuid
+  threeWayMatchOverruleNotes String?   @map("three_way_match_overrule_notes") @db.Text
+
   createdAt       DateTime              @default(now()) @map("created_at")
   updatedAt       DateTime              @updatedAt @map("updated_at")
 
   tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vendor          Vendor                @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   purchaseOrder   PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  threeWayMatchOverruledBy User? @relation("PurchaseInvoiceThreeWayOverruleApprover", fields: [threeWayMatchOverruledById], references: [id], onDelete: SetNull)
 
   @@index([tenantId, vendorId])
   @@index([tenantId, dueDate])
