@@ -75,6 +75,12 @@ export class InventoryItemsController {
     });
   }
 
+  /** Vista previa del próximo `IN####` (no reserva correlativo). */
+  @Get('next-inventory-code')
+  peekNextInventorySku(@Req() req: any) {
+    return this.inventoryItemsService.peekNextInventorySku(req.user);
+  }
+
   @Get()
   findCatalog(
     @Req() req: any,

@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 
 export class CreateInventoryItemDto {
+  /** Ignorado en POST: el servicio asigna IN####; si el cliente lo envía no vacío → 400. */
   @IsString()
   @IsOptional()
   @MaxLength(60)

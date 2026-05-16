@@ -328,16 +328,18 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div>
         <label class="block text-sm font-medium text-muted mb-1"
-          >Código de Inventario (SKU interno)</label
+          >Código de inventario (SKU interno)</label
         >
         <input
           type="text"
           formControlName="inventoryCode"
-          class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary font-mono"
-          placeholder="Vacío = asignar automáticamente (IN0001)"
+          class="w-full bg-dark/80 border border-border text-main rounded-md px-3 py-2 outline-none font-mono cursor-not-allowed opacity-90"
+          [attr.placeholder]="
+            mode === 'CREATING' && nextSkuLoading() ? '…' : ''
+          "
         />
         <p class="text-[11px] text-muted mt-1 font-mono">
-          Opcional. Si lo deja vacío, el sistema genera un correlativo. Use un código propio para repuestos ya codificados.
+          Correlativo automático <span class="text-main">IN</span>####. Solo lectura.
         </p>
       </div>
       <div class="hidden md:block"></div>
@@ -349,11 +351,8 @@
           type="text"
           formControlName="partNumber"
           class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary uppercase font-mono"
-          placeholder="Ej: 1R-0716 (opcional para insumos sin referencia)"
+          placeholder="Opcional"
         />
-        <p class="text-[11px] text-muted mt-1 font-mono">
-          Obligatorio para repuestos; opcional para insumos sin número de referencia.
-        </p>
       </div>
       <div>
         <label class="block text-sm font-medium text-muted mb-1"

@@ -1,6 +1,6 @@
 /**
  * Cuerpo POST /inventory-items/quick-create (modal selector / compras).
- * Alineado con campos clave de CreateInventoryItemDto; códigos vacíos → correlativo.
+ * SKU siempre autogenerado (IN####); no enviar `inventoryCode` (no vacío → 400).
  */
 export interface QuickCreateItemDto {
   name: string;
@@ -10,9 +10,9 @@ export interface QuickCreateItemDto {
   warehouseId?: string;
   minStock?: number;
   maxStock?: number;
-  /** SKU interno; si se omite o vacío, correlativo INV-xxxxx. */
+  /** @deprecated El backend lo ignora/rechaza; el SKU lo asigna el sistema. */
   inventoryCode?: string;
-  /** Nº de parte; si se omite o vacío, correlativo AUTO-xxxxx. */
+  /** Nº de parte; si se omite o vacío, queda null (sin autogeneración). */
   partNumber?: string;
   description?: string;
   brand?: string;

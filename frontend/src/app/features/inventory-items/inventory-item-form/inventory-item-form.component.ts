@@ -72,12 +72,15 @@ export class InventoryItemFormComponent implements OnInit {
   /** Payload escaneable (backend: INV:<uuid>). */
   itemQrCode = signal<string | null>(null);
 
+  /** Creación: mientras llega la vista previa del correlativo desde el API. */
+  nextSkuLoading = signal(false);
+
   canManageAttachments = () =>
     this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
 
   constructor() {
     this.itemForm = this.fb.group({
-      inventoryCode: [''],
+      inventoryCode: [{ value: '', disabled: true }],
       partNumber: [''],
       name: ['', Validators.required],
       description: [''],
@@ -123,11 +126,28 @@ export class InventoryItemFormComponent implements OnInit {
     });
 
     this.route.paramMap.subscribe((params) => {
-      this.itemId = params.get('id');
-      if (this.itemId) {
+      const id = params.get('id');
+      this.itemId = id;
+      if (id) {
         this.mode = 'EDITING';
-        this.loadItem(this.itemId);
+        this.loadItem(id);
+      } else {
+        this.mode = 'CREATING';
+        this.loadNextSkuPreview();
       }
+    });
+  }
+
+  private loadNextSkuPreview() {
+    this.nextSkuLoading.set(true);
+    this.inventoryItemsService.getNextInventorySkuPreview().subscribe({
+      next: (r) => {
+        this.itemForm.patchValue({ inventoryCode: r.inventoryCode });
+        this.nextSkuLoading.set(false);
+      },
+      error: () => {
+        this.nextSkuLoading.set(false);
+      },
     });
   }
 
@@ -421,9 +441,8 @@ export class InventoryItemFormComponent implements OnInit {
       return;
     }
 
-    const raw = this.itemForm.value;
-    const sku = String(raw.inventoryCode ?? '').trim();
-    const pn  = String(raw.partNumber ?? '').trim();
+    const raw = this.itemForm.getRawValue();
+    const pn = String(raw.partNumber ?? '').trim();
     const payload: Record<string, unknown> = {
       partNumber: pn || null,
       name: raw.name,
@@ -437,11 +456,6 @@ export class InventoryItemFormComponent implements OnInit {
       isAsset: raw.isAsset ?? false,
       isConsumable: raw.isConsumable ?? true,
     };
-    if (sku) {
-      payload['inventoryCode'] = sku;
-    } else if (this.mode === 'EDITING') {
-      payload['inventoryCode'] = '';
-    }
 
     if (this.mode === 'CREATING') {
       this.inventoryItemsService.createItem(payload).subscribe({

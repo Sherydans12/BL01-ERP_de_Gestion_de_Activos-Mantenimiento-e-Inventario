@@ -36,6 +36,11 @@ export interface QuickCreateItemResult {
   } | null;
 }
 
+/** GET /inventory-items/next-inventory-code (vista previa; no reserva correlativo). */
+export interface NextInventorySkuPreview {
+  inventoryCode: string;
+}
+
 /** Cuerpo POST /inventory-items/quick-create. */
 export interface QuickCreateItemPayload {
   name: string;
@@ -44,6 +49,7 @@ export interface QuickCreateItemPayload {
   warehouseId?: string;
   minStock?: number;
   maxStock?: number;
+  /** No usar: el backend asigna el SKU; si se envía no vacío, responde 400. */
   inventoryCode?: string;
   partNumber?: string;
   description?: string;
@@ -60,7 +66,7 @@ export interface ItemPickerRow {
   id: string;
   /** Payload QR (mismo esquema que backend: INV:<uuid>). */
   qrCode?: string;
-  /** SKU interno ERP (IN0001 o código propio). */
+  /** SKU interno ERP (típicamente IN####; legado u otros valores posibles en datos importados). */
   inventoryCode?: string | null;
   partNumber: string | null;
   name: string;
@@ -252,6 +258,13 @@ export class InventoryItemsService {
 
   createItem(data: any): Observable<any> {
     return this.http.post<any>(this.apiUrl, data);
+  }
+
+  /** Próximo código `IN####` que asignaría el sistema (misma lógica que al guardar, salvo carreras). */
+  getNextInventorySkuPreview(): Observable<NextInventorySkuPreview> {
+    return this.http.get<NextInventorySkuPreview>(
+      `${this.apiUrl}/next-inventory-code`,
+    );
   }
 
   quickCreateItem(data: QuickCreateItemPayload): Observable<QuickCreateItemResult> {

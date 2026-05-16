@@ -49,8 +49,11 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
   units = signal<UnitOfMeasureRow[]>([]);
   isSaving = signal(false);
 
+  /** Vista previa del próximo IN#### (GET; no reserva correlativo). */
+  previewSku = signal('');
+  previewSkuLoading = signal(false);
+
   name = '';
-  inventoryCode = '';
   partNumber = '';
   description = '';
   brand = '';
@@ -72,7 +75,22 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
     if (changes['open']?.currentValue === true) {
       this.loadFamilies();
       this.loadUnits();
+      this.loadSkuPreview();
     }
+  }
+
+  private loadSkuPreview() {
+    this.previewSkuLoading.set(true);
+    this.previewSku.set('');
+    this.itemsService.getNextInventorySkuPreview().subscribe({
+      next: (r) => {
+        this.previewSku.set(r.inventoryCode);
+        this.previewSkuLoading.set(false);
+      },
+      error: () => {
+        this.previewSkuLoading.set(false);
+      },
+    });
   }
 
   private loadFamilies() {
@@ -133,8 +151,6 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
       minStock: this.minStock ?? undefined,
       maxStock: this.maxStock ?? undefined,
     };
-    const ic = this.inventoryCode.trim();
-    if (ic) payload.inventoryCode = ic;
     const pn = this.partNumber.trim();
     if (pn) payload.partNumber = pn;
     const desc = this.description.trim();
@@ -168,7 +184,7 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
 
   private resetForm() {
     this.name = '';
-    this.inventoryCode = '';
+    this.previewSku.set('');
     this.partNumber = '';
     this.description = '';
     this.brand = '';

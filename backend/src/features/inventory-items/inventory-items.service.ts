@@ -75,6 +75,52 @@ export class InventoryItemsService {
     return null;
   }
 
+  /** Máximo numérico en códigos `IN####` o legado `INV-#####` (tenant). */
+  private computeInventorySkuNumericFloor(
+    rows: Iterable<{ inventoryCode: string | null }>,
+  ): number {
+    let floor = 0;
+    for (const { inventoryCode } of rows) {
+      const t = (inventoryCode ?? '').trim();
+      if (!t) continue;
+      const mNew = /^IN(\d{1,8})$/i.exec(t);
+      if (mNew) floor = Math.max(floor, parseInt(mNew[1]!, 10));
+      const mOld = /^INV-(\d{1,8})$/i.exec(t);
+      if (mOld) floor = Math.max(floor, parseInt(mOld[1]!, 10));
+    }
+    return floor;
+  }
+
+  /**
+   * Siguiente SKU que asignaría el sistema (solo lectura; no reserva correlativo).
+   * Debe coincidir con `create`/`quickCreate` salvo carrera entre usuarios.
+   */
+  async peekNextInventorySku(user: { tenantId: string }): Promise<{
+    inventoryCode: string;
+  }> {
+    const tenantId = user.tenantId;
+    const rows = await this.prisma.inventoryItem.findMany({
+      where: { tenantId, inventoryCode: { not: null } },
+      select: { inventoryCode: true },
+    });
+    const floor = this.computeInventorySkuNumericFloor(rows);
+    const counter = await this.prisma.sequenceCounter.findUnique({
+      where: {
+        tenantId_documentType: {
+          tenantId,
+          documentType: INV_SKU_DOC_TYPE,
+        },
+      },
+    });
+    const counterVal = counter?.lastNumber ?? 0;
+    const synced = Math.max(floor, counterVal);
+    const nextNum = synced + 1;
+    const padWidth = 4;
+    return {
+      inventoryCode: `${INV_SKU_PREFIX}${String(nextNum).padStart(padWidth, '0')}`,
+    };
+  }
+
   /**
    * Alinea `sequence_counters` (INV_SKU) con el máximo numérico ya presente en
    * `inventory_code` (formato `IN####` o legado `INV-#####`) para que el
@@ -88,15 +134,7 @@ export class InventoryItemsService {
       where: { tenantId, inventoryCode: { not: null } },
       select: { inventoryCode: true },
     });
-    let floor = 0;
-    for (const { inventoryCode } of rows) {
-      const t = (inventoryCode ?? '').trim();
-      if (!t) continue;
-      const mNew = /^IN(\d{1,8})$/i.exec(t);
-      if (mNew) floor = Math.max(floor, parseInt(mNew[1]!, 10));
-      const mOld = /^INV-(\d{1,8})$/i.exec(t);
-      if (mOld) floor = Math.max(floor, parseInt(mOld[1]!, 10));
-    }
+    const floor = this.computeInventorySkuNumericFloor(rows);
     if (floor <= 0) return;
 
     const counter = await tx.sequenceCounter.findUnique({
@@ -637,35 +675,24 @@ export class InventoryItemsService {
       }
     }
 
-    const requestedSku = dto.inventoryCode?.trim();
-    if (requestedSku) {
-      const dupSku = await this.prisma.inventoryItem.findFirst({
-        where: {
-          tenantId: user.tenantId,
-          inventoryCode: requestedSku,
-        },
-      });
-      if (dupSku) {
-        throw new BadRequestException(
-          'Ya existe un artículo con este Código de Inventario.',
-        );
-      }
+    if (dto.inventoryCode?.trim()) {
+      throw new BadRequestException(
+        'El código de inventario lo asigna el sistema; no envíe "inventoryCode" al crear el artículo.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
       await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
-      const inventoryCode =
-        requestedSku ||
-        (await this.sequenceService.getNextCorrelative(
-          user.tenantId,
-          INV_SKU_DOC_TYPE,
-          INV_SKU_PREFIX,
-          {
-            tx,
-            padWidth: 4,
-            separator: '',
-          },
-        ));
+      const inventoryCode = await this.sequenceService.getNextCorrelative(
+        user.tenantId,
+        INV_SKU_DOC_TYPE,
+        INV_SKU_PREFIX,
+        {
+          tx,
+          padWidth: 4,
+          separator: '',
+        },
+      );
 
       const id = randomUUID();
       const qrCode = `INV:${id}`;
@@ -700,11 +727,16 @@ export class InventoryItemsService {
 
   async update(id: string, dto: UpdateInventoryItemDto, user: any) {
     const existing = await this.findOne(id, user);
+    if (dto.inventoryCode !== undefined) {
+      const incoming = (dto.inventoryCode ?? '').trim();
+      const current = (existing.inventoryCode ?? '').trim();
+      if (incoming !== current) {
+        throw new BadRequestException(
+          'El código de inventario no se puede modificar.',
+        );
+      }
+    }
     const merged: CreateInventoryItemDto = {
-      inventoryCode:
-        dto.inventoryCode !== undefined
-          ? dto.inventoryCode
-          : (existing.inventoryCode ?? undefined),
       partNumber:
         dto.partNumber !== undefined
           ? dto.partNumber
@@ -756,28 +788,9 @@ export class InventoryItemsService {
       }
     }
 
-    const skuIn = merged.inventoryCode?.trim();
-    if (skuIn) {
-      const existingSku = await this.prisma.inventoryItem.findFirst({
-        where: {
-          tenantId: user.tenantId,
-          inventoryCode: skuIn,
-          id: { not: id },
-        },
-      });
-      if (existingSku) {
-        throw new BadRequestException(
-          'El Código de Inventario ya está siendo usado por otro artículo.',
-        );
-      }
-    }
-
     return this.prisma.inventoryItem.update({
       where: { id },
       data: {
-        ...(dto.inventoryCode !== undefined
-          ? { inventoryCode: skuIn || null }
-          : {}),
         partNumber: mergedPn,
         name: merged.name,
         description: merged.description,
@@ -825,10 +838,9 @@ export class InventoryItemsService {
         'El Número de Parte no puede superar 50 caracteres.',
       );
     }
-    const requestedSku = dto.inventoryCode?.trim() ?? '';
-    if (requestedSku.length > 60) {
+    if (dto.inventoryCode?.trim()) {
       throw new BadRequestException(
-        'El código de inventario no puede superar 60 caracteres.',
+        'El código de inventario lo asigna el sistema; no envíe "inventoryCode" en quick-create.',
       );
     }
     const brand = dto.brand?.trim() || undefined;
@@ -853,20 +865,6 @@ export class InventoryItemsService {
         );
       }
     }
-    if (requestedSku) {
-      const dupSku = await this.prisma.inventoryItem.findFirst({
-        where: {
-          tenantId: user.tenantId,
-          inventoryCode: requestedSku,
-        },
-      });
-      if (dupSku) {
-        throw new BadRequestException(
-          'Ya existe un artículo con este Código de Inventario.',
-        );
-      }
-    }
-
     const isSerialized = dto.isSerialized ?? false;
     const isInventory = dto.isInventory ?? true;
     const isAsset = dto.isAsset ?? false;
@@ -884,18 +882,16 @@ export class InventoryItemsService {
         await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
 
         const partNumber = requestedPn ? requestedPn : null;
-        const inventoryCode = requestedSku
-          ? requestedSku
-          : await this.sequenceService.getNextCorrelative(
-              user.tenantId,
-              INV_SKU_DOC_TYPE,
-              INV_SKU_PREFIX,
-              {
-                tx,
-                padWidth: 4,
-                separator: '',
-              },
-            );
+        const inventoryCode = await this.sequenceService.getNextCorrelative(
+          user.tenantId,
+          INV_SKU_DOC_TYPE,
+          INV_SKU_PREFIX,
+          {
+            tx,
+            padWidth: 4,
+            separator: '',
+          },
+        );
 
         const id = randomUUID();
         const qrCode = `INV:${id}`;

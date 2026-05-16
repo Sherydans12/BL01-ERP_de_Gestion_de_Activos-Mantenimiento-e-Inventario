@@ -43,7 +43,7 @@ Documentación de **negocio y pantallas** del circuito de compras distinta de la
 
 Cuando compras o el solicitante **crean** un artículo desde modales (p. ej. quick-create en el selector global):
 
-- **Código de inventario** autogenerado si el usuario no informa uno: formato **`IN` + 4 dígitos** (`IN0001`, `IN0002`, …), sin guion. El contador `INV_SKU` se **alinea** con el máximo ya existente en ítems del tenant en códigos `IN####` o legado `INV-#####` para evitar solapamientos tras importaciones.
+- **Código de inventario (SKU):** lo asigna **solo el sistema** en alta vía API (`POST` catálogo / `quick-create`); el usuario **no** puede informarlo ni editarlo. Formato **`IN` + 4 dígitos** (`IN0116`, `IN0117`, …). El contador `INV_SKU` se **alinea** con el máximo numérico ya existente en ítems del tenant en códigos `IN####` o legado `INV-#####` (p. ej. tras importar Excel o vaciar y reimportar) para que el siguiente correlativo no colisione.
 - **Número de parte:** si se deja vacío en **quick-create**, **no** se genera correlativo automático; queda **`null`** en base (el comportamiento anterior de AUTO-PN se eliminó).
 
 **Referencias:** `backend/.../inventory-items.service.ts` (`create`, `quickCreate`, `ensureInventorySkuCounterFloor`), `backend/.../sequence/sequence.service.ts`, `frontend/.../quick-add-item-modal/`, `frontend/.../global-item-picker/`.
