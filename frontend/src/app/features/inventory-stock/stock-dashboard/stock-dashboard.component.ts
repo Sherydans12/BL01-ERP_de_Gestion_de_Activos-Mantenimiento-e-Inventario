@@ -88,6 +88,27 @@ export class StockDashboardComponent implements OnInit {
   /** Misma configuración base que requerimientos de compra (`GLOBAL_ITEM_PICKER_CATALOG`). */
   readonly itemPickerCatalog = GLOBAL_ITEM_PICKER_CATALOG;
 
+  /**
+   * Salida a terreno: solo ítems con stock físico en la bodega actual y sin «+ Nuevo artículo».
+   * Entrada por compra / devolución OT conservan el catálogo amplio del catálogo global.
+   */
+  transactionItemPickerAllowQuickAdd(): boolean {
+    if (this.transactionForm.get('movementKind')?.value === 'FIELD_OUT') {
+      return false;
+    }
+    return this.itemPickerCatalog.allowQuickAdd;
+  }
+
+  transactionItemPickerOnlyWithStockInWarehouse(): boolean {
+    return this.transactionForm.get('movementKind')?.value === 'FIELD_OUT';
+  }
+
+  transactionItemPickerTitle(): string {
+    return this.transactionForm.get('movementKind')?.value === 'FIELD_OUT'
+      ? 'Artículos con saldo en esta bodega'
+      : this.itemPickerCatalog.titleMaster;
+  }
+
   warehouses = signal<any[]>([]);
   warehousesLoading = signal(true);
   selectedWarehouseId = signal<string>('');
@@ -303,6 +324,9 @@ export class StockDashboardComponent implements OnInit {
       .get('movementKind')
       ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((k) => {
+        this.transactionForm.patchValue({ itemId: '' }, { emitEvent: false });
+        this.transactionItemPreview.set(null);
+        this.transactionStockHint.set(null);
         if (k === 'RETURN_OT') {
           this.loadWorkOrdersForReturn();
         }

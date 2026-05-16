@@ -1571,9 +1571,9 @@
     [open]="showItemPicker()"
     [warehouseId]="selectedWarehouseId()"
     [strictFamilyFirst]="itemPickerCatalog.strictFamilyFirst"
-    [allowQuickAdd]="itemPickerCatalog.allowQuickAdd"
-    [onlyWithStockInWarehouse]="itemPickerCatalog.onlyWithStockInWarehouse"
-    [title]="itemPickerCatalog.titleMaster"
+    [allowQuickAdd]="transactionItemPickerAllowQuickAdd()"
+    [onlyWithStockInWarehouse]="transactionItemPickerOnlyWithStockInWarehouse()"
+    [title]="transactionItemPickerTitle()"
     (closed)="onTransactionItemPickerClosed()"
     (itemPicked)="onTransactionItemPicked($event)"
   />
