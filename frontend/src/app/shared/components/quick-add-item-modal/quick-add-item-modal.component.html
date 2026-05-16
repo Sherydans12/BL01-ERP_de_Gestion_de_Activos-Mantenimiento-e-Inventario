@@ -115,40 +115,26 @@
         <p class="text-[11px] text-muted mt-1 font-mono">Opcional. Mejora la búsqueda en catálogo y selector de OT.</p>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="flex items-start gap-3 p-3 bg-dark/30 rounded-lg border border-border">
+        <input
+          type="checkbox"
+          [(ngModel)]="isSerialized"
+          id="quickIsSerialized"
+          class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2 mt-0.5"
+        />
         <div>
-          <label class="block text-sm font-medium text-muted mb-1">Stock crítico <span class="text-xs font-normal">(opc.)</span></label>
-          <input type="number" [(ngModel)]="minStock" placeholder="—" min="0"
-                 class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-muted mb-1">Stock máximo <span class="text-xs font-normal">(opc.)</span></label>
-          <input type="number" [(ngModel)]="maxStock" placeholder="—" min="0"
-                 class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
-        </div>
-        <div class="sm:col-span-3 md:col-span-1 border-t border-border pt-4 sm:border-t-0 sm:pt-0">
-          <div class="flex items-start gap-3 p-3 bg-dark/30 rounded-lg border border-border">
-            <input
-              type="checkbox"
-              [(ngModel)]="isSerialized"
-              id="quickIsSerialized"
-              class="appearance-none min-w-[20px] w-5 h-5 rounded border transition-all cursor-pointer relative flex items-center justify-center bg-dark border-border checked:bg-primary checked:border-primary after:content-['X'] after:font-black after:text-[10px] after:hidden checked:after:block after:text-gray-900 focus:ring-2 focus:ring-primary focus:ring-offset-2 mt-0.5"
-            />
-            <div>
-              <label for="quickIsSerialized" class="text-sm font-bold text-main cursor-pointer block">
-                Componente seriado / mayor
-              </label>
-              <p class="text-xs text-muted font-mono mt-0.5">
-                Solo si requiere trazabilidad por número de serie (motores, transmisiones, etc.).
-              </p>
-            </div>
-          </div>
+          <label for="quickIsSerialized" class="text-sm font-bold text-main cursor-pointer block">
+            Componente seriado / mayor
+          </label>
+          <p class="text-xs text-muted font-mono mt-0.5">
+            Solo si requiere trazabilidad por número de serie (motores, transmisiones, etc.).
+          </p>
         </div>
       </div>
     </div>
 
     <p class="text-xs text-muted mt-4">
-      Misma ficha que <span class="font-mono text-main">/app/articulos/nuevo</span> (sin adjuntos).
+      Igual que <span class="font-mono text-main">/app/articulos/nuevo</span>. Con bodega de contexto: umbrales 0/0 en ficha hasta el primer movimiento en esa bodega.
     </p>
 
     <div class="flex justify-end gap-3 mt-5 pt-4 border-t border-border">

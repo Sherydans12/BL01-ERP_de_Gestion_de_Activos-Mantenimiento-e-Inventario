@@ -731,7 +731,9 @@
     <app-global-item-picker
       [open]="showCatalogItemPicker()"
       [warehouseId]="pickerWarehouseId()"
-      [strictFamilyFirst]="true"
+      [strictFamilyFirst]="itemPickerCatalog.strictFamilyFirst"
+      [allowQuickAdd]="itemPickerCatalog.allowQuickAdd"
+      [onlyWithStockInWarehouse]="itemPickerCatalog.onlyWithStockInWarehouse"
       title="Vincular línea — Catálogo Maestro de Artículos"
       (closed)="onCatalogPickerClosed()"
       (itemPicked)="onCatalogItemPicked($event)"

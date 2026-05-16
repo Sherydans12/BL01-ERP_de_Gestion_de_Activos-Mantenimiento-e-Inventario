@@ -246,8 +246,10 @@
 
   <app-global-item-picker
     [open]="showItemPicker()"
-    [strictFamilyFirst]="true"
-    title="Catálogo Maestro de Artículos"
+    [strictFamilyFirst]="itemPickerCatalog.strictFamilyFirst"
+    [allowQuickAdd]="itemPickerCatalog.allowQuickAdd"
+    [onlyWithStockInWarehouse]="itemPickerCatalog.onlyWithStockInWarehouse"
+    [title]="itemPickerCatalog.titleMaster"
     (closed)="onPickerClosed()"
     (itemPicked)="onPickerItem($event)"
   />

@@ -22,6 +22,7 @@ import {
   ItemPickerRow,
 } from '../../../core/services/inventory-items/inventory-items.service';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
+import { GLOBAL_ITEM_PICKER_CATALOG } from '../../../shared/components/global-item-picker/global-item-picker.catalog';
 import { Contract, Equipment } from '../../../core/models/types';
 
 const UUID_RE =
@@ -60,6 +61,9 @@ export class RequisitionFormComponent implements OnInit {
   private notify = inject(NotificationService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+
+  /** Misma configuración base que control de stock (`GLOBAL_ITEM_PICKER_CATALOG`). */
+  readonly itemPickerCatalog = GLOBAL_ITEM_PICKER_CATALOG;
 
   readonly UOM_PRESETS = [
     { value: 'UN', label: 'UN - Unidad' },

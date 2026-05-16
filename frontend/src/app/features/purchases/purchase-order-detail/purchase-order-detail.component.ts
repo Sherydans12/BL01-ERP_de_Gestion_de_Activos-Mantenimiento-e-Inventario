@@ -20,6 +20,7 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
 import { PurchasesConceptInfoComponent } from '../../../shared/components/purchases-concept-info/purchases-concept-info.component';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
+import { GLOBAL_ITEM_PICKER_CATALOG } from '../../../shared/components/global-item-picker/global-item-picker.catalog';
 import { ItemPickerRow } from '../../../core/services/inventory-items/inventory-items.service';
 import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-modal/equipment-detail-modal.component';
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
@@ -87,6 +88,9 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
     const wid = receipts?.[0]?.warehouseId;
     return wid && typeof wid === 'string' ? wid : null;
   });
+
+  /** Alineado con control de stock / requerimientos (flags del picker; el título se define en la plantilla). */
+  readonly itemPickerCatalog = GLOBAL_ITEM_PICKER_CATALOG;
 
   /** Pestañas Resumen / Facturación (3-way match). */
   poDetailTab = signal<'summary' | 'billing'>('summary');

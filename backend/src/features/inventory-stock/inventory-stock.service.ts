@@ -7,6 +7,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { generatePhysicalCountSheetPdfBuffer } from './physical-count-sheet-pdf.generator';
+import {
+  getPolicyThresholdsForNewItemStockRow,
+  clearItemStockPolicyIfMatchesWarehouse,
+} from '../inventory-items/inventory-item-stock-policy.helper';
 
 export interface PerformTransactionDto {
   warehouseId: string;
@@ -831,32 +835,6 @@ export class InventoryStockService {
       );
     }
 
-    const current = await this.prisma.itemStock.findUnique({
-      where: {
-        warehouseId_itemId: {
-          warehouseId,
-          itemId,
-        },
-      },
-      select: {
-        quantity: true,
-        unitCost: true,
-        minStock: true,
-        maxStock: true,
-        location: true,
-      },
-    });
-
-    const finalMin = minStock ?? current?.minStock ?? 0;
-    const finalMax = maxStock ?? current?.maxStock ?? 0;
-    if (hasMin || hasMax) {
-      if (finalMax > 0 && finalMax < finalMin) {
-        throw new BadRequestException(
-          'El stock máximo no puede ser menor que el stock mínimo.',
-        );
-      }
-    }
-
     const loc =
       dto.location !== undefined
         ? dto.location?.trim()
@@ -864,27 +842,74 @@ export class InventoryStockService {
           : null
         : undefined;
 
-    return this.prisma.itemStock.upsert({
-      where: {
-        warehouseId_itemId: {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.itemStock.findUnique({
+        where: {
+          warehouseId_itemId: {
+            warehouseId,
+            itemId,
+          },
+        },
+        select: {
+          quantity: true,
+          unitCost: true,
+          minStock: true,
+          maxStock: true,
+          location: true,
+        },
+      });
+
+      const policyDefaults = !current
+        ? await getPolicyThresholdsForNewItemStockRow(
+            tx,
+            tenantId,
+            itemId,
+            warehouseId,
+          )
+        : { minStock: 0, maxStock: 0 };
+
+      const finalMin =
+        minStock ?? current?.minStock ?? policyDefaults.minStock;
+      const finalMax =
+        maxStock ?? current?.maxStock ?? policyDefaults.maxStock;
+      if (hasMin || hasMax) {
+        if (finalMax > 0 && finalMax < finalMin) {
+          throw new BadRequestException(
+            'El stock máximo no puede ser menor que el stock mínimo.',
+          );
+        }
+      }
+
+      const row = await tx.itemStock.upsert({
+        where: {
+          warehouseId_itemId: {
+            warehouseId,
+            itemId,
+          },
+        },
+        update: {
+          minStock: minStock ?? undefined,
+          maxStock: maxStock ?? undefined,
+          ...(loc !== undefined ? { location: loc } : {}),
+        },
+        create: {
           warehouseId,
           itemId,
+          quantity: current?.quantity ?? 0,
+          unitCost: current?.unitCost ?? 0,
+          minStock: finalMin,
+          maxStock: finalMax,
+          ...(loc !== undefined ? { location: loc } : {}),
         },
-      },
-      update: {
-        minStock: minStock ?? undefined,
-        maxStock: maxStock ?? undefined,
-        ...(loc !== undefined ? { location: loc } : {}),
-      },
-      create: {
-        warehouseId,
+      });
+
+      await clearItemStockPolicyIfMatchesWarehouse(
+        tx,
+        tenantId,
         itemId,
-        quantity: current?.quantity ?? 0,
-        unitCost: current?.unitCost ?? 0,
-        minStock: finalMin,
-        maxStock: finalMax,
-        ...(loc !== undefined ? { location: loc } : {}),
-      },
+        warehouseId,
+      );
+      return row;
     });
   }
 
@@ -1059,6 +1084,15 @@ export class InventoryStockService {
           }
         }
 
+        const policyDefaults = !currentStock
+          ? await getPolicyThresholdsForNewItemStockRow(
+              tx,
+              user.tenantId,
+              dto.itemId,
+              dto.warehouseId,
+            )
+          : { minStock: 0, maxStock: 0 };
+
         const updatedStock = await tx.itemStock.upsert({
           where: {
             warehouseId_itemId: {
@@ -1075,8 +1109,17 @@ export class InventoryStockService {
             itemId: dto.itemId,
             quantity: newQty,
             unitCost: dto.unitCost || 0,
+            minStock: policyDefaults.minStock,
+            maxStock: policyDefaults.maxStock,
           },
         });
+
+        await clearItemStockPolicyIfMatchesWarehouse(
+          tx,
+          user.tenantId,
+          dto.itemId,
+          dto.warehouseId,
+        );
 
         const transaction = await tx.inventoryTransaction.create({
           data: {
@@ -1274,6 +1317,15 @@ export class InventoryStockService {
 
         const unitCost = Number(currentStock?.unitCost ?? 0);
 
+        const policyDefaults = !currentStock
+          ? await getPolicyThresholdsForNewItemStockRow(
+              tx,
+              user.tenantId,
+              dto.itemId,
+              dto.warehouseId,
+            )
+          : { minStock: 0, maxStock: 0 };
+
         // 4. Actualizar stock
         await tx.itemStock.upsert({
           where: {
@@ -1288,8 +1340,17 @@ export class InventoryStockService {
             itemId: dto.itemId,
             quantity: newQty,
             unitCost,
+            minStock: policyDefaults.minStock,
+            maxStock: policyDefaults.maxStock,
           },
         });
+
+        await clearItemStockPolicyIfMatchesWarehouse(
+          tx,
+          user.tenantId,
+          dto.itemId,
+          dto.warehouseId,
+        );
 
         // 5. Registrar devolución a bodega (no recalcula CPP: solo incrementa cantidad)
         const transaction = await tx.inventoryTransaction.create({

@@ -74,5 +74,6 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |
 | [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md) | **Inventario:** maestro de artículos, `ItemStock`, kardex (`InventoryTransaction`), ajustes, transferencias W2W, picker y rutas de código |
+| [inventario-alta-articulos-y-selector-global.md](inventario-alta-articulos-y-selector-global.md) | **Inventario:** política de umbrales sin `item_stocks` hasta primer movimiento; alta `/articulos/nuevo`; selector global unificado (`GLOBAL_ITEM_PICKER_CATALOG`) |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.

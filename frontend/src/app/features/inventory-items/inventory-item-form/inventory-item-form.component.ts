@@ -13,7 +13,9 @@ import {
   ItemCategory,
   ItemLedgerRow,
   InventoryItemAttachmentRow,
+  CreateInventoryItemPayload,
 } from '../../../core/services/inventory-items/inventory-items.service';
+import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { environment } from '../../../../environments/environment';
@@ -38,6 +40,7 @@ import { EntityLinkComponent } from '../../../shared/components/entity-link/enti
 export class InventoryItemFormComponent implements OnInit {
   private fb = inject(FormBuilder);
   private inventoryItemsService = inject(InventoryItemsService);
+  private warehousesService = inject(WarehousesService);
   private uomService = inject(UnitsOfMeasureService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -51,6 +54,8 @@ export class InventoryItemFormComponent implements OnInit {
   families = signal<ItemCategory[]>([]);
   subcategories = signal<ItemCategory[]>([]);
   units = signal<UnitOfMeasureRow[]>([]);
+  warehouses = signal<{ id: string; code: string; name: string }[]>([]);
+  warehousesLoading = signal(false);
 
   activeTab = signal<'ficha' | 'historial'>('ficha');
   ledgerRows = signal<ItemLedgerRow[]>([]);
@@ -93,6 +98,9 @@ export class InventoryItemFormComponent implements OnInit {
       isInventory: [true],
       isAsset: [false],
       isConsumable: [true],
+      initialWarehouseId: [''],
+      initialMinStock: [''],
+      initialMaxStock: [''],
     });
   }
 
@@ -106,6 +114,8 @@ export class InventoryItemFormComponent implements OnInit {
       next: (rows) => this.families.set(rows),
       error: () => {},
     });
+
+    this.loadWarehouses();
 
     this.uomService.list().subscribe({
       next: (rows) => {
@@ -133,8 +143,33 @@ export class InventoryItemFormComponent implements OnInit {
         this.loadItem(id);
       } else {
         this.mode = 'CREATING';
+        this.itemForm.patchValue({
+          initialWarehouseId: '',
+          initialMinStock: '',
+          initialMaxStock: '',
+        });
         this.loadNextSkuPreview();
       }
+    });
+  }
+
+  private loadWarehouses() {
+    this.warehousesLoading.set(true);
+    this.warehousesService.getWarehouses().subscribe({
+      next: (rows) => {
+        this.warehouses.set(
+          (rows ?? []).map((w: { id: string; code: string; name: string }) => ({
+            id: w.id,
+            code: w.code,
+            name: w.name,
+          })),
+        );
+        this.warehousesLoading.set(false);
+      },
+      error: () => {
+        this.warehouses.set([]);
+        this.warehousesLoading.set(false);
+      },
     });
   }
 
@@ -407,6 +442,9 @@ export class InventoryItemFormComponent implements OnInit {
                 ...base,
                 familyId: famId,
                 categoryId: item.categoryId,
+                initialWarehouseId: '',
+                initialMinStock: '',
+                initialMaxStock: '',
               });
               this.loadAttachments(id);
             },
@@ -415,6 +453,9 @@ export class InventoryItemFormComponent implements OnInit {
                 ...base,
                 familyId: famId,
                 categoryId: item.categoryId,
+                initialWarehouseId: '',
+                initialMinStock: '',
+                initialMaxStock: '',
               });
               this.loadAttachments(id);
             },
@@ -424,6 +465,9 @@ export class InventoryItemFormComponent implements OnInit {
             ...base,
             familyId: '',
             categoryId: item.categoryId ?? '',
+            initialWarehouseId: '',
+            initialMinStock: '',
+            initialMaxStock: '',
           });
           this.loadAttachments(id);
         }
@@ -443,7 +487,7 @@ export class InventoryItemFormComponent implements OnInit {
 
     const raw = this.itemForm.getRawValue();
     const pn = String(raw.partNumber ?? '').trim();
-    const payload: Record<string, unknown> = {
+    const payload: CreateInventoryItemPayload = {
       partNumber: pn || null,
       name: raw.name,
       description: raw.description,
@@ -458,6 +502,42 @@ export class InventoryItemFormComponent implements OnInit {
     };
 
     if (this.mode === 'CREATING') {
+      const wh = String(raw.initialWarehouseId ?? '').trim();
+      if (wh) {
+        const minRaw = raw.initialMinStock;
+        const maxRaw = raw.initialMaxStock;
+        if (
+          minRaw === '' ||
+          minRaw === null ||
+          minRaw === undefined ||
+          maxRaw === '' ||
+          maxRaw === null ||
+          maxRaw === undefined
+        ) {
+          this.notificationService.error(
+            'Si elige una bodega inicial, indique stock mínimo y máximo (≥ 0).',
+          );
+          return;
+        }
+        const minN = Number(minRaw);
+        const maxN = Number(maxRaw);
+        if (!Number.isFinite(minN) || minN < 0 || !Number.isFinite(maxN) || maxN < 0) {
+          this.notificationService.error(
+            'Stock mínimo y máximo deben ser números mayores o iguales a cero.',
+          );
+          return;
+        }
+        if (maxN > 0 && maxN < minN) {
+          this.notificationService.error(
+            'El stock máximo no puede ser menor que el stock mínimo.',
+          );
+          return;
+        }
+        payload.warehouseId = wh;
+        payload.minStock = minN;
+        payload.maxStock = maxN;
+      }
+
       this.inventoryItemsService.createItem(payload).subscribe({
         next: () => {
           this.notificationService.success('Artículo creado exitosamente.');

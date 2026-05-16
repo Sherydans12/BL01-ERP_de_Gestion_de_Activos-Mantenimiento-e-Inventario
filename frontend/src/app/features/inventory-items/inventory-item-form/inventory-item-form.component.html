@@ -467,6 +467,70 @@
       </p>
     </div>
 
+    @if (mode === "CREATING") {
+      <details class="border border-border rounded-xl bg-dark/20 p-4">
+        <summary
+          class="cursor-pointer list-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 text-sm select-none [&::-webkit-details-marker]:hidden"
+        >
+          <span
+            class="text-[11px] font-mono font-bold uppercase tracking-wide text-primary"
+            >Umbrales para una bodega (opcional)</span
+          >
+          <span class="text-xs text-muted font-mono"
+            >Al primer movimiento que cree stock en esa bodega</span
+          >
+        </summary>
+        <div class="mt-4 pt-4 border-t border-border space-y-4">
+          <p class="text-xs text-muted font-mono">
+            No crea fila con cantidad 0. Con bodega, mín. y máx. obligatorios (≥ 0).
+          </p>
+          <div>
+            <label class="block text-sm font-medium text-muted mb-1">Bodega</label>
+            <select
+              formControlName="initialWarehouseId"
+              class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary text-sm"
+            >
+              <option value="">— Ninguna —</option>
+              @if (warehousesLoading()) {
+                <option disabled value="">Cargando bodegas…</option>
+              }
+              @for (w of warehouses(); track w.id) {
+                <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-muted mb-1"
+                >Mínimo (crítico) en esa bodega</label
+              >
+              <input
+                type="number"
+                formControlName="initialMinStock"
+                min="0"
+                step="any"
+                placeholder="—"
+                class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-muted mb-1"
+                >Máximo en esa bodega</label
+              >
+              <input
+                type="number"
+                formControlName="initialMaxStock"
+                min="0"
+                step="any"
+                placeholder="—"
+                class="w-full bg-dark border border-border text-main rounded-md px-3 py-2 outline-none focus:border-primary font-mono text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      </details>
+    }
+
     @if (mode === "EDITING" && itemId) {
       <div class="border-t border-border pt-6 space-y-3">
         <div>

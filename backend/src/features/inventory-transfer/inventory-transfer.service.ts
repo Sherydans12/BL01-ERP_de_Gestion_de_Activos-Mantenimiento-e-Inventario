@@ -8,6 +8,10 @@ import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
+import {
+  getPolicyThresholdsForNewItemStockRow,
+  clearItemStockPolicyIfMatchesWarehouse,
+} from '../inventory-items/inventory-item-stock-policy.helper';
 
 export interface TransferLineDto {
   itemId: string;
@@ -305,6 +309,15 @@ export class InventoryTransferService {
                   incomingCost,
                 );
 
+          const policyDefaults = !destStock
+            ? await getPolicyThresholdsForNewItemStockRow(
+                tx,
+                tenantId,
+                line.itemId,
+                transfer.destinationWarehouse.id,
+              )
+            : { minStock: 0, maxStock: 0 };
+
           await tx.itemStock.upsert({
             where: {
               warehouseId_itemId: {
@@ -321,8 +334,17 @@ export class InventoryTransferService {
               itemId: line.itemId,
               quantity: newDestQty,
               unitCost: incomingCost,
+              minStock: policyDefaults.minStock,
+              maxStock: policyDefaults.maxStock,
             },
           });
+
+          await clearItemStockPolicyIfMatchesWarehouse(
+            tx,
+            tenantId,
+            line.itemId,
+            transfer.destinationWarehouse.id,
+          );
 
           const notes = `${noteBase} · Recepción de ${line.quantity} u.`;
           await tx.inventoryTransaction.create({

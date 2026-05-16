@@ -815,6 +815,7 @@ model Warehouse {
   warehouseReceipts WarehouseReceipt[]
   outboundTransfers  InventoryTransfer[] @relation("InventoryTransferOrigin")
   inboundTransfers   InventoryTransfer[] @relation("InventoryTransferDestination")
+  inventoryItemsAsPolicyTarget InventoryItem[] @relation("InventoryItemPolicyTargetWarehouse")
 
   @@unique([tenantId, code])
   @@map("warehouses")
@@ -847,10 +848,16 @@ model InventoryItem {
   isAsset         Boolean       @default(false) @map("is_asset")
   isConsumable    Boolean       @default(true)  @map("is_consumable")
 
+  /// Bodega en la que, al primer movimiento que cree `item_stocks`, se aplicarán policyMinStock / policyMaxStock (sin fila hasta entonces).
+  policyTargetWarehouseId String?   @map("policy_target_warehouse_id") @db.Uuid
+  policyMinStock          Float?    @map("policy_min_stock")
+  policyMaxStock          Float?    @map("policy_max_stock")
+
   tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   itemCategory      ItemCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   inventorySupplier InventorySupplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   unitOfMeasure     UnitOfMeasure  @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
+  policyTargetWarehouse Warehouse? @relation("InventoryItemPolicyTargetWarehouse", fields: [policyTargetWarehouseId], references: [id], onDelete: SetNull)
   stocks            ItemStock[]
   transactions      InventoryTransaction[]
   workOrderParts             WorkOrderPart[]

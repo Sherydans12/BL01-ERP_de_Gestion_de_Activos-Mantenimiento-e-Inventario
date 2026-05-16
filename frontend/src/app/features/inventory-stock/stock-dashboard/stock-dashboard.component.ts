@@ -35,6 +35,7 @@ import { ExportService } from '../../../core/services/export/export.service';
 import { PdfService } from '../../../core/services/pdf/pdf.service';
 import { SkeletonRowComponent } from '../../../shared/components/skeleton-row/skeleton-row.component';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
+import { GLOBAL_ITEM_PICKER_CATALOG } from '../../../shared/components/global-item-picker/global-item-picker.catalog';
 import { ItemPickerRow } from '../../../core/services/inventory-items/inventory-items.service';
 import { PendingRegularizationModalComponent } from '../pending-regularization-modal/pending-regularization-modal.component';
 import type { PendingRegularizationRowDto } from '../pending-regularization-modal/pending-regularization-modal.component';
@@ -77,6 +78,9 @@ export class StockDashboardComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private workOrdersService = inject(WorkOrdersService);
   private fb = inject(FormBuilder);
+
+  /** Misma configuración base que requerimientos de compra (`GLOBAL_ITEM_PICKER_CATALOG`). */
+  readonly itemPickerCatalog = GLOBAL_ITEM_PICKER_CATALOG;
 
   warehouses = signal<any[]>([]);
   warehousesLoading = signal(true);

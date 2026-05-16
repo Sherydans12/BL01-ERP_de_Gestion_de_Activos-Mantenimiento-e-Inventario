@@ -23,6 +23,11 @@ import {
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import Decimal from 'decimal.js';
 
+import {
+  getPolicyThresholdsForNewItemStockRow,
+  clearItemStockPolicyIfMatchesWarehouse,
+} from '../inventory-items/inventory-item-stock-policy.helper';
+
 function truncateForDb(s: string, max: number): string {
   if (!s) return '';
   return s.length <= max ? s : s.slice(0, max);
@@ -1956,6 +1961,15 @@ export class WorkOrdersService {
 
                 const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
 
+                const policyDefaults = !currentStock
+                  ? await getPolicyThresholdsForNewItemStockRow(
+                      tx,
+                      tenantId,
+                      part.inventoryItemId,
+                      effectiveWarehouseId,
+                    )
+                  : { minStock: 0, maxStock: 0 };
+
                 await tx.itemStock.upsert({
                   where: {
                     warehouseId_itemId: {
@@ -1969,8 +1983,17 @@ export class WorkOrdersService {
                     itemId: part.inventoryItemId,
                     quantity: newQty,
                     unitCost: 0,
+                    minStock: policyDefaults.minStock,
+                    maxStock: policyDefaults.maxStock,
                   },
                 });
+
+                await clearItemStockPolicyIfMatchesWarehouse(
+                  tx,
+                  tenantId,
+                  part.inventoryItemId,
+                  effectiveWarehouseId,
+                );
 
                 await tx.inventoryTransaction.create({
                   data: {
@@ -2020,6 +2043,15 @@ export class WorkOrdersService {
                 const pn =
                   fc.inventoryItem?.partNumber ?? fc.fluidType ?? 'fluid';
 
+                const policyDefaults = !currentStock
+                  ? await getPolicyThresholdsForNewItemStockRow(
+                      tx,
+                      tenantId,
+                      itemId,
+                      effectiveWarehouseId,
+                    )
+                  : { minStock: 0, maxStock: 0 };
+
                 await tx.itemStock.upsert({
                   where: {
                     warehouseId_itemId: {
@@ -2033,8 +2065,17 @@ export class WorkOrdersService {
                     itemId,
                     quantity: newQty,
                     unitCost: 0,
+                    minStock: policyDefaults.minStock,
+                    maxStock: policyDefaults.maxStock,
                   },
                 });
+
+                await clearItemStockPolicyIfMatchesWarehouse(
+                  tx,
+                  tenantId,
+                  itemId,
+                  effectiveWarehouseId,
+                );
 
                 await tx.inventoryTransaction.create({
                   data: {

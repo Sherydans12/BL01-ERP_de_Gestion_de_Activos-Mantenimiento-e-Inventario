@@ -4,6 +4,9 @@ import {
   IsBoolean,
   IsUUID,
   MaxLength,
+  IsNumber,
+  Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateInventoryItemDto {
@@ -63,4 +66,19 @@ export class CreateInventoryItemDto {
   @IsBoolean()
   @IsOptional()
   isConsumable?: boolean;
+
+  /** Si se informa, el servicio crea `item_stocks` en esa bodega (cantidad 0) con min/max obligatorios. */
+  @IsUUID()
+  @IsOptional()
+  warehouseId?: string;
+
+  @ValidateIf((o) => !!o.warehouseId?.trim())
+  @IsNumber()
+  @Min(0)
+  minStock?: number;
+
+  @ValidateIf((o) => !!o.warehouseId?.trim())
+  @IsNumber()
+  @Min(0)
+  maxStock?: number;
 }

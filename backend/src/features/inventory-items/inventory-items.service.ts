@@ -697,7 +697,58 @@ export class InventoryItemsService {
       const id = randomUUID();
       const qrCode = `INV:${id}`;
 
-      return tx.inventoryItem.create({
+      let policyExtra: {
+        policyTargetWarehouseId: string;
+        policyMinStock: number;
+        policyMaxStock: number;
+      } | null = null;
+
+      const wh = dto.warehouseId?.trim();
+      if (wh) {
+        if (
+          dto.minStock === undefined ||
+          dto.minStock === null ||
+          dto.maxStock === undefined ||
+          dto.maxStock === null
+        ) {
+          throw new BadRequestException(
+            'Si indica una bodega inicial, debe enviar stock mínimo y stock máximo (números ≥ 0).',
+          );
+        }
+        const minStock = Number(dto.minStock);
+        const maxStock = Number(dto.maxStock);
+        if (!Number.isFinite(minStock) || minStock < 0) {
+          throw new BadRequestException(
+            'El stock mínimo debe ser un número mayor o igual a cero.',
+          );
+        }
+        if (!Number.isFinite(maxStock) || maxStock < 0) {
+          throw new BadRequestException(
+            'El stock máximo debe ser un número mayor o igual a cero.',
+          );
+        }
+        if (maxStock > 0 && maxStock < minStock) {
+          throw new BadRequestException(
+            'El stock máximo no puede ser menor que el stock mínimo.',
+          );
+        }
+        const warehouse = await tx.warehouse.findFirst({
+          where: { id: wh, tenantId: user.tenantId },
+          select: { id: true },
+        });
+        if (!warehouse) {
+          throw new BadRequestException(
+            'La bodega seleccionada no existe o no pertenece a su empresa.',
+          );
+        }
+        policyExtra = {
+          policyTargetWarehouseId: warehouse.id,
+          policyMinStock: minStock,
+          policyMaxStock: maxStock,
+        };
+      }
+
+      const item = await tx.inventoryItem.create({
         data: {
           id,
           qrCode,
@@ -715,6 +766,7 @@ export class InventoryItemsService {
           isAsset: dto.isAsset ?? false,
           isConsumable: dto.isConsumable ?? true,
           compatibilityInfo: dto.compatibilityInfo?.trim() || null,
+          ...(policyExtra ?? {}),
         },
         include: {
           itemCategory: { select: ITEM_CATEGORY_SELECT },
@@ -722,6 +774,8 @@ export class InventoryItemsService {
           inventorySupplier: { select: { id: true, name: true } },
         },
       });
+
+      return item;
     });
   }
 
@@ -896,6 +950,53 @@ export class InventoryItemsService {
         const id = randomUUID();
         const qrCode = `INV:${id}`;
 
+        let policyExtra: {
+          policyTargetWarehouseId: string;
+          policyMinStock: number;
+          policyMaxStock: number;
+        } | null = null;
+
+        if (dto.warehouseId?.trim()) {
+          const wh = dto.warehouseId.trim();
+          const minStock =
+            dto.minStock !== undefined && dto.minStock !== null
+              ? Number(dto.minStock)
+              : 0;
+          const maxStock =
+            dto.maxStock !== undefined && dto.maxStock !== null
+              ? Number(dto.maxStock)
+              : 0;
+          if (!Number.isFinite(minStock) || minStock < 0) {
+            throw new BadRequestException(
+              'El stock mínimo debe ser un número mayor o igual a cero.',
+            );
+          }
+          if (!Number.isFinite(maxStock) || maxStock < 0) {
+            throw new BadRequestException(
+              'El stock máximo debe ser un número mayor o igual a cero.',
+            );
+          }
+          if (maxStock > 0 && maxStock < minStock) {
+            throw new BadRequestException(
+              'El stock máximo no puede ser menor que el stock mínimo.',
+            );
+          }
+          const warehouse = await tx.warehouse.findFirst({
+            where: { id: wh, tenantId: user.tenantId },
+            select: { id: true },
+          });
+          if (!warehouse) {
+            throw new BadRequestException(
+              'La bodega seleccionada no existe o no pertenece a su empresa.',
+            );
+          }
+          policyExtra = {
+            policyTargetWarehouseId: warehouse.id,
+            policyMinStock: minStock,
+            policyMaxStock: maxStock,
+          };
+        }
+
         const item = await tx.inventoryItem.create({
           data: {
             id,
@@ -913,6 +1014,7 @@ export class InventoryItemsService {
             isInventory,
             isAsset,
             isConsumable,
+            ...(policyExtra ?? {}),
           },
           select: {
             id: true,
@@ -925,64 +1027,6 @@ export class InventoryItemsService {
             itemCategory: { select: ITEM_CATEGORY_SELECT },
           },
         });
-
-        if (dto.warehouseId?.trim()) {
-          const warehouse = await tx.warehouse.findFirst({
-            where: { id: dto.warehouseId.trim(), tenantId: user.tenantId },
-            select: { id: true },
-          });
-          if (!warehouse) {
-            throw new BadRequestException(
-              'La bodega seleccionada no existe o no pertenece a su empresa.',
-            );
-          }
-
-          const minStock =
-            dto.minStock !== undefined && dto.minStock !== null
-              ? Number(dto.minStock)
-              : 0;
-          const maxStock =
-            dto.maxStock !== undefined && dto.maxStock !== null
-              ? Number(dto.maxStock)
-              : 0;
-
-          if (!Number.isFinite(minStock) || minStock < 0) {
-            throw new BadRequestException(
-              'El stock mínimo debe ser un número mayor o igual a cero.',
-            );
-          }
-          if (!Number.isFinite(maxStock) || maxStock < 0) {
-            throw new BadRequestException(
-              'El stock máximo debe ser un número mayor o igual a cero.',
-            );
-          }
-          if (maxStock > 0 && maxStock < minStock) {
-            throw new BadRequestException(
-              'El stock máximo no puede ser menor que el stock mínimo.',
-            );
-          }
-
-          await tx.itemStock.upsert({
-            where: {
-              warehouseId_itemId: {
-                warehouseId: warehouse.id,
-                itemId: item.id,
-              },
-            },
-            update: {
-              minStock,
-              maxStock,
-            },
-            create: {
-              warehouseId: warehouse.id,
-              itemId: item.id,
-              quantity: 0,
-              unitCost: 0,
-              minStock,
-              maxStock,
-            },
-          });
-        }
 
         return item;
       },

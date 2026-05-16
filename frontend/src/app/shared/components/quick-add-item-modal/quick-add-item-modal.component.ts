@@ -63,8 +63,6 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
   /** ID de la subcategoría (se envía como categoryId al API). */
   subcategoryId = '';
   unitOfMeasureId = '';
-  minStock: number | null = null;
-  maxStock: number | null = null;
 
   ngOnInit() {
     this.loadFamilies();
@@ -148,8 +146,6 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
       categoryId: this.subcategoryId,
       unitOfMeasureId: this.unitOfMeasureId,
       warehouseId: this.warehouseId?.trim() || undefined,
-      minStock: this.minStock ?? undefined,
-      maxStock: this.maxStock ?? undefined,
     };
     const pn = this.partNumber.trim();
     if (pn) payload.partNumber = pn;
@@ -196,7 +192,5 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
     const rows = this.units();
     const un = rows.find((u) => u.abbreviation === 'UN');
     this.unitOfMeasureId = un ? un.id : rows[0]?.id ?? '';
-    this.minStock = null;
-    this.maxStock = null;
   }
 }

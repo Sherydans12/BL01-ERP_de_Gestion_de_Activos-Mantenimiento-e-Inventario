@@ -41,14 +41,33 @@ export interface NextInventorySkuPreview {
   inventoryCode: string;
 }
 
-/** Cuerpo POST /inventory-items/quick-create. */
-export interface QuickCreateItemPayload {
-  name: string;
-  categoryId: string;
-  unitOfMeasureId: string;
+/** Bodega inicial + umbrales (POST maestro exige min/max si hay bodega; quick-create puede omitirlos → 0). */
+export interface InitialItemStockPayload {
   warehouseId?: string;
   minStock?: number;
   maxStock?: number;
+}
+
+/** Cuerpo POST /inventory-items (catálogo maestro). */
+export type CreateInventoryItemPayload = {
+  partNumber?: string | null;
+  name: string;
+  description?: string;
+  compatibilityInfo?: string | null;
+  categoryId: string;
+  unitOfMeasureId: string;
+  brand?: string;
+  isSerialized?: boolean;
+  isInventory?: boolean;
+  isAsset?: boolean;
+  isConsumable?: boolean;
+} & InitialItemStockPayload;
+
+/** Cuerpo POST /inventory-items/quick-create. */
+export type QuickCreateItemPayload = {
+  name: string;
+  categoryId: string;
+  unitOfMeasureId: string;
   /** No usar: el backend asigna el SKU; si se envía no vacío, responde 400. */
   inventoryCode?: string;
   partNumber?: string;
@@ -59,7 +78,7 @@ export interface QuickCreateItemPayload {
   isInventory?: boolean;
   isAsset?: boolean;
   isConsumable?: boolean;
-}
+} & InitialItemStockPayload;
 
 /** Fila devuelta por `GET /inventory-items/picker` (selector global). */
 export interface ItemPickerRow {
@@ -256,7 +275,7 @@ export class InventoryItemsService {
     });
   }
 
-  createItem(data: any): Observable<any> {
+  createItem(data: CreateInventoryItemPayload): Observable<any> {
     return this.http.post<any>(this.apiUrl, data);
   }
 

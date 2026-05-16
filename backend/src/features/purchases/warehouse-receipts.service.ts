@@ -17,6 +17,10 @@ import { assertUserHasContractAccess } from './purchase-contract-access.util';
 import { PO_STATUSES_ALLOW_WAREHOUSE_RECEIPT } from './po-receipt-eligible-statuses';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 import {
+  getPolicyThresholdsForNewItemStockRow,
+  clearItemStockPolicyIfMatchesWarehouse,
+} from '../inventory-items/inventory-item-stock-policy.helper';
+import {
   requisitionIdFromPurchaseOrder,
   tryAutoCloseRequisitionIfFullyReconciled,
 } from './purchase-requisition-auto-close.util';
@@ -451,6 +455,15 @@ export class WarehouseReceiptsService {
             incomingCost,
           );
 
+          const policyDefaults = !existingStock
+            ? await getPolicyThresholdsForNewItemStockRow(
+                tx,
+                user.tenantId,
+                inventoryItemId,
+                receipt.warehouseId,
+              )
+            : { minStock: 0, maxStock: 0 };
+
           await tx.itemStock.upsert({
             where: {
               warehouseId_itemId: {
@@ -463,12 +476,21 @@ export class WarehouseReceiptsService {
               itemId: inventoryItemId,
               quantity: item.quantityReceived,
               unitCost: incomingCost,
+              minStock: policyDefaults.minStock,
+              maxStock: policyDefaults.maxStock,
             },
             update: {
               quantity: { increment: item.quantityReceived },
               unitCost: parseFloat(newUnitCost),
             },
           });
+
+          await clearItemStockPolicyIfMatchesWarehouse(
+            tx,
+            user.tenantId,
+            inventoryItemId,
+            receipt.warehouseId,
+          );
 
           await tx.inventoryTransaction.create({
             data: {
