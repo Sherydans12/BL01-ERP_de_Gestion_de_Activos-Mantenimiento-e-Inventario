@@ -5,6 +5,7 @@ import { SeoService } from './core/seo/seo.service';
 import { ToastComponent } from './shared/components/toast/toast.component';
 import { QuickViewHostComponent } from './shared/components/quick-view/quick-view-host.component';
 import { ThemeService } from './core/services/theme/theme.service';
+import { AppDeploySyncService } from './core/services/app-deploy-sync/app-deploy-sync.service';
 
 @Component({
   selector: 'app-root',
@@ -19,6 +20,7 @@ export class AppComponent implements OnInit {
   private readonly platformId = inject(PLATFORM_ID);
 
   constructor() {
+    inject(AppDeploySyncService);
     // Sincronizar data-theme en el <html>: los effect() en servicios no siempre
     // actualizan el DOM de forma fiable; en el componente raíz sí.
     effect(() => {

@@ -73,6 +73,17 @@ psql -h HOST -U USUARIO -d NOMBRE_BD -f erp-local.sql
 - Si la base remota está vacía y restauras un dump completo de local, suele ser coherente con el historial de `_prisma_migrations` que traiga el dump.
 - Evita commitear `.env`, volcados con datos sensibles o la carpeta `backend/uploads/`.
 
+## Frontend: sincronizar clientes tras redeploy (PWA / Service Worker)
+
+El front en producción usa **Angular Service Worker** (`ngsw`). Tras un redeploy, los usuarios con la pestaña abierta pueden quedar en una mezcla vieja/nueva si no se revalida el shell.
+
+En el repo ya está cubierto así:
+
+- **`AppDeploySyncService`** (`frontend/src/app/core/services/app-deploy-sync/`): cuando el SW detecta una nueva versión (`VERSION_READY`), aplica `activateUpdate()` y **recarga** la página; además llama a `checkForUpdate()` al cargar, al recuperar el **foco** de la ventana y cada **5 minutos**. Si el SW entra en estado irrecuperable, fuerza una recarga.
+- **`frontend/nginx.conf`**: `Cache-Control: no-cache` (y equivalentes) en **`/index.html`**, **`/ngsw.json`** y **`/ngsw-worker.js`** para que el navegador o un CDN no sirvan un `index.html` obsoleto junto a bundles con hash nuevos. Los `.js`/`.css` con hash del build siguen con cache largo (`immutable`).
+
+Si delante del contenedor hay **proxy o CDN en Coolify** con reglas de caché propias, alineá lo mismo para esas rutas; de lo contrario pueden anular las cabeceras del nginx interno.
+
 ## Scripts útiles (solo desarrollo / operaciones manuales)
 
 En el repo, desde `backend/`:
