@@ -584,6 +584,9 @@ export class InventoryStockService {
             correlative: rc.correlative,
           };
           trace.purchaseOrder = rc.purchaseOrder;
+          if (row.type === 'ADJUST') {
+            trace.saldoPendienteAdjust = true;
+          }
         }
       }
       if (row.referenceType === 'WORK_ORDER' && row.referenceId) {
@@ -1032,142 +1035,159 @@ export class InventoryStockService {
    * OUT ahora permite stock negativo, marcando isPendingRegularization.
    */
   async performTransaction(dto: PerformTransactionDto, user: any) {
-    if (dto.quantity <= 0 && dto.type !== 'ADJUST') {
-      throw new BadRequestException('La cantidad debe ser mayor a cero.');
-    }
-
     const userId = user.id || user.sub;
     if (!userId) {
       throw new BadRequestException(
         'No se pudo identificar al usuario que realiza la transacción.',
       );
     }
+    if (dto.quantity <= 0 && dto.type !== 'ADJUST') {
+      throw new BadRequestException('La cantidad debe ser mayor a cero.');
+    }
 
     return this.prisma.$transaction(
-      async (tx) => {
-        const warehouse = await tx.warehouse.findFirst({
-          where: { id: dto.warehouseId, tenantId: user.tenantId },
-        });
-        if (!warehouse) throw new NotFoundException('Bodega no válida.');
-
-        const currentStock = await tx.itemStock.findUnique({
-          where: {
-            warehouseId_itemId: {
-              warehouseId: dto.warehouseId,
-              itemId: dto.itemId,
-            },
-          },
-        });
-
-        const previousQty = currentStock?.quantity || 0;
-        let newQty = previousQty;
-        let newUnitCost = Number(currentStock?.unitCost ?? 0);
-        let isPendingRegularization = false;
-
-        if (dto.type === 'IN') {
-          newQty = previousQty + dto.quantity;
-
-          if (dto.unitCost && dto.unitCost > 0) {
-            const cQ = new Decimal(previousQty);
-            const cC = new Decimal(Number(currentStock?.unitCost ?? 0));
-            const rQ = new Decimal(dto.quantity);
-            const rC = new Decimal(dto.unitCost);
-            const totalQty = cQ.plus(rQ);
-            newUnitCost = totalQty.isZero()
-              ? dto.unitCost
-              : parseFloat(
-                  cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4),
-                );
-          }
-        } else if (dto.type === 'OUT') {
-          newQty = previousQty - dto.quantity;
-          if (newQty < 0) {
-            isPendingRegularization = true;
-          }
-        } else if (dto.type === 'ADJUST') {
-          newQty = previousQty + dto.quantity;
-          if (newQty < 0) {
-            isPendingRegularization = true;
-          }
-        }
-
-        const policyDefaults = !currentStock
-          ? await getPolicyThresholdsForNewItemStockRow(
-              tx,
-              user.tenantId,
-              dto.itemId,
-              dto.warehouseId,
-            )
-          : { minStock: 0, maxStock: 0 };
-
-        const updatedStock = await tx.itemStock.upsert({
-          where: {
-            warehouseId_itemId: {
-              warehouseId: dto.warehouseId,
-              itemId: dto.itemId,
-            },
-          },
-          update: {
-            quantity: newQty,
-            unitCost: newUnitCost,
-          },
-          create: {
-            warehouseId: dto.warehouseId,
-            itemId: dto.itemId,
-            quantity: newQty,
-            unitCost: dto.unitCost || 0,
-            minStock: policyDefaults.minStock,
-            maxStock: policyDefaults.maxStock,
-          },
-        });
-
-        await clearItemStockPolicyIfMatchesWarehouse(
-          tx,
-          user.tenantId,
-          dto.itemId,
-          dto.warehouseId,
-        );
-
-        const transaction = await tx.inventoryTransaction.create({
-          data: {
-            type: dto.type,
-            quantity: dto.quantity,
-            previousStock: previousQty,
-            newStock: newQty,
-            isPendingRegularization,
-            referenceId: dto.referenceId || null,
-            referenceType: dto.referenceType || null,
-            notes: dto.notes || null,
-            warehouse: { connect: { id: dto.warehouseId } },
-            item: { connect: { id: dto.itemId } },
-            user: { connect: { id: userId } },
-          },
-        });
-
-        await this.clearPendingRegularizationFlags(
-          tx,
-          dto.warehouseId,
-          dto.itemId,
-          newQty,
-        );
-
-        const stockMasked = {
-          ...updatedStock,
-          unitCost: this.maskCostValue(
-            user,
-            updatedStock.unitCost != null
-              ? Number(updatedStock.unitCost)
-              : null,
-          ),
-        };
-        return { stock: stockMasked, transaction };
-      },
+      async (tx) => this.performTransactionCore(tx, dto, user),
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         maxWait: 10_000,
         timeout: 60_000,
       },
     );
+  }
+
+  /**
+   * Misma lógica que {@link performTransaction} pero dentro de un `tx` existente
+   * (p. ej. ajuste «Saldo pendiente» + sincronización de recepción en una sola transacción).
+   */
+  async performTransactionCore(
+    tx: Prisma.TransactionClient,
+    dto: PerformTransactionDto,
+    user: any,
+  ): Promise<{ stock: any; transaction: any }> {
+    const userId = user.id || user.sub;
+    if (!userId) {
+      throw new BadRequestException(
+        'No se pudo identificar al usuario que realiza la transacción.',
+      );
+    }
+    if (dto.quantity <= 0 && dto.type !== 'ADJUST') {
+      throw new BadRequestException('La cantidad debe ser mayor a cero.');
+    }
+
+    const warehouse = await tx.warehouse.findFirst({
+      where: { id: dto.warehouseId, tenantId: user.tenantId },
+    });
+    if (!warehouse) throw new NotFoundException('Bodega no válida.');
+
+    const currentStock = await tx.itemStock.findUnique({
+      where: {
+        warehouseId_itemId: {
+          warehouseId: dto.warehouseId,
+          itemId: dto.itemId,
+        },
+      },
+    });
+
+    const previousQty = currentStock?.quantity || 0;
+    let newQty = previousQty;
+    let newUnitCost = Number(currentStock?.unitCost ?? 0);
+    let isPendingRegularization = false;
+
+    if (dto.type === 'IN') {
+      newQty = previousQty + dto.quantity;
+
+      if (dto.unitCost && dto.unitCost > 0) {
+        const cQ = new Decimal(previousQty);
+        const cC = new Decimal(Number(currentStock?.unitCost ?? 0));
+        const rQ = new Decimal(dto.quantity);
+        const rC = new Decimal(dto.unitCost);
+        const totalQty = cQ.plus(rQ);
+        newUnitCost = totalQty.isZero()
+          ? dto.unitCost
+          : parseFloat(
+              cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4),
+            );
+      }
+    } else if (dto.type === 'OUT') {
+      newQty = previousQty - dto.quantity;
+      if (newQty < 0) {
+        isPendingRegularization = true;
+      }
+    } else if (dto.type === 'ADJUST') {
+      newQty = previousQty + dto.quantity;
+      if (newQty < 0) {
+        isPendingRegularization = true;
+      }
+    }
+
+    const policyDefaults = !currentStock
+      ? await getPolicyThresholdsForNewItemStockRow(
+          tx,
+          user.tenantId,
+          dto.itemId,
+          dto.warehouseId,
+        )
+      : { minStock: 0, maxStock: 0 };
+
+    const updatedStock = await tx.itemStock.upsert({
+      where: {
+        warehouseId_itemId: {
+          warehouseId: dto.warehouseId,
+          itemId: dto.itemId,
+        },
+      },
+      update: {
+        quantity: newQty,
+        unitCost: newUnitCost,
+      },
+      create: {
+        warehouseId: dto.warehouseId,
+        itemId: dto.itemId,
+        quantity: newQty,
+        unitCost: dto.unitCost || 0,
+        minStock: policyDefaults.minStock,
+        maxStock: policyDefaults.maxStock,
+      },
+    });
+
+    await clearItemStockPolicyIfMatchesWarehouse(
+      tx,
+      user.tenantId,
+      dto.itemId,
+      dto.warehouseId,
+    );
+
+    const transaction = await tx.inventoryTransaction.create({
+      data: {
+        type: dto.type,
+        quantity: dto.quantity,
+        previousStock: previousQty,
+        newStock: newQty,
+        isPendingRegularization,
+        referenceId: dto.referenceId || null,
+        referenceType: dto.referenceType || null,
+        notes: dto.notes || null,
+        warehouse: { connect: { id: dto.warehouseId } },
+        item: { connect: { id: dto.itemId } },
+        user: { connect: { id: userId } },
+      },
+    });
+
+    await this.clearPendingRegularizationFlags(
+      tx,
+      dto.warehouseId,
+      dto.itemId,
+      newQty,
+    );
+
+    const stockMasked = {
+      ...updatedStock,
+      unitCost: this.maskCostValue(
+        user,
+        updatedStock.unitCost != null ? Number(updatedStock.unitCost) : null,
+      ),
+    };
+    return { stock: stockMasked, transaction };
   }
 
   /**

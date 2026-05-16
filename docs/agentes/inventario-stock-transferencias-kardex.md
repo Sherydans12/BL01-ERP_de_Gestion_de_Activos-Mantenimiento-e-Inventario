@@ -35,15 +35,17 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 - **Endpoint:** `GET /inventory-items/:id/ledger` → `InventoryItemsService.findItemLedger`.
 - Lista **todas** las `InventoryTransaction` del `itemId` (todas las bodegas), paginadas, orden `date desc`.
 - Enriquece `reference` para `WORK_ORDER`, `PURCHASE_RECEIPT`, **`INVENTORY_TRANSFER`** (etiquetas con códigos/nombres de bodega origen/destino según `TRANSFER_OUT` / `TRANSFER_IN`).
+- Si `referenceType = 'PURCHASE_RECEIPT'` y **`type = 'ADJUST'`** (cierre de saldo pendiente desde stock), `reference.kind` = **`ADJUST_SALDO_PENDIENTE`** y `label` describe recepción + OC; incluye `warehouseReceiptId` / `purchaseOrderId` para enlaces WR/OC en UI (misma forma que una recepción de compra “normal” en ledger).
 
-**Frontend:** pestaña «Historial de movimientos» en `inventory-item-form` (`loadLedger` → `getItemLedger`). Cantidades mostradas con signo (`ledgerSignedQty`) para lectura tipo kardex; bloque dedicado para transferencias con notas y enlace a `/app/inventario/transferencias`.
+**Frontend:** pestaña «Historial de movimientos» en `inventory-item-form` y modal de catálogo (`loadLedger` → `getItemLedger`). Título de fila: `ledgerMovementTitle` (p. ej. «Ajuste · saldo pendiente (recepción)» cuando `reference.kind === 'ADJUST_SALDO_PENDIENTE'`). Cantidades con signo (`ledgerSignedQty`); bloque dedicado para transferencias con notas y enlace a `/app/inventario/transferencias`.
 
 ## Kardex por bodega (gestión de stock)
 
 - **Endpoint:** `GET /inventory-stock/warehouse/:warehouseId/transactions` (opcional `?itemId=`) → `getTransactionsByWarehouse` + **`enrichTransactionsTrace`**.
 - Añade `trace` para recepciones, OT y **transferencias** (`trace.transfer` con códigos/nombres y `direction` OUT/IN según bodega de la fila).
+- Para un `ADJUST` con `referenceType = 'PURCHASE_RECEIPT'` cerrado como saldo pendiente, `trace.saldoPendienteAdjust = true` (además de `trace.warehouseReceipt` / `trace.purchaseOrder` cuando aplica) para subtítulo en kardex por bodega.
 
-**Frontend:** modal «Ver kardex» en `stock-dashboard` (`openKardexModal`).
+**Frontend:** modal «Ver kardex» en `stock-dashboard` (`openKardexModal`, `kardexMovementTitle`).
 
 ## Ajustes de inventario
 
@@ -51,8 +53,10 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 ### Motivo «Saldo pendiente» (compra / recepción incompleta)
 
-- **API:** `POST /inventory-adjustments` (`InventoryAdjustmentService`). Requiere `reason: 'SALDO_PENDIENTE'`, `purchaseOrderId`, `purchaseReceiptId` y comentario; valida tenant, que la recepción pertenezca a esa OC y a la **misma bodega** del ajuste.
-- **Kardex / trazabilidad:** `referenceId` = id de `WarehouseReceipt` asociada al contexto del saldo pendiente; `referenceType = 'PURCHASE_RECEIPT'` permite reutilizar el enriquecido `trace` (OC + correlativo de recepción) en listados. El movimiento sigue siendo **`type = ADJUST`** (no duplica el ingreso contable de la recepción original); es un vínculo documental para auditoría.
+- **API:** `POST /inventory-adjustments` (`InventoryAdjustmentService`). Requiere `reason: 'SALDO_PENDIENTE'`, `purchaseOrderId`, `purchaseReceiptId` y comentario; valida tenant, que la recepción pertenezca a esa OC y a la **misma bodega** del ajuste. La recepción debe estar **confirmada** (no en borrador `PENDING`): el ajuste incrementa stock físico por la diferencia respecto a lo ya ingresado en compras.
+- **Sincronía con compras (misma transacción Prisma que el `ADJUST`):** además del movimiento de inventario, se ejecuta la lógica que **incrementa `quantity_received`** en las líneas de la guía (`receipt_items`), recalcula el estado de la **`WarehouseReceipt`** (`PENDING` / `PARTIAL` / `COMPLETED`) y, si el estado de la **`PurchaseOrder`** lo permite (`SENT`, `ORDERED`, `SENT_TO_SUPPLIER`, `PARTIALLY_RECEIVED`), lo avanza a **`PARTIALLY_RECEIVED`** o **`RECEIVED`** cuando la OC queda totalmente cubierta. Así, cerrar saldo desde **control de stock** alinea pendientes con lo que verías si completaras cantidades desde el **módulo de recepciones** (sin duplicar confirmaciones: no se reutiliza el flujo de `confirm` de una guía ya cerrada para volver a cargar stock).
+- **Kardex / trazabilidad:** `referenceId` = id de `WarehouseReceipt`; `referenceType = 'PURCHASE_RECEIPT'` reutiliza el enriquecido `trace` (OC + guía) en listados por bodega y marca `trace.saldoPendienteAdjust` en ese caso. El movimiento sigue siendo **`type = ADJUST`** (no sustituye las filas `PURCHASE_RECEIPT` del ingreso original al bodega).
+- **Ledger por artículo:** `findItemLedger` expone `reference.kind = 'ADJUST_SALDO_PENDIENTE'` para distinguir visualmente el ajuste vinculado a compras.
 - **Texto en `notes` (legible en UI y parseable):**  
   `Ajuste [Saldo pendiente] (OC: #<correlativo>): <comentario>`  
   donde `<correlativo>` es `PurchaseOrder.correlative` (no el UUID). El parser compartido está en `frontend/src/app/core/utils/inventory-adjustment-notes.ts` (`parseInventoryAdjustmentNotes`).

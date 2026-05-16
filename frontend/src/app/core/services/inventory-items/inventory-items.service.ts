@@ -122,6 +122,7 @@ export interface InventoryCatalogPage {
 }
 
 export interface ItemLedgerReference {
+  /** Incluye `ADJUST_SALDO_PENDIENTE` (ajuste desde stock vinculado a recepción/OC). */
   kind: string;
   label: string;
   workOrderId?: string;

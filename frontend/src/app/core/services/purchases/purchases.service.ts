@@ -303,6 +303,8 @@ export interface ReceiptItem {
   quantityExpected: number;
   quantityReceived: number;
   observations?: string;
+  /** OC − suma recibida en otras recepciones (mismo `orderItemId`); solo detalle GET. */
+  quantityPendingOnPurchase?: number;
   orderItem?: PurchaseOrderItem & {
     inventoryItem?: {
       id: string;

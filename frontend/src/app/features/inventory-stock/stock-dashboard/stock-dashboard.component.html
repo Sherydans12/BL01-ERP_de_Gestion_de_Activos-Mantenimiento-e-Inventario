@@ -1033,22 +1033,17 @@
                 </span>
                 — edítelos con <span class="text-primary font-semibold">Umbrales</span> en la tabla.
               </p>
+              <p class="text-[11px] text-muted">
+                Ubicación en bodega (solo lectura):
+                <span class="text-main font-mono font-bold">{{
+                  adj.location?.trim() ? adj.location : "—"
+                }}</span>
+                — edítela con <span class="text-primary font-semibold">Umbrales</span> o con <span class="text-primary font-semibold">Editar</span> en la columna Ubicación.
+              </p>
               <div
                 class="rounded-lg border border-border/80 bg-dark/30 px-3 py-2 text-[11px] text-muted leading-snug"
               >
-                Este formulario es solo para <span class="text-main font-semibold">diferencias de conteo</span> (merma, daño, saldo pendiente, etc.). No obliga a cambiar umbrales de alerta.
-              </div>
-
-              <div>
-                <label class="block text-xs font-medium text-muted mb-1"
-                  >Ubicación en bodega (pasillo / estante)</label
-                >
-                <input
-                  type="text"
-                  formControlName="location"
-                  class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
-                  placeholder="Ej: A-12-B"
-                />
+                Este formulario es solo para <span class="text-main font-semibold">diferencias de conteo</span> (merma, daño, saldo pendiente, etc.). No obliga a cambiar umbrales de alerta ni la ubicación.
               </div>
 
               <div>
@@ -1378,7 +1373,12 @@
                         {{ t.date | date: "short" }}
                       </td>
                       <td class="py-2 pr-2">
-                        <div class="text-muted">{{ transactionTypeLabel(t.type) }}</div>
+                        <div class="text-muted">{{ kardexMovementTitle(t) }}</div>
+                        @if (t.type === 'ADJUST' && $any(t).trace?.saldoPendienteAdjust) {
+                          <p class="mt-1 text-[10px] text-primary font-mono leading-snug">
+                            Recepción actualizada en compras (líneas y estado de guía / OC).
+                          </p>
+                        }
                         @if ($any(t).trace?.warehouseReceipt && $any(t).trace?.purchaseOrder) {
                           <div class="mt-1 flex flex-wrap gap-1 items-center">
                             <app-entity-link

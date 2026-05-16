@@ -143,7 +143,63 @@ export class WarehouseReceiptsService {
       include: RECEIPT_DETAIL_INCLUDE,
     });
     if (!receipt) throw new NotFoundException('Recepción no encontrada');
-    return receipt;
+    return this.attachQuantityPendingOnPurchase(receipt, tenantId);
+  }
+
+  /**
+   * OC − cantidades ya registradas en **otras** recepciones de la misma OC
+   * (todas las líneas `receipt_items`, cualquier estado), para UI y techo coherente con `updateItems`/`confirm`.
+   */
+  private async attachQuantityPendingOnPurchase<
+    T extends {
+      id: string;
+      purchaseOrderId: string;
+      items: Array<{
+        orderItemId: string;
+        orderItem: { quantity: unknown };
+        [key: string]: unknown;
+      }>;
+    },
+  >(receipt: T, tenantId: string): Promise<
+    T & {
+      items: Array<
+        T['items'][number] & { quantityPendingOnPurchase: number }
+      >;
+    }
+  > {
+    const orderItemIds = receipt.items.map((i) => i.orderItemId);
+    if (orderItemIds.length === 0) {
+      return receipt as T & {
+        items: Array<
+          T['items'][number] & { quantityPendingOnPurchase: number }
+        >;
+      };
+    }
+    const sumsOther = await this.prisma.receiptItem.groupBy({
+      by: ['orderItemId'],
+      where: {
+        orderItemId: { in: orderItemIds },
+        receipt: {
+          purchaseOrderId: receipt.purchaseOrderId,
+          tenantId,
+          id: { not: receipt.id },
+        },
+      },
+      _sum: { quantityReceived: true },
+    });
+    const mapOther = new Map(
+      sumsOther.map((s) => [
+        s.orderItemId,
+        Number(s._sum.quantityReceived ?? 0),
+      ]),
+    );
+    const items = receipt.items.map((item) => {
+      const orderQty = Number(item.orderItem.quantity);
+      const receivedElsewhere = mapOther.get(item.orderItemId) ?? 0;
+      const quantityPendingOnPurchase = Math.max(0, orderQty - receivedElsewhere);
+      return { ...item, quantityPendingOnPurchase };
+    });
+    return { ...receipt, items };
   }
 
   async create(
@@ -198,6 +254,25 @@ export class WarehouseReceiptsService {
         tx,
       );
 
+      const orderItemIds = order.items.map((oi) => oi.id);
+      const priorSums =
+        orderItemIds.length === 0
+          ? []
+          : await tx.receiptItem.groupBy({
+              by: ['orderItemId'],
+              where: {
+                orderItemId: { in: orderItemIds },
+                receipt: { purchaseOrderId: order.id, tenantId },
+              },
+              _sum: { quantityReceived: true },
+            });
+      const priorReceivedByLine = new Map(
+        priorSums.map((s) => [
+          s.orderItemId,
+          Number(s._sum.quantityReceived ?? 0),
+        ]),
+      );
+
       return tx.warehouseReceipt.create({
         data: {
           tenantId,
@@ -206,11 +281,15 @@ export class WarehouseReceiptsService {
           receivedById: user.id,
           correlative,
           items: {
-            create: order.items.map((oi) => ({
-              orderItemId: oi.id,
-              quantityExpected: oi.quantity,
-              quantityReceived: 0,
-            })),
+            create: order.items.map((oi) => {
+              const already = priorReceivedByLine.get(oi.id) ?? 0;
+              const pending = Math.max(0, Number(oi.quantity) - already);
+              return {
+                orderItemId: oi.id,
+                quantityExpected: pending,
+                quantityReceived: 0,
+              };
+            }),
           },
         },
         include: {
@@ -259,8 +338,12 @@ export class WarehouseReceiptsService {
   ) {
     const receipt = await this.findById(receiptId, user.tenantId);
 
-    if (receipt.status === 'COMPLETED') {
-      throw new BadRequestException('Esta recepción ya fue confirmada');
+    if (receipt.status !== 'PENDING') {
+      throw new BadRequestException(
+        receipt.status === 'COMPLETED'
+          ? 'Esta recepción ya fue confirmada.'
+          : 'Esta recepción ya fue procesada; no se pueden modificar las cantidades.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -350,8 +433,12 @@ export class WarehouseReceiptsService {
       'No tiene acceso al contrato de esta recepción',
     );
 
-    if (receipt.status === 'COMPLETED') {
-      throw new BadRequestException('Esta recepción ya fue confirmada');
+    if (receipt.status !== 'PENDING') {
+      throw new BadRequestException(
+        receipt.status === 'COMPLETED'
+          ? 'Esta recepción ya fue confirmada.'
+          : 'Esta recepción ya fue procesada; no se puede volver a confirmar.',
+      );
     }
 
     const totalReceived = receipt.items.reduce(

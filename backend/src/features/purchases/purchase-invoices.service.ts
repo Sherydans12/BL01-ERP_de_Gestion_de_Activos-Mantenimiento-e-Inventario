@@ -21,6 +21,9 @@ const PO_STATUSES_ALLOW_INVOICE = [
   'SENT',
   'ORDERED',
   'SENT_TO_SUPPLIER',
+  'PARTIALLY_RECEIVED',
+  'RECEIVED',
+  'CLOSED',
 ] as const;
 
 const INVOICE_STATUS_LIST: PurchaseInvoiceStatus[] = [
@@ -655,7 +658,7 @@ export class PurchaseInvoicesService {
 
     if (!PO_STATUSES_ALLOW_INVOICE.includes(order.status as any)) {
       throw new BadRequestException(
-        'Solo se puede registrar factura si la OC está en estado APROBADA o ENVIADA AL PROVEEDOR.',
+        'La Orden de Compra debe estar aprobada, enviada, en proceso de recepción o cerrada para poder registrar una factura.',
       );
     }
 

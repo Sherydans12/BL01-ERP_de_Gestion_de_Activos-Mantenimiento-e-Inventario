@@ -574,7 +574,7 @@
         }
 
         <div class="flex flex-wrap gap-2">
-          @if (['APPROVED','SENT','ORDERED','SENT_TO_SUPPLIER'].includes(order()!.status)) {
+          @if (['APPROVED','SENT','ORDERED','SENT_TO_SUPPLIER','PARTIALLY_RECEIVED','RECEIVED','CLOSED'].includes(order()!.status)) {
             <a [routerLink]="['/app/compras/ordenes', order()!.id, 'factura']"
                class="inline-flex items-center px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90">
               {{ order()!.purchaseInvoice ? 'Editar factura' : 'Registrar factura' }}

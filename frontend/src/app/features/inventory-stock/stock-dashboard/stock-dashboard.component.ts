@@ -19,7 +19,7 @@ import {
   Validators,
   ReactiveFormsModule,
 } from '@angular/forms';
-import { Subject, forkJoin, Observable, debounceTime } from 'rxjs';
+import { Subject, debounceTime } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
@@ -310,7 +310,6 @@ export class StockDashboardComponent implements OnInit {
 
     this.adjustmentForm = this.fb.group({
       newPhysical: [0, [Validators.required, Validators.min(0)]],
-      location: [''],
       reason: ['CONTEO', Validators.required],
       comment: ['', [Validators.required, Validators.minLength(2)]],
       purchaseOrderId: [''],
@@ -560,7 +559,6 @@ export class StockDashboardComponent implements OnInit {
     this.receiptsForAdjust.set([]);
     this.adjustmentForm.reset({
       newPhysical: row.quantity,
-      location: row.location ?? '',
       reason: 'CONTEO',
       comment: '',
       purchaseOrderId: '',
@@ -756,47 +754,26 @@ export class StockDashboardComponent implements OnInit {
     const v = this.adjustmentForm.getRawValue();
     const diff = Number(v.newPhysical) - row.quantity;
     const stockChanged = Math.abs(diff) >= 1e-9;
-    const locChanged =
-      String(v.location ?? '').trim() !==
-      String(row.location ?? '').trim();
 
-    if (!stockChanged && !locChanged) {
+    if (!stockChanged) {
       this.notificationService.info(
-        'No hay cambios en el stock físico ni en la ubicación.',
+        'Indique un stock físico distinto al de sistema para registrar la corrección.',
       );
       return;
     }
 
     const itemName = String(row.item?.name ?? 'ítem');
-    const pieces: string[] = [];
-    if (stockChanged) {
-      const diffLabel = `${diff > 0 ? '+' : ''}${diff}`;
-      pieces.push(
-        `se ajustarán ${diffLabel} unidades de '${itemName}' (saldo final: ${Number(v.newPhysical)})`,
-      );
-    }
-    if (locChanged) {
-      pieces.push(`ubicación: "${String(v.location ?? '').trim() || '—'}"`);
-    }
+    const diffLabel = `${diff > 0 ? '+' : ''}${diff}`;
     this.adjustmentConfirmSummary.set(
-      `Se aplicarán cambios: ${pieces.join(' | ')}. ¿Proceder?`,
+      `Se aplicarán cambios: se ajustarán ${diffLabel} unidades de '${itemName}' (saldo final: ${Number(v.newPhysical)}). ¿Proceder?`,
     );
 
-    if (stockChanged) {
-      this.adjustmentConfirmTitle.set('Confirmar ajuste de inventario');
-      this.adjustmentConfirmMessage.set(
-        '¿Está seguro? Esta acción modificará el stock físico y generará una transacción de ajuste que afectará la valorización de la bodega.',
-      );
-      this.adjustmentConfirmButtonText.set('Sí, aplicar ajuste');
-      this.adjustmentRiskLevel.set(diff < 0 ? 'danger' : 'warning');
-    } else {
-      this.adjustmentConfirmTitle.set('Confirmar ubicación en bodega');
-      this.adjustmentConfirmMessage.set(
-        'Solo se actualizará la ubicación física del ítem en esta bodega. No se registra movimiento de inventario ni ajuste de valorización.',
-      );
-      this.adjustmentConfirmButtonText.set('Guardar ubicación');
-      this.adjustmentRiskLevel.set('info');
-    }
+    this.adjustmentConfirmTitle.set('Confirmar ajuste de inventario');
+    this.adjustmentConfirmMessage.set(
+      '¿Está seguro? Esta acción modificará el stock físico y generará una transacción de ajuste que afectará la valorización de la bodega.',
+    );
+    this.adjustmentConfirmButtonText.set('Sí, aplicar ajuste');
+    this.adjustmentRiskLevel.set(diff < 0 ? 'danger' : 'warning');
     this.showAdjustmentConfirmModal.set(true);
   }
 
@@ -818,50 +795,31 @@ export class StockDashboardComponent implements OnInit {
     const v = this.adjustmentForm.getRawValue();
     const diff = Number(v.newPhysical) - row.quantity;
     const stockChanged = Math.abs(diff) >= 1e-9;
-    const locChanged =
-      String(v.location ?? '').trim() !==
-      String(row.location ?? '').trim();
 
-    const requests: Observable<unknown>[] = [];
-    if (locChanged) {
-      requests.push(
-        this.stockService.updateStockLevels(wh, row.item.id, {
-          location: String(v.location ?? '').trim() || null,
-        }),
-      );
-    }
-
-    if (stockChanged) {
-      const adjPayload: Parameters<
-        InventoryStockService['createPhysicalAdjustment']
-      >[0] = {
-        warehouseId: wh,
-        itemId: row.item.id,
-        newPhysicalQuantity: Number(v.newPhysical),
-        reason: v.reason as 'MERMAS' | 'CONTEO' | 'DANO' | 'SALDO_PENDIENTE',
-        comment: String(v.comment).trim(),
-      };
-      if (v.reason === 'SALDO_PENDIENTE') {
-        adjPayload.purchaseOrderId = String(v.purchaseOrderId ?? '').trim();
-        adjPayload.purchaseReceiptId = String(
-          v.purchaseReceiptId ?? '',
-        ).trim();
-      }
-      requests.push(this.stockService.createPhysicalAdjustment(adjPayload));
-    }
-
-    if (requests.length === 0) {
-      this.notificationService.info('No hay cambios para guardar.');
+    if (!stockChanged) {
+      this.notificationService.info('No hay cambios en el stock físico.');
       return;
     }
 
-    const request$ =
-      requests.length === 1 ? requests[0] : forkJoin(requests);
-    request$.subscribe({
+    const adjPayload: Parameters<
+      InventoryStockService['createPhysicalAdjustment']
+    >[0] = {
+      warehouseId: wh,
+      itemId: row.item.id,
+      newPhysicalQuantity: Number(v.newPhysical),
+      reason: v.reason as 'MERMAS' | 'CONTEO' | 'DANO' | 'SALDO_PENDIENTE',
+      comment: String(v.comment).trim(),
+    };
+    if (v.reason === 'SALDO_PENDIENTE') {
+      adjPayload.purchaseOrderId = String(v.purchaseOrderId ?? '').trim();
+      adjPayload.purchaseReceiptId = String(
+        v.purchaseReceiptId ?? '',
+      ).trim();
+    }
+
+    this.stockService.createPhysicalAdjustment(adjPayload).subscribe({
       next: () => {
-        const msg = stockChanged
-          ? 'Corrección de inventario registrada correctamente.'
-          : 'Ubicación en bodega actualizada.';
+        const msg = 'Corrección de inventario registrada correctamente.';
         this.notificationService.success(msg);
         this.closeAdjustModal();
         this.adjustmentConfirmSummary.set('');
@@ -1454,6 +1412,17 @@ export class StockDashboardComponent implements OnInit {
       TRANSFER_IN: 'Transferencia (recepción)',
     };
     return m[String(type ?? '').toUpperCase()] ?? String(type ?? '—');
+  }
+
+  /** Título de fila kardex (incluye variante saldo pendiente sincronizado con compras). */
+  kardexMovementTitle(t: {
+    type?: string;
+    trace?: { saldoPendienteAdjust?: boolean };
+  }): string {
+    if (t?.type === 'ADJUST' && t?.trace?.saldoPendienteAdjust) {
+      return 'Ajuste · saldo pendiente (recepción)';
+    }
+    return this.transactionTypeLabel(t.type);
   }
 
   /** Cantidad con signo en kardex por bodega (consumos/salidas negativos). */

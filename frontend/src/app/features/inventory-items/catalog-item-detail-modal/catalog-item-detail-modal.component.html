@@ -303,10 +303,10 @@
                                 (click)="openAdjustDetail(row)"
                                 class="text-primary hover:underline text-left font-medium text-xs"
                               >
-                                {{ ledgerTypeLabel(row.type) }}
+                                {{ ledgerMovementTitle(row) }}
                               </button>
                             } @else {
-                              <span class="text-xs">{{ ledgerTypeLabel(row.type) }}</span>
+                              <span class="text-xs">{{ ledgerMovementTitle(row) }}</span>
                             }
                           </td>
                           <td
@@ -330,7 +330,9 @@
                             @if (row.reference; as ref) {
                               <div class="flex flex-col gap-1">
                                 @if (
-                                  ref.kind === 'INVENTORY_ADJUSTMENT' && row.type === 'ADJUST'
+                                  (ref.kind === 'INVENTORY_ADJUSTMENT' ||
+                                    ref.kind === 'ADJUST_SALDO_PENDIENTE') &&
+                                  row.type === 'ADJUST'
                                 ) {
                                   <button
                                     type="button"
@@ -361,7 +363,10 @@
                                     >
                                   </div>
                                 }
-                                @if (ref.kind === 'PURCHASE_RECEIPT') {
+                                @if (
+                                  ref.kind === 'PURCHASE_RECEIPT' ||
+                                  ref.kind === 'ADJUST_SALDO_PENDIENTE'
+                                ) {
                                   <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                     @if (ref.warehouseReceiptId) {
                                       <app-entity-link

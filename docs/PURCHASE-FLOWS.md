@@ -20,8 +20,14 @@ Documentación de **negocio y pantallas** del circuito de compras distinta de la
 
 - La cantidad guardada en **`requisition_items.quantity`** es la que usa el motor al generar la OC desde la adjudicación y al abrir la recepción:
   - Línea de OC: `quantity` desde ítem de requerimiento / cotización adjudicada.
-  - Al crear recepción: `receipt_items.quantity_expected` = cantidad de la línea de OC (`WarehouseReceiptsService.create`).
+  - Al **crear** una nueva guía de recepción: cada `receipt_items.quantity_expected` = **pendiente en OC** (`línea OC − suma de `quantity_received` en otras recepciones de la misma OC`), no el total bruto de la línea. Así las recepciones parciales sucesivas muestran el tope coherente en UI y coinciden con las validaciones de `updateItems` / `confirm`.
+- El detalle `GET /warehouse-receipts/:id` enriquece cada línea con **`quantityPendingOnPurchase`** (mismo cálculo excluyendo la guía actual) para columnas «Pedido OC» / «Pendiente» en el formulario.
 - Si se corrige la cantidad en el SRC **después** de generar la OC, las líneas de OC ya creadas **no** se reescriben solas; el ajuste operativo es en compras/OC según reglas vigentes.
+
+### Alineación desde inventario (saldo pendiente)
+
+- Si el usuario **regulariza stock** en control de inventario con motivo **Saldo pendiente** (`POST /inventory-adjustments`), el backend puede **actualizar en la misma transacción** las líneas de la guía (`quantity_received`) y los estados de **recepción** y **OC** (ver `InventoryAdjustmentService` + `syncSaldoPendienteIntoReceiptAndPo` y la guía [inventario-stock-transferencias-kardex.md](./agentes/inventario-stock-transferencias-kardex.md) § saldo pendiente).
+- El kardex por bodega y el historial por artículo muestran el movimiento como **`ADJUST`** con trazabilidad a WR/OC; no reemplaza las entradas `PURCHASE_RECEIPT` ya registradas al confirmar recepciones.
 
 **Referencias:** `frontend/.../requisition-form/`, `backend/.../purchase-requisitions.service.ts`, `backend/.../warehouse-receipts.service.ts`, `backend/.../purchase-orders.service.ts` (generación desde requerimiento).
 

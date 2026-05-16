@@ -309,6 +309,17 @@ export class InventoryItemFormComponent implements OnInit {
     return map[type] ?? type;
   }
 
+  /** Título de tipo en ledger (variante saldo pendiente sincronizado con compras). */
+  ledgerMovementTitle(row: ItemLedgerRow): string {
+    if (
+      row.type === 'ADJUST' &&
+      row.reference?.kind === 'ADJUST_SALDO_PENDIENTE'
+    ) {
+      return 'Ajuste · saldo pendiente (recepción)';
+    }
+    return this.ledgerTypeLabel(row.type);
+  }
+
   /**
    * Cantidad con signo para lectura de kardex (salidas/consumos negativos).
    */

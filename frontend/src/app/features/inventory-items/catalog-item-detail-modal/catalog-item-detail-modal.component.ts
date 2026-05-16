@@ -173,6 +173,16 @@ export class CatalogItemDetailModalComponent {
     return map[type] ?? type;
   }
 
+  ledgerMovementTitle(row: ItemLedgerRow): string {
+    if (
+      row.type === 'ADJUST' &&
+      row.reference?.kind === 'ADJUST_SALDO_PENDIENTE'
+    ) {
+      return 'Ajuste · saldo pendiente (recepción)';
+    }
+    return this.ledgerTypeLabel(row.type);
+  }
+
   ledgerSignedQty(row: ItemLedgerRow): number {
     const q = Number(row.quantity);
     switch (row.type) {

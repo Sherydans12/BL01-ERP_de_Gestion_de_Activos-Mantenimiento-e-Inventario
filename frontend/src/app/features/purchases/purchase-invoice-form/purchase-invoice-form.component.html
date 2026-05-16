@@ -24,7 +24,7 @@
 
     @if (!canRegister() && !existingInvoice()) {
       <div class="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-main mb-6">
-        Solo puede cargarse una factura cuando la OC está <strong>aprobada</strong> o <strong>enviada al proveedor</strong>.
+        Solo puede cargarse una factura cuando la OC está <strong>aprobada</strong>, <strong>enviada al proveedor</strong>, <strong>en recepción</strong>, <strong>recepcionada</strong> o <strong>cerrada</strong>.
         Estado actual: <span class="font-medium">{{ labelPoStatus(order()!.status) }}</span>.
       </div>
     }

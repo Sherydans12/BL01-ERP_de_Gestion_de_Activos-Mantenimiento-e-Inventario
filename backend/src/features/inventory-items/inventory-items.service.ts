@@ -1235,15 +1235,27 @@ export class InventoryItemsService {
           };
         } else if (r.referenceType === 'PURCHASE_RECEIPT') {
           const wr = wrMap.get(r.referenceId);
-          reference = {
-            kind: 'PURCHASE_RECEIPT',
-            label: wr
-              ? `Recepción ${wr.correlative}${wr.poCorrelative ? ` (OC ${wr.poCorrelative})` : ''}`
-              : 'Recepción de compra',
-            warehouseReceiptId: r.referenceId,
-            purchaseOrderId: wr?.purchaseOrderId,
-            purchaseOrderCorrelative: wr?.poCorrelative ?? undefined,
-          };
+          if (r.type === 'ADJUST') {
+            reference = {
+              kind: 'ADJUST_SALDO_PENDIENTE',
+              label: wr
+                ? `Saldo pendiente · recepción ${wr.correlative}${wr.poCorrelative ? ` (OC ${wr.poCorrelative})` : ''}`
+                : 'Ajuste saldo pendiente (recepción)',
+              warehouseReceiptId: r.referenceId,
+              purchaseOrderId: wr?.purchaseOrderId,
+              purchaseOrderCorrelative: wr?.poCorrelative ?? undefined,
+            };
+          } else {
+            reference = {
+              kind: 'PURCHASE_RECEIPT',
+              label: wr
+                ? `Recepción ${wr.correlative}${wr.poCorrelative ? ` (OC ${wr.poCorrelative})` : ''}`
+                : 'Recepción de compra',
+              warehouseReceiptId: r.referenceId,
+              purchaseOrderId: wr?.purchaseOrderId,
+              purchaseOrderCorrelative: wr?.poCorrelative ?? undefined,
+            };
+          }
         } else if (r.referenceType === 'INVENTORY_TRANSFER') {
           const tr = trfMap.get(r.referenceId);
           let label = 'Transferencia entre bodegas (W2W)';

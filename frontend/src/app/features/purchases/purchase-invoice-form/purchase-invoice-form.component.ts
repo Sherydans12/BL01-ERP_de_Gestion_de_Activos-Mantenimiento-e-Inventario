@@ -77,7 +77,15 @@ export class PurchaseInvoiceFormComponent implements OnInit {
   canRegister = computed(() => {
     const o = this.order();
     if (!o) return false;
-    return ['APPROVED', 'SENT', 'ORDERED', 'SENT_TO_SUPPLIER'].includes(o.status);
+    return [
+      'APPROVED',
+      'SENT',
+      'ORDERED',
+      'SENT_TO_SUPPLIER',
+      'PARTIALLY_RECEIVED',
+      'RECEIVED',
+      'CLOSED',
+    ].includes(o.status);
   });
 
   existingInvoice = computed(() => this.order()?.purchaseInvoice ?? null);

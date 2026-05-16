@@ -30,10 +30,13 @@ export class ReceiptFormComponent implements OnInit {
   isSaving = signal(false);
   showConfirmReceiptModal = signal(false);
 
-  isReadonly = computed(() => this.receipt()?.status === 'COMPLETED');
+  isReadonly = computed(() => this.receipt()?.status !== 'PENDING');
 
   hasDiscrepancies = computed(() =>
-    this.editableItems().some(i => i._quantityReceived !== i.quantityExpected),
+    this.editableItems().some((i) => {
+      const cap = this.capQty(i);
+      return Math.abs(Number(i._quantityReceived) - cap) > 1e-9;
+    }),
   );
 
   hasUnlinkedItems = computed(() =>
@@ -58,6 +61,31 @@ export class ReceiptFormComponent implements OnInit {
   isItemStockTracked(item: EditableReceiptItem): boolean {
     const inv = item.orderItem?.inventoryItem as any;
     return inv && inv.isInventory !== false;
+  }
+
+  orderedQty(item: EditableReceiptItem): number {
+    return Number(item.orderItem?.quantity ?? 0);
+  }
+
+  /**
+   * Techo de recepción alineado con backend: pedido OC − suma en otras recepciones.
+   * En lectura (confirmada) se muestra el snapshot `quantityExpected` del documento.
+   */
+  capQty(item: EditableReceiptItem): number {
+    if (this.isReadonly()) {
+      return Number(item.quantityExpected ?? 0);
+    }
+    const p = item.quantityPendingOnPurchase;
+    if (typeof p === 'number' && !Number.isNaN(p)) {
+      return p;
+    }
+    return Number(item.quantityExpected ?? 0);
+  }
+
+  /** Resaltar fila si la cantidad no iguala el tope esperado (borrador). */
+  qtyRowHighlight(item: EditableReceiptItem): boolean {
+    if (this.isReadonly()) return false;
+    return Math.abs(Number(item._quantityReceived) - this.capQty(item)) > 1e-9;
   }
 
   ngOnInit() {
@@ -91,8 +119,15 @@ export class ReceiptFormComponent implements OnInit {
   }
 
   updateItemQty(index: number, value: number) {
-    this.editableItems.update(items =>
-      items.map((item, i) => i === index ? { ...item, _quantityReceived: value } : item),
+    const items = this.editableItems();
+    const item = items[index];
+    if (!item) return;
+    const cap = this.capQty(item);
+    let v = Number(value);
+    if (Number.isNaN(v)) v = 0;
+    v = Math.max(0, Math.min(v, cap));
+    this.editableItems.update((list) =>
+      list.map((it, i) => (i === index ? { ...it, _quantityReceived: v } : it)),
     );
   }
 
