@@ -49,6 +49,15 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 - Movimientos `type = ADJUST` con referencias según implementación (`INVENTORY_ADJUSTMENT` u otros); detalle en UI con modal de ajuste en `inventory-item-form`. No confundir con transferencias.
 
+### Motivo «Saldo pendiente» (compra / recepción incompleta)
+
+- **API:** `POST /inventory-adjustments` (`InventoryAdjustmentService`). Requiere `reason: 'SALDO_PENDIENTE'`, `purchaseOrderId`, `purchaseReceiptId` y comentario; valida tenant, que la recepción pertenezca a esa OC y a la **misma bodega** del ajuste.
+- **Kardex / trazabilidad:** `referenceId` = id de `WarehouseReceipt`, `referenceType = 'PURCHASE_RECEIPT'` (misma convención que ingresos por recepción); el enriquecido `trace` en listados usa ese vínculo.
+- **Texto en `notes` (legible en UI y parseable):**  
+  `Ajuste [Saldo pendiente] (OC: #<correlativo>): <comentario>`  
+  donde `<correlativo>` es `PurchaseOrder.correlative` (no el UUID). El parser compartido está en `frontend/src/app/core/utils/inventory-adjustment-notes.ts` (`parseInventoryAdjustmentNotes`).
+- **UI:** motivo y selectores de OC/recepción en `stock-dashboard` (modal ajustar stock).
+
 ## Selector global de artículos (`GlobalItemPicker`)
 
 - **Componente:** `frontend/src/app/shared/components/global-item-picker/`.

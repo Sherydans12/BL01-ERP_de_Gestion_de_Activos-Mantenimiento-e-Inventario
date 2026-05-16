@@ -24,6 +24,7 @@ import {
   UnitOfMeasureRow,
 } from '../../../core/services/units-of-measure/units-of-measure.service';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import { parseInventoryAdjustmentNotes } from '../../../core/utils/inventory-adjustment-notes';
 
 @Component({
   selector: 'app-inventory-item-form',
@@ -390,14 +391,7 @@ export class InventoryItemFormComponent implements OnInit {
   }
 
   parseAdjustmentNotes(notes: string | null): { reason: string; comment: string } {
-    if (!notes?.trim()) {
-      return { reason: '', comment: '' };
-    }
-    const m = notes.match(/^Ajuste\s*\[([^\]]+)\]\s*:\s*([\s\S]*)$/);
-    if (m) {
-      return { reason: m[1].trim(), comment: m[2].trim() };
-    }
-    return { reason: 'Ajuste', comment: notes.trim() };
+    return parseInventoryAdjustmentNotes(notes);
   }
 
   onFamilyChangeFromUi() {

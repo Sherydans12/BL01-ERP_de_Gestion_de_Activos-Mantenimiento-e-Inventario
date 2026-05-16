@@ -118,8 +118,10 @@ export class InventoryStockService {
     warehouseId: string;
     itemId: string;
     newPhysicalQuantity: number;
-    reason: 'MERMAS' | 'CONTEO' | 'DANO';
+    reason: 'MERMAS' | 'CONTEO' | 'DANO' | 'SALDO_PENDIENTE';
     comment: string;
+    purchaseOrderId?: string;
+    purchaseReceiptId?: string;
   }): Observable<any> {
     return this.http.post<any>(this.adjustmentsUrl, data);
   }

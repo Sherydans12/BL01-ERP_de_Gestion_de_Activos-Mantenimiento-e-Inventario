@@ -470,7 +470,11 @@ export class InventoryStockService {
     const receiptIds = [
       ...new Set(
         rows
-          .filter((r) => r.type === 'PURCHASE_RECEIPT' && r.referenceId)
+          .filter(
+            (r) =>
+              r.referenceId &&
+              r.referenceType === 'PURCHASE_RECEIPT',
+          )
           .map((r) => r.referenceId as string),
       ),
     ];
@@ -569,7 +573,10 @@ export class InventoryStockService {
 
     return rows.map((row) => {
       const trace: Record<string, unknown> = {};
-      if (row.type === 'PURCHASE_RECEIPT' && row.referenceId) {
+      if (
+        row.referenceType === 'PURCHASE_RECEIPT' &&
+        row.referenceId
+      ) {
         const rc = receiptMap.get(row.referenceId);
         if (rc) {
           trace.warehouseReceipt = {

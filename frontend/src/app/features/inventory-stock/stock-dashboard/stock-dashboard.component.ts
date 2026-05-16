@@ -46,6 +46,11 @@ import {
   CatalogItemDetailModalComponent,
   CatalogItemDetailRow,
 } from '../../inventory-items/catalog-item-detail-modal/catalog-item-detail-modal.component';
+import {
+  PurchasesService,
+  type PurchaseOrder,
+  type WarehouseReceipt,
+} from '../../../core/services/purchases/purchases.service';
 
 @Component({
   selector: 'app-stock-dashboard',
@@ -77,6 +82,7 @@ export class StockDashboardComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private workOrdersService = inject(WorkOrdersService);
+  private purchasesService = inject(PurchasesService);
   private fb = inject(FormBuilder);
 
   /** Misma configuración base que requerimientos de compra (`GLOBAL_ITEM_PICKER_CATALOG`). */
@@ -216,6 +222,11 @@ export class StockDashboardComponent implements OnInit {
 
   showAdjustModal = signal(false);
   adjustStockRow = signal<any | null>(null);
+  /** OC para ajuste «Saldo pendiente». */
+  purchaseOrdersForAdjust = signal<PurchaseOrder[]>([]);
+  purchaseOrdersAdjLoading = signal(false);
+  receiptsForAdjust = signal<WarehouseReceipt[]>([]);
+  receiptsForAdjustLoading = signal(false);
   /** Edición rápida de ubicación en fila (id de item_stock). */
   editingLocationStockId = signal<string | null>(null);
   locationDraft = signal('');
@@ -293,7 +304,48 @@ export class StockDashboardComponent implements OnInit {
       location: [''],
       reason: ['CONTEO', Validators.required],
       comment: ['', [Validators.required, Validators.minLength(2)]],
+      purchaseOrderId: [''],
+      purchaseReceiptId: [''],
     });
+
+    this.adjustmentForm
+      .get('reason')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((reason: string | null) => {
+        const r = reason ?? 'CONTEO';
+        this.syncAdjustmentCommentValidators(r);
+        this.syncPurchaseReferenceValidators(r);
+      });
+
+    this.adjustmentForm
+      .get('purchaseOrderId')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((po: string | null) => {
+        const poTrim = String(po ?? '').trim();
+        this.adjustmentForm
+          .get('purchaseReceiptId')
+          ?.setValue('', { emitEvent: false });
+        if (!poTrim) {
+          this.receiptsForAdjust.set([]);
+          return;
+        }
+        if (this.adjustmentForm.get('reason')?.value !== 'SALDO_PENDIENTE') {
+          return;
+        }
+        this.receiptsForAdjustLoading.set(true);
+        this.purchasesService.getOrder(poTrim).subscribe({
+          next: (o) => {
+            const wid = this.selectedWarehouseId();
+            const list = (o.receipts ?? []).filter((rc) => rc.warehouseId === wid);
+            this.receiptsForAdjust.set(list);
+            this.receiptsForAdjustLoading.set(false);
+          },
+          error: () => {
+            this.receiptsForAdjust.set([]);
+            this.receiptsForAdjustLoading.set(false);
+          },
+        });
+      });
 
     // Reactividad multifaena
     effect(
@@ -490,6 +542,7 @@ export class StockDashboardComponent implements OnInit {
   openAdjustModal(row: any) {
     if (!this.selectedWarehouseId()) return;
     this.adjustStockRow.set(row);
+    this.receiptsForAdjust.set([]);
     this.adjustmentForm.reset({
       newPhysical: row.quantity,
       minStock: Number(row.minStock ?? 0),
@@ -497,8 +550,12 @@ export class StockDashboardComponent implements OnInit {
       location: row.location ?? '',
       reason: 'CONTEO',
       comment: '',
+      purchaseOrderId: '',
+      purchaseReceiptId: '',
     });
     this.syncAdjustmentCommentValidators('CONTEO');
+    this.syncPurchaseReferenceValidators('CONTEO');
+    this.loadPurchaseOrdersForAdjust();
     this.showAdjustModal.set(true);
     afterNextRender(
       () => {
@@ -509,6 +566,17 @@ export class StockDashboardComponent implements OnInit {
       },
       { injector: this.injector },
     );
+  }
+
+  private loadPurchaseOrdersForAdjust(): void {
+    this.purchaseOrdersAdjLoading.set(true);
+    this.purchasesService
+      .getOrders()
+      .pipe(finalize(() => this.purchaseOrdersAdjLoading.set(false)))
+      .subscribe({
+        next: (rows) => this.purchaseOrdersForAdjust.set(rows),
+        error: () => this.purchaseOrdersForAdjust.set([]),
+      });
   }
 
   closeAdjustModal() {
@@ -543,15 +611,31 @@ export class StockDashboardComponent implements OnInit {
     c.updateValueAndValidity({ emitEvent: false });
   }
 
-  onAdjustmentReasonChange(event: Event) {
-    const reason = (event.target as HTMLSelectElement).value;
-    this.syncAdjustmentCommentValidators(reason);
+  private syncPurchaseReferenceValidators(reason: string) {
+    const po = this.adjustmentForm.get('purchaseOrderId');
+    const rc = this.adjustmentForm.get('purchaseReceiptId');
+    if (!po || !rc) return;
+    if (reason === 'SALDO_PENDIENTE') {
+      po.setValidators([Validators.required]);
+      rc.setValidators([Validators.required]);
+    } else {
+      po.clearValidators();
+      rc.clearValidators();
+      po.setValue('', { emitEvent: false });
+      rc.setValue('', { emitEvent: false });
+      this.receiptsForAdjust.set([]);
+    }
+    po.updateValueAndValidity({ emitEvent: false });
+    rc.updateValueAndValidity({ emitEvent: false });
   }
 
   adjustmentCommentHint(): string {
     const r = this.adjustmentForm.get('reason')?.value;
     if (r === 'MERMAS' || r === 'DANO') {
       return 'Obligatorio: mínimo 15 caracteres (pérdida/daño auditable).';
+    }
+    if (r === 'SALDO_PENDIENTE') {
+      return 'Indique OC y recepción de esta bodega; comentario obligatorio (mín. 2 caracteres).';
     }
     return 'Obligatorio para auditoría (mín. 2 caracteres).';
   }
@@ -660,15 +744,22 @@ export class StockDashboardComponent implements OnInit {
     }
 
     if (stockChanged) {
-      requests.push(
-        this.stockService.createPhysicalAdjustment({
-          warehouseId: wh,
-          itemId: row.item.id,
-          newPhysicalQuantity: Number(v.newPhysical),
-          reason: v.reason as 'MERMAS' | 'CONTEO' | 'DANO',
-          comment: String(v.comment).trim(),
-        }),
-      );
+      const adjPayload: Parameters<
+        InventoryStockService['createPhysicalAdjustment']
+      >[0] = {
+        warehouseId: wh,
+        itemId: row.item.id,
+        newPhysicalQuantity: Number(v.newPhysical),
+        reason: v.reason as 'MERMAS' | 'CONTEO' | 'DANO' | 'SALDO_PENDIENTE',
+        comment: String(v.comment).trim(),
+      };
+      if (v.reason === 'SALDO_PENDIENTE') {
+        adjPayload.purchaseOrderId = String(v.purchaseOrderId ?? '').trim();
+        adjPayload.purchaseReceiptId = String(
+          v.purchaseReceiptId ?? '',
+        ).trim();
+      }
+      requests.push(this.stockService.createPhysicalAdjustment(adjPayload));
     }
 
     if (requests.length === 0) {

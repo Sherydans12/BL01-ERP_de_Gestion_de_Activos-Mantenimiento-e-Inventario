@@ -15,6 +15,7 @@ import {
 } from '../../../core/services/inventory-items/inventory-items.service';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
+import { parseInventoryAdjustmentNotes } from '../../../core/utils/inventory-adjustment-notes';
 
 /** Fila devuelta por `GET /inventory-items/:id` (subset usado en la vista). */
 export interface CatalogItemDetailRow {
@@ -212,14 +213,7 @@ export class CatalogItemDetailModalComponent {
   }
 
   parseAdjustmentNotes(notes: string | null): { reason: string; comment: string } {
-    if (!notes?.trim()) {
-      return { reason: '', comment: '' };
-    }
-    const m = notes.match(/^Ajuste\s*\[([^\]]+)\]\s*:\s*([\s\S]*)$/);
-    if (m) {
-      return { reason: m[1].trim(), comment: m[2].trim() };
-    }
-    return { reason: 'Ajuste', comment: notes.trim() };
+    return parseInventoryAdjustmentNotes(notes);
   }
 
   dash(v: string | null | undefined): string {

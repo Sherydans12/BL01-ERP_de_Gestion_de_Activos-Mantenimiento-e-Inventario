@@ -1101,14 +1101,72 @@
                 >
                 <select
                   formControlName="reason"
-                  (change)="onAdjustmentReasonChange($event)"
                   class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary"
                 >
                   <option value="CONTEO">Ajuste por inventario (conteo / hallazgo)</option>
                   <option value="MERMAS">Merma o pérdida</option>
                   <option value="DANO">Daño</option>
+                  <option value="SALDO_PENDIENTE">Saldo pendiente (compra / recepción incompleta)</option>
                 </select>
               </div>
+
+              @if (adjustmentForm.get('reason')?.value === 'SALDO_PENDIENTE') {
+                <div class="space-y-3 rounded-lg border border-border bg-dark/40 p-3">
+                  <p class="text-[11px] text-muted">
+                    Vincule la OC y la recepción de bodega que originan el saldo pendiente (esta bodega).
+                  </p>
+                  <div>
+                    <label class="block text-xs font-medium text-muted mb-1"
+                      >Orden de compra <span class="text-error">*</span></label
+                    >
+                    <select
+                      formControlName="purchaseOrderId"
+                      class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                    >
+                      <option value="">
+                        @if (purchaseOrdersAdjLoading()) {
+                          Cargando OC…
+                        } @else {
+                          Seleccione OC
+                        }
+                      </option>
+                      @for (o of purchaseOrdersForAdjust(); track o.id) {
+                        <option [value]="o.id">{{ o.correlative }} — {{ o.status }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-muted mb-1"
+                      >Recepción (esta bodega) <span class="text-error">*</span></label
+                    >
+                    <select
+                      formControlName="purchaseReceiptId"
+                      class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                      [disabled]="!adjustmentForm.get('purchaseOrderId')?.value || receiptsForAdjustLoading()"
+                    >
+                      <option value="">
+                        @if (receiptsForAdjustLoading()) {
+                          Cargando recepciones…
+                        } @else {
+                          Seleccione recepción
+                        }
+                      </option>
+                      @for (r of receiptsForAdjust(); track r.id) {
+                        <option [value]="r.id">{{ r.correlative }} — {{ r.status }}</option>
+                      }
+                    </select>
+                    @if (
+                      adjustmentForm.get('purchaseOrderId')?.value &&
+                      !receiptsForAdjustLoading() &&
+                      receiptsForAdjust().length === 0
+                    ) {
+                      <p class="text-[10px] text-muted mt-1">
+                        No hay recepciones registradas para esta OC en la bodega actual.
+                      </p>
+                    }
+                  </div>
+                </div>
+              }
 
               <div>
                 <label class="block text-xs font-medium text-muted mb-1"

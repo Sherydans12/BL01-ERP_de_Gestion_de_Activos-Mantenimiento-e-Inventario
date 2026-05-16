@@ -8,7 +8,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 
 /** Motivos contables obligatorios para ajuste de inventario físico. */
-export const ADJUSTMENT_REASON_CODES = ['MERMAS', 'CONTEO', 'DANO'] as const;
+export const ADJUSTMENT_REASON_CODES = [
+  'MERMAS',
+  'CONTEO',
+  'DANO',
+  'SALDO_PENDIENTE',
+] as const;
 
 export type AdjustmentReasonCode = (typeof ADJUSTMENT_REASON_CODES)[number];
 
@@ -19,12 +24,16 @@ export interface CreateInventoryAdjustmentDto {
   newPhysicalQuantity: number;
   reason: AdjustmentReasonCode;
   comment: string;
+  /** Obligatorios si `reason === 'SALDO_PENDIENTE'`. */
+  purchaseOrderId?: string;
+  purchaseReceiptId?: string;
 }
 
 const REASON_LABEL: Record<AdjustmentReasonCode, string> = {
   MERMAS: 'Mermas',
   CONTEO: 'Error de conteo',
   DANO: 'Daño',
+  SALDO_PENDIENTE: 'Saldo pendiente',
 };
 
 /** Para MERMAS/DANO se exige explicación auditable (no basta un comentario de un carácter). */
@@ -64,6 +73,18 @@ export class InventoryAdjustmentService {
     if (!ADJUSTMENT_REASON_CODES.includes(dto.reason)) {
       throw new BadRequestException('Motivo de ajuste no válido.');
     }
+
+    const poId = dto.purchaseOrderId?.trim();
+    const receiptId = dto.purchaseReceiptId?.trim();
+
+    if (dto.reason === 'SALDO_PENDIENTE') {
+      if (!poId || !receiptId) {
+        throw new BadRequestException(
+          'La Orden de Compra y la Recepción son obligatorias para este motivo',
+        );
+      }
+    }
+
     if (
       typeof dto.newPhysicalQuantity !== 'number' ||
       Number.isNaN(dto.newPhysicalQuantity) ||
@@ -109,8 +130,49 @@ export class InventoryAdjustmentService {
       );
     }
 
-    const reasonLabel = REASON_LABEL[dto.reason];
-    const notes = `Ajuste [${reasonLabel}]: ${comment}`;
+    let notes: string;
+    let referenceId: string | undefined;
+    let referenceType: string | undefined;
+
+    if (dto.reason === 'SALDO_PENDIENTE') {
+      const receipt = await this.prisma.warehouseReceipt.findFirst({
+        where: { id: receiptId!, tenantId },
+        select: {
+          id: true,
+          purchaseOrderId: true,
+          warehouseId: true,
+        },
+      });
+      if (!receipt) {
+        throw new NotFoundException('Recepción no encontrada.');
+      }
+      if (receipt.purchaseOrderId !== poId) {
+        throw new BadRequestException(
+          'La recepción seleccionada no corresponde a la orden de compra indicada.',
+        );
+      }
+      if (receipt.warehouseId !== dto.warehouseId) {
+        throw new BadRequestException(
+          'La recepción pertenece a otra bodega; seleccione una recepción de esta bodega.',
+        );
+      }
+      const po = await this.prisma.purchaseOrder.findFirst({
+        where: { id: poId!, tenantId },
+        select: { id: true, correlative: true },
+      });
+      if (!po) {
+        throw new NotFoundException('Orden de compra no encontrada.');
+      }
+
+      const ocLabel = String(po.correlative ?? '').trim() || po.id;
+      notes = `Ajuste [Saldo pendiente] (OC: #${ocLabel}): ${comment}`;
+      referenceId = receipt.id;
+      referenceType = 'PURCHASE_RECEIPT';
+    } else {
+      const reasonLabel = REASON_LABEL[dto.reason];
+      notes = `Ajuste [${reasonLabel}]: ${comment}`;
+      referenceType = 'INVENTORY_ADJUSTMENT';
+    }
 
     // Revalidación justo antes de ejecutar la operación transaccional.
     this.assertPrivilegedRole(user);
@@ -122,7 +184,8 @@ export class InventoryAdjustmentService {
         quantity: delta,
         unitCost: delta > 0 ? cpp : undefined,
         notes,
-        referenceType: 'INVENTORY_ADJUSTMENT',
+        referenceId,
+        referenceType,
       },
       user,
     );
