@@ -465,7 +465,7 @@
             <th class="py-3 px-6 border-b border-border text-right">
               Valor Total
             </th>
-            <th class="py-3 px-4 border-b border-border text-center w-36">
+            <th class="py-3 px-4 border-b border-border text-center w-44 min-w-[11rem]">
               Acciones
             </th>
           </tr>
@@ -656,10 +656,19 @@
                     @if (canAdjustStock()) {
                       <button
                         type="button"
+                        (click)="openPolicyLevelsModal(s)"
+                        class="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded border border-emerald-500/35 text-emerald-200/95 hover:bg-emerald-950/25"
+                        title="Stock mínimo, máximo y ubicación en esta bodega (sin movimiento de inventario)"
+                      >
+                        Umbrales
+                      </button>
+                      <button
+                        type="button"
                         (click)="openAdjustModal(s)"
                         class="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                        title="Conteo físico, merma, daño o saldo pendiente (genera transacción de ajuste)"
                       >
-                        Ajustar stock
+                        Corregir físico
                       </button>
                     }
                   </div>
@@ -976,7 +985,7 @@
             class="p-4 border-b border-border flex justify-between items-center bg-dark"
           >
             <h3 class="font-bold text-main font-mono text-sm">
-              Corrección de inventario
+              Corrección física de inventario
             </h3>
             <button
               type="button"
@@ -1018,11 +1027,17 @@
                 {{ adj.item.unitOfMeasure?.abbreviation ?? "" }}
               </p>
               <p class="text-[11px] text-muted">
-                Umbrales actuales:
+                Umbrales en esta bodega (solo lectura):
                 <span class="text-main font-mono font-bold">
                   mín {{ adj.minStock ?? 0 }} / máx {{ adj.maxStock ?? 0 }}
                 </span>
+                — edítelos con <span class="text-primary font-semibold">Umbrales</span> en la tabla.
               </p>
+              <div
+                class="rounded-lg border border-border/80 bg-dark/30 px-3 py-2 text-[11px] text-muted leading-snug"
+              >
+                Este formulario es solo para <span class="text-main font-semibold">diferencias de conteo</span> (merma, daño, saldo pendiente, etc.). No obliga a cambiar umbrales de alerta.
+              </div>
 
               <div>
                 <label class="block text-xs font-medium text-muted mb-1"
@@ -1066,33 +1081,6 @@
                 } @else {
                   <span class="text-muted">—</span>
                 }
-              </div>
-
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs font-medium text-muted mb-1"
-                    >Stock mínimo <span class="text-error">*</span></label
-                  >
-                  <input
-                    type="number"
-                    formControlName="minStock"
-                    step="any"
-                    min="0"
-                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
-                  />
-                </div>
-                <div>
-                  <label class="block text-xs font-medium text-muted mb-1"
-                    >Stock máximo <span class="text-error">*</span></label
-                  >
-                  <input
-                    type="number"
-                    formControlName="maxStock"
-                    step="any"
-                    min="0"
-                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
-                  />
-                </div>
               </div>
 
               <div>
@@ -1194,7 +1182,129 @@
                   [disabled]="adjustmentForm.invalid"
                   class="bg-primary text-dark px-6 py-2 text-sm font-bold font-mono rounded disabled:opacity-50"
                 >
-                  Confirmar ajuste
+                  Confirmar corrección
+                </button>
+              </div>
+            </form>
+          }
+        </div>
+      </div>
+    </dialog>
+  }
+
+  @if (showPolicyLevelsModal()) {
+    <dialog
+      #policyLevelsDialog
+      class="dialog-native-shell animate-fade-in [&::backdrop]:bg-black/80 [&::backdrop]:backdrop-blur-sm"
+      (close)="onPolicyLevelsDialogClose()"
+    >
+      <div
+        class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+        (click)="closePolicyLevelsModal()"
+      >
+        <div
+          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
+          (click)="$event.stopPropagation()"
+        >
+          <div
+            class="p-4 border-b border-border flex justify-between items-center bg-dark"
+          >
+            <h3 class="font-bold text-main font-mono text-sm">
+              Umbrales y ubicación (bodega)
+            </h3>
+            <button
+              type="button"
+              (click)="closePolicyLevelsModal()"
+              class="text-muted hover:text-error transition-colors"
+              aria-label="Cerrar"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                ></path>
+              </svg>
+            </button>
+          </div>
+
+          @if (policyLevelsRow(); as pl) {
+            <form
+              [formGroup]="policyLevelsForm"
+              (ngSubmit)="submitPolicyLevels()"
+              class="p-6 space-y-4"
+            >
+              <p class="text-xs text-muted font-mono">
+                <span class="text-primary font-bold">{{ pl.item.partNumber }}</span>
+                — {{ pl.item.name }}
+                @if (itemDescriptionLabel(pl.item); as itemDesc) {
+                  <span class="text-main"> · {{ itemDesc }}</span>
+                }
+              </p>
+              <p class="text-[11px] text-muted leading-relaxed">
+                Define alertas de stock mín/máx y la ubicación en <span class="text-main font-semibold">esta bodega</span>.
+                No modifica el saldo físico ni genera kardex de ajuste.
+              </p>
+              <p class="text-[11px] text-muted">
+                Stock físico actual:
+                <span class="text-main font-mono font-bold">{{ pl.quantity | number: "1.0-4" }}</span>
+                {{ pl.item.unitOfMeasure?.abbreviation ?? "" }}
+              </p>
+
+              <div>
+                <label class="block text-xs font-medium text-muted mb-1"
+                  >Ubicación en bodega (pasillo / estante)</label
+                >
+                <input
+                  type="text"
+                  formControlName="location"
+                  class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                  placeholder="Ej: A-12-B"
+                />
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-muted mb-1"
+                    >Stock mínimo (alerta) <span class="text-error">*</span></label
+                  >
+                  <input
+                    type="number"
+                    formControlName="minStock"
+                    step="any"
+                    min="0"
+                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-muted mb-1"
+                    >Stock máximo <span class="text-error">*</span></label
+                  >
+                  <input
+                    type="number"
+                    formControlName="maxStock"
+                    step="any"
+                    min="0"
+                    class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
+                  />
+                </div>
+              </div>
+
+              <div class="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  (click)="closePolicyLevelsModal()"
+                  class="px-4 py-2 text-sm text-muted hover:text-main"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  [disabled]="policyLevelsForm.invalid"
+                  class="bg-primary text-dark px-6 py-2 text-sm font-bold font-mono rounded disabled:opacity-50 hover:opacity-95"
+                >
+                  Guardar umbrales
                 </button>
               </div>
             </form>
@@ -1488,10 +1598,10 @@
 
   <app-confirm-modal
     [isOpen]="showAdjustmentConfirmModal()"
-    title="Confirmar ajuste de inventario"
-    message="¿Está seguro? Esta acción modificará el stock físico y generará una transacción de ajuste que afectará la valorización de la bodega."
+    [title]="adjustmentConfirmTitle()"
+    [message]="adjustmentConfirmMessage()"
     [consequenceSummary]="adjustmentConfirmSummary()"
-    confirmText="Sí, aplicar ajuste"
+    [confirmText]="adjustmentConfirmButtonText()"
     cancelText="Revisar nuevamente"
     [riskLevel]="adjustmentRiskLevel()"
     (confirm)="confirmAdjustment()"

@@ -52,11 +52,11 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 ### Motivo «Saldo pendiente» (compra / recepción incompleta)
 
 - **API:** `POST /inventory-adjustments` (`InventoryAdjustmentService`). Requiere `reason: 'SALDO_PENDIENTE'`, `purchaseOrderId`, `purchaseReceiptId` y comentario; valida tenant, que la recepción pertenezca a esa OC y a la **misma bodega** del ajuste.
-- **Kardex / trazabilidad:** `referenceId` = id de `WarehouseReceipt`, `referenceType = 'PURCHASE_RECEIPT'` (misma convención que ingresos por recepción); el enriquecido `trace` en listados usa ese vínculo.
+- **Kardex / trazabilidad:** `referenceId` = id de `WarehouseReceipt` asociada al contexto del saldo pendiente; `referenceType = 'PURCHASE_RECEIPT'` permite reutilizar el enriquecido `trace` (OC + correlativo de recepción) en listados. El movimiento sigue siendo **`type = ADJUST`** (no duplica el ingreso contable de la recepción original); es un vínculo documental para auditoría.
 - **Texto en `notes` (legible en UI y parseable):**  
   `Ajuste [Saldo pendiente] (OC: #<correlativo>): <comentario>`  
   donde `<correlativo>` es `PurchaseOrder.correlative` (no el UUID). El parser compartido está en `frontend/src/app/core/utils/inventory-adjustment-notes.ts` (`parseInventoryAdjustmentNotes`).
-- **UI:** motivo y selectores de OC/recepción en `stock-dashboard` (modal ajustar stock).
+- **UI:** motivo y selectores de OC/recepción en `stock-dashboard` (modal **Corregir físico**). Umbrales mín/máx: modal **Umbrales** o edición inline de ubicación — ver [control-stock-umbrales-vs-correccion-fisica.md](control-stock-umbrales-vs-correccion-fisica.md).
 
 ## Selector global de artículos (`GlobalItemPicker`)
 
@@ -89,6 +89,7 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 | Historial artículo | `frontend/src/app/features/inventory-items/inventory-item-form/` |
 | Transferencias UI | `frontend/src/app/features/inventory-transfer/` |
 | Kardex bodega UI | `frontend/src/app/features/inventory-stock/stock-dashboard/` |
+| Umbrales vs corrección física (doc) | [control-stock-umbrales-vs-correccion-fisica.md](control-stock-umbrales-vs-correccion-fisica.md) |
 
 ## Reglas para el agente
 

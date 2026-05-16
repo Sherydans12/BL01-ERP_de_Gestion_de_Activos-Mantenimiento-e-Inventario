@@ -217,11 +217,17 @@ export class StockDashboardComponent implements OnInit {
     viewChild<ElementRef<HTMLDialogElement>>('transactionDialog');
   adjustDialog =
     viewChild<ElementRef<HTMLDialogElement>>('adjustDialog');
+  policyLevelsDialog =
+    viewChild<ElementRef<HTMLDialogElement>>('policyLevelsDialog');
   transactionForm: FormGroup;
   adjustmentForm: FormGroup;
+  /** Solo mín/máx y ubicación (`updateStockLevels`); sin conteo físico. */
+  policyLevelsForm: FormGroup;
 
   showAdjustModal = signal(false);
   adjustStockRow = signal<any | null>(null);
+  showPolicyLevelsModal = signal(false);
+  policyLevelsRow = signal<any | null>(null);
   /** OC para ajuste «Saldo pendiente». */
   purchaseOrdersForAdjust = signal<PurchaseOrder[]>([]);
   purchaseOrdersAdjLoading = signal(false);
@@ -233,6 +239,11 @@ export class StockDashboardComponent implements OnInit {
   showAdjustmentConfirmModal = signal(false);
   adjustmentConfirmSummary = signal('');
   adjustmentRiskLevel = signal<'info' | 'warning' | 'danger'>('warning');
+  adjustmentConfirmTitle = signal('Confirmar ajuste de inventario');
+  adjustmentConfirmMessage = signal(
+    '¿Está seguro? Esta acción modificará el stock físico y generará una transacción de ajuste que afectará la valorización de la bodega.',
+  );
+  adjustmentConfirmButtonText = signal('Sí, aplicar ajuste');
 
   kardexModalOpen = signal(false);
   kardexLoading = signal(false);
@@ -299,13 +310,17 @@ export class StockDashboardComponent implements OnInit {
 
     this.adjustmentForm = this.fb.group({
       newPhysical: [0, [Validators.required, Validators.min(0)]],
-      minStock: [0, [Validators.required, Validators.min(0)]],
-      maxStock: [0, [Validators.required, Validators.min(0)]],
       location: [''],
       reason: ['CONTEO', Validators.required],
       comment: ['', [Validators.required, Validators.minLength(2)]],
       purchaseOrderId: [''],
       purchaseReceiptId: [''],
+    });
+
+    this.policyLevelsForm = this.fb.group({
+      minStock: [0, [Validators.required, Validators.min(0)]],
+      maxStock: [0, [Validators.required, Validators.min(0)]],
+      location: [''],
     });
 
     this.adjustmentForm
@@ -545,8 +560,6 @@ export class StockDashboardComponent implements OnInit {
     this.receiptsForAdjust.set([]);
     this.adjustmentForm.reset({
       newPhysical: row.quantity,
-      minStock: Number(row.minStock ?? 0),
-      maxStock: Number(row.maxStock ?? 0),
       location: row.location ?? '',
       reason: 'CONTEO',
       comment: '',
@@ -592,6 +605,97 @@ export class StockDashboardComponent implements OnInit {
   onAdjustDialogClose() {
     this.showAdjustModal.set(false);
     this.adjustStockRow.set(null);
+  }
+
+  openPolicyLevelsModal(row: any) {
+    if (!this.selectedWarehouseId()) return;
+    this.policyLevelsRow.set(row);
+    this.policyLevelsForm.reset({
+      minStock: Number(row.minStock ?? 0),
+      maxStock: Number(row.maxStock ?? 0),
+      location: row.location ?? '',
+    });
+    this.showPolicyLevelsModal.set(true);
+    afterNextRender(
+      () => {
+        const el = this.policyLevelsDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  closePolicyLevelsModal() {
+    const el = this.policyLevelsDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.showPolicyLevelsModal.set(false);
+      this.policyLevelsRow.set(null);
+    }
+  }
+
+  onPolicyLevelsDialogClose() {
+    this.showPolicyLevelsModal.set(false);
+    this.policyLevelsRow.set(null);
+  }
+
+  submitPolicyLevels() {
+    if (this.policyLevelsForm.invalid) {
+      this.policyLevelsForm.markAllAsTouched();
+      return;
+    }
+    const row = this.policyLevelsRow();
+    const wh = this.selectedWarehouseId();
+    if (!row?.item?.id || !wh) return;
+
+    const v = this.policyLevelsForm.getRawValue();
+    if (Number(v.maxStock) > 0 && Number(v.maxStock) < Number(v.minStock)) {
+      this.notificationService.error(
+        'El stock máximo no puede ser menor que el stock mínimo.',
+      );
+      return;
+    }
+
+    const minChanged = Number(v.minStock) !== Number(row.minStock ?? 0);
+    const maxChanged = Number(v.maxStock) !== Number(row.maxStock ?? 0);
+    const locChanged =
+      String(v.location ?? '').trim() !==
+      String(row.location ?? '').trim();
+
+    if (!minChanged && !maxChanged && !locChanged) {
+      this.notificationService.info(
+        'No hay cambios en umbrales ni ubicación.',
+      );
+      return;
+    }
+
+    const payload: {
+      minStock?: number;
+      maxStock?: number;
+      location?: string | null;
+    } = {};
+    if (minChanged) payload.minStock = Number(v.minStock);
+    if (maxChanged) payload.maxStock = Number(v.maxStock);
+    if (locChanged) {
+      payload.location = String(v.location ?? '').trim() || null;
+    }
+
+    this.stockService.updateStockLevels(wh, row.item.id, payload).subscribe({
+      next: () => {
+        this.notificationService.success(
+          'Umbrales y ubicación actualizados en esta bodega.',
+        );
+        this.closePolicyLevelsModal();
+        this.loadStock(wh);
+      },
+      error: (err) =>
+        this.notificationService.error(
+          err.error?.message || 'No se pudieron guardar los cambios.',
+        ),
+    });
   }
 
   private syncAdjustmentCommentValidators(reason: string) {
@@ -651,23 +755,14 @@ export class StockDashboardComponent implements OnInit {
 
     const v = this.adjustmentForm.getRawValue();
     const diff = Number(v.newPhysical) - row.quantity;
-    const minChanged = Number(v.minStock) !== Number(row.minStock ?? 0);
-    const maxChanged = Number(v.maxStock) !== Number(row.maxStock ?? 0);
     const stockChanged = Math.abs(diff) >= 1e-9;
     const locChanged =
       String(v.location ?? '').trim() !==
       String(row.location ?? '').trim();
 
-    if (Number(v.maxStock) > 0 && Number(v.maxStock) < Number(v.minStock)) {
-      this.notificationService.error(
-        'El stock máximo no puede ser menor que el stock mínimo.',
-      );
-      return;
-    }
-
-    if (!stockChanged && !minChanged && !maxChanged && !locChanged) {
+    if (!stockChanged && !locChanged) {
       this.notificationService.info(
-        'No hay cambios por aplicar en stock, umbrales ni ubicación.',
+        'No hay cambios en el stock físico ni en la ubicación.',
       );
       return;
     }
@@ -680,18 +775,28 @@ export class StockDashboardComponent implements OnInit {
         `se ajustarán ${diffLabel} unidades de '${itemName}' (saldo final: ${Number(v.newPhysical)})`,
       );
     }
-    if (minChanged || maxChanged) {
-      pieces.push(
-        `umbrales: mínimo ${Number(v.minStock)} / máximo ${Number(v.maxStock)}`,
-      );
-    }
     if (locChanged) {
       pieces.push(`ubicación: "${String(v.location ?? '').trim() || '—'}"`);
     }
     this.adjustmentConfirmSummary.set(
       `Se aplicarán cambios: ${pieces.join(' | ')}. ¿Proceder?`,
     );
-    this.adjustmentRiskLevel.set(stockChanged && diff < 0 ? 'danger' : 'warning');
+
+    if (stockChanged) {
+      this.adjustmentConfirmTitle.set('Confirmar ajuste de inventario');
+      this.adjustmentConfirmMessage.set(
+        '¿Está seguro? Esta acción modificará el stock físico y generará una transacción de ajuste que afectará la valorización de la bodega.',
+      );
+      this.adjustmentConfirmButtonText.set('Sí, aplicar ajuste');
+      this.adjustmentRiskLevel.set(diff < 0 ? 'danger' : 'warning');
+    } else {
+      this.adjustmentConfirmTitle.set('Confirmar ubicación en bodega');
+      this.adjustmentConfirmMessage.set(
+        'Solo se actualizará la ubicación física del ítem en esta bodega. No se registra movimiento de inventario ni ajuste de valorización.',
+      );
+      this.adjustmentConfirmButtonText.set('Guardar ubicación');
+      this.adjustmentRiskLevel.set('info');
+    }
     this.showAdjustmentConfirmModal.set(true);
   }
 
@@ -712,34 +817,17 @@ export class StockDashboardComponent implements OnInit {
 
     const v = this.adjustmentForm.getRawValue();
     const diff = Number(v.newPhysical) - row.quantity;
-    const minChanged = Number(v.minStock) !== Number(row.minStock ?? 0);
-    const maxChanged = Number(v.maxStock) !== Number(row.maxStock ?? 0);
     const stockChanged = Math.abs(diff) >= 1e-9;
     const locChanged =
       String(v.location ?? '').trim() !==
       String(row.location ?? '').trim();
 
-    if (Number(v.maxStock) > 0 && Number(v.maxStock) < Number(v.minStock)) {
-      this.notificationService.error(
-        'El stock máximo no puede ser menor que el stock mínimo.',
-      );
-      return;
-    }
-
     const requests: Observable<unknown>[] = [];
-    if (minChanged || maxChanged || locChanged) {
-      const payload: {
-        minStock?: number;
-        maxStock?: number;
-        location?: string | null;
-      } = {};
-      if (minChanged) payload.minStock = Number(v.minStock);
-      if (maxChanged) payload.maxStock = Number(v.maxStock);
-      if (locChanged) {
-        payload.location = String(v.location ?? '').trim() || null;
-      }
+    if (locChanged) {
       requests.push(
-        this.stockService.updateStockLevels(wh, row.item.id, payload),
+        this.stockService.updateStockLevels(wh, row.item.id, {
+          location: String(v.location ?? '').trim() || null,
+        }),
       );
     }
 
@@ -771,7 +859,10 @@ export class StockDashboardComponent implements OnInit {
       requests.length === 1 ? requests[0] : forkJoin(requests);
     request$.subscribe({
       next: () => {
-        this.notificationService.success('Cambios de stock guardados correctamente.');
+        const msg = stockChanged
+          ? 'Corrección de inventario registrada correctamente.'
+          : 'Ubicación en bodega actualizada.';
+        this.notificationService.success(msg);
         this.closeAdjustModal();
         this.adjustmentConfirmSummary.set('');
         this.loadInventoryValuation();
