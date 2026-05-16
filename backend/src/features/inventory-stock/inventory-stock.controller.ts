@@ -123,11 +123,21 @@ export class InventoryStockController {
     @Param('warehouseId') warehouseId: string,
     @Req() req: any,
     @Query('itemId') itemId?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
+    const parseNum = (s?: string) => {
+      const n = s !== undefined ? Number.parseInt(s, 10) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    };
     return this.inventoryStockService.getTransactionsByWarehouse(
       warehouseId,
       req.user,
-      { itemId: itemId?.trim() || undefined },
+      {
+        itemId: itemId?.trim() || undefined,
+        page: parseNum(page),
+        pageSize: parseNum(pageSize),
+      },
     );
   }
 

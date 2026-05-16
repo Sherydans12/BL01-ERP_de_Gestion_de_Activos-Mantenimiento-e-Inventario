@@ -22,7 +22,10 @@ import {
 import { Subject, debounceTime } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
+import {
+  InventoryStockService,
+  type InventoryWarehouseItemTransactionsPage,
+} from '../../../core/services/inventory-stock/inventory-stock.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import {
   InventoryItemsService,
@@ -309,7 +312,11 @@ export class StockDashboardComponent implements OnInit {
   kardexModalOpen = signal(false);
   kardexLoading = signal(false);
   kardexRows = signal<any[]>([]);
+  kardexTotal = signal(0);
+  kardexPage = signal(1);
+  readonly kardexPageSize = 25;
   kardexContext = signal<{
+    itemId: string;
     partNumber: string;
     name: string;
     warehouseLabel: string;
@@ -1386,6 +1393,7 @@ export class StockDashboardComponent implements OnInit {
     if (!wh) return;
     const w = this.warehouses().find((x) => x.id === wh);
     this.kardexContext.set({
+      itemId: row.item.id,
       partNumber: String(row.item?.partNumber ?? ''),
       name: String(row.item?.name ?? ''),
       warehouseLabel: w
@@ -1395,19 +1403,9 @@ export class StockDashboardComponent implements OnInit {
     this.kardexModalOpen.set(true);
     this.kardexLoading.set(true);
     this.kardexRows.set([]);
-    this.stockService
-      .getTransactionsByWarehouse(wh, { itemId: row.item.id })
-      .subscribe({
-        next: (rows) => {
-          this.kardexRows.set(rows ?? []);
-          this.kardexLoading.set(false);
-        },
-        error: () => {
-          this.kardexRows.set([]);
-          this.kardexLoading.set(false);
-          this.notificationService.error('No se pudo cargar el kardex.');
-        },
-      });
+    this.kardexTotal.set(0);
+    this.kardexPage.set(1);
+    this.loadKardexPage(1);
     afterNextRender(
       () => {
         const el = this.kardexDialog()?.nativeElement;
@@ -1417,6 +1415,50 @@ export class StockDashboardComponent implements OnInit {
       },
       { injector: this.injector },
     );
+  }
+
+  /** Kardex por ítem + bodega (API paginada; incluye `user` y `trace`). */
+  loadKardexPage(page: number) {
+    const ctx = this.kardexContext();
+    const wh = this.selectedWarehouseId();
+    if (!ctx?.itemId || !wh) return;
+    this.kardexLoading.set(true);
+    this.stockService
+      .getTransactionsByWarehouse(wh, {
+        itemId: ctx.itemId,
+        page,
+        pageSize: this.kardexPageSize,
+      })
+      .subscribe({
+        next: (res) => {
+          const p = res as InventoryWarehouseItemTransactionsPage;
+          this.kardexRows.set((p.data as any[]) ?? []);
+          this.kardexTotal.set(Number(p.total ?? 0));
+          this.kardexPage.set(Number(p.page ?? page));
+          this.kardexLoading.set(false);
+        },
+        error: () => {
+          this.kardexRows.set([]);
+          this.kardexTotal.set(0);
+          this.kardexLoading.set(false);
+          this.notificationService.error('No se pudo cargar el kardex.');
+        },
+      });
+  }
+
+  kardexTotalPages(): number {
+    const t = this.kardexTotal();
+    return Math.max(1, Math.ceil(t / this.kardexPageSize));
+  }
+
+  kardexPrevPage() {
+    if (this.kardexPage() <= 1) return;
+    this.loadKardexPage(this.kardexPage() - 1);
+  }
+
+  kardexNextPage() {
+    if (this.kardexPage() >= this.kardexTotalPages()) return;
+    this.loadKardexPage(this.kardexPage() + 1);
   }
 
   closeKardexModal() {
@@ -1432,6 +1474,8 @@ export class StockDashboardComponent implements OnInit {
     this.kardexModalOpen.set(false);
     this.kardexContext.set(null);
     this.kardexRows.set([]);
+    this.kardexTotal.set(0);
+    this.kardexPage.set(1);
   }
 
   openReservationsModal(row: {

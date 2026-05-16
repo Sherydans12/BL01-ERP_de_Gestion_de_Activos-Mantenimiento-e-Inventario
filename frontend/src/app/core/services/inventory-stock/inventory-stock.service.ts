@@ -3,6 +3,14 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { Observable } from 'rxjs';
 
+/** Respuesta de `GET …/transactions?itemId=` (paginado). */
+export interface InventoryWarehouseItemTransactionsPage {
+  data: unknown[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -24,15 +32,21 @@ export class InventoryStockService {
     });
   }
 
+  /**
+   * Historial de transacciones de la bodega (sin `itemId`): hasta 100 movimientos, sin paginar.
+   * Con `itemId`: respuesta paginada (defecto pág. 1, 25 filas) para kardex por artículo en bodega.
+   */
   getTransactionsByWarehouse(
     warehouseId: string,
-    opts?: { itemId?: string },
-  ): Observable<any[]> {
+    opts?: { itemId?: string; page?: number; pageSize?: number },
+  ): Observable<any[] | InventoryWarehouseItemTransactionsPage> {
     let params = new HttpParams();
     if (opts?.itemId?.trim()) {
       params = params.set('itemId', opts.itemId.trim());
+      params = params.set('page', String(opts.page ?? 1));
+      params = params.set('pageSize', String(opts.pageSize ?? 25));
     }
-    return this.http.get<any[]>(
+    return this.http.get<any[] | InventoryWarehouseItemTransactionsPage>(
       `${this.apiUrl}/warehouse/${warehouseId}/transactions`,
       { params },
     );

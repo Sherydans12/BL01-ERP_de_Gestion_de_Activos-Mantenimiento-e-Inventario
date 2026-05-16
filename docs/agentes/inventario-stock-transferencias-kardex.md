@@ -32,7 +32,7 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 ## Kardex / historial por artículo (global al ítem)
 
-- **Endpoint:** `GET /inventory-items/:id/ledger` → `InventoryItemsService.findItemLedger`.
+- **Endpoint:** `GET /inventory-items/:id/ledger` (query opcional: `warehouseId`, `page`, `pageSize`) → `InventoryItemsService.findItemLedger`.
 - Lista **todas** las `InventoryTransaction` del `itemId` (todas las bodegas), paginadas, orden `date desc`.
 - Enriquece `reference` para `WORK_ORDER`, `PURCHASE_RECEIPT`, **`INVENTORY_TRANSFER`** (etiquetas con códigos/nombres de bodega origen/destino según `TRANSFER_OUT` / `TRANSFER_IN`).
 - Si `referenceType = 'PURCHASE_RECEIPT'` y **`type = 'ADJUST'`** (cierre de saldo pendiente desde stock), `reference.kind` = **`ADJUST_SALDO_PENDIENTE`** y `label` describe recepción + OC; incluye `warehouseReceiptId` / `purchaseOrderId` para enlaces WR/OC en UI (misma forma que una recepción de compra “normal” en ledger).
@@ -41,11 +41,13 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 ## Kardex por bodega (gestión de stock)
 
-- **Endpoint:** `GET /inventory-stock/warehouse/:warehouseId/transactions` (opcional `?itemId=`) → `getTransactionsByWarehouse` + **`enrichTransactionsTrace`**.
+- **Endpoint:** `GET /inventory-stock/warehouse/:warehouseId/transactions` (query opcional: `itemId`, y con `itemId` también `page`, `pageSize`) → `getTransactionsByWarehouse` + **`enrichTransactionsTrace`**.
+- **Sin `itemId`:** hasta **100** movimientos de la bodega (array JSON), sin paginar.
+- **Con `itemId`:** respuesta **`{ data, total, page, pageSize }`** (defecto `page=1`, `pageSize=25`, máx. 100 por página), orden `date desc`. Cada fila incluye **`user`** (`id`, `name`, `email`) y, vía enriquecido, **`trace`** cuando aplica.
 - Añade `trace` para recepciones, OT y **transferencias** (`trace.transfer` con códigos/nombres y `direction` OUT/IN según bodega de la fila).
 - Para un `ADJUST` con `referenceType = 'PURCHASE_RECEIPT'` cerrado como saldo pendiente, `trace.saldoPendienteAdjust = true` (además de `trace.warehouseReceipt` / `trace.purchaseOrder` cuando aplica) para subtítulo en kardex por bodega.
 
-**Frontend:** modal «Ver kardex» en `stock-dashboard` (`openKardexModal`, `kardexMovementTitle`).
+**Frontend:** modal «Ver kardex» en `stock-dashboard` (`openKardexModal`, `loadKardexPage`, `kardexMovementTitle`); paginación Anterior/Siguiente alineada al total del servidor.
 
 ## Ajustes de inventario
 

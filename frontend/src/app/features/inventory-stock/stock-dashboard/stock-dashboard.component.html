@@ -1362,7 +1362,7 @@
         (click)="closeKardexModal()"
       >
         <div
-          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+          class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
           (click)="$event.stopPropagation()"
         >
           <div
@@ -1374,9 +1374,12 @@
                 <p class="text-[11px] text-muted font-mono truncate mt-1">
                   {{ k.warehouseLabel }}
                 </p>
-                <p class="text-xs text-primary font-mono font-bold truncate">
+                <p class="text-xs text-primary font-mono font-bold truncate mt-1">
                   {{ k.partNumber }}
                   <span class="text-muted font-normal"> — {{ k.name }}</span>
+                </p>
+                <p class="text-[10px] text-muted font-mono mt-1">
+                  Orden: más reciente primero.
                 </p>
               }
             </div>
@@ -1393,7 +1396,7 @@
           <div class="p-4 overflow-y-auto flex-1 min-h-0">
             @if (kardexLoading()) {
               <p class="text-sm text-muted font-mono text-center py-8">Cargando movimientos…</p>
-            } @else if (kardexRows().length === 0) {
+            } @else if (kardexTotal() === 0) {
               <p class="text-sm text-muted font-mono text-center py-8">
                 Sin movimientos registrados para este ítem en esta bodega.
               </p>
@@ -1416,6 +1419,10 @@
                       </td>
                       <td class="py-2 pr-2">
                         <div class="text-muted">{{ kardexMovementTitle(t) }}</div>
+                        <p class="text-[10px] text-muted mt-0.5 font-mono">
+                          <span class="uppercase tracking-wide">Usuario</span>
+                          <span class="text-main"> · {{ $any(t).user?.name || '—' }}</span>
+                        </p>
                         @if (t.type === 'ADJUST' && $any(t).trace?.saldoPendienteAdjust) {
                           <p class="mt-1 text-[10px] text-primary font-mono leading-snug">
                             Recepción actualizada en compras (líneas y estado de guía / OC).
@@ -1521,6 +1528,34 @@
               </table>
             }
           </div>
+          @if (!kardexLoading() && kardexTotal() > 0) {
+            <div
+              class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-t border-border bg-dark/40 shrink-0"
+            >
+              <span class="font-mono text-[11px] text-muted">
+                {{ kardexTotal() }} movimiento(s) · Pág. {{ kardexPage() }} /
+                {{ kardexTotalPages() }}
+              </span>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  (click)="kardexPrevPage()"
+                  [disabled]="kardexPage() <= 1"
+                  class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-main hover:bg-dark disabled:opacity-40"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  (click)="kardexNextPage()"
+                  [disabled]="kardexPage() >= kardexTotalPages()"
+                  class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-main hover:bg-dark disabled:opacity-40"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          }
         </div>
       </div>
     </dialog>

@@ -679,7 +679,7 @@ export class InventoryStockService {
   async getTransactionsByWarehouse(
     warehouseId: string,
     user: any,
-    opts?: { itemId?: string },
+    opts?: { itemId?: string; page?: number; pageSize?: number },
   ) {
     const tenantId = user.tenantId as string;
     const where: Prisma.InventoryTransactionWhereInput = {
@@ -690,23 +690,49 @@ export class InventoryStockService {
       where.itemId = opts.itemId;
     }
 
-    const rows = await this.prisma.inventoryTransaction.findMany({
-      where,
-      include: {
-        item: {
-          select: {
-            partNumber: true,
-            name: true,
-            description: true,
-            unitOfMeasure: {
-              select: { id: true, name: true, abbreviation: true },
-            },
+    const include = {
+      item: {
+        select: {
+          partNumber: true,
+          name: true,
+          description: true,
+          unitOfMeasure: {
+            select: { id: true, name: true, abbreviation: true },
           },
         },
-        user: { select: { name: true, email: true } },
       },
+      user: { select: { id: true, name: true, email: true } },
+    } as const;
+
+    if (opts?.itemId) {
+      const page = Math.max(1, opts.page ?? 1);
+      const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 25));
+      const skip = (page - 1) * pageSize;
+
+      const [rows, total] = await Promise.all([
+        this.prisma.inventoryTransaction.findMany({
+          where,
+          include,
+          orderBy: { date: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        this.prisma.inventoryTransaction.count({ where }),
+      ]);
+
+      const enriched = await this.enrichTransactionsTrace(rows, tenantId);
+      const data = enriched.map((row) => ({
+        ...row,
+        item: this.ensureItemDescription(row.item),
+      }));
+      return { data, total, page, pageSize };
+    }
+
+    const rows = await this.prisma.inventoryTransaction.findMany({
+      where,
+      include,
       orderBy: { date: 'desc' },
-      take: opts?.itemId ? 500 : 100,
+      take: 100,
     });
     const enriched = await this.enrichTransactionsTrace(rows, tenantId);
     return enriched.map((row) => ({
