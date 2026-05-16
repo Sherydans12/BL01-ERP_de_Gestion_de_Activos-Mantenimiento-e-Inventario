@@ -57,25 +57,16 @@ export async function ensureDefaultTenantRolesForTenant(
 }
 
 /**
- * Resuelve qué política de aprobación aplica al usuario:
- * - Si tiene customRoleId, solo coincide por roleId exacto.
- * - Si no tiene rol personalizado, coincide con el TenantRole espejo cuyo nombre
- *   y baseRole coinciden con User.role.
+ * Resuelve qué política de aprobación corresponde al usuario buscando
+ * su `id` en la tabla intermedia `allowedUsers` de cada política.
  */
 export function resolveApprovalPolicyForUser<
-  T extends {
-    roleId: string;
-    role: { name: string; baseRole: UserRole };
-  },
+  T extends { allowedUsers: Array<{ userId: string }> },
 >(
   policies: T[],
-  user: { customRoleId?: string | null; role: UserRole },
+  user: { id: string },
 ): T | undefined {
-  if (user.customRoleId) {
-    return policies.find((p) => p.roleId === user.customRoleId);
-  }
-  const mirrorName = SYSTEM_MIRROR_ROLE_NAME[user.role];
-  return policies.find(
-    (p) => p.role.baseRole === user.role && p.role.name === mirrorName,
+  return policies.find((p) =>
+    p.allowedUsers.some((au) => au.userId === user.id),
   );
 }

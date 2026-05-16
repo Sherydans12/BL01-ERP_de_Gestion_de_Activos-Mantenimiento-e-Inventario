@@ -35,13 +35,17 @@ export interface PurchaseSettings {
   approvalPolicies: ApprovalPolicy[];
 }
 
+export interface ApprovalPolicyUser {
+  userId: string;
+  user: { id: string; name: string; email: string; role: string; customRole?: { id: string; name: string } | null };
+}
+
 export interface ApprovalPolicy {
   id: string;
   level: number;
   description?: string;
-  roleId: string;
   minAmount: number;
-  role?: { id: string; name: string; baseRole: string };
+  allowedUsers: ApprovalPolicyUser[];
 }
 
 /** Payload adjudicación por ítem (split multiproveedor). */

@@ -565,6 +565,7 @@ model User {
 
   purchaseRequisitions    PurchaseRequisition[]      @relation("RequisitionRequester")
   purchaseOrderApprovals  PurchaseOrderApproval[]    @relation("POApprover")
+  approvalPolicyUsers     ApprovalPolicyUser[]       @relation("ApprovalPolicyUsers")
   warehouseReceipts       WarehouseReceipt[]         @relation("ReceiptReceiver")
   activityLogs            ActivityLog[]
   pushSubscriptions       PushSubscription[]
@@ -644,7 +645,6 @@ model TenantRole {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   users              User[]
-  approvalPolicies   ApprovalPolicy[]
 
   @@unique([tenantId, name])
   @@map("tenant_roles")
@@ -1160,15 +1160,31 @@ model ApprovalPolicy {
   tenantId            String           @map("tenant_id") @db.Uuid
   level               Int
   description         String?          @db.VarChar(100)
-  roleId              String           @map("role_id") @db.Uuid
   minAmount           Decimal          @default(0) @db.Decimal(18, 2) @map("min_amount")
 
   purchaseSettings    PurchaseSettings @relation(fields: [purchaseSettingsId], references: [id], onDelete: Cascade)
-  role                TenantRole       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  allowedUsers        ApprovalPolicyUser[]
   approvals           PurchaseOrderApproval[]
 
   @@unique([tenantId, level])
   @@map("approval_policies")
+}
+
+/// Usuarios autorizados para firmar en un nivel de aprobación específico.
+/// Reemplaza el enfoque anterior basado en TenantRole.
+model ApprovalPolicyUser {
+  id        String         @id @default(uuid()) @db.Uuid
+  policyId  String         @map("policy_id") @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  /// Desnormalizado para queries multi-tenant seguras sin JOIN adicional.
+  tenantId  String         @map("tenant_id") @db.Uuid
+
+  policy    ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  user      User           @relation("ApprovalPolicyUsers", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, userId])
+  @@index([tenantId, userId])
+  @@map("approval_policy_users")
 }
 
 // ==========================================

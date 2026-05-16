@@ -8,6 +8,8 @@ Sistema orientado a entornos industriales para el control de flota, mantenimient
 
 **Cierre v1.1 (Platinum — storage):** Archivos en Cloudflare R2 con modelo **private-first**; punteros relativos en BD; runbook operativo en [docs/SECURITY-STORAGE.md](docs/SECURITY-STORAGE.md).
 
+**v1.2 — Gobernanza de compras por ACL de usuarios y control de umbrales económicos (`minAmount`):** políticas de aprobación por lista explícita de firmantes (`approval_policy_users`), validación de monto mínimo por nivel al firmar OC, y panel de configuración alineado; detalle en [docs/PURCHASE-GOVERNANCE.md](docs/PURCHASE-GOVERNANCE.md).
+
 Funcionalidades principales:
 
 - **Maestro de flota:** Activos con trazabilidad de horómetros y ajustes físicos (offsets).

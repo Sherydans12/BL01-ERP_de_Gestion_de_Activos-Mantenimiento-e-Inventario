@@ -17,10 +17,7 @@ import {
 } from '../../common/crypto/signature.util';
 import { AuditService, pickChanged } from '../../common/audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import {
-  resolveApprovalPolicyForUser,
-  SYSTEM_MIRROR_ROLE_NAME,
-} from '../tenant-roles/tenant-role-defaults';
+import { resolveApprovalPolicyForUser } from '../tenant-roles/tenant-role-defaults';
 import {
   EQUIPMENT_LINK_SELECT,
   WORK_ORDER_LINK_SELECT,
@@ -32,7 +29,6 @@ import {
   ActivityAction,
   Prisma,
   PurchaseOrderStatus,
-  UserRole,
 } from '@prisma/client';
 import type { QuotationStatusChange } from './purchase-quotation-status-sync.util';
 import { EmailService } from '../../common/email/email.service';
@@ -1113,24 +1109,32 @@ export class PurchaseOrdersService {
 
     const policies = await this.prisma.approvalPolicy.findMany({
       where: { tenantId },
-      include: { role: true },
+      include: { allowedUsers: true },
       orderBy: { level: 'asc' },
     });
 
     const matchingPolicy = resolveApprovalPolicyForUser(policies, {
-      customRoleId: user.customRoleId ?? null,
-      role: user.role,
+      id: user.id,
     });
 
     if (!matchingPolicy) {
       throw new ForbiddenException(
-        'Tu rol no tiene atribución de firma en las políticas de aprobación configuradas',
+        'No estás autorizado para firmar en ningún nivel de aprobación configurado',
       );
     }
 
     if (matchingPolicy.level > order.requiredSignatures) {
       throw new BadRequestException(
         'Tu nivel de firma no es requerido para esta OC',
+      );
+    }
+
+    if (
+      Number(matchingPolicy.minAmount) > 0 &&
+      Number(order.totalAmount) < Number(matchingPolicy.minAmount)
+    ) {
+      throw new BadRequestException(
+        `El monto de la OC (${order.totalAmount}) no alcanza el mínimo requerido para el Nivel ${matchingPolicy.level} (${matchingPolicy.minAmount})`,
       );
     }
 
@@ -1751,38 +1755,16 @@ export class PurchaseOrdersService {
   private async findUserIdsForNextApprovalPolicy(
     tenantId: string,
     contractId: string,
-    nextPolicy: {
-      roleId: string;
-      role: { baseRole: string; name: string };
-    },
+    nextPolicy: { allowedUsers: Array<{ userId: string }> },
   ): Promise<string[]> {
-    const baseRole = nextPolicy.role.baseRole as UserRole;
-    const mirrorName = SYSTEM_MIRROR_ROLE_NAME[baseRole];
-    const policyIsMirror = nextPolicy.role.name === mirrorName;
-
-    const policyRoleMatch: Prisma.UserWhereInput = {
-      OR: [
-        { customRoleId: nextPolicy.roleId },
-        ...(policyIsMirror
-          ? [
-              {
-                customRoleId: null,
-                role: baseRole,
-              },
-            ]
-          : []),
-      ],
-    };
+    const allowedUserIds = nextPolicy.allowedUsers.map((au) => au.userId);
+    if (!allowedUserIds.length) return [];
 
     const contractScope: Prisma.UserWhereInput = {
       OR: [
         { role: 'ADMIN' },
         { role: 'SUPER_ADMIN' },
-        {
-          contractAccess: {
-            some: { contractId },
-          },
-        },
+        { contractAccess: { some: { contractId } } },
       ],
     };
 
@@ -1790,7 +1772,8 @@ export class PurchaseOrdersService {
       where: {
         tenantId,
         isActive: true,
-        AND: [policyRoleMatch, contractScope],
+        id: { in: allowedUserIds },
+        AND: [contractScope],
       },
       select: { id: true },
     });
@@ -1828,7 +1811,7 @@ export class PurchaseOrdersService {
         tenantId,
         level: { lte: order.requiredSignatures },
       },
-      include: { role: true },
+      include: { allowedUsers: true },
       orderBy: { level: 'asc' },
     });
     const nextPolicy = policies.find((p) => !signedLevels.has(p.level));
@@ -1884,7 +1867,7 @@ export class PurchaseOrdersService {
     const maxSig = Math.max(1, ...orders.map((o) => o.requiredSignatures));
     const policies = await this.prisma.approvalPolicy.findMany({
       where: { tenantId, level: { lte: maxSig } },
-      include: { role: true },
+      include: { allowedUsers: true },
       orderBy: { level: 'asc' },
     });
 

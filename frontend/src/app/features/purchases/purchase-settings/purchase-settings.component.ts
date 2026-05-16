@@ -1,4 +1,4 @@
-import { Component, signal, inject, OnInit, effect, computed } from '@angular/core';
+import { Component, signal, inject, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -7,28 +7,16 @@ import {
   PurchaseSettings,
 } from '../../../core/services/purchases/purchases.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
-import { TenantRolesService, TenantRole } from '../../../core/services/tenant-roles/tenant-roles.service';
-import { TenantService } from '../../../core/services/tenant/tenant.service';
+import { UsersService, User } from '../../../core/services/users/users.service';
 import { PushNotificationsService } from '../../../core/services/push-notifications/push-notifications.service';
 import { ClpCurrencyPipe } from '../../../shared/pipes/clp-currency.pipe';
 import { switchMap } from 'rxjs/operators';
 
-function mapTenantConfigRoles(
-  rows: Array<{
-    id: string;
-    name: string;
-    description?: string | null;
-    baseRole: string;
-    routes: string[];
-  }>,
-): TenantRole[] {
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description ?? undefined,
-    baseRole: r.baseRole as TenantRole['baseRole'],
-    routes: r.routes,
-  }));
+interface PolicyRow {
+  level: number;
+  description: string;
+  userIds: string[];
+  minAmount: number;
 }
 
 @Component({
@@ -39,15 +27,14 @@ function mapTenantConfigRoles(
 })
 export class PurchaseSettingsComponent implements OnInit {
   private purchasesService = inject(PurchasesService);
-  private rolesService = inject(TenantRolesService);
-  private tenantService = inject(TenantService);
+  private usersService = inject(UsersService);
   private notify = inject(NotificationService);
 
   settings = signal<PurchaseSettings | null>(null);
-  roles = signal<TenantRole[]>([]);
+  /** Lista plana de usuarios activos del tenant para el selector. */
+  tenantUsers = signal<User[]>([]);
   isLoading = signal(true);
-  isLoadingRoles = signal(false);
-  isSeedingDefaults = signal(false);
+  isLoadingUsers = signal(false);
   isSaving = signal(false);
   /** Aviso cuando el navegador bloqueó notificaciones del sitio. */
   pushNotificationsBlocked = signal(false);
@@ -56,23 +43,19 @@ export class PurchaseSettingsComponent implements OnInit {
   currency = signal('CLP');
   /** Margen relativo (p. ej. 1 = 1%) para validación 3-way match factura vs OC / recepción. */
   invoiceMatchTolerancePercent = signal(1);
-  policies = signal<Array<{
-    level: number;
-    description: string;
-    roleId: string;
-    minAmount: number;
-  }>>([]);
+  policies = signal<PolicyRow[]>([]);
+
+  /** Texto de búsqueda por nivel para filtrar el listado de usuarios disponibles. */
+  userSearch = signal<Record<number, string>>({});
 
   readonly maxLevels = 3;
 
-  /** Índices reales en `policies()` para filas de nivel 1–2. */
   policyRowsBase = computed(() =>
     this.policies()
       .map((policy, index) => ({ policy, index }))
       .filter((x) => x.policy.level <= 2),
   );
 
-  /** Nivel 3 (condicional al umbral en backend). */
   policyRowsCritical = computed(() =>
     this.policies()
       .map((policy, index) => ({ policy, index }))
@@ -81,22 +64,10 @@ export class PurchaseSettingsComponent implements OnInit {
 
   canSaveMatrix = computed(() => this.policies().length >= 2);
 
-  constructor() {
-    effect(() => {
-      const tr = this.tenantService.currentTenant()?.tenantRoles;
-      if (!tr?.length || this.roles().length > 0) return;
-      this.roles.set(mapTenantConfigRoles(tr));
-    });
-  }
-
   ngOnInit() {
     this.pushNotificationsBlocked.set(PushNotificationsService.notificationsDenied());
-    const cached = this.tenantService.currentTenant()?.tenantRoles;
-    if (cached?.length) {
-      this.roles.set(mapTenantConfigRoles(cached));
-    }
     this.loadSettings();
-    this.loadRoles();
+    this.loadTenantUsers();
   }
 
   loadSettings() {
@@ -106,14 +77,12 @@ export class PurchaseSettingsComponent implements OnInit {
         this.settings.set(data);
         this.threshold.set(Number(data.approvalThreshold));
         this.currency.set(data.currency);
-        this.invoiceMatchTolerancePercent.set(
-          Number(data.invoiceMatchTolerancePercent ?? 1),
-        );
+        this.invoiceMatchTolerancePercent.set(Number(data.invoiceMatchTolerancePercent ?? 1));
         this.policies.set(
           data.approvalPolicies.map((p) => ({
             level: p.level,
             description: p.description || '',
-            roleId: p.roleId,
+            userIds: p.allowedUsers.map((au) => au.userId),
             minAmount: Number(p.minAmount),
           })),
         );
@@ -126,66 +95,79 @@ export class PurchaseSettingsComponent implements OnInit {
     });
   }
 
-  loadDefaultRoles() {
-    this.isSeedingDefaults.set(true);
-    this.rolesService.ensureDefaultRoles().subscribe({
+  loadTenantUsers() {
+    this.isLoadingUsers.set(true);
+    this.usersService.getUsers(1, 200).subscribe({
       next: (data) => {
-        this.roles.set(data);
-        this.tenantService.getTenantConfig().subscribe({
-          next: (cfg) => this.tenantService.setTenant(cfg),
-        });
-        this.notify.success('Roles base disponibles en la lista');
-        this.isSeedingDefaults.set(false);
+        this.tenantUsers.set(data.items.filter((u) => u.isActive));
+        this.isLoadingUsers.set(false);
       },
       error: () => {
-        this.notify.error('No se pudieron generar los roles base');
-        this.isSeedingDefaults.set(false);
+        this.notify.error('No se pudieron cargar los usuarios del tenant');
+        this.isLoadingUsers.set(false);
       },
     });
   }
 
-  loadRoles() {
-    this.isLoadingRoles.set(true);
-    this.rolesService.getAll().subscribe({
-      next: (data) => {
-        if (data.length > 0) {
-          this.roles.set(data);
-        } else {
-          this.applyRolesFromTenantCache();
-        }
-        this.isLoadingRoles.set(false);
-      },
-      error: (err) => {
-        const msg = err?.error?.message;
-        this.notify.error(
-          typeof msg === 'string'
-            ? msg
-            : 'No se pudieron cargar los roles personalizados del tenant',
-        );
-        this.applyRolesFromTenantCache();
-        this.isLoadingRoles.set(false);
-      },
+  /** Usuarios disponibles para un nivel (excluye los ya asignados a ese nivel, filtrando por búsqueda). */
+  availableUsersForLevel(levelIndex: number): User[] {
+    const policy = this.policies()[levelIndex];
+    if (!policy) return [];
+    const q = (this.userSearch()[policy.level] ?? '').toLowerCase();
+    return this.tenantUsers().filter((u) => {
+      if (policy.userIds.includes(u.id)) return false;
+      if (!q) return true;
+      return (
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.position ?? '').toLowerCase().includes(q)
+      );
     });
   }
 
-  private applyRolesFromTenantCache() {
-    const tr = this.tenantService.currentTenant()?.tenantRoles;
-    if (tr?.length) {
-      this.roles.set(mapTenantConfigRoles(tr));
+  /** Usuarios asignados a un nivel, enriquecidos con datos de perfil. */
+  assignedUsersForLevel(levelIndex: number): User[] {
+    const policy = this.policies()[levelIndex];
+    if (!policy) return [];
+    return this.tenantUsers().filter((u) => policy.userIds.includes(u.id));
+  }
+
+  addUserToPolicy(levelIndex: number, userId: string) {
+    this.policies.update((ps) =>
+      ps.map((p, i) =>
+        i === levelIndex && !p.userIds.includes(userId)
+          ? { ...p, userIds: [...p.userIds, userId] }
+          : p,
+      ),
+    );
+    // limpiar búsqueda del nivel
+    const level = this.policies()[levelIndex]?.level;
+    if (level !== undefined) {
+      this.userSearch.update((s) => ({ ...s, [level]: '' }));
     }
+  }
+
+  removeUserFromPolicy(levelIndex: number, userId: string) {
+    this.policies.update((ps) =>
+      ps.map((p, i) =>
+        i === levelIndex ? { ...p, userIds: p.userIds.filter((id) => id !== userId) } : p,
+      ),
+    );
+  }
+
+  setUserSearch(level: number, value: string) {
+    this.userSearch.update((s) => ({ ...s, [level]: value }));
   }
 
   addPolicy() {
     if (this.policies().length >= this.maxLevels) {
-      this.notify.warning(
-        'BaseLogic actualmente soporta hasta 3 niveles de escalamiento (Base + Crítico).',
-      );
+      this.notify.warning('BaseLogic soporta hasta 3 niveles de escalamiento (Base + Crítico).');
       return;
     }
     const nextLevel = this.policies().length + 1;
     this.policies.update((p) => [
       ...p,
-      { level: nextLevel, description: '', roleId: '', minAmount: 0 },
+      { level: nextLevel, description: '', userIds: [], minAmount: 0 },
     ]);
   }
 
@@ -195,7 +177,7 @@ export class PurchaseSettingsComponent implements OnInit {
     );
   }
 
-  updatePolicy(index: number, field: string, value: any) {
+  updatePolicyField(index: number, field: keyof PolicyRow, value: any) {
     this.policies.update((p) =>
       p.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
@@ -206,8 +188,9 @@ export class PurchaseSettingsComponent implements OnInit {
       this.notify.error('Debe configurar al menos 2 niveles de firma.');
       return;
     }
-    if (this.policies().some((p) => !p.roleId)) {
-      this.notify.error('Todos los niveles deben tener un rol asignado');
+    const emptyLevel = this.policies().find((p) => !p.userIds.length);
+    if (emptyLevel) {
+      this.notify.warning(`El Nivel ${emptyLevel.level} no tiene usuarios asignados. Asigne al menos un firmante antes de guardar.`);
       return;
     }
     this.isSaving.set(true);
@@ -224,8 +207,9 @@ export class PurchaseSettingsComponent implements OnInit {
           this.loadSettings();
           this.isSaving.set(false);
         },
-        error: () => {
-          this.notify.error('Error al guardar configuración');
+        error: (err) => {
+          const msg = err?.error?.message;
+          this.notify.error(typeof msg === 'string' ? msg : 'Error al guardar configuración');
           this.isSaving.set(false);
         },
       });

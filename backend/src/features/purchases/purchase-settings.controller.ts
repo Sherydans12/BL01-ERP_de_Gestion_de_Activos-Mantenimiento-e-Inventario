@@ -34,10 +34,18 @@ export class PurchaseSettingsController {
   }
 
   @Put('policies')
-  upsertPolicies(@Body() body: { policies: any[] }, @Req() req: any) {
-    return this.settingsService.upsertPolicies(
-      req.user.tenantId,
-      body.policies,
-    );
+  upsertPolicies(
+    @Body()
+    body: {
+      policies: Array<{
+        level: number;
+        description?: string;
+        userIds: string[];
+        minAmount?: number;
+      }>;
+    },
+    @Req() req: any,
+  ) {
+    return this.settingsService.upsertPolicies(req.user.tenantId, body.policies);
   }
 }

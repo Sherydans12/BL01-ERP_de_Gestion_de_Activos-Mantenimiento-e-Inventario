@@ -5,6 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
+const POLICY_INCLUDE = {
+  allowedUsers: {
+    include: {
+      user: { select: { id: true, name: true, email: true, role: true, customRole: { select: { id: true, name: true } } } },
+    },
+  },
+} as const;
+
 @Injectable()
 export class PurchaseSettingsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -14,9 +22,7 @@ export class PurchaseSettingsService {
       where: { tenantId },
       include: {
         approvalPolicies: {
-          include: {
-            role: { select: { id: true, name: true, baseRole: true } },
-          },
+          include: POLICY_INCLUDE,
           orderBy: { level: 'asc' },
         },
       },
@@ -32,9 +38,7 @@ export class PurchaseSettingsService {
         },
         include: {
           approvalPolicies: {
-            include: {
-              role: { select: { id: true, name: true, baseRole: true } },
-            },
+            include: POLICY_INCLUDE,
             orderBy: { level: 'asc' },
           },
         },
@@ -62,9 +66,7 @@ export class PurchaseSettingsService {
       },
       include: {
         approvalPolicies: {
-          include: {
-            role: { select: { id: true, name: true, baseRole: true } },
-          },
+          include: POLICY_INCLUDE,
           orderBy: { level: 'asc' },
         },
       },
@@ -81,7 +83,7 @@ export class PurchaseSettingsService {
     policies: Array<{
       level: number;
       description?: string;
-      roleId: string;
+      userIds: string[];
       minAmount?: number;
     }>,
   ) {
@@ -90,6 +92,28 @@ export class PurchaseSettingsService {
     const levels = policies.map((p) => p.level);
     if (new Set(levels).size !== levels.length) {
       throw new BadRequestException('Cada nivel debe aparecer solo una vez');
+    }
+
+    for (const p of policies) {
+      if (!p.userIds?.length) {
+        throw new BadRequestException(
+          `El nivel ${p.level} no tiene usuarios autorizados asignados. Cada nivel debe tener al menos un firmante.`,
+        );
+      }
+    }
+
+    // Validar que todos los userIds pertenecen al mismo tenant
+    const allUserIds = [...new Set(policies.flatMap((p) => p.userIds))];
+    const existingUsers = await this.prisma.user.findMany({
+      where: { id: { in: allUserIds }, tenantId },
+      select: { id: true },
+    });
+    const validUserIdSet = new Set(existingUsers.map((u) => u.id));
+    const invalidIds = allUserIds.filter((id) => !validUserIdSet.has(id));
+    if (invalidIds.length) {
+      throw new BadRequestException(
+        `Los siguientes usuarios no pertenecen al tenant o no existen: ${invalidIds.join(', ')}`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -101,27 +125,36 @@ export class PurchaseSettingsService {
 
       for (const p of policies) {
         const row = existing.find((e) => e.level === p.level);
+        let policyId: string;
+
         if (row) {
           await tx.approvalPolicy.update({
             where: { id: row.id },
             data: {
-              roleId: p.roleId,
               description: p.description,
               minAmount: p.minAmount ?? 0,
             },
           });
+          policyId = row.id;
         } else {
-          await tx.approvalPolicy.create({
+          const created = await tx.approvalPolicy.create({
             data: {
               purchaseSettingsId: settings.id,
               tenantId,
               level: p.level,
               description: p.description,
-              roleId: p.roleId,
               minAmount: p.minAmount ?? 0,
             },
           });
+          policyId = created.id;
         }
+
+        // Reemplazar usuarios autorizados del nivel (delete + createMany atómico)
+        await tx.approvalPolicyUser.deleteMany({ where: { policyId } });
+        await tx.approvalPolicyUser.createMany({
+          data: p.userIds.map((userId) => ({ policyId, userId, tenantId })),
+          skipDuplicates: true,
+        });
       }
 
       for (const ex of existing) {
@@ -131,7 +164,7 @@ export class PurchaseSettingsService {
         });
         if (refCount > 0) {
           throw new BadRequestException(
-            `No se puede quitar el nivel ${ex.level} del flujo: ya hay órdenes de compra firmadas con esa política. Puede editar el rol del nivel, pero no eliminarlo del historial.`,
+            `No se puede quitar el nivel ${ex.level}: ya hay órdenes de compra firmadas con esa política. Puede editar los firmantes del nivel, pero no eliminarlo del historial.`,
           );
         }
         await tx.approvalPolicy.delete({ where: { id: ex.id } });
@@ -139,7 +172,7 @@ export class PurchaseSettingsService {
 
       return tx.approvalPolicy.findMany({
         where: { purchaseSettingsId: settings.id },
-        include: { role: { select: { id: true, name: true, baseRole: true } } },
+        include: POLICY_INCLUDE,
         orderBy: { level: 'asc' },
       });
     });
