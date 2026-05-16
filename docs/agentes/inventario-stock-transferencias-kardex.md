@@ -65,8 +65,8 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 ## Selector global de artículos (`GlobalItemPicker`)
 
 - **Componente:** `frontend/src/app/shared/components/global-item-picker/`.
-- **API:** `GET /inventory-items/picker` con `search`, `categoryId`, `warehouseId`, paginación; **`onlyWithStock=1`** restringe a artículos con **`ItemStock.quantity > 0`** en esa bodega (requiere `warehouseId`). Opcional **`workOrderId`**: ítems con salida (`OUT` / `WORK_ORDER_ISSUE`) a esa OT desde esa bodega y cantidad neta aún devolvible (alineado con `performReturn`).
-- **Inputs:** `allowQuickAdd`, `onlyWithStockInWarehouse`, `workOrderIdForReturn`, `warehouseId`, `strictFamilyFirst`, etc.
+- **API:** `GET /inventory-items/picker` con `search`, `categoryId`, `warehouseId`, paginación; **`onlyWithStock=1`** restringe a artículos con **`ItemStock.quantity > 0`** en esa bodega (requiere `warehouseId`). Opcional **`workOrderId`**: ítems con salida (`OUT` / `WORK_ORDER_ISSUE`) a esa OT desde esa bodega y cantidad neta aún devolvible (alineado con `performReturn`). Opcional **`fieldReentryOutstanding=1`**: ítems con saldo neto pendiente de reingreso desde terreno (OUT `FIELD_DISPATCH` − IN `FIELD_RETURN`) en esa bodega (requiere `warehouseId`).
+- **Inputs:** `allowQuickAdd`, `onlyWithStockInWarehouse`, `workOrderIdForReturn`, `fieldReentryOutstandingOnly`, `warehouseId`, `strictFamilyFirst`, etc.
 
 **Transferencias:** se usa con `allowQuickAdd=false`, `onlyWithStockInWarehouse=true` y `warehouseId` = bodega origen.
 
@@ -75,6 +75,13 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 - **Ruta:** `/app/inventario/transferencias` → `inventory-transfer.component`.
 - **Formulario:** señal `formRevision` + `merge(valueChanges, statusChanges)` para integrar Reactive Forms con `computed` (`canSubmit`, `originWarehouseIdForPicker`).
 - **Líneas:** datos del picker (stock en origen, ubicación, código inventario, `allowsDecimals` de la UoM) y validación de no superar saldo origen antes de enviar.
+
+## Salida / reingreso «a terreno» (no OT)
+
+- **Trazabilidad en kardex:** `inventory_transactions.reference_type` = `FIELD_DISPATCH` en **`OUT`** (material que sale de bodega hacia faena sin OT) y `FIELD_RETURN` en **`IN`** (vuelve a bodega). El pendiente por ítem/bodega es Σ OUT(`FIELD_DISPATCH`) − Σ IN(`FIELD_RETURN`).
+- **Salidas históricas** sin `reference_type` no entran en el cómputo hasta que exista backfill o se registren nuevas salidas con la marca.
+- **API stock por bodega:** `GET /inventory-stock/warehouse/:id` incluye por fila `fieldDispatchOutstandingQty` (pendiente terreno). En **Control de stock** hay columna «Pend. terreno» y filtro de estado «Pendiente reingreso (terreno)».
+- **Transacción manual:** `POST /inventory-stock/transaction` con `type`/`referenceType` coherentes; el backend valida reingreso (cantidad ≤ pendiente, `unitCost` &gt; 0 para `FIELD_RETURN`).
 
 ## Seeds / UoM
 

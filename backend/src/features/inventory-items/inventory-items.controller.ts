@@ -55,6 +55,7 @@ export class InventoryItemsController {
     @Query('warehouseId') warehouseId?: string,
     @Query('onlyWithStock') onlyWithStock?: string,
     @Query('workOrderId') workOrderReturnFilterId?: string,
+    @Query('fieldReentryOutstanding') fieldReentryOutstanding?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
@@ -66,12 +67,18 @@ export class InventoryItemsController {
       .toLowerCase();
     const onlyWithStockInWarehouse =
       ows === '1' || ows === 'true' || ows === 'yes';
+    const fre = String(fieldReentryOutstanding ?? '')
+      .trim()
+      .toLowerCase();
+    const fieldReentryOutstandingOnly =
+      fre === '1' || fre === 'true' || fre === 'yes';
     return this.inventoryItemsService.findForPicker(req.user, {
       search,
       categoryId,
       warehouseId,
       onlyWithStockInWarehouse,
       workOrderReturnFilterId,
+      fieldReentryOutstanding: fieldReentryOutstandingOnly,
       page: Number.isFinite(p) ? p : undefined,
       pageSize: Number.isFinite(ps) ? ps : undefined,
     });

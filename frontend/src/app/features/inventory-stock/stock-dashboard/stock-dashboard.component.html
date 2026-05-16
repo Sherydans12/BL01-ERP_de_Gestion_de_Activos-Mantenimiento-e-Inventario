@@ -181,6 +181,7 @@
             >
               <option value="all">Todos</option>
               <option value="critical">Solo críticos (≤ mín.)</option>
+              <option value="field_pending">Pendiente reingreso (terreno)</option>
             </select>
             <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted group-hover:text-primary transition-colors">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -432,6 +433,9 @@
               } @else if (stockStatusFilter() === 'critical') {
                 {{ totalItemCount() }} crítico(s) que coinciden (de
                 {{ afterFamilyAndArticleFilter().length }} con la búsqueda).
+              } @else if (stockStatusFilter() === 'field_pending') {
+                {{ totalItemCount() }} con saldo pendiente en terreno (de
+                {{ afterFamilyAndArticleFilter().length }} con la búsqueda).
               } @else {
                 {{ afterFamilyAndArticleFilter().length }} artículo(s) con la búsqueda
                 (de {{ familyFilteredStockItems().length }} en categoría actual).
@@ -459,6 +463,9 @@
             <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
               Disponible
             </th>
+            <th class="py-3 px-3 border-b border-border text-center whitespace-nowrap hidden sm:table-cell" title="Salidas a terreno (FIELD_DISPATCH) menos reingresos (FIELD_RETURN)">
+              Pend. terreno
+            </th>
             <th class="py-3 px-6 border-b border-border text-right">
               Costo Unit. (CPP)
             </th>
@@ -475,13 +482,13 @@
             @for (_ of tableSkeletonRows; track $index) {
               <tr
                 appSkeletonRow
-                [columnCount]="10"
+                [columnCount]="11"
               ></tr>
             }
           } @else if (!stockLoading() && stockItems().length === 0) {
             <tr>
               <td
-                colspan="10"
+                colspan="11"
                 class="py-12 text-center text-muted font-mono text-sm"
               >
                 @if (locationSearch().trim()) {
@@ -496,13 +503,15 @@
           ) {
             <tr>
               <td
-                colspan="10"
+                colspan="11"
                 class="py-12 text-center text-muted font-mono text-sm"
               >
                 @if (articleSearchExcludedAll()) {
                   Ningún artículo coincide con la búsqueda. Pruebe otras palabras o limpie el campo (Escape).
                 } @else if (stockStatusFilter() === 'critical') {
                   No hay posiciones críticas (disponible ≤ mínimo) con los filtros actuales.
+                } @else if (stockStatusFilter() === 'field_pending') {
+                  No hay artículos con saldo pendiente de reingreso desde terreno en esta bodega (con los filtros actuales).
                 } @else {
                   No hay artículos en esta bodega para la familia / subcategoría seleccionada.
                 }
@@ -629,6 +638,18 @@
                   >
                     {{ stockAvailable(s) | number:'1.0-4' }}
                   </span>
+                </td>
+                <td class="py-4 px-2 text-center align-middle hidden sm:table-cell">
+                  @if ((s.fieldDispatchOutstandingQty ?? 0) > 1e-9) {
+                    <span
+                      class="font-mono text-xs px-2 py-1 rounded border border-amber-500/30 bg-amber-950/25 text-amber-100"
+                      title="Cantidad aún no reingresada (salidas a terreno marcadas − reingresos)"
+                    >
+                      {{ s.fieldDispatchOutstandingQty | number:'1.0-4' }}
+                    </span>
+                  } @else {
+                    <span class="text-muted font-mono text-xs">—</span>
+                  }
                 </td>
                 <td class="py-4 px-6 text-right font-mono">
                   @if (canSeeStockCosts()) {
@@ -769,6 +790,19 @@
                 <input
                   type="radio"
                   formControlName="movementKind"
+                  value="FIELD_RETURN_IN"
+                  class="peer sr-only"
+                />
+                <div
+                  class="text-center py-2.5 text-xs font-mono rounded border border-border peer-checked:bg-primary/15 peer-checked:text-primary peer-checked:border-primary/60 transition-all"
+                >
+                  Reingreso desde terreno
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input
+                  type="radio"
+                  formControlName="movementKind"
                   value="FIELD_OUT"
                   class="peer sr-only"
                 />
@@ -806,7 +840,10 @@
               </label>
             </div>
             <p class="text-[10px] text-muted mt-2 leading-relaxed">
-              Entrada y salida registran movimiento en <strong>esta</strong> bodega. La devolución reingresa material despachado a una OT (sin cambiar el CPP). Transferencia abre el flujo de traslado.
+              <strong>Entrada por compra</strong> es ingreso de material nuevo (catálogo amplio).
+              <strong>Reingreso desde terreno</strong> solo lista artículos con salida a terreno pendiente de devolver a estante (no use «Entrada por compra» para eso).
+              <strong>Salida a terreno</strong> marca el movimiento para poder reingresar después.
+              La devolución desde OT es otro flujo. Transferencia abre traslado W2W.
             </p>
           </div>
 
@@ -908,7 +945,7 @@
                   class="w-full bg-dark border border-border text-main rounded px-3 py-2 text-sm outline-none focus:border-primary font-mono"
                 />
               </div>
-              @if (transactionForm.get('movementKind')?.value === 'PURCHASE_IN') {
+              @if (transactionForm.get('movementKind')?.value === 'PURCHASE_IN' || transactionForm.get('movementKind')?.value === 'FIELD_RETURN_IN') {
                 <div>
                   <label class="block text-xs font-medium text-muted mb-1"
                     >Costo Unitario ($)</label
@@ -1578,6 +1615,7 @@
     [strictFamilyFirst]="itemPickerCatalog.strictFamilyFirst"
     [allowQuickAdd]="transactionItemPickerAllowQuickAdd()"
     [onlyWithStockInWarehouse]="transactionItemPickerOnlyWithStockInWarehouse()"
+    [fieldReentryOutstandingOnly]="transactionItemPickerFieldReentryOutstandingOnly()"
     [workOrderIdForReturn]="transactionItemPickerWorkOrderId()"
     [title]="transactionItemPickerTitle()"
     (closed)="onTransactionItemPickerClosed()"

@@ -18,6 +18,7 @@ import {
   type InventoryLabelQrMode,
   type InventoryLabelSize,
 } from './inventory-item-label-pdf.generator';
+import { listItemIdsWithFieldDispatchOutstanding } from '../../common/inventory/field-dispatch-outstanding';
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 /** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
@@ -442,6 +443,11 @@ export class InventoryItemsService {
        * aún devolvible (requiere `warehouseId`). Usado en devolución a bodega desde OT.
        */
       workOrderReturnFilterId?: string;
+      /**
+       * Solo ítems con saldo neto pendiente de reingreso (OUT `FIELD_DISPATCH` − IN `FIELD_RETURN`)
+       * en la bodega (requiere `warehouseId`).
+       */
+      fieldReentryOutstanding?: boolean;
       page?: number;
       pageSize?: number;
     },
@@ -501,12 +507,27 @@ export class InventoryItemsService {
       }
     }
 
+    let fieldReentryWhere: Prisma.InventoryItemWhereInput | undefined;
+    if (opts.fieldReentryOutstanding === true) {
+      if (!warehouseIdForStock) {
+        fieldReentryWhere = { id: { in: [] } };
+      } else {
+        const ids = await listItemIdsWithFieldDispatchOutstanding(
+          this.prisma,
+          tenantId,
+          warehouseIdForStock,
+        );
+        fieldReentryWhere = { id: { in: ids.length ? ids : [] } };
+      }
+    }
+
     const mergePickerWhere = (
       base: Prisma.InventoryItemWhereInput,
     ): Prisma.InventoryItemWhereInput => {
       const extras: Prisma.InventoryItemWhereInput[] = [];
       if (stockWhere) extras.push(stockWhere);
       if (woReturnWhere) extras.push(woReturnWhere);
+      if (fieldReentryWhere) extras.push(fieldReentryWhere);
       if (!extras.length) return base;
       return { AND: [base, ...extras] };
     };

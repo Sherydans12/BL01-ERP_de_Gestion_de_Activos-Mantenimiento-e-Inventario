@@ -23,5 +23,6 @@ En **Control de stock** (`/app/inventario/stock`, `stock-dashboard`) conviene no
 
 - **Regularizaciones pendientes** (`pending-regularization-modal`): abre **Corregir físico** (`openAdjustModal`) porque el caso de negocio es discrepancia de cantidad, no umbrales.
 - **Operación de almacén** (entrada/salida en el mismo dashboard): distinta intención (movimiento IN/OUT); no toca esta separación.
-- **Salida a terreno** (`FIELD_OUT`): el `GlobalItemPicker` usa `onlyWithStockInWarehouse=true` y `allowQuickAdd=false` (solo ítems con saldo en la bodega seleccionada; sin alta rápida).
+- **Salida a terreno** (`FIELD_OUT`): el `GlobalItemPicker` usa `onlyWithStockInWarehouse=true` y `allowQuickAdd=false` (solo ítems con saldo en la bodega seleccionada; sin alta rápida). El backend registra `OUT` con `reference_type = FIELD_DISPATCH`.
+- **Reingreso desde terreno** (`FIELD_RETURN_IN`): `fieldReentryOutstandingOnly=true` en el picker (API `fieldReentryOutstanding=1` + `warehouseId`); solo ítems con saldo neto pendiente (OUT `FIELD_DISPATCH` − IN `FIELD_RETURN`); sin quick-add. El movimiento es `IN` con `reference_type = FIELD_RETURN` (costo unitario obligatorio; cantidad ≤ pendiente).
 - **Devolución desde OT** (`RETURN_OT`): sin quick-add; se elige primero la OT y el picker envía `workOrderId` + `warehouseId` para listar solo ítems con consumo hacia esa OT desde esa bodega y cantidad aún devolvible (no exige stock actual en bodega). Entrada por compra sigue el catálogo global (`GLOBAL_ITEM_PICKER_CATALOG`).

@@ -205,6 +205,8 @@ export class InventoryItemsService {
     onlyWithStockInWarehouse?: boolean;
     /** Solo ítems con salida a esta OT desde la bodega y cantidad aún devolvible (requiere warehouseId). */
     workOrderReturnFilterId?: string;
+    /** Solo ítems con saldo pendiente de reingreso (terreno) en la bodega (requiere warehouseId). */
+    fieldReentryOutstanding?: boolean;
     page?: number;
     pageSize?: number;
   }): Observable<ItemPickerPage> {
@@ -223,6 +225,9 @@ export class InventoryItemsService {
     }
     if (params.workOrderReturnFilterId?.trim()) {
       p = p.set('workOrderId', params.workOrderReturnFilterId.trim());
+    }
+    if (params.fieldReentryOutstanding === true) {
+      p = p.set('fieldReentryOutstanding', '1');
     }
     if (params.page != null) {
       p = p.set('page', String(params.page));

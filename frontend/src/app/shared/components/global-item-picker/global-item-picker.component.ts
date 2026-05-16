@@ -91,6 +91,12 @@ export class GlobalItemPickerComponent
    */
   @Input() workOrderIdForReturn: string | null = null;
 
+  /**
+   * Con `warehouseId`, limita a ítems con saldo neto pendiente de reingreso
+   * (salidas `FIELD_DISPATCH` − reingresos `FIELD_RETURN` en kardex).
+   */
+  @Input() fieldReentryOutstandingOnly = false;
+
   @Output() closed = new EventEmitter<void>();
   @Output() itemPicked = new EventEmitter<ItemPickerRow>();
 
@@ -132,10 +138,12 @@ export class GlobalItemPickerComponent
       const wh = changes['warehouseId'];
       const ow = changes['onlyWithStockInWarehouse'];
       const wo = changes['workOrderIdForReturn'];
+      const fr = changes['fieldReentryOutstandingOnly'];
       if (
         (wh && !wh.firstChange) ||
         (ow && !ow.firstChange) ||
-        (wo && !wo.firstChange)
+        (wo && !wo.firstChange) ||
+        (fr && !fr.firstChange)
       ) {
         this.fetch();
       }
@@ -218,6 +226,9 @@ export class GlobalItemPickerComponent
           this.onlyWithStockInWarehouse && !!this.warehouseId?.trim(),
         workOrderReturnFilterId:
           this.workOrderIdForReturn?.trim() || undefined,
+        fieldReentryOutstanding:
+          this.fieldReentryOutstandingOnly &&
+          !!this.warehouseId?.trim(),
         page: this.page(),
         pageSize: this.pageSize,
       })
@@ -290,6 +301,9 @@ export class GlobalItemPickerComponent
           this.onlyWithStockInWarehouse && !!this.warehouseId?.trim(),
         workOrderReturnFilterId:
           this.workOrderIdForReturn?.trim() || undefined,
+        fieldReentryOutstanding:
+          this.fieldReentryOutstandingOnly &&
+          !!this.warehouseId?.trim(),
         page: this.page(),
         pageSize: this.pageSize,
       })

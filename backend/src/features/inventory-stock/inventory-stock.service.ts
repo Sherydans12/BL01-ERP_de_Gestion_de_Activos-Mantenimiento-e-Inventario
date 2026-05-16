@@ -11,6 +11,11 @@ import {
   getPolicyThresholdsForNewItemStockRow,
   clearItemStockPolicyIfMatchesWarehouse,
 } from '../inventory-items/inventory-item-stock-policy.helper';
+import {
+  FIELD_DISPATCH_REFERENCE_TYPE,
+  FIELD_RETURN_REFERENCE_TYPE,
+} from '../../common/inventory/field-dispatch.constants';
+import { getFieldDispatchOutstandingForItem } from '../../common/inventory/field-dispatch-outstanding';
 
 export interface PerformTransactionDto {
   warehouseId: string;
@@ -391,6 +396,12 @@ export class InventoryStockService {
     });
     if (!warehouse) throw new NotFoundException('Bodega no encontrada');
 
+    const fieldOutstandingByItem =
+      await this.mapFieldDispatchOutstandingForWarehouse(
+        tenantId,
+        warehouseId,
+      );
+
     const loc = opts?.location?.trim();
     const where: Prisma.ItemStockWhereInput = { warehouseId };
     if (loc) {
@@ -443,6 +454,8 @@ export class InventoryStockService {
         ...r,
         reservedQuantity,
         availableQuantity,
+        fieldDispatchOutstandingQty:
+          fieldOutstandingByItem.get(r.itemId) ?? 0,
         unitCost: this.maskCostValue(
           user,
           r.unitCost != null ? Number(r.unitCost) : null,
@@ -451,6 +464,51 @@ export class InventoryStockService {
         linkedRequisition: reqByItemId.get(r.itemId) ?? null,
       };
     });
+  }
+
+  /**
+   * Por ítem: Σ OUT(referenceType=FIELD_DISPATCH) − Σ IN(referenceType=FIELD_RETURN)
+   * en esta bodega (tenant vía warehouse).
+   */
+  private async mapFieldDispatchOutstandingForWarehouse(
+    tenantId: string,
+    warehouseId: string,
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    const [outs, ins] = await Promise.all([
+      this.prisma.inventoryTransaction.groupBy({
+        by: ['itemId'],
+        where: {
+          warehouseId,
+          type: 'OUT',
+          referenceType: FIELD_DISPATCH_REFERENCE_TYPE,
+          warehouse: { tenantId },
+        },
+        _sum: { quantity: true },
+      }),
+      this.prisma.inventoryTransaction.groupBy({
+        by: ['itemId'],
+        where: {
+          warehouseId,
+          type: 'IN',
+          referenceType: FIELD_RETURN_REFERENCE_TYPE,
+          warehouse: { tenantId },
+        },
+        _sum: { quantity: true },
+      }),
+    ]);
+    const inMap = new Map(
+      ins.map((r) => [r.itemId, Number(r._sum.quantity ?? 0)]),
+    );
+    for (const o of outs) {
+      const outQ = Number(o._sum.quantity ?? 0);
+      const inQ = inMap.get(o.itemId) ?? 0;
+      const net = outQ - inQ;
+      if (net > 1e-9) {
+        result.set(o.itemId, net);
+      }
+    }
+    return result;
   }
 
   /**
@@ -1078,6 +1136,37 @@ export class InventoryStockService {
       where: { id: dto.warehouseId, tenantId: user.tenantId },
     });
     if (!warehouse) throw new NotFoundException('Bodega no válida.');
+
+    const refType = dto.referenceType?.trim() ?? '';
+    if (refType === FIELD_DISPATCH_REFERENCE_TYPE && dto.type !== 'OUT') {
+      throw new BadRequestException(
+        'FIELD_DISPATCH solo aplica a salidas (OUT).',
+      );
+    }
+    if (refType === FIELD_RETURN_REFERENCE_TYPE && dto.type !== 'IN') {
+      throw new BadRequestException(
+        'FIELD_RETURN solo aplica a entradas (IN).',
+      );
+    }
+    if (dto.type === 'IN' && refType === FIELD_RETURN_REFERENCE_TYPE) {
+      const uc = Number(dto.unitCost ?? 0);
+      if (!Number.isFinite(uc) || uc <= 0) {
+        throw new BadRequestException(
+          'El reingreso desde terreno requiere costo unitario mayor a cero (CPP).',
+        );
+      }
+      const outstanding = await getFieldDispatchOutstandingForItem(
+        tx,
+        user.tenantId,
+        dto.warehouseId,
+        dto.itemId,
+      );
+      if (dto.quantity > outstanding + 1e-6) {
+        throw new BadRequestException(
+          `La cantidad de reingreso (${dto.quantity}) supera lo pendiente desde terreno (${outstanding}).`,
+        );
+      }
+    }
 
     const currentStock = await tx.itemStock.findUnique({
       where: {

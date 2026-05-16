@@ -116,7 +116,10 @@
       }
       @if (warehouseId) {
         <p class="font-mono text-[11px] text-muted">
-          @if (onlyWithStockInWarehouse) {
+          @if (fieldReentryOutstandingOnly) {
+            <span class="text-primary">Terreno:</span> solo artículos con saldo
+            pendiente de reingreso (salidas marcadas a terreno menos reingresos ya registrados).
+          } @else if (onlyWithStockInWarehouse) {
             <span class="text-primary">Stock:</span> solo artículos con saldo
             &gt; 0 en la bodega seleccionada.
           } @else {
@@ -168,6 +171,8 @@
                   @if (onlyWithStockInWarehouse) {
                     No hay artículos con stock en esta bodega. Cambie familia,
                     subcategoría o búsqueda.
+                  } @else if (fieldReentryOutstandingOnly) {
+                    No hay artículos con saldo pendiente de reingreso desde terreno en esta bodega.
                   } @else {
                     Sin resultados. Ajuste filtros o cree un artículo nuevo.
                   }

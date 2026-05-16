@@ -51,6 +51,10 @@ import {
   type PurchaseOrder,
   type WarehouseReceipt,
 } from '../../../core/services/purchases/purchases.service';
+import {
+  FIELD_DISPATCH_REFERENCE_TYPE,
+  FIELD_RETURN_REFERENCE_TYPE,
+} from '../../../core/constants/inventory-field-dispatch';
 
 @Component({
   selector: 'app-stock-dashboard',
@@ -90,12 +94,13 @@ export class StockDashboardComponent implements OnInit {
 
   /**
    * Salida a terreno: solo ítems con stock físico en la bodega, sin quick-add.
+   * Reingreso desde terreno: solo ítems con saldo pendiente (OUT FIELD_DISPATCH − IN FIELD_RETURN); sin quick-add.
    * Devolución OT: solo ítems con salida previa a la OT elegida y cantidad aún devolvible; sin quick-add (elegir OT antes de abrir el catálogo).
    * Entrada por compra: catálogo global (quick-add según `GLOBAL_ITEM_PICKER_CATALOG`).
    */
   transactionItemPickerAllowQuickAdd(): boolean {
     const k = this.transactionForm.get('movementKind')?.value;
-    if (k === 'FIELD_OUT' || k === 'RETURN_OT') {
+    if (k === 'FIELD_OUT' || k === 'FIELD_RETURN_IN' || k === 'RETURN_OT') {
       return false;
     }
     return this.itemPickerCatalog.allowQuickAdd;
@@ -114,10 +119,18 @@ export class StockDashboardComponent implements OnInit {
     return id || null;
   }
 
+  /** Filtro API `fieldReentryOutstanding` en el picker (solo reingreso desde terreno). */
+  transactionItemPickerFieldReentryOutstandingOnly(): boolean {
+    return this.transactionForm.get('movementKind')?.value === 'FIELD_RETURN_IN';
+  }
+
   transactionItemPickerTitle(): string {
     const k = this.transactionForm.get('movementKind')?.value;
     if (k === 'FIELD_OUT') {
       return 'Artículos con saldo en esta bodega';
+    }
+    if (k === 'FIELD_RETURN_IN') {
+      return 'Artículos pendientes de reingreso (salida a terreno)';
     }
     if (k === 'RETURN_OT') {
       return 'Repuestos devolvibles desde esta OT (esta bodega)';
@@ -157,8 +170,8 @@ export class StockDashboardComponent implements OnInit {
    * Varios términos separados por espacio: todos deben aparecer (AND) en algún campo del artículo.
    */
   articleQuickSearch = signal('');
-  /** Solo filas en o bajo el umbral mínimo (según stock disponible). */
-  stockStatusFilter = signal<'all' | 'critical'>('all');
+  /** Solo filas en o bajo el umbral mínimo (según stock disponible), o con saldo pendiente en terreno. */
+  stockStatusFilter = signal<'all' | 'critical' | 'field_pending'>('all');
   private locationFilterReload$ = new Subject<void>();
   pendingRegularizationCount = signal<number>(0);
   pendingRegModalOpen = signal(false);
@@ -219,6 +232,10 @@ export class StockDashboardComponent implements OnInit {
     let rows = this.afterFamilyAndArticleFilter();
     if (this.stockStatusFilter() === 'critical') {
       rows = rows.filter((s: any) => this.isAvailabilityCritical(s));
+    } else if (this.stockStatusFilter() === 'field_pending') {
+      rows = rows.filter(
+        (s: any) => Number(s.fieldDispatchOutstandingQty ?? 0) > 1e-9,
+      );
     }
     return rows;
   });
@@ -1225,6 +1242,46 @@ export class StockDashboardComponent implements OnInit {
       return;
     }
 
+    if (kind === 'FIELD_RETURN_IN') {
+      const uc = Number(raw.unitCost ?? 0);
+      if (!raw.itemId) {
+        this.notificationService.error('Seleccione un artículo del catálogo.');
+        return;
+      }
+      if (!Number.isFinite(uc) || uc <= 0) {
+        this.notificationService.error(
+          'Indique costo unitario mayor a cero para valorizar el reingreso (CPP).',
+        );
+        return;
+      }
+      if (this.transactionForm.get('quantity')?.invalid) {
+        this.transactionForm.markAllAsTouched();
+        return;
+      }
+      this.stockService
+        .performTransaction({
+          warehouseId: wh,
+          itemId: raw.itemId,
+          type: 'IN',
+          quantity: raw.quantity,
+          unitCost: uc,
+          notes: raw.notes,
+          referenceType: FIELD_RETURN_REFERENCE_TYPE,
+        })
+        .subscribe({
+          next: () => {
+            this.notificationService.success('Reingreso desde terreno registrado.');
+            this.closeTransactionModal();
+            this.loadStock(wh);
+          },
+          error: (err) =>
+            this.notificationService.error(
+              err.error?.message || 'Error en la transacción.',
+            ),
+        });
+      return;
+    }
+
     if (!raw.itemId) {
       this.transactionForm.markAllAsTouched();
       this.notificationService.error('Seleccione un artículo del catálogo.');
@@ -1237,7 +1294,15 @@ export class StockDashboardComponent implements OnInit {
     }
 
     const type = kind === 'PURCHASE_IN' ? 'IN' : 'OUT';
-    const payload = {
+    const payload: {
+      warehouseId: string;
+      itemId: string;
+      type: string;
+      quantity: number;
+      unitCost?: number;
+      notes?: string;
+      referenceType?: string;
+    } = {
       warehouseId: wh,
       itemId: raw.itemId,
       type,
@@ -1245,6 +1310,9 @@ export class StockDashboardComponent implements OnInit {
       unitCost: raw.unitCost,
       notes: raw.notes,
     };
+    if (kind === 'FIELD_OUT') {
+      payload.referenceType = FIELD_DISPATCH_REFERENCE_TYPE;
+    }
 
     this.stockService.performTransaction(payload).subscribe({
       next: () => {
@@ -1429,6 +1497,15 @@ export class StockDashboardComponent implements OnInit {
         this.transactionForm.get('quantity')?.valid === true
       );
     }
+    if (kind === 'FIELD_RETURN_IN') {
+      const uc = Number(this.transactionForm.get('unitCost')?.value ?? 0);
+      return (
+        !!itemId &&
+        this.transactionForm.get('quantity')?.valid === true &&
+        Number.isFinite(uc) &&
+        uc > 0
+      );
+    }
     return this.transactionForm.valid && !!itemId;
   }
 
@@ -1469,6 +1546,8 @@ export class StockDashboardComponent implements OnInit {
       WORK_ORDER_RETURN: 'Devolución desde OT',
       TRANSFER_OUT: 'Transferencia (envío)',
       TRANSFER_IN: 'Transferencia (recepción)',
+      FIELD_DISPATCH: 'Salida a terreno (ref.)',
+      FIELD_RETURN: 'Reingreso desde terreno (ref.)',
     };
     return m[String(type ?? '').toUpperCase()] ?? String(type ?? '—');
   }
@@ -1476,10 +1555,18 @@ export class StockDashboardComponent implements OnInit {
   /** Título de fila kardex (incluye variante saldo pendiente sincronizado con compras). */
   kardexMovementTitle(t: {
     type?: string;
+    referenceType?: string | null;
     trace?: { saldoPendienteAdjust?: boolean };
   }): string {
     if (t?.type === 'ADJUST' && t?.trace?.saldoPendienteAdjust) {
       return 'Ajuste · saldo pendiente (recepción)';
+    }
+    const ref = String(t?.referenceType ?? '').trim();
+    if (t?.type === 'OUT' && ref === FIELD_DISPATCH_REFERENCE_TYPE) {
+      return 'Salida a terreno';
+    }
+    if (t?.type === 'IN' && ref === FIELD_RETURN_REFERENCE_TYPE) {
+      return 'Reingreso desde terreno';
     }
     return this.transactionTypeLabel(t.type);
   }
