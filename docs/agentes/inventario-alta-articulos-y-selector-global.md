@@ -29,7 +29,7 @@ Resumen de mejoras **2026-05** alineadas con multi-bodega (`item_stocks`) y UX d
   (`strictFamilyFirst`, `allowQuickAdd`, `onlyWithStockInWarehouse`, `titleMaster`).
 - **Control de stock** (movimiento de almacén) y **requerimiento de compra** (y **detalle OC** para flags comunes) enlazan esos valores para no desalinear UX.
 - **`warehouseId`** sigue siendo responsabilidad de cada pantalla (stock pasa la bodega seleccionada; SRC no tiene bodega fija en el picker).
-- **`GlobalItemPicker`**: el modal interno **crear artículo** usa `overlayInsideDialog=true` porque el quick-add vive **dentro** del `<dialog>` del picker (stacking correcto con otros diálogos nativos).
+- **Quick-add desde el picker:** usar **`overlayInsideDialog=false`** en `GlobalItemPicker` (overlay `fixed`). Con `true` se rompe el flujo **Nuevo movimiento** + catálogo (dos `<dialog>` nativos). Ver [ui-quickadd-global-picker-dialogos-nativos.md](ui-quickadd-global-picker-dialogos-nativos.md).
 
 ## 5. Rutas de código útiles
 

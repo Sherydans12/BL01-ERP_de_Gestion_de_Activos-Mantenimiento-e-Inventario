@@ -33,8 +33,10 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
   @Input() open = false;
   @Input() warehouseId: string | null = null;
   /**
-   * Dentro de otro `<dialog>` (p. ej. GlobalItemPicker): el overlay debe ser
-   * `absolute` para apilarse correctamente sobre el contenido del diálogo padre.
+   * `false` (uso desde `GlobalItemPicker`): overlay `position: fixed` al viewport — obligatorio
+   * cuando hay **varios** `<dialog>` nativos en cascada (p. ej. operación de bodega + catálogo).
+   * `true`: overlay `absolute` al ancestro posicionado; solo en escenarios sin ese apilamiento.
+   * Guía: `docs/agentes/ui-quickadd-global-picker-dialogos-nativos.md`.
    */
   @Input() overlayInsideDialog = false;
   @Output() closed = new EventEmitter<void>();

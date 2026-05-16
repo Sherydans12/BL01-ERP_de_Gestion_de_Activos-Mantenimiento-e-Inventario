@@ -290,7 +290,7 @@
   @if (allowQuickAdd) {
     <app-quick-add-item-modal
       [open]="quickAddOpen()"
-      [overlayInsideDialog]="true"
+      [overlayInsideDialog]="false"
       [warehouseId]="warehouseId"
       (closed)="onQuickAddClosed()"
       (itemCreated)="onQuickAddCreated($event)"
