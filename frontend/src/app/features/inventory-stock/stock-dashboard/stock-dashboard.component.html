@@ -835,6 +835,9 @@
                   </svg>
                 </div>
               </div>
+              <p class="text-[10px] text-muted mt-1.5 leading-relaxed">
+                Luego podrá elegir solo repuestos que tengan salida registrada a esta OT desde <span class="text-main font-semibold">esta bodega</span> y cantidad aún por devolver.
+              </p>
             </div>
           }
 
@@ -856,7 +859,8 @@
                   <button
                     type="button"
                     (click)="showItemPicker.set(true)"
-                    class="shrink-0 text-xs font-mono px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10"
+                    [disabled]="!canOpenTransactionItemPicker()"
+                    class="shrink-0 text-xs font-mono px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
                     Cambiar
                   </button>
@@ -865,7 +869,8 @@
                 <button
                   type="button"
                   (click)="showItemPicker.set(true)"
-                  class="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-border text-sm text-muted hover:border-primary/50 hover:text-main transition-colors"
+                  [disabled]="!canOpenTransactionItemPicker()"
+                  class="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-border text-sm text-muted hover:border-primary/50 hover:text-main transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted"
                 >
                   Buscar artículo en el Catálogo Maestro de Artículos…
                 </button>
@@ -1573,6 +1578,7 @@
     [strictFamilyFirst]="itemPickerCatalog.strictFamilyFirst"
     [allowQuickAdd]="transactionItemPickerAllowQuickAdd()"
     [onlyWithStockInWarehouse]="transactionItemPickerOnlyWithStockInWarehouse()"
+    [workOrderIdForReturn]="transactionItemPickerWorkOrderId()"
     [title]="transactionItemPickerTitle()"
     (closed)="onTransactionItemPickerClosed()"
     (itemPicked)="onTransactionItemPicked($event)"

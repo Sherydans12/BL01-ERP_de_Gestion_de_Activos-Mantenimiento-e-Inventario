@@ -65,8 +65,8 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 ## Selector global de artículos (`GlobalItemPicker`)
 
 - **Componente:** `frontend/src/app/shared/components/global-item-picker/`.
-- **API:** `GET /inventory-items/picker` con `search`, `categoryId`, `warehouseId`, paginación; **`onlyWithStock=1`** restringe a artículos con **`ItemStock.quantity > 0`** en esa bodega (requiere `warehouseId`).
-- **Inputs:** `allowQuickAdd` (mostrar/ocultar alta rápida), `onlyWithStockInWarehouse`, `warehouseId`, `strictFamilyFirst`, etc.
+- **API:** `GET /inventory-items/picker` con `search`, `categoryId`, `warehouseId`, paginación; **`onlyWithStock=1`** restringe a artículos con **`ItemStock.quantity > 0`** en esa bodega (requiere `warehouseId`). Opcional **`workOrderId`**: ítems con salida (`OUT` / `WORK_ORDER_ISSUE`) a esa OT desde esa bodega y cantidad neta aún devolvible (alineado con `performReturn`).
+- **Inputs:** `allowQuickAdd`, `onlyWithStockInWarehouse`, `workOrderIdForReturn`, `warehouseId`, `strictFamilyFirst`, etc.
 
 **Transferencias:** se usa con `allowQuickAdd=false`, `onlyWithStockInWarehouse=true` y `warehouseId` = bodega origen.
 

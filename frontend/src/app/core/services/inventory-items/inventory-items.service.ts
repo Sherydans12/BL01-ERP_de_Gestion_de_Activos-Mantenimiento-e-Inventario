@@ -203,6 +203,8 @@ export class InventoryItemsService {
     warehouseId?: string;
     /** Solo ítems con cantidad &gt; 0 en la bodega indicada (requiere warehouseId). */
     onlyWithStockInWarehouse?: boolean;
+    /** Solo ítems con salida a esta OT desde la bodega y cantidad aún devolvible (requiere warehouseId). */
+    workOrderReturnFilterId?: string;
     page?: number;
     pageSize?: number;
   }): Observable<ItemPickerPage> {
@@ -218,6 +220,9 @@ export class InventoryItemsService {
     }
     if (params.onlyWithStockInWarehouse === true) {
       p = p.set('onlyWithStock', '1');
+    }
+    if (params.workOrderReturnFilterId?.trim()) {
+      p = p.set('workOrderId', params.workOrderReturnFilterId.trim());
     }
     if (params.page != null) {
       p = p.set('page', String(params.page));

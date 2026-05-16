@@ -378,6 +378,54 @@ export class InventoryItemsService {
   }
 
   /**
+   * Ítems con salidas (OUT / WORK_ORDER_ISSUE) a una OT desde una bodega y
+   * cantidad neta aún devolvible (misma lógica que `performReturn`).
+   */
+  private async listReturnableItemIdsForWorkOrder(
+    tenantId: string,
+    warehouseId: string,
+    workOrderId: string,
+  ): Promise<string[]> {
+    const [outs, rets] = await Promise.all([
+      this.prisma.inventoryTransaction.groupBy({
+        by: ['itemId'],
+        where: {
+          warehouseId,
+          referenceId: workOrderId,
+          referenceType: 'WORK_ORDER',
+          type: { in: ['OUT', 'WORK_ORDER_ISSUE'] },
+          warehouse: { tenantId },
+        },
+        _sum: { quantity: true },
+      }),
+      this.prisma.inventoryTransaction.groupBy({
+        by: ['itemId'],
+        where: {
+          warehouseId,
+          referenceId: workOrderId,
+          referenceType: 'WORK_ORDER',
+          type: { in: ['RETURN', 'WORK_ORDER_RETURN'] },
+          warehouse: { tenantId },
+        },
+        _sum: { quantity: true },
+      }),
+    ]);
+
+    const returned = new Map(
+      rets.map((r) => [r.itemId, Number(r._sum.quantity ?? 0)]),
+    );
+    const ids: string[] = [];
+    for (const o of outs) {
+      const consumed = Number(o._sum.quantity ?? 0);
+      const prevRet = returned.get(o.itemId) ?? 0;
+      if (consumed - prevRet > 1e-9) {
+        ids.push(o.itemId);
+      }
+    }
+    return ids;
+  }
+
+  /**
    * Listado paginado para selectores (Catálogo Maestro): búsqueda por texto,
    * filtro por familia o subcategoría, y saldo opcional por bodega.
    */
@@ -389,6 +437,11 @@ export class InventoryItemsService {
       warehouseId?: string;
       /** Solo artículos con fila de stock y quantity &gt; 0 en esa bodega. */
       onlyWithStockInWarehouse?: boolean;
+      /**
+       * Solo ítems con consumo hacia esta OT desde la bodega indicada y cantidad
+       * aún devolvible (requiere `warehouseId`). Usado en devolución a bodega desde OT.
+       */
+      workOrderReturnFilterId?: string;
       page?: number;
       pageSize?: number;
     },
@@ -425,10 +478,38 @@ export class InventoryItemsService {
         }
       : undefined;
 
-    const mergeStockWhere = (
+    const woTrim = opts.workOrderReturnFilterId?.trim();
+    let woReturnWhere: Prisma.InventoryItemWhereInput | undefined;
+    if (woTrim) {
+      if (!warehouseIdForStock) {
+        woReturnWhere = { id: { in: [] } };
+      } else {
+        const wo = await this.prisma.workOrder.findFirst({
+          where: { id: woTrim, tenantId },
+          select: { id: true },
+        });
+        if (!wo) {
+          woReturnWhere = { id: { in: [] } };
+        } else {
+          const ids = await this.listReturnableItemIdsForWorkOrder(
+            tenantId,
+            warehouseIdForStock,
+            woTrim,
+          );
+          woReturnWhere = { id: { in: ids } };
+        }
+      }
+    }
+
+    const mergePickerWhere = (
       base: Prisma.InventoryItemWhereInput,
-    ): Prisma.InventoryItemWhereInput =>
-      stockWhere ? { AND: [base, stockWhere] } : base;
+    ): Prisma.InventoryItemWhereInput => {
+      const extras: Prisma.InventoryItemWhereInput[] = [];
+      if (stockWhere) extras.push(stockWhere);
+      if (woReturnWhere) extras.push(woReturnWhere);
+      if (!extras.length) return base;
+      return { AND: [base, ...extras] };
+    };
 
     const include: Prisma.InventoryItemInclude = {
       itemCategory: { select: ITEM_CATEGORY_SELECT },
@@ -464,7 +545,7 @@ export class InventoryItemsService {
           pageSize,
         };
       }
-      const where = mergeStockWhere(
+      const where = mergePickerWhere(
         await this.buildInventoryItemWhere(tenantId, {
           categoryId: opts.categoryId,
           searchIds: orderedSearchIds,
@@ -492,7 +573,7 @@ export class InventoryItemsService {
       });
       rows = this.sortRowsBySearchIdOrder(rows, pageIds);
     } else {
-      const where = mergeStockWhere(
+      const where = mergePickerWhere(
         await this.buildInventoryItemWhere(tenantId, {
           categoryId: opts.categoryId,
         }),

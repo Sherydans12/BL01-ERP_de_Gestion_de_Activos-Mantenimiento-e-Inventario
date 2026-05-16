@@ -89,11 +89,13 @@ export class StockDashboardComponent implements OnInit {
   readonly itemPickerCatalog = GLOBAL_ITEM_PICKER_CATALOG;
 
   /**
-   * Salida a terreno: solo ítems con stock físico en la bodega actual y sin «+ Nuevo artículo».
-   * Entrada por compra / devolución OT conservan el catálogo amplio del catálogo global.
+   * Salida a terreno: solo ítems con stock físico en la bodega, sin quick-add.
+   * Devolución OT: solo ítems con salida previa a la OT elegida y cantidad aún devolvible; sin quick-add (elegir OT antes de abrir el catálogo).
+   * Entrada por compra: catálogo global (quick-add según `GLOBAL_ITEM_PICKER_CATALOG`).
    */
   transactionItemPickerAllowQuickAdd(): boolean {
-    if (this.transactionForm.get('movementKind')?.value === 'FIELD_OUT') {
+    const k = this.transactionForm.get('movementKind')?.value;
+    if (k === 'FIELD_OUT' || k === 'RETURN_OT') {
       return false;
     }
     return this.itemPickerCatalog.allowQuickAdd;
@@ -103,10 +105,31 @@ export class StockDashboardComponent implements OnInit {
     return this.transactionForm.get('movementKind')?.value === 'FIELD_OUT';
   }
 
+  /** Filtro API `workOrderId` en el picker (solo devolución OT). */
+  transactionItemPickerWorkOrderId(): string | null {
+    if (this.transactionForm.get('movementKind')?.value !== 'RETURN_OT') {
+      return null;
+    }
+    const id = String(this.transactionForm.get('workOrderId')?.value ?? '').trim();
+    return id || null;
+  }
+
   transactionItemPickerTitle(): string {
-    return this.transactionForm.get('movementKind')?.value === 'FIELD_OUT'
-      ? 'Artículos con saldo en esta bodega'
-      : this.itemPickerCatalog.titleMaster;
+    const k = this.transactionForm.get('movementKind')?.value;
+    if (k === 'FIELD_OUT') {
+      return 'Artículos con saldo en esta bodega';
+    }
+    if (k === 'RETURN_OT') {
+      return 'Repuestos devolvibles desde esta OT (esta bodega)';
+    }
+    return this.itemPickerCatalog.titleMaster;
+  }
+
+  canOpenTransactionItemPicker(): boolean {
+    if (this.transactionForm.get('movementKind')?.value !== 'RETURN_OT') {
+      return true;
+    }
+    return !!String(this.transactionForm.get('workOrderId')?.value ?? '').trim();
   }
 
   warehouses = signal<any[]>([]);
@@ -330,6 +353,18 @@ export class StockDashboardComponent implements OnInit {
         if (k === 'RETURN_OT') {
           this.loadWorkOrdersForReturn();
         }
+      });
+
+    this.transactionForm
+      .get('workOrderId')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.transactionForm.get('movementKind')?.value !== 'RETURN_OT') {
+          return;
+        }
+        this.transactionForm.patchValue({ itemId: '' }, { emitEvent: false });
+        this.transactionItemPreview.set(null);
+        this.transactionStockHint.set(null);
       });
 
     this.adjustmentForm = this.fb.group({

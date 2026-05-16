@@ -54,6 +54,7 @@ export class InventoryItemsController {
     @Query('categoryId') categoryId?: string,
     @Query('warehouseId') warehouseId?: string,
     @Query('onlyWithStock') onlyWithStock?: string,
+    @Query('workOrderId') workOrderReturnFilterId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
@@ -70,6 +71,7 @@ export class InventoryItemsController {
       categoryId,
       warehouseId,
       onlyWithStockInWarehouse,
+      workOrderReturnFilterId,
       page: Number.isFinite(p) ? p : undefined,
       pageSize: Number.isFinite(ps) ? ps : undefined,
     });

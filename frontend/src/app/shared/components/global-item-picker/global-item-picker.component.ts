@@ -85,6 +85,12 @@ export class GlobalItemPickerComponent
    */
   @Input() onlyWithStockInWarehouse = false;
 
+  /**
+   * Con `warehouseId`, limita a ítems con consumo hacia esta OT desde esa bodega
+   * y cantidad aún devolvible (API `workOrderId` en el picker).
+   */
+  @Input() workOrderIdForReturn: string | null = null;
+
   @Output() closed = new EventEmitter<void>();
   @Output() itemPicked = new EventEmitter<ItemPickerRow>();
 
@@ -125,7 +131,12 @@ export class GlobalItemPickerComponent
     if (this.open && this.pickerDialog?.nativeElement?.open) {
       const wh = changes['warehouseId'];
       const ow = changes['onlyWithStockInWarehouse'];
-      if ((wh && !wh.firstChange) || (ow && !ow.firstChange)) {
+      const wo = changes['workOrderIdForReturn'];
+      if (
+        (wh && !wh.firstChange) ||
+        (ow && !ow.firstChange) ||
+        (wo && !wo.firstChange)
+      ) {
         this.fetch();
       }
     }
@@ -205,6 +216,8 @@ export class GlobalItemPickerComponent
         warehouseId: this.warehouseId?.trim() || undefined,
         onlyWithStockInWarehouse:
           this.onlyWithStockInWarehouse && !!this.warehouseId?.trim(),
+        workOrderReturnFilterId:
+          this.workOrderIdForReturn?.trim() || undefined,
         page: this.page(),
         pageSize: this.pageSize,
       })
@@ -275,6 +288,8 @@ export class GlobalItemPickerComponent
         warehouseId: this.warehouseId?.trim() || undefined,
         onlyWithStockInWarehouse:
           this.onlyWithStockInWarehouse && !!this.warehouseId?.trim(),
+        workOrderReturnFilterId:
+          this.workOrderIdForReturn?.trim() || undefined,
         page: this.page(),
         pageSize: this.pageSize,
       })
