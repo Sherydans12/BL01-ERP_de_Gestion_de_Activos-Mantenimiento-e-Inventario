@@ -10,6 +10,8 @@ Sistema orientado a entornos industriales para el control de flota, mantenimient
 
 **v1.2 — Gobernanza de compras por ACL de usuarios y control de umbrales económicos (`minAmount`):** políticas de aprobación por lista explícita de firmantes (`approval_policy_users`), validación de monto mínimo por nivel al firmar OC, y panel de configuración alineado; detalle en [docs/PURCHASE-GOVERNANCE.md](docs/PURCHASE-GOVERNANCE.md).
 
+**v1.3 — Flujos de compras y catálogo en SRC/recepción:** documento único de flujos operativos (líneas con catálogo, cantidad editable y validada, cadena hasta recepción, un solo botón «Generar orden(es) de compra» en detalle SRC, códigos de inventario `IN####` y sin autogenerar N° de parte en quick-create) en [docs/PURCHASE-FLOWS.md](docs/PURCHASE-FLOWS.md).
+
 Funcionalidades principales:
 
 - **Maestro de flota:** Activos con trazabilidad de horómetros y ajustes físicos (offsets).

@@ -24,7 +24,7 @@ export interface QuickCreateItemResult {
   id: string;
   qrCode?: string;
   inventoryCode?: string | null;
-  partNumber: string;
+  partNumber: string | null;
   name: string;
   unitOfMeasure: UnitOfMeasureRef;
   categoryId: string | null;
@@ -60,9 +60,9 @@ export interface ItemPickerRow {
   id: string;
   /** Payload QR (mismo esquema que backend: INV:<uuid>). */
   qrCode?: string;
-  /** SKU interno ERP (INV-00001 o código propio). */
+  /** SKU interno ERP (IN0001 o código propio). */
   inventoryCode?: string | null;
-  partNumber: string;
+  partNumber: string | null;
   name: string;
   description?: string | null;
   /** Equipos / marcas / modelos compatibles (texto libre). */

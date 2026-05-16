@@ -20,9 +20,8 @@ import {
 } from './inventory-item-label-pdf.generator';
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
-const INV_SKU_PREFIX = 'INV';
-/** Secuencia N° de parte en quickCreate — max 10 chars (sequence_counters.document_type). */
-const INV_QUICK_PN_DOC_TYPE = 'INV_QCK_PN';
+/** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
+const INV_SKU_PREFIX = 'IN';
 
 const ITEM_CATEGORY_SELECT = {
   id: true,
@@ -74,6 +73,60 @@ export class InventoryItemsService {
   ): number | null {
     if (!this.isMechanic(user)) return value;
     return null;
+  }
+
+  /**
+   * Alinea `sequence_counters` (INV_SKU) con el máximo numérico ya presente en
+   * `inventory_code` (formato `IN####` o legado `INV-#####`) para que el
+   * siguiente autogenerado no repita ni quede por debajo de importaciones.
+   */
+  private async ensureInventorySkuCounterFloor(
+    tenantId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const rows = await tx.inventoryItem.findMany({
+      where: { tenantId, inventoryCode: { not: null } },
+      select: { inventoryCode: true },
+    });
+    let floor = 0;
+    for (const { inventoryCode } of rows) {
+      const t = (inventoryCode ?? '').trim();
+      if (!t) continue;
+      const mNew = /^IN(\d{1,8})$/i.exec(t);
+      if (mNew) floor = Math.max(floor, parseInt(mNew[1]!, 10));
+      const mOld = /^INV-(\d{1,8})$/i.exec(t);
+      if (mOld) floor = Math.max(floor, parseInt(mOld[1]!, 10));
+    }
+    if (floor <= 0) return;
+
+    const counter = await tx.sequenceCounter.findUnique({
+      where: {
+        tenantId_documentType: {
+          tenantId,
+          documentType: INV_SKU_DOC_TYPE,
+        },
+      },
+    });
+    if (!counter || counter.lastNumber < floor) {
+      await tx.sequenceCounter.upsert({
+        where: {
+          tenantId_documentType: {
+            tenantId,
+            documentType: INV_SKU_DOC_TYPE,
+          },
+        },
+        create: {
+          tenantId,
+          documentType: INV_SKU_DOC_TYPE,
+          prefix: INV_SKU_PREFIX,
+          lastNumber: floor,
+        },
+        update: {
+          lastNumber: floor,
+          prefix: INV_SKU_PREFIX,
+        },
+      });
+    }
   }
 
   /**
@@ -600,13 +653,18 @@ export class InventoryItemsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
       const inventoryCode =
         requestedSku ||
         (await this.sequenceService.getNextCorrelative(
           user.tenantId,
           INV_SKU_DOC_TYPE,
           INV_SKU_PREFIX,
-          tx,
+          {
+            tx,
+            padWidth: 4,
+            separator: '',
+          },
         ));
 
       const id = randomUUID();
@@ -823,21 +881,20 @@ export class InventoryItemsService {
           user.tenantId,
         );
 
-        const partNumber = requestedPn
-          ? requestedPn
-          : await this.sequenceService.getNextCorrelative(
-              user.tenantId,
-              INV_QUICK_PN_DOC_TYPE,
-              'AUTO',
-              tx,
-            );
+        await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
+
+        const partNumber = requestedPn ? requestedPn : null;
         const inventoryCode = requestedSku
           ? requestedSku
           : await this.sequenceService.getNextCorrelative(
               user.tenantId,
               INV_SKU_DOC_TYPE,
               INV_SKU_PREFIX,
-              tx,
+              {
+                tx,
+                padWidth: 4,
+                separator: '',
+              },
             );
 
         const id = randomUUID();

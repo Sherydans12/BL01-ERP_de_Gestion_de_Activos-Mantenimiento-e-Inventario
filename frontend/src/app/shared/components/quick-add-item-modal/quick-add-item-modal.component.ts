@@ -149,9 +149,11 @@ export class QuickAddItemModalComponent implements OnInit, OnChanges {
       .quickCreateItem(payload)
       .subscribe({
         next: (item) => {
-          this.notify.success(
-            `Artículo "${item.name}" creado (${item.partNumber})`,
-          );
+          const ref =
+            (item.inventoryCode && String(item.inventoryCode).trim()) ||
+            (item.partNumber && String(item.partNumber).trim()) ||
+            item.name;
+          this.notify.success(`Artículo "${item.name}" creado (${ref})`);
           this.itemCreated.emit(item);
           this.isSaving.set(false);
           this.resetForm();

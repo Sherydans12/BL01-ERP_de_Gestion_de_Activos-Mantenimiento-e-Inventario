@@ -952,7 +952,7 @@ export class StockDashboardComponent implements OnInit {
   onTransactionItemPicked(row: ItemPickerRow) {
     this.transactionForm.patchValue({ itemId: row.id });
     this.transactionItemPreview.set({
-      partNumber: row.partNumber,
+      partNumber: row.partNumber ?? '',
       name: row.name,
     });
     this.showItemPicker.set(false);

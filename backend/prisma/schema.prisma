@@ -824,7 +824,7 @@ model InventoryItem {
   id              String        @id @default(uuid()) @db.Uuid
   tenantId        String        @map("tenant_id") @db.Uuid
 
-  /// SKU interno ERP (opcional; si no se informa, se autogenera p. ej. INV-00001).
+  /// SKU interno ERP (opcional; si no se informa, se autogenera p. ej. IN0001).
   inventoryCode   String?       @map("inventory_code") @db.VarChar(60)
 
   /// Payload estable para QR / pistola (típicamente INV:<uuid>).

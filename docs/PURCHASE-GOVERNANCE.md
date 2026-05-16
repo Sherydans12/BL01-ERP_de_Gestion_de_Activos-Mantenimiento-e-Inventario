@@ -2,6 +2,8 @@
 
 Documentación técnica del módulo de **matriz de firmas** y validación económica por nivel (`minAmount`), alineada con Prisma, NestJS y el panel **Configuración de Compras** (`purchase-settings`).
 
+> **Flujos operativos del módulo de compras** (requerimiento → adjudicación → OC → recepción, cantidades, catálogo por línea, generación única de OC): [PURCHASE-FLOWS.md](./PURCHASE-FLOWS.md).
+
 ---
 
 ## 1. Cambio de paradigma: de RBAC (rol) a ACL (usuarios explícitos)

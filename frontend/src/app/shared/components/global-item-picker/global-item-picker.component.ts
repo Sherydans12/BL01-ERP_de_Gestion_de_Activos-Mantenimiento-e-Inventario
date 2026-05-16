@@ -325,7 +325,7 @@ export class GlobalItemPickerComponent
     const row: ItemPickerRow = {
       id: item.id,
       qrCode: item.qrCode,
-      partNumber: item.partNumber,
+      partNumber: item.partNumber ?? null,
       name: item.name,
       description: null,
       compatibilityInfo: null,

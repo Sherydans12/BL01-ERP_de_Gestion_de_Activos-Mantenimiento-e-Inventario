@@ -1087,11 +1087,15 @@ export class WorkOrderFormComponent implements OnInit {
     const i = this.partPickerIndex();
     if (i >= 0) {
       const g = this.partsArray.at(i) as FormGroup;
+      const pnOrSku =
+        (row.partNumber ?? '').trim() ||
+        (row.inventoryCode ?? '').trim() ||
+        '';
       g.patchValue({
-        partNumber: row.partNumber,
+        partNumber: pnOrSku,
         description: row.name,
         inventoryItemId: row.id,
-        linkedItemName: `${row.partNumber} — ${row.name}`,
+        linkedItemName: pnOrSku ? `${pnOrSku} — ${row.name}` : row.name,
       });
     }
     this.onPartPickerClosed();
@@ -1132,11 +1136,18 @@ export class WorkOrderFormComponent implements OnInit {
     const i = this.fluidPickerRowIndex();
     if (i >= 0) {
       const g = this.compartmentRowsArray.at(i) as FormGroup;
-      const label = `${row.partNumber} — ${row.name}`.slice(0, 200);
+      const pnOrSku =
+        (row.partNumber ?? '').trim() ||
+        (row.inventoryCode ?? '').trim() ||
+        '';
+      const label = (pnOrSku ? `${pnOrSku} — ${row.name}` : row.name).slice(
+        0,
+        200,
+      );
       g.patchValue({
         fluidType: label,
         inventoryItemId: row.id,
-        linkedFluidItemName: `${row.partNumber} — ${row.name}`,
+        linkedFluidItemName: pnOrSku ? `${pnOrSku} — ${row.name}` : row.name,
       });
     }
     this.onFluidPickerClosed();
