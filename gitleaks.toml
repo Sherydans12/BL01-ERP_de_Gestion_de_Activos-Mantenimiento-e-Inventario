@@ -1,0 +1,11 @@
+# BL01 — configuración GitLeaks (exclusiones de ruido local / CI)
+# Doc: https://github.com/gitleaks/gitleaks
+title = "BL01 gitleaks"
+
+[allowlist]
+paths = [
+  '''(^|/)node_modules(/|$)''',
+  '''(^|/)dist(/|$)''',
+  '''(^|/)security-audit-reports(/|$)''',
+  '''(^|/)\.cursor(/|$)''',
+]

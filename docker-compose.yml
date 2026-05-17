@@ -1,5 +1,8 @@
 version: '3.8'
 
+# El frontend Docker escucha en 8080 dentro del contenedor (nginx unprivileged).
+# `docker compose up` solo levanta `db` (comportamiento habitual). Para probar el
+# shell estático con Nginx en local: `docker compose --profile with-frontend up --build`
 services:
   db:
     image: postgres:16-alpine
@@ -13,6 +16,18 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - erp-network
+
+  frontend:
+    profiles:
+      - with-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: erp-frontend-local
+    ports:
+      - "8080:8080"
     networks:
       - erp-network
 

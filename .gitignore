@@ -25,3 +25,6 @@ temp-ecc-import/
 
 # Log local de hooks Cursor (memoria automática por máquina)
 docs/agentes/sesiones-auto.log.md
+
+# Informes locales de auditoría (npm audit JSON, trivy staging, gitleaks, psql, curl) — no versionar
+security-audit-reports/

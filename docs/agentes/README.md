@@ -68,6 +68,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | `README.md` | Este índice |
 | [platform-data-admin.md](platform-data-admin.md) | Herramienta SUPER_ADMIN: purga por tenant, API `/api/super-admin/platform`, escalamiento |
 | [seguridad-auth.md](seguridad-auth.md) | 2FA por correo (Super Admin), TOTP (Super Admin), bypass local, API y notas de extensión |
+| [remediacion-docker-trivy-coolify.md](remediacion-docker-trivy-coolify.md) | Docker: usuario no root, healthchecks, frontend puerto **8080** interno y checklist **Coolify** |
 | [correos-transaccionales.md](correos-transaccionales.md) | Plantillas, `npm run email-previews`, reglas técnicas; el **inventario de envíos** vive en [CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md) |
 | [../CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md) | **Catálogo maestro** de todos los `sendMail` y plantillas; actualizar al añadir correos nuevos |
 | [../PURCHASE-FLOWS.md](../PURCHASE-FLOWS.md) y [../PURCHASE-GOVERNANCE.md](../PURCHASE-GOVERNANCE.md) | **Compras:** flujos SRC → OC → recepción (cantidades, catálogo por línea, generación OC) y matriz de firmas ACL / `minAmount` |

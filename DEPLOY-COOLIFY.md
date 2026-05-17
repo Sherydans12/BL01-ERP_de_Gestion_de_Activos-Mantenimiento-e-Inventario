@@ -84,6 +84,17 @@ En el repo ya está cubierto así:
 
 Si delante del contenedor hay **proxy o CDN en Coolify** con reglas de caché propias, alineá lo mismo para esas rutas; de lo contrario pueden anular las cabeceras del nginx interno.
 
+## Frontend Docker: puerto interno **8080** (Coolify / Traefik)
+
+El `frontend/Dockerfile` usa **`nginxinc/nginx-unprivileged:stable-alpine`**, que escucha en **8080** dentro del contenedor (no en 80).
+
+1. En el recurso **Frontend** de Coolify, en **puertos / port mapping / internal port**, apuntá el upstream al **8080** del contenedor.
+2. Si hay **healthcheck HTTP** definido en el panel que usaba el puerto **80**, cambialo a **8080** (p. ej. ruta `/`).
+3. El dominio público sigue siendo **443** en el proxy de Coolify; solo cambia el **puerto de destino hacia el contenedor**.
+4. Si desplegás con `docker-compose.prod.yml`, el servicio `frontend` declara **`expose: "8080"`** para que el proxy de la plataforma descubra el puerto correcto.
+
+Guía detallada: [`docs/agentes/remediacion-docker-trivy-coolify.md`](remediacion-docker-trivy-coolify.md).
+
 ## Scripts útiles (solo desarrollo / operaciones manuales)
 
 En el repo, desde `backend/`:
