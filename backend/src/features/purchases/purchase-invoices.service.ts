@@ -77,6 +77,8 @@ export type PurchaseInvoiceApi = InvoiceEntity & {
   match?: {
     poAmount: number;
     invoiceAmount: number;
+    creditNotesAmount: number;
+    netInvoiceAmount: number;
     receivedAmount: number;
     tolerancePercent: number;
     matchPo: boolean;
@@ -147,23 +149,69 @@ export class PurchaseInvoicesService {
     }
     if (!matchReceived) {
       reasons.push(
-        `El monto facturado (${invNum.toFixed(2)}) supera el valor recepcionado acumulado (${recNum.toFixed(2)}); no se puede reconocer pago por bienes no ingresados a bodega.`,
+        `El monto neto facturado (${invNum.toFixed(2)}) supera el valor recepcionado acumulado (${recNum.toFixed(2)}); no se puede reconocer pago por bienes no ingresados a bodega.`,
       );
     }
     return reasons;
   }
 
-  /** Cálculo 3-way (montos) sin escribir en DB. */
+  /**
+   * Suma acumulada de TODAS las facturas no canceladas asociadas a una OC.
+   * Si se excluye `excludeInvoiceId`, esa factura no se incluye (útil para recálculo
+   * antes de persistir la factura actual en un create/update).
+   */
+  private async computeAccumulatedInvoiceAmount(
+    purchaseOrderId: string,
+    tenantId: string,
+    excludeInvoiceId?: string,
+  ): Promise<Prisma.Decimal> {
+    const invoices = await this.prisma.purchaseInvoice.findMany({
+      where: {
+        purchaseOrderId,
+        tenantId,
+        ...(excludeInvoiceId ? { id: { not: excludeInvoiceId } } : {}),
+      },
+      select: { totalAmount: true },
+    });
+    return invoices.reduce(
+      (acc, inv) => acc.add(inv.totalAmount),
+      new Prisma.Decimal(0),
+    );
+  }
+
+  /**
+   * Suma acumulada de TODAS las notas de crédito asociadas a una OC.
+   */
+  private async computeAccumulatedCreditNoteAmount(
+    purchaseOrderId: string,
+    tenantId: string,
+  ): Promise<Prisma.Decimal> {
+    const creditNotes = await this.prisma.purchaseCreditNote.findMany({
+      where: { purchaseOrderId, tenantId },
+      select: { totalAmount: true },
+    });
+    return creditNotes.reduce(
+      (acc, cn) => acc.add(cn.totalAmount),
+      new Prisma.Decimal(0),
+    );
+  }
+
+  /**
+   * Cálculo 3-way (montos) sin escribir en DB.
+   * `invAccumulated` = sumatoria de TODAS las facturas de la OC (incluyendo la actual).
+   * Las notas de crédito se restan para obtener el monto neto real a conciliar.
+   */
   private async computeThreeWayMatchNumbers(
     tenantId: string,
     purchaseOrderId: string,
     poAmount: Prisma.Decimal,
-    invAmount: Prisma.Decimal,
+    invAccumulated: Prisma.Decimal,
   ): Promise<{
     tolPct: number;
     poNum: number;
     invNum: number;
     recNum: number;
+    creditNotesNum: number;
     matchPo: boolean;
     matchReceived: boolean;
   }> {
@@ -175,12 +223,14 @@ export class PurchaseInvoicesService {
       : 1;
     const tol = tolPct / 100;
 
-    const receivedAmount = await this.computeReceivedAmountForPurchaseOrder(
-      purchaseOrderId,
-    );
+    const [receivedAmount, creditNotesTotal] = await Promise.all([
+      this.computeReceivedAmountForPurchaseOrder(purchaseOrderId),
+      this.computeAccumulatedCreditNoteAmount(purchaseOrderId, tenantId),
+    ]);
 
     const poNum = poAmount.toNumber();
-    const invNum = invAmount.toNumber();
+    // Monto neto = facturas acumuladas − notas de crédito (Fase 3: ecuación final).
+    const invNum = invAccumulated.sub(creditNotesTotal).toNumber();
     const recNum = receivedAmount.toNumber();
 
     const diffPo = Math.abs(invNum - poNum);
@@ -190,7 +240,15 @@ export class PurchaseInvoicesService {
     const recMargin = Math.abs(recNum) * tol;
     const matchReceived = invNum <= recNum + recMargin;
 
-    return { tolPct, poNum, invNum, recNum, matchPo, matchReceived };
+    return {
+      tolPct,
+      poNum,
+      invNum,
+      recNum,
+      creditNotesNum: creditNotesTotal.toNumber(),
+      matchPo,
+      matchReceived,
+    };
   }
 
   private async fetchDiscrepancyReasonsMap(
@@ -455,11 +513,16 @@ export class PurchaseInvoicesService {
     ]);
     assertUserHasContractAccess(user, inv.purchaseOrder.contractId);
     const meta = await this.attachInvoiceMeta(inv, user.tenantId);
+    const siblingTotal = await this.computeAccumulatedInvoiceAmount(
+      inv.purchaseOrderId,
+      user.tenantId,
+      inv.id,
+    );
     const nums = await this.computeThreeWayMatchNumbers(
       user.tenantId,
       inv.purchaseOrderId,
       inv.purchaseOrder.totalAmount,
-      inv.totalAmount,
+      siblingTotal.add(inv.totalAmount),
     );
     const reasons =
       inv.threeWayMatchOverruled && nums.matchReceived
@@ -478,6 +541,8 @@ export class PurchaseInvoicesService {
       match: {
         poAmount: nums.poNum,
         invoiceAmount: nums.invNum,
+        creditNotesAmount: nums.creditNotesNum,
+        netInvoiceAmount: nums.invNum,
         receivedAmount: nums.recNum,
         tolerancePercent: nums.tolPct,
         matchPo: nums.matchPo,
@@ -509,11 +574,19 @@ export class PurchaseInvoicesService {
       );
     }
 
+    // Suma acumulada: facturas hermanas + la actual.
+    const siblingTotal = await this.computeAccumulatedInvoiceAmount(
+      invoice.purchaseOrderId,
+      tenantId,
+      invoiceId,
+    );
+    const accumulatedInvAmount = siblingTotal.add(invoice.totalAmount);
+
     let nums = await this.computeThreeWayMatchNumbers(
       tenantId,
       invoice.purchaseOrderId,
       invoice.purchaseOrder.totalAmount,
-      invoice.totalAmount,
+      accumulatedInvAmount,
     );
 
     if (invoice.threeWayMatchOverruled && !nums.matchReceived) {
@@ -533,11 +606,16 @@ export class PurchaseInvoicesService {
           vendor: { select: { id: true, name: true, code: true } },
         },
       }))!;
+      const siblingTotalAfterRevoke = await this.computeAccumulatedInvoiceAmount(
+        invoice.purchaseOrderId,
+        tenantId,
+        invoiceId,
+      );
       nums = await this.computeThreeWayMatchNumbers(
         tenantId,
         invoice.purchaseOrderId,
         invoice.purchaseOrder.totalAmount,
-        invoice.totalAmount,
+        siblingTotalAfterRevoke.add(invoice.totalAmount),
       );
     }
 
@@ -581,6 +659,8 @@ export class PurchaseInvoicesService {
         match: {
           poAmount: nums.poNum,
           invoiceAmount: nums.invNum,
+          creditNotesAmount: nums.creditNotesNum,
+          netInvoiceAmount: nums.invNum,
           receivedAmount: nums.recNum,
           tolerancePercent: nums.tolPct,
           matchPo: nums.matchPo,
@@ -769,6 +849,8 @@ export class PurchaseInvoicesService {
       match: {
         poAmount: nums.poNum,
         invoiceAmount: nums.invNum,
+        creditNotesAmount: nums.creditNotesNum,
+        netInvoiceAmount: nums.invNum,
         receivedAmount: nums.recNum,
         tolerancePercent: nums.tolPct,
         matchPo: nums.matchPo,
@@ -814,11 +896,16 @@ export class PurchaseInvoicesService {
       );
     }
 
+    const siblingsForOverrule = await this.computeAccumulatedInvoiceAmount(
+      existing.purchaseOrderId,
+      user.tenantId,
+      id,
+    );
     const nums = await this.computeThreeWayMatchNumbers(
       user.tenantId,
       existing.purchaseOrderId,
       existing.purchaseOrder.totalAmount,
-      existing.totalAmount,
+      siblingsForOverrule.add(existing.totalAmount),
     );
 
     if (!nums.matchReceived) {
@@ -907,6 +994,8 @@ export class PurchaseInvoicesService {
       match: {
         poAmount: nums.poNum,
         invoiceAmount: nums.invNum,
+        creditNotesAmount: nums.creditNotesNum,
+        netInvoiceAmount: nums.invNum,
         receivedAmount: nums.recNum,
         tolerancePercent: nums.tolPct,
         matchPo: nums.matchPo,
@@ -941,7 +1030,6 @@ export class PurchaseInvoicesService {
       where: { id: data.purchaseOrderId, tenantId },
       include: {
         quotation: { select: { vendorId: true } },
-        purchaseInvoice: { select: { id: true } },
       },
     });
 
@@ -951,12 +1039,6 @@ export class PurchaseInvoicesService {
     if (!PO_STATUSES_ALLOW_INVOICE.includes(order.status as any)) {
       throw new BadRequestException(
         'La Orden de Compra debe estar aprobada, enviada, en proceso de recepción o cerrada para poder registrar una factura.',
-      );
-    }
-
-    if (order.purchaseInvoice) {
-      throw new BadRequestException(
-        'Esta orden ya tiene una factura registrada (relación 1:1).',
       );
     }
 

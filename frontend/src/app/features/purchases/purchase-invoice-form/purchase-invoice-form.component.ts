@@ -88,7 +88,7 @@ export class PurchaseInvoiceFormComponent implements OnInit {
     ].includes(o.status);
   });
 
-  existingInvoice = computed(() => this.order()?.purchaseInvoice ?? null);
+  existingInvoice = computed(() => this.order()?.purchaseInvoices?.[0] ?? null);
 
   ngOnInit() {
     const orderId = this.route.snapshot.paramMap.get('orderId');
@@ -123,7 +123,7 @@ export class PurchaseInvoiceFormComponent implements OnInit {
     this.purchasesService.getOrder(orderId).subscribe({
       next: (data) => {
         this.order.set(data);
-        const inv = data.purchaseInvoice;
+        const inv = data.purchaseInvoices?.[0] ?? null;
         if (inv) {
           this.invoiceNumber.set(inv.invoiceNumber);
           this.emissionDate.set(inv.emissionDate.slice(0, 10));
@@ -213,7 +213,7 @@ export class PurchaseInvoiceFormComponent implements OnInit {
       return;
     }
 
-    const existing = o.purchaseInvoice;
+    const existing = o.purchaseInvoices?.[0] ?? null;
     this.isSaving.set(true);
 
     const fd = new FormData();

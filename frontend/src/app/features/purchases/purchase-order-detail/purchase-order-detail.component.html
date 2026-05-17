@@ -469,32 +469,32 @@
           Conciliación entre monto de la OC, valor recepcionado en bodega y monto de la factura del proveedor (margen en configuración de compras).
         </p>
 
-        @if (order()!.purchaseInvoice) {
+        @if (primaryInvoice()) {
           <app-purchase-documents-panel
             entity="PURCHASE_INVOICE"
-            [entityId]="order()!.purchaseInvoice!.id"
+            [entityId]="primaryInvoice()!.id"
             [title]="'Adjuntos de la factura'"
           />
         }
 
-        @if (order()!.purchaseInvoice && (order()!.purchaseInvoice!.status === 'MATCHED' || order()!.purchaseInvoice!.status === 'PAID')) {
+        @if (primaryInvoice() && (primaryInvoice()!.status === 'MATCHED' || primaryInvoice()!.status === 'PAID')) {
           <div class="rounded-xl border-2 border-emerald-500/45 bg-emerald-500/10 px-5 py-4 mb-6">
             <p class="text-base sm:text-lg font-semibold text-emerald-200 leading-snug">
               Conciliación exitosa: la factura hace match con la orden de compra y con lo recepcionado en bodega.
             </p>
             <p class="text-sm text-emerald-100/90 mt-2">OC y recepción vinculadas en el control de tres vías (3-way match).</p>
-            @if (order()!.purchaseInvoice!.threeWayMatchOverruled) {
+            @if (primaryInvoice()!.threeWayMatchOverruled) {
               <p class="text-sm text-amber-100/95 mt-3 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2">
                 Conciliación aceptada con <span class="font-semibold">excepción manual</span> (causa documentada en historial de actividad).
               </p>
             }
-            @if (order()!.purchaseInvoice!.status === 'MATCHED') {
+            @if (primaryInvoice()!.status === 'MATCHED') {
               <p class="text-sm text-emerald-100/85 mt-2">Puede registrar el pago cuando corresponda.</p>
             } @else {
               <p class="text-sm text-emerald-100/85 mt-2">Factura marcada como pagada.</p>
             }
           </div>
-        } @else if (order()!.purchaseInvoice?.status === 'DISCREPANCY') {
+        } @else if (primaryInvoice()?.status === 'DISCREPANCY') {
           <div class="rounded-xl border-2 border-red-500/50 bg-red-500/10 px-5 py-4 mb-6">
             <p class="text-base font-semibold text-red-300 mb-3">Discrepancia detectada en la validación 3-way</p>
             <ul class="list-disc list-inside space-y-1.5 text-sm text-red-100/95">
@@ -541,15 +541,15 @@
             <p class="text-lg font-mono font-semibold text-main">{{ receivedValueTotal() | clpCurrency }}</p>
           </div>
           <div class="rounded-lg border border-border p-4">
-            <p class="text-xs text-muted uppercase">Total factura</p>
-            @if (order()!.purchaseInvoice) {
-              <p class="text-lg font-mono font-semibold text-main">{{ order()!.purchaseInvoice!.totalAmount | clpCurrency }}</p>
+            <p class="text-xs text-muted uppercase">Total facturado</p>
+            @if (primaryInvoice()) {
+              <p class="text-lg font-mono font-semibold text-main">{{ primaryInvoice()!.totalAmount | clpCurrency }}</p>
               <p class="text-xs text-muted mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                @if (order()!.purchaseInvoice!.invoiceNumber.trim()) {
+                @if (primaryInvoice()!.invoiceNumber.trim()) {
                   <app-entity-link
                     kind="INV"
-                    [id]="order()!.purchaseInvoice!.id"
-                    [label]="order()!.purchaseInvoice!.invoiceNumber"
+                    [id]="primaryInvoice()!.id"
+                    [label]="primaryInvoice()!.invoiceNumber"
                     [purchaseOrderIdForDetail]="order()!.id"
                     variant="link"
                   />
@@ -557,28 +557,58 @@
                   <span class="italic">Sin número</span>
                 }
                 <span class="text-muted">·</span>
-                <span>emisión {{ order()!.purchaseInvoice!.emissionDate | date:'dd/MM/yyyy' }}</span>
+                <span>emisión {{ primaryInvoice()!.emissionDate | date:'dd/MM/yyyy' }}</span>
               </p>
             } @else {
               <p class="text-sm text-muted italic">—</p>
             }
           </div>
         </div>
-        @if (order()!.purchaseInvoice) {
+
+        @if (creditNotesTotal() > 0) {
+          <div class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <p class="text-xs text-amber-300 uppercase font-medium tracking-wide">Desglose con Notas de Crédito</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+              <div>
+                <p class="text-[11px] text-muted uppercase mb-1">Total facturas brutas</p>
+                <p class="font-mono text-main">{{ (primaryInvoice()?.totalAmount ?? 0) | clpCurrency }}</p>
+              </div>
+              <div>
+                <p class="text-[11px] text-amber-300/80 uppercase mb-1">− Notas de crédito ({{ order()!.purchaseCreditNotes!.length }})</p>
+                <p class="font-mono text-amber-300">− {{ creditNotesTotal() | clpCurrency }}</p>
+              </div>
+              <div class="border-l border-border/50 pl-4">
+                <p class="text-[11px] text-muted uppercase mb-1">= Monto neto a conciliar</p>
+                <p class="text-lg font-mono font-semibold text-primary">{{ netInvoicedTotal() | clpCurrency }}</p>
+              </div>
+            </div>
+            <ul class="mt-3 space-y-1">
+              @for (cn of order()!.purchaseCreditNotes!; track cn.id) {
+                <li class="flex items-center justify-between text-xs text-muted border-t border-border/30 pt-1.5 mt-1.5">
+                  <span class="font-mono">NC {{ cn.creditNoteNumber }} · {{ cn.emissionDate | date:'dd/MM/yyyy' }}</span>
+                  <span class="font-mono text-amber-300">− {{ cn.totalAmount | clpCurrency }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+        @if (primaryInvoice()) {
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 rounded-lg border border-border/60 bg-dark/15 p-4">
             <div>
               <p class="text-[11px] text-muted uppercase mb-1">Neto afecto</p>
-              <p class="font-mono text-main">{{ order()!.purchaseInvoice!.netAmount != null ? (order()!.purchaseInvoice!.netAmount | clpCurrency) : '—' }}</p>
+              <p class="font-mono text-main">{{ primaryInvoice()!.netAmount != null ? (primaryInvoice()!.netAmount | clpCurrency) : '—' }}</p>
             </div>
             <div>
               <p class="text-[11px] text-muted uppercase mb-1">IVA / impuestos</p>
-              <p class="font-mono text-main">{{ order()!.purchaseInvoice!.taxAmount != null ? (order()!.purchaseInvoice!.taxAmount | clpCurrency) : '—' }}</p>
+              <p class="font-mono text-main">{{ primaryInvoice()!.taxAmount != null ? (primaryInvoice()!.taxAmount | clpCurrency) : '—' }}</p>
             </div>
             <div>
               <p class="text-[11px] text-muted uppercase mb-1">Fecha de vencimiento</p>
               <p class="font-mono text-main">
-                @if (order()!.purchaseInvoice!.dueDate) {
-                  {{ order()!.purchaseInvoice!.dueDate | date: 'dd/MM/yyyy' }}
+                @if (primaryInvoice()!.dueDate) {
+                  {{ primaryInvoice()!.dueDate | date: 'dd/MM/yyyy' }}
                 } @else {
                   —
                 }
@@ -591,22 +621,22 @@
           @if (['APPROVED','SENT','ORDERED','SENT_TO_SUPPLIER','PARTIALLY_RECEIVED','RECEIVED','CLOSED'].includes(order()!.status)) {
             <a [routerLink]="['/app/compras/ordenes', order()!.id, 'factura']"
                class="inline-flex items-center px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90">
-              {{ order()!.purchaseInvoice ? 'Editar factura' : 'Registrar factura' }}
+              {{ primaryInvoice() ? 'Nueva factura / editar' : 'Registrar factura' }}
             </a>
           }
-          @if (order()!.purchaseInvoice) {
+          @if (primaryInvoice()) {
             <button type="button" (click)="revalidateInvoice()"
                     class="px-4 py-2 border border-border rounded-lg text-main hover:bg-dark/40">
               Volver a validar
             </button>
-            @if (order()!.purchaseInvoice!.status === 'MATCHED') {
+            @if (primaryInvoice()!.status === 'MATCHED') {
               <button type="button" (click)="markInvoicePaid()"
                       class="px-4 py-2 border border-green-500/40 text-green-400 rounded-lg hover:bg-green-500/10">
                 Marcar factura como pagada
               </button>
             }
-            @if (order()!.purchaseInvoice!.pdfUrl) {
-              <a [href]="order()!.purchaseInvoice!.pdfUrl!" target="_blank" rel="noopener noreferrer"
+            @if (primaryInvoice()!.pdfUrl) {
+              <a [href]="primaryInvoice()!.pdfUrl!" target="_blank" rel="noopener noreferrer"
                  class="px-4 py-2 border border-border rounded-lg text-primary hover:bg-primary/10">
                 Ver PDF
               </a>

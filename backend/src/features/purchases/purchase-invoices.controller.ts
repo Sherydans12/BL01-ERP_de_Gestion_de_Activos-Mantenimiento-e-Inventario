@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -261,14 +262,27 @@ export class PurchaseInvoicesController {
     );
   }
 
-  /** Excepción manual 3-way (short shipment): solo ADMIN / SUPERVISOR. */
+  /**
+   * Excepción manual 3-way (short shipment).
+   * Requiere el flag explícito `canOverruleThreeWayMatch` en el usuario o ser SUPER_ADMIN.
+   * Se elimina la restricción de rol organizacional (ADMIN/SUPERVISOR) para permitir
+   * asignación flexible del permiso a cualquier usuario autorizado por el administrador.
+   */
   @Post(':id/three-way-match/overrule')
-  @Roles('ADMIN', 'SUPERVISOR')
   overruleThreeWayMatch(
     @Param('id') id: string,
     @Body() body: { notes?: string },
     @Req() req: any,
   ) {
+    const user = req.user as {
+      role: string;
+      canOverruleThreeWayMatch: boolean;
+    };
+    if (!user.canOverruleThreeWayMatch && user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'No tienes el permiso explícito para autorizar discrepancias financieras del 3-way match.',
+      );
+    }
     return this.service.overruleThreeWayMatch(id, body?.notes ?? '', req.user);
   }
 

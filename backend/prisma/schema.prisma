@@ -548,7 +548,10 @@ model User {
   phone               String?         @db.VarChar(20)
   birthDate           DateTime?       @map("birth_date") @db.Date
   position            String?         @db.VarChar(100)
-  
+
+  /// Permiso explícito para autorizar discrepancias de 3-way match (short shipment) en facturas de compra.
+  canOverruleThreeWayMatch Boolean     @default(false) @map("can_overrule_three_way_match")
+
   createdAt           DateTime        @default(now()) @map("created_at")
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
@@ -627,6 +630,7 @@ model Tenant {
   inventoryItemAttachments InventoryItemAttachment[]
   inventoryTransfers    InventoryTransfer[]
   purchaseDocuments     PurchaseDocument[]
+  purchaseCreditNotes   PurchaseCreditNote[]
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -1338,7 +1342,8 @@ model PurchaseOrder {
   approvals          PurchaseOrderApproval[]
   receipts           WarehouseReceipt[]
   assetCostRecords   AssetCostRecord[]
-  purchaseInvoice    PurchaseInvoice?
+  purchaseInvoices   PurchaseInvoice[]
+  purchaseCreditNotes PurchaseCreditNote[]
 
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])
@@ -1435,7 +1440,7 @@ model PurchaseInvoice {
   id              String                @id @default(uuid()) @db.Uuid
   tenantId        String                @map("tenant_id") @db.Uuid
   vendorId        String                @map("vendor_id") @db.Uuid
-  purchaseOrderId String                @unique @map("purchase_order_id") @db.Uuid
+  purchaseOrderId String                @map("purchase_order_id") @db.Uuid
   invoiceNumber   String                @map("invoice_number") @db.VarChar(80)
   emissionDate    DateTime              @map("emission_date")
   /** Vencimiento pactado para el calendario de pagos. */
@@ -1465,10 +1470,37 @@ model PurchaseInvoice {
   vendor          Vendor                @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   purchaseOrder   PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   threeWayMatchOverruledBy User? @relation("PurchaseInvoiceThreeWayOverruleApprover", fields: [threeWayMatchOverruledById], references: [id], onDelete: SetNull)
+  creditNotes      PurchaseCreditNote[]
 
   @@index([tenantId, vendorId])
   @@index([tenantId, dueDate])
+  @@index([tenantId, purchaseOrderId])
   @@map("purchase_invoices")
+}
+
+/// Nota de crédito de proveedor vinculada a una OC (y opcionalmente a una factura específica).
+/// Su monto se resta al total facturado acumulado en el cálculo del 3-way match.
+model PurchaseCreditNote {
+  id                String        @id @default(uuid()) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  purchaseOrderId   String        @map("purchase_order_id") @db.Uuid
+  /// Factura específica a la que aplica (opcional; si null aplica a la OC entera).
+  purchaseInvoiceId String?       @map("purchase_invoice_id") @db.Uuid
+  creditNoteNumber  String        @map("credit_note_number") @db.VarChar(80)
+  emissionDate      DateTime      @map("emission_date")
+  totalAmount       Decimal       @map("total_amount") @db.Decimal(18, 2)
+  notes             String?       @db.Text
+
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder     PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, creditNoteNumber, purchaseOrderId])
+  @@index([tenantId, purchaseOrderId])
+  @@map("purchase_credit_notes")
 }
 
 /// Adjuntos unificados (REQ, OC, factura): clave en storage + metadatos (migración R2-ready).

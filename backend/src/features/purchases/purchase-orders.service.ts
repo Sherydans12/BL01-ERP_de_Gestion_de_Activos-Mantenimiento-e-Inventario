@@ -178,10 +178,14 @@ export class PurchaseOrdersService {
           },
           orderBy: { level: 'asc' },
         },
-        purchaseInvoice: {
+        purchaseInvoices: {
           include: {
             vendor: { select: { id: true, name: true, code: true } },
           },
+          orderBy: { createdAt: 'asc' },
+        },
+        purchaseCreditNotes: {
+          orderBy: { emissionDate: 'desc' },
         },
         receipts: {
           include: {
@@ -239,6 +243,7 @@ export class PurchaseOrdersService {
       };
     });
 
+    const invoiceIds = order.purchaseInvoices.map((inv) => inv.id);
     const [poDocuments, invoiceDocuments] = await Promise.all([
       this.prisma.purchaseDocument.findMany({
         where: { tenantId, entity: 'PURCHASE_ORDER', entityId: id },
@@ -247,19 +252,19 @@ export class PurchaseOrdersService {
           uploadedBy: { select: { id: true, name: true, email: true } },
         },
       }),
-      order.purchaseInvoice
+      invoiceIds.length
         ? this.prisma.purchaseDocument.findMany({
             where: {
               tenantId,
               entity: 'PURCHASE_INVOICE',
-              entityId: order.purchaseInvoice.id,
+              entityId: { in: invoiceIds },
             },
             orderBy: { createdAt: 'desc' },
             include: {
               uploadedBy: { select: { id: true, name: true, email: true } },
             },
           })
-        : Promise.resolve([]),
+        : (Promise.resolve([]) as ReturnType<typeof this.prisma.purchaseDocument.findMany>),
     ]);
 
     const resolvedQuotation = order.quotation
@@ -284,20 +289,24 @@ export class PurchaseOrdersService {
         }
       : null;
 
+    const resolvedInvoices = await Promise.all(
+      order.purchaseInvoices.map(async (inv) => ({
+        ...inv,
+        pdfUrl: inv.pdfUrl
+          ? await this.storage.getReadOnlyUrl(inv.pdfUrl)
+          : null,
+        purchaseDocuments: invoiceDocuments.filter(
+          (d) => d.entityId === inv.id,
+        ),
+      })),
+    );
+
     return {
       ...order,
       quotation: resolvedQuotation,
       approvals: enrichedApprovals,
       purchaseDocuments: poDocuments,
-      purchaseInvoice: order.purchaseInvoice
-        ? {
-            ...order.purchaseInvoice,
-            pdfUrl: order.purchaseInvoice.pdfUrl
-              ? await this.storage.getReadOnlyUrl(order.purchaseInvoice.pdfUrl)
-              : null,
-            purchaseDocuments: invoiceDocuments,
-          }
-        : null,
+      purchaseInvoices: resolvedInvoices,
     };
   }
 
@@ -393,8 +402,8 @@ export class PurchaseOrdersService {
 
     const requisitionId =
       order.requisitionId ?? order.quotation?.requisitionId ?? undefined;
-    const invoice = await this.prisma.purchaseInvoice.findUnique({
-      where: { purchaseOrderId: orderId },
+    const orderInvoices = await this.prisma.purchaseInvoice.findMany({
+      where: { purchaseOrderId: orderId, tenantId },
       select: { id: true },
     });
 
@@ -405,10 +414,10 @@ export class PurchaseOrdersService {
         ]
       : [{ entityType: 'PURCHASE_ORDER', entityId: orderId }];
 
-    if (invoice) {
+    for (const inv of orderInvoices) {
       orFilter.push({
         entityType: 'PURCHASE_INVOICE',
-        entityId: invoice.id,
+        entityId: inv.id,
       });
     }
 

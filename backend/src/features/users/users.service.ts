@@ -49,6 +49,7 @@ const meSelect = {
   notifyUnusualLogin: true,
   totpEnabled: true,
   email2faEnabled: true,
+  canOverruleThreeWayMatch: true,
 } as const;
 
 @Injectable()
@@ -106,6 +107,7 @@ export class UsersService {
     customRoleId: string | null;
     customRole: { id: string; name: string; baseRole: string } | null;
     notifyUnusualLogin: boolean;
+    canOverruleThreeWayMatch: boolean;
   }) {
     return {
       id: u.id,
@@ -121,6 +123,7 @@ export class UsersService {
       customRoleId: u.customRoleId,
       customRoleName: u.customRole?.name ?? null,
       notifyUnusualLogin: u.notifyUnusualLogin,
+      canOverruleThreeWayMatch: u.canOverruleThreeWayMatch,
     };
   }
 
@@ -494,6 +497,7 @@ export class UsersService {
           totpEnabled: true,
           email2faEnabled: true,
           notifyUnusualLogin: true,
+          canOverruleThreeWayMatch: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -648,6 +652,10 @@ export class UsersService {
             isActive: data.isActive,
             customRoleId:
               data.customRoleId !== undefined ? data.customRoleId : undefined,
+            canOverruleThreeWayMatch:
+              data.canOverruleThreeWayMatch !== undefined
+                ? Boolean(data.canOverruleThreeWayMatch)
+                : undefined,
           },
         });
 
@@ -691,6 +699,7 @@ export class UsersService {
             customRole: { select: { id: true, name: true, baseRole: true } },
             contractAccess: { select: { contractId: true } },
             tenant: { select: { id: true, code: true, name: true } },
+            canOverruleThreeWayMatch: true,
           },
         });
       });

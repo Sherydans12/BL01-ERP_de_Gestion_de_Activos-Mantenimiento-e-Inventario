@@ -18,6 +18,8 @@ import { PurchasesAnalyticsService } from './purchases-analytics.service';
 import { UsersModule } from '../users/users.module';
 import { PurchaseDocumentsController } from './purchase-documents.controller';
 import { PurchaseDocumentsService } from './purchase-documents.service';
+import { PurchaseCreditNotesController } from './purchase-credit-notes.controller';
+import { PurchaseCreditNotesService } from './purchase-credit-notes.service';
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { PurchaseDocumentsService } from './purchase-documents.service';
     PurchaseInvoicesController,
     PurchasesAnalyticsController,
     PurchaseDocumentsController,
+    PurchaseCreditNotesController,
   ],
   providers: [
     PurchaseSettingsService,
@@ -44,6 +47,7 @@ import { PurchaseDocumentsService } from './purchase-documents.service';
     PurchaseInvoicesService,
     PurchasesAnalyticsService,
     PurchaseDocumentsService,
+    PurchaseCreditNotesService,
   ],
   exports: [
     PurchaseOrdersService,

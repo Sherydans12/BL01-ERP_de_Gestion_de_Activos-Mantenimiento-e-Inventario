@@ -62,4 +62,5 @@ Cuando compras o el solicitante **crean** un artículo desde modales (p. ej. qui
 |------|-----------|
 | Matriz de firmas, ACL por usuario, `minAmount`, `purchase-settings` | [PURCHASE-GOVERNANCE.md](./PURCHASE-GOVERNANCE.md) |
 | SRC, OC, recepción, catálogo en líneas, botón único generar OC | Este archivo |
+| Motor 3-Way Match, multi-factura, notas de crédito, overrule granular | [PURCHASE-FINANCIAL-CONCILIATION.md](./PURCHASE-FINANCIAL-CONCILIATION.md) |
 | Inventario, stock, transferencias, kardex | [docs/agentes/inventario-stock-transferencias-kardex.md](./agentes/inventario-stock-transferencias-kardex.md) |

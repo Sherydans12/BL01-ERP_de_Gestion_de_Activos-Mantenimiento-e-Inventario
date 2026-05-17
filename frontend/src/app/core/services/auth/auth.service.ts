@@ -45,6 +45,8 @@ export interface UserPayload {
   customRoleId?: string | null;
   /** Nombre del rol custom (informativo). */
   customRoleName?: string | null;
+  /** Permiso explícito para autorizar discrepancias de 3-way match en facturas de compra. */
+  canOverruleThreeWayMatch?: boolean;
   /** Empresa en sesión; SUPER_ADMIN sin fila tenant en BD igual puede tener snapshot desde login. */
   tenant?: {
     id: string;

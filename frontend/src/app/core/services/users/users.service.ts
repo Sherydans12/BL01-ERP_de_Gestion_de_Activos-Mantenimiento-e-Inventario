@@ -28,6 +28,8 @@ export interface User {
   totpEnabled?: boolean;
   /** Aviso por correo en logins poco habituales (perfil de seguridad). */
   notifyUnusualLogin?: boolean;
+  /** Permiso explícito para autorizar discrepancias de 3-way match en facturas de compra. */
+  canOverruleThreeWayMatch?: boolean;
   /** UUID en BD; útil para soporte / SUPER_ADMIN. */
   tenantId?: string | null;
   tenant?: { id: string; code: string; name: string } | null;

@@ -110,9 +110,31 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
     return sum;
   });
 
+  /** Suma total de notas de crédito de la OC. */
+  creditNotesTotal = computed(() => {
+    const notes = this.order()?.purchaseCreditNotes;
+    if (!notes?.length) return 0;
+    return notes.reduce((sum, cn) => sum + Number(cn.totalAmount), 0);
+  });
+
+  /** Monto neto facturado = total facturas acumulado − notas de crédito. */
+  netInvoicedTotal = computed(() => {
+    const invoices = this.order()?.purchaseInvoices;
+    if (!invoices?.length) return 0;
+    const gross = invoices.reduce((sum, inv) => sum + Number(inv.totalAmount), 0);
+    return Math.max(0, gross - this.creditNotesTotal());
+  });
+
+  /**
+   * Primera factura de la OC (adapter 1:N → 1 para compatibilidad de UI).
+   * La vista de detalle muestra la primera factura; las adicionales se muestran
+   * como lista secundaria dentro de la misma pestaña de Facturación.
+   */
+  primaryInvoice = computed(() => this.order()?.purchaseInvoices?.[0] ?? null);
+
   /** Semáforo 3-way en UI. */
   billingTrafficLight = computed((): 'none' | 'ok' | 'bad' | 'pending' => {
-    const inv = this.order()?.purchaseInvoice;
+    const inv = this.primaryInvoice();
     if (!inv) return 'none';
     if (inv.status === 'MATCHED' || inv.status === 'PAID') return 'ok';
     if (inv.status === 'DISCREPANCY') return 'bad';
@@ -121,7 +143,7 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
 
   /** Motivos de discrepancia (API enriquecida o último match). */
   invoiceDiscrepancyReasons = computed(() => {
-    const inv = this.order()?.purchaseInvoice;
+    const inv = this.primaryInvoice();
     if (!inv || inv.status !== 'DISCREPANCY') return [];
     if (inv.match?.reasons?.length) {
       return inv.match.reasons.filter((r) => r?.trim());
@@ -331,9 +353,12 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
 
   /** Misma gobernanza que `POST .../three-way-match/overrule` en backend. */
   canOverruleShortShipment = computed(() => {
-    const inv = this.order()?.purchaseInvoice;
+    const inv = this.primaryInvoice();
     if (!inv || inv.status !== 'DISCREPANCY') return false;
-    if (!this.authService.hasRole(['ADMIN', 'SUPERVISOR'])) return false;
+    const user = this.authService.currentUser();
+    const hasPermission =
+      user?.canOverruleThreeWayMatch === true || user?.role === 'SUPER_ADMIN';
+    if (!hasPermission) return false;
     return inv.match?.matchReceived === true;
   });
 
@@ -397,13 +422,17 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
       .getOrder(id)
       .pipe(
         switchMap((data) => {
-          if (!data.purchaseInvoice?.id) {
+          const firstInv = data.purchaseInvoices?.[0];
+          if (!firstInv?.id) {
             return of(data);
           }
-          return this.purchasesService.getPurchaseInvoice(data.purchaseInvoice.id).pipe(
-            map((inv) => ({
+          return this.purchasesService.getPurchaseInvoice(firstInv.id).pipe(
+            map((enriched) => ({
               ...data,
-              purchaseInvoice: { ...data.purchaseInvoice!, ...inv },
+              purchaseInvoices: [
+                { ...firstInv, ...enriched },
+                ...(data.purchaseInvoices?.slice(1) ?? []),
+              ],
             })),
             catchError(() => of(data)),
           );
@@ -583,7 +612,7 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
   }
 
   revalidateInvoice() {
-    const inv = this.order()?.purchaseInvoice;
+    const inv = this.primaryInvoice();
     const oid = this.order()?.id;
     if (!inv || !oid) return;
     this.purchasesService.validatePurchaseInvoice(inv.id).subscribe({
@@ -616,7 +645,7 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
       this.notify.error('La justificación debe tener al menos 15 caracteres.');
       return;
     }
-    const inv = this.order()?.purchaseInvoice;
+    const inv = this.primaryInvoice();
     const oid = this.order()?.id;
     if (!inv?.id || !oid) return;
     this.isOverrulingThreeWay.set(true);
@@ -639,7 +668,7 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
   }
 
   markInvoicePaid() {
-    const inv = this.order()?.purchaseInvoice;
+    const inv = this.primaryInvoice();
     const oid = this.order()?.id;
     if (!inv || !oid) return;
     this.purchasesService.markPurchaseInvoicePaid(inv.id).subscribe({

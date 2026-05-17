@@ -12,6 +12,8 @@ Sistema orientado a entornos industriales para el control de flota, mantenimient
 
 **v1.3 — Flujos de compras y catálogo en SRC/recepción:** documento único de flujos operativos (líneas con catálogo, cantidad editable y validada, cadena hasta recepción, un solo botón «Generar orden(es) de compra» en detalle SRC, códigos de inventario `IN####` y sin autogenerar N° de parte en quick-create) en [docs/PURCHASE-FLOWS.md](docs/PURCHASE-FLOWS.md).
 
+**v1.3 Enterprise — Multi-Facturación, Notas de Crédito y Permisos de Sobreseimiento Granulares a Nivel de Usuario:** relación `PurchaseOrder 1:N PurchaseInvoice` (multi-factura por OC), nuevo modelo `PurchaseCreditNote` con integración en la ecuación del 3-Way Match (`∑Facturas − ∑NotasCrédito ≤ MontoRecepcionado`), y reemplazo de roles hardcodeados por el flag dinámico `canOverruleThreeWayMatch` a nivel de usuario. Arquitectura detallada en [docs/PURCHASE-FINANCIAL-CONCILIATION.md](docs/PURCHASE-FINANCIAL-CONCILIATION.md).
+
 Funcionalidades principales:
 
 - **Maestro de flota:** Activos con trazabilidad de horómetros y ajustes físicos (offsets).

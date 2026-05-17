@@ -69,7 +69,7 @@ export async function buildRequisitionReconciliationSnapshot(
           sourceQuotationItemId: true,
         },
       },
-      purchaseInvoice: {
+      purchaseInvoices: {
         select: { id: true, totalAmount: true },
       },
       receipts: {
@@ -100,8 +100,11 @@ export async function buildRequisitionReconciliationSnapshot(
 
   for (const po of pos) {
     if (!currency && po.currency) currency = po.currency;
-    if (po.purchaseInvoice) {
-      invoicesTotal += Number(po.purchaseInvoice.totalAmount);
+    if (po.purchaseInvoices && po.purchaseInvoices.length > 0) {
+      invoicesTotal += po.purchaseInvoices.reduce(
+        (sum, inv) => sum + Number(inv.totalAmount),
+        0,
+      );
     }
 
     const receivedByOrderItem = new Map<string, number>();
@@ -128,7 +131,7 @@ export async function buildRequisitionReconciliationSnapshot(
         receivedReqLines.add(reqLineId);
       }
 
-      if (po.purchaseInvoice) {
+      if (po.purchaseInvoices && po.purchaseInvoices.length > 0) {
         invoicedReqLines.add(reqLineId);
       }
     }

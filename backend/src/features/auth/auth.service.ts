@@ -505,6 +505,7 @@ export class AuthService {
       customRoleId: string | null;
       tenantId: string | null;
       notifyUnusualLogin: boolean;
+      canOverruleThreeWayMatch: boolean;
       contractAccess: { contractId: string }[];
       tenant: {
         id: string;
@@ -610,6 +611,7 @@ export class AuthService {
         role: user.role,
         customRoleId: user.customRoleId ?? null,
         customRoleName: user.customRole?.name ?? null,
+        canOverruleThreeWayMatch: user.canOverruleThreeWayMatch,
         tenant: tenantForResponse
           ? {
               id: tenantForResponse.id,
@@ -815,6 +817,7 @@ export class AuthService {
         role: updatedUser.role,
         customRoleId: user.customRoleId ?? null,
         customRoleName: user.customRole?.name ?? null,
+        canOverruleThreeWayMatch: updatedUser.canOverruleThreeWayMatch,
         tenant: user.tenant
           ? {
               id: user.tenant.id,

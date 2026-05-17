@@ -209,12 +209,27 @@ export interface PurchaseInvoice {
   match?: {
     poAmount: number;
     invoiceAmount: number;
+    creditNotesAmount: number;
+    netInvoiceAmount: number;
     receivedAmount: number;
     tolerancePercent: number;
     matchPo: boolean;
     matchReceived: boolean;
     reasons: string[];
   };
+}
+
+export interface PurchaseCreditNote {
+  id: string;
+  tenantId: string;
+  purchaseOrderId: string;
+  purchaseInvoiceId?: string | null;
+  creditNoteNumber: string;
+  emissionDate: string;
+  totalAmount: number;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PurchaseOrder {
@@ -237,7 +252,8 @@ export interface PurchaseOrder {
   items: PurchaseOrderItem[];
   approvals: PurchaseOrderApproval[];
   receipts?: WarehouseReceipt[];
-  purchaseInvoice?: PurchaseInvoice | null;
+  purchaseInvoices?: PurchaseInvoice[];
+  purchaseCreditNotes?: PurchaseCreditNote[];
   quotation?: PurchaseQuotation & {
     requisition?: {
       id: string;
@@ -381,8 +397,34 @@ export class PurchasesService {
     order.quotation?.requisition?.quotations?.forEach((q) =>
       this.normalizeQuotationMedia(q),
     );
-    this.normalizeInvoiceMedia(order.purchaseInvoice ?? undefined);
+    order.purchaseInvoices?.forEach((inv) => this.normalizeInvoiceMedia(inv));
     return order;
+  }
+
+  // -- Notas de crédito --
+  getCreditNotes(purchaseOrderId: string): Observable<PurchaseCreditNote[]> {
+    return this.http.get<PurchaseCreditNote[]>(
+      `${this.base}/purchase-credit-notes`,
+      { params: { purchaseOrderId } },
+    );
+  }
+
+  createCreditNote(data: {
+    purchaseOrderId: string;
+    purchaseInvoiceId?: string | null;
+    creditNoteNumber: string;
+    emissionDate: string;
+    totalAmount: number;
+    notes?: string | null;
+  }): Observable<PurchaseCreditNote> {
+    return this.http.post<PurchaseCreditNote>(
+      `${this.base}/purchase-credit-notes`,
+      data,
+    );
+  }
+
+  deleteCreditNote(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/purchase-credit-notes/${id}`);
   }
 
   // -- Settings --
