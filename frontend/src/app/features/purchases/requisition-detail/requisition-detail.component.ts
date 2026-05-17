@@ -123,6 +123,32 @@ export class RequisitionDetailComponent implements OnInit {
 
   /** Selección local: requisitionItemId → quotationItemId adjudicado. */
   matrixSelection = signal<Record<string, string>>({});
+  /**
+   * Para la UI del cuadro comparativo: matriz guardada en servidor + cambios locales,
+   * y si no hay adjudicación persistida pero sí cotización ganadora única (legado),
+   * se asume adjudicada cada línea del SRC a la oferta de esa cotización.
+   */
+  effectiveAwardByReqItemId = computed((): Record<string, string> => {
+    const r = this.requisition();
+    const sel = this.matrixSelection();
+    if (!r) return {};
+    const winner = r.quotations?.find((q) => q.isWinner) ?? null;
+    const out: Record<string, string> = {};
+    for (const it of r.items) {
+      const fromSel = sel[it.id];
+      if (fromSel) {
+        out[it.id] = fromSel;
+        continue;
+      }
+      if (it.awardedQuotationItemId) {
+        out[it.id] = it.awardedQuotationItemId;
+        continue;
+      }
+      const line = winner?.items?.find((li) => li.requisitionItemId === it.id);
+      if (line) out[it.id] = line.id;
+    }
+    return out;
+  });
   isSavingLineAwards = signal(false);
   isGeneratingSplitOrders = signal(false);
 
@@ -298,10 +324,10 @@ export class RequisitionDetailComponent implements OnInit {
   totalAdjudicado = computed(() => {
     const r = this.requisition();
     if (!r) return 0;
-    const sel = this.matrixSelection();
+    const eff = this.effectiveAwardByReqItemId();
     let sum = 0;
     for (const it of r.items) {
-      const qLineId = sel[it.id];
+      const qLineId = eff[it.id];
       if (!qLineId) continue;
       const line = this.findQuotationItemById(qLineId);
       if (!line) continue;
@@ -314,8 +340,8 @@ export class RequisitionDetailComponent implements OnInit {
   hasUnassignedMatrixRows = computed(() => {
     const r = this.requisition();
     if (!r) return false;
-    const sel = this.matrixSelection();
-    return r.items.some((it) => !sel[it.id] && !this.isAwardRowLocked(it.id));
+    const eff = this.effectiveAwardByReqItemId();
+    return r.items.some((it) => !eff[it.id] && !this.isAwardRowLocked(it.id));
   });
 
   /** Quedan líneas adjudicadas sin OC activa (pendiente de generar o completar). */

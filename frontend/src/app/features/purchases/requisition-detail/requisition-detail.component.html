@@ -460,7 +460,7 @@
                         <td class="px-1 py-1 align-top border-l border-border/30 text-center">
                           @let line = getQuotationLineForCell(q, item.id);
                           @if (line) {
-                            @let selected = matrixSelection()[item.id] === line.id;
+                            @let selected = effectiveAwardByReqItemId()[item.id] === line.id;
                             <div class="rounded-lg py-2 px-1 transition-colors"
                                  [ngClass]="{
                                    'ring-2 ring-green-500/60 bg-green-500/10': selected,
