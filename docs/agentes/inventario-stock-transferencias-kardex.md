@@ -24,7 +24,9 @@ Para **transferencias W2W**, al **enviar** se crea `TRANSFER_OUT` en la bodega *
 ## Flujo transferencias (backend)
 
 - **Módulo:** `backend/src/features/inventory-transfer/` (`InventoryTransferController`, `InventoryTransferService`).
-- **API:** `GET /inventory-transfers`, `POST /inventory-transfers` (crear envío), `POST /inventory-transfers/:id/receive` (confirmar recepción). Roles: ver controlador (`ADMIN`, `SUPERVISOR`, `SUPER_ADMIN` en envío).
+- **API:** `GET /inventory-transfers` (listado **paginado**), `GET /inventory-transfers/:id` (detalle con líneas, artículos y metadatos de recepción), `POST /inventory-transfers` (crear envío), `POST /inventory-transfers/:id/receive` (confirmar recepción). Roles: ver controlador (`ADMIN`, `SUPERVISOR`, `SUPER_ADMIN` en envío).
+- **Listado:** respuesta `{ data, total, page, pageSize }`. Query opcional: `page` (default 1), `pageSize` (default 25, máx. 100), `sort` = `createdAt` \| `origin` \| `dest` \| `status`, `dir` = `asc` \| `desc`. Cada fila incluye `createdBy` (`id`, `name`, `email`), `originWarehouse` / `destinationWarehouse` con `contractId`, y `lineCount` (cantidad de líneas). **No** incluye el detalle de cada artículo (usar `GET :id`).
+- **Detalle (`GET :id`):** mismas cabeceras de acceso que el listado; incluye `lines` con `item` (código inventario, part number, nombre, UoM). Si `status = COMPLETED`, añade `reception`: fecha/hora del último `TRANSFER_IN` en destino y usuario que ejecutó la recepción (alineado al kardex / `inventory_transactions`).
 - **Ejecutar envío (`executeTransfer`):** transacción Prisma: crea `InventoryTransfer` en `SHIPPED`, descuenta stock origen, crea líneas, crea **`InventoryTransaction`** `TRANSFER_OUT` por ítem con notas tipo `Transferencia {orig} → {dest} · Traslado de …`.
 - **Recepción (`confirmReception`):** valida acceso al contrato de la bodega destino; incrementa/upsert `ItemStock` destino con **CPP ponderado**; crea `TRANSFER_IN`; pasa transfer a `COMPLETED`.
 
@@ -75,6 +77,7 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 ## Transferencias — frontend
 
 - **Ruta:** `/app/inventario/transferencias` → `inventory-transfer.component`.
+- **Listado:** orden por columnas (origen, destino, estado, envío), paginación Anterior/Siguiente, columna de envío con fecha + usuario creador, conteo de ítems (`lineCount`). Acciones: **Detalle** (modal con líneas, recepción si aplica, enlaces a `/app/articulos/:id`) y **Confirmar recepción** cuando el estado es en tránsito y el usuario puede operar sobre el **contrato de la bodega destino** (misma regla que el backend: `ADMIN` / `SUPER_ADMIN` sin depender del contrato seleccionado en el header; otros roles vía `allowedContracts`). La UI **no** infiere permisos solo con la lista de bodegas del contrato activo del selector superior.
 - **Formulario:** señal `formRevision` + `merge(valueChanges, statusChanges)` para integrar Reactive Forms con `computed` (`canSubmit`, `originWarehouseIdForPicker`).
 - **Líneas:** datos del picker (stock en origen, ubicación, código inventario, `allowsDecimals` de la UoM) y validación de no superar saldo origen antes de enviar.
 

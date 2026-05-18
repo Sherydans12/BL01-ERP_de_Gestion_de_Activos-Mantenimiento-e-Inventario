@@ -1,11 +1,16 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { merge } from 'rxjs';
 import { AuthService } from '../../core/services/auth/auth.service';
-import { InventoryTransferRow, InventoryTransferService } from '../../core/services/inventory-transfer/inventory-transfer.service';
+import {
+  InventoryTransferDetail,
+  InventoryTransferRow,
+  InventoryTransferService,
+  TransferLineDetail,
+} from '../../core/services/inventory-transfer/inventory-transfer.service';
 import { NotificationService } from '../../core/services/notification/notification.service';
 import { WarehousesService } from '../../core/services/warehouses/warehouses.service';
 import { ItemPickerRow } from '../../core/services/inventory-items/inventory-items.service';
@@ -32,12 +37,15 @@ type PendingAction =
   | { type: 'send' }
   | { type: 'receive'; transfer: InventoryTransferRow };
 
+type ListSortKey = 'createdAt' | 'origin' | 'dest' | 'status';
+
 @Component({
   selector: 'app-inventory-transfer',
   standalone: true,
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    RouterLink,
     ConfirmModalComponent,
     GlobalItemPickerComponent,
   ],
@@ -57,9 +65,18 @@ export class InventoryTransferComponent implements OnInit {
   warehouses = signal<any[]>([]);
   warehousesLoading = signal(true);
   transfers = signal<InventoryTransferRow[]>([]);
+  transfersTotal = signal(0);
+  transfersPage = signal(1);
+  transfersPageSize = signal(25);
+  listSortKey = signal<ListSortKey>('createdAt');
+  listSortDir = signal<'asc' | 'desc'>('desc');
   transfersLoading = signal(true);
   lines = signal<DraftLine[]>([]);
   pickerOpen = signal(false);
+
+  detailOpen = signal(false);
+  detailLoading = signal(false);
+  detailTransfer = signal<InventoryTransferDetail | null>(null);
 
   confirmOpen = signal(false);
   confirmTitle = signal('Confirmar acción');
@@ -78,6 +95,10 @@ export class InventoryTransferComponent implements OnInit {
    */
   private formRevision = signal(0);
 
+  readonly transfersTotalPages = computed(() =>
+    Math.max(1, Math.ceil(this.transfersTotal() / this.transfersPageSize())),
+  );
+
   /** Bodega origen para el picker (lectura reactiva al formulario). */
   originWarehouseIdForPicker = computed(() => {
     this.formRevision();
@@ -94,11 +115,7 @@ export class InventoryTransferComponent implements OnInit {
       !!v.destinationWarehouseId &&
       v.originWarehouseId !== v.destinationWarehouseId &&
       this.lines().length > 0 &&
-      this.lines().every(
-        (l) =>
-          l.quantity > 0 &&
-          !this.exceedsOriginStock(l),
-      )
+      this.lines().every((l) => l.quantity > 0 && !this.exceedsOriginStock(l))
     );
   });
 
@@ -111,6 +128,16 @@ export class InventoryTransferComponent implements OnInit {
       () => {
         this.authService.currentContractId();
         this.loadWarehouses();
+      },
+      { allowSignalWrites: true },
+    );
+
+    effect(
+      () => {
+        this.transfersPage();
+        this.transfersPageSize();
+        this.listSortKey();
+        this.listSortDir();
         this.loadTransfers();
       },
       { allowSignalWrites: true },
@@ -143,16 +170,89 @@ export class InventoryTransferComponent implements OnInit {
 
   loadTransfers() {
     this.transfersLoading.set(true);
-    this.transferService.listTransfers().subscribe({
-      next: (rows) => {
-        this.transfers.set(rows ?? []);
-        this.transfersLoading.set(false);
+    this.transferService
+      .listTransfers({
+        page: this.transfersPage(),
+        pageSize: this.transfersPageSize(),
+        sort: this.listSortKey(),
+        dir: this.listSortDir(),
+      })
+      .subscribe({
+        next: (res) => {
+          this.transfers.set(res?.data ?? []);
+          this.transfersTotal.set(res?.total ?? 0);
+          this.transfersLoading.set(false);
+        },
+        error: () => {
+          this.transfers.set([]);
+          this.transfersTotal.set(0);
+          this.transfersLoading.set(false);
+          this.notificationService.error('No se pudieron cargar las transferencias.');
+        },
+      });
+  }
+
+  toggleSort(field: ListSortKey) {
+    if (this.listSortKey() === field) {
+      this.listSortDir.update((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      this.listSortKey.set(field);
+      this.listSortDir.set(field === 'createdAt' ? 'desc' : 'asc');
+    }
+    this.transfersPage.set(1);
+  }
+
+  sortIndicator(field: ListSortKey): string {
+    if (this.listSortKey() !== field) return '';
+    return this.listSortDir() === 'asc' ? '↑' : '↓';
+  }
+
+  transfersPrevPage() {
+    if (this.transfersPage() <= 1) return;
+    this.transfersPage.update((p) => p - 1);
+  }
+
+  transfersNextPage() {
+    if (this.transfersPage() >= this.transfersTotalPages()) return;
+    this.transfersPage.update((p) => p + 1);
+  }
+
+  openDetail(row: InventoryTransferRow) {
+    this.detailOpen.set(true);
+    this.detailLoading.set(true);
+    this.detailTransfer.set(null);
+    this.transferService.getTransfer(row.id).subscribe({
+      next: (d) => {
+        this.detailTransfer.set(d);
+        this.detailLoading.set(false);
       },
-      error: () => {
-        this.transfers.set([]);
-        this.transfersLoading.set(false);
+      error: (err) => {
+        this.detailLoading.set(false);
+        this.detailOpen.set(false);
+        this.notificationService.error(
+          err?.error?.message || 'No se pudo cargar el detalle de la transferencia.',
+        );
       },
     });
+  }
+
+  closeDetail() {
+    this.detailOpen.set(false);
+    this.detailTransfer.set(null);
+    this.detailLoading.set(false);
+  }
+
+  lineQtyDisplay(line: TransferLineDetail): string {
+    const dec = line.item?.unitOfMeasure?.allowsDecimals ?? false;
+    const q = line.quantity;
+    if (!Number.isFinite(q)) return '—';
+    if (dec) {
+      return new Intl.NumberFormat('es-CL', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3,
+      }).format(q);
+    }
+    return String(Math.floor(q));
   }
 
   openPicker() {
@@ -287,12 +387,21 @@ export class InventoryTransferComponent implements OnInit {
     return this.statusLabel(transfer.status) === 'En Tránsito';
   }
 
+  /**
+   * Alineado al backend (`canAccessContract` sobre la bodega destino).
+   * No usar solo la lista de bodegas del contrato activo del header: una transferencia
+   * puede tener destino en otro contrato y el ADMIN igual debe poder confirmar.
+   */
   canConfirmReception(transfer: InventoryTransferRow): boolean {
     if (!this.isReceivable(transfer)) return false;
-    const destinationId = transfer.destinationWarehouse?.id;
-    if (!destinationId) return false;
-    // Solo habilitamos recepción si la bodega destino está dentro del alcance del usuario.
-    return this.warehouses().some((w) => w.id === destinationId);
+    const destContractId = transfer.destinationWarehouse?.contractId;
+    if (!destContractId) return false;
+    const user = this.authService.currentUser();
+    if (!user) return false;
+    const role = String(user.role ?? '').toUpperCase();
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') return true;
+    const allowed = user.allowedContracts ?? [];
+    return allowed.includes(destContractId);
   }
 
   requestSendTransfer() {
@@ -355,6 +464,7 @@ export class InventoryTransferComponent implements OnInit {
           this.notificationService.success('Transferencia enviada exitosamente.');
           this.lines.set([]);
           this.transferForm.patchValue({ destinationWarehouseId: '' });
+          this.transfersPage.set(1);
           this.loadTransfers();
         },
         error: (err) => {
@@ -370,6 +480,9 @@ export class InventoryTransferComponent implements OnInit {
       next: () => {
         this.notificationService.success('Recepción confirmada.');
         this.loadTransfers();
+        if (this.detailOpen() && this.detailTransfer()?.id === transfer.id) {
+          this.openDetail(transfer);
+        }
       },
       error: (err) => {
         this.notificationService.error(
