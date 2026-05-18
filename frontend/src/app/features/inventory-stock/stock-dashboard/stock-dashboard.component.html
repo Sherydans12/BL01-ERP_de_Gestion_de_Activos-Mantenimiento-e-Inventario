@@ -383,9 +383,9 @@
             for="stock-article-quick-search"
             >Buscar artículo</label
           >
-          <div class="relative">
+          <div class="tpm-search-combobox relative flex w-full min-w-0 items-center rounded-lg border border-border bg-surface shadow-sm focus-within:border-primary/50">
             <span
-              class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted"
               aria-hidden="true"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -407,7 +407,7 @@
               (keydown)="onArticleQuickSearchKeydown($event)"
               placeholder="Código, N° parte, nombre, QR, marca, compatibilidad… (varias palabras = todas)"
               autocomplete="off"
-              class="tpm-input-leading-icon w-full bg-surface border border-border text-main rounded-lg pl-9 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm placeholder:text-muted/60"
+              class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0 pr-9 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted/60"
             />
             @if (articleQuickSearch().trim()) {
               <button

@@ -12,9 +12,10 @@
     class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-xl border border-border shadow-sm backdrop-blur-xl"
   >
     <div class="flex items-center gap-4 flex-1">
-      <div class="relative flex-1 max-w-md">
-        <div
-          class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+      <div class="tpm-search-combobox relative flex flex-1 max-w-md min-w-0 items-center rounded-lg border border-border bg-dark focus-within:border-primary">
+        <span
+          class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted"
+          aria-hidden="true"
         >
           <svg
             class="h-4 w-4 text-muted"
@@ -29,13 +30,13 @@
               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             />
           </svg>
-        </div>
+        </span>
         <input
           type="text"
           placeholder="Buscar por ID..."
           [ngModel]="searchQuery()"
           (input)="onSearch($event)"
-          class="tpm-input-leading-icon w-full bg-dark border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-main placeholder:text-muted focus:outline-none focus:border-primary transition-all"
+          class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2 pr-3 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted"
         />
       </div>
 

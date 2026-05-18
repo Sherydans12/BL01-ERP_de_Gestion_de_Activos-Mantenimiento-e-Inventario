@@ -39,6 +39,12 @@
     border-color: #E2E8F0 !important;
   }
 
+  /** Búsqueda “icono + input sin borde”: el fondo es el wrapper; no forzar caja blanca sobre el composé. */
+  [data-theme='light'] .tpm-search-combobox > input[type='text'] {
+    background-color: transparent !important;
+    border-color: transparent !important;
+  }
+
   [data-theme='light'] tr:nth-child(odd) td {
     background-color: #F8FAFC; /* Slate-50 for odd tables rows */
   }

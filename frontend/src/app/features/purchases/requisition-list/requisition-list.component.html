@@ -13,8 +13,8 @@
   <div class="bg-surface rounded-xl border border-border p-4 mb-4">
     <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5">Buscar en requerimientos</label>
     <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
-      <div class="relative flex-1 min-w-0">
-        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted" aria-hidden="true">
+      <div class="tpm-search-combobox relative flex flex-1 min-w-0 items-center rounded-lg border border-border bg-dark focus-within:border-primary/50">
+        <span class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
@@ -27,7 +27,7 @@
           (ngModelChange)="onSearchChange($event)"
           (keydown.enter)="onSearchEnter($event)"
           placeholder="Correlativo, descripción, solicitante, contrato, equipo, OT, Nº parte o artículo en líneas…"
-          class="tpm-input-leading-icon w-full bg-dark border border-border text-main rounded-lg pl-10 pr-10 py-2.5 text-sm outline-none focus:border-primary/50"
+          class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0 pr-9 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none"
           autocomplete="off"
           aria-describedby="req-search-hint"
         />
