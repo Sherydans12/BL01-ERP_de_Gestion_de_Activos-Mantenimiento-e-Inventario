@@ -1,5 +1,11 @@
 import { chromium } from 'playwright';
 
+/**
+ * PDF formal de orden de compra (HTML → Chromium → PDF).
+ * Patrón de plantilla reutilizable para otros documentos: ver
+ * `docs/agentes/pdf-html-playwright-plantilla-base.md`.
+ */
+
 /** Datos mínimos para el PDF formal de OC (alineado al include de `getPurchaseOrderPdfStream`). */
 export type PoPdfOrder = {
   correlative: string;

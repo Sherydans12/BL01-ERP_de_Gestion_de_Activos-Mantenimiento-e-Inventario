@@ -1,0 +1,78 @@
+# PDF por HTML + Playwright — plantilla base (BL01)
+
+Este documento fija el **patrón oficial** para PDFs generados en el backend: **HTML (plantilla en string) + Chromium (Playwright) → `page.pdf()`**. La implementación de referencia es la **orden de compra (OC)**; otros documentos (guías de despacho, informes, etc.) deben **reutilizar la estructura y convenciones**, no copiar ciegamente bloques de negocio que no correspondan (p. ej. proveedor en un PDF interno).
+
+## Referencia en código
+
+| Pieza | Ubicación |
+|-------|-----------|
+| Plantilla OC + helpers | `backend/src/features/purchases/purchase-order-pdf.generator.ts` |
+| Stream PDF OC (include Prisma + logo) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
+| Chromium en imagen Docker | `backend/Dockerfile` (deps sistema + `playwright install chromium` en runner) |
+| Variable ejecutable opcional | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` |
+
+## Flujo técnico
+
+1. **Tipado** del payload mínimo (`PoPdfOrder`, etc.) alineado con el `select`/`include` de Prisma que alimenta el PDF.
+2. **Función `build*Html(...)`** que devuelve un string HTML completo (`<!DOCTYPE html>…`), con `<style>` embebido (sin dependencia de assets externos salvo `data:` opcionales, p. ej. logo).
+3. **`escapeHtml()`** en todo texto que provenga de BD, DTO o usuario (evita XSS en HTML intermedio y caracteres rotos en PDF).
+4. **`generate*PdfBuffer()`**: `chromium.launch` → `newPage()` → `setContent(html, { waitUntil: 'load' })` → `page.pdf({ format: 'A4', printBackground: true, margin: … })` → `Buffer`.
+5. **Args recomendados** en headless: `--disable-dev-shm-usage`, `--no-sandbox` (contenedor Linux).
+
+## Estructura de layout (plantilla base)
+
+Orden conceptual reutilizable; **omití** bloques que el documento no necesite.
+
+1. **`<div class="wrap">`** — ancho máximo coherente con A4 (~190mm útil).
+2. **Cabecera (`div.top`)** — tres columnas flexibles:
+   - **Título** del documento + estado (texto amigable, p. ej. enum → español).
+   - **Logo** centrado (imagen `data:` o placeholder con iniciales).
+   - **Meta** (`table.meta-t`): filas chicas etiqueta/valor; primera columna en **negrita** vía `table.meta-t td:first-child` (Rut, correlativo, contrato/subcontrato, etc.).
+3. **Bloque contextual** opcional (en OC: “Destino / imputación”; en otros: resumen, período, faena).
+4. **Tablas de datos** (`table.grid2`):
+   - Primera columna de etiquetas con clase **`lbl`** (`font-weight: 700`, color oscuro).
+   - Celdas de valor sin negrita; `colspan` cuando haga falta.
+   - **No** mezclar en una sola celda centrada un dato sin etiqueta (p. ej. contrato): usar fila “Contrato” / “Subcontrato” + valor.
+5. **Tabla maestra de líneas** (`table.items`): `table-layout: fixed`, `<colgroup>` con porcentajes, descripción con `overflow-wrap`, `thead` repetible en impresión.
+6. **Pie** (`div.foot`): tablas auxiliares + totales (`table.totals` con primera columna en negrita; fila total con clase `b` si aplica).
+7. **Nota legal / pie de página** opcional (generación electrónica, correlativo, etc.).
+
+## Estilo y legibilidad
+
+- **Tipografía**: `system-ui`, tamaño ~9–10px cuerpo; bordes `#0f172a` para tablas tipo formulario.
+- **Acento**: variable CSS `--accent` desde color de marca del tenant cuando aplique.
+- **Etiquetas**: clase **`.lbl`** en `grid2`; meta con **`td:first-child`**; totales con **`.totals tr > td:first-child`**.
+- **Impresión**: `@page { size: A4; margin: … }` alineado con `page.pdf({ margin })`.
+- **Paginación**: evitar decenas de filas vacías de relleno; si se usa relleno estético, acotar por reglas de negocio (ej. OC: N filas extra solo si pocas líneas ocupadas).
+
+## Contenido específico de OC (no obligatorio en otros PDFs)
+
+- Bloque **proveedor** (razón social, RUT, dirección, condición de pago, etc.).
+- Tabla de **ítems** con cantidades y montos.
+- Mapeo **`PurchaseOrderStatus` → español** (`purchaseOrderStatusLabelEs` o equivalente por enum).
+
+Para un **nuevo** documento: creá un generador dedicado (p. ej. `*-pdf.generator.ts`), tipá el DTO mínimo y copiá solo la **estructura HTML/CSS** y el **pipeline Playwright**; sustituí bloques por los campos del dominio.
+
+## Seguridad y datos
+
+- Tratar el HTML como **salida**: siempre escapar textos variables.
+- No incrustar URLs arbitrarias sin control (logo: preferir `data:image/...` resuelto en servidor).
+- No loguear HTML completo en producción (ruido y fuga de datos).
+
+## Pruebas locales
+
+- Requiere Chromium instalado (Docker ya lo hace; en dev: `npx playwright install chromium` en `backend/` si falla el launch).
+- Regenerar PDF desde la API/UI y revisar **una y varias páginas** según cantidad de líneas reales.
+
+## Relación con otros documentos
+
+- **Correos HTML**: flujo distinto (`Mailer`, plantillas Handlebars); ver [correos-transaccionales.md](correos-transaccionales.md).
+- **Compras (negocio OC)**: [../PURCHASE-FLOWS.md](../PURCHASE-FLOWS.md).
+
+Al añadir un PDF nuevo que siga este patrón, enlazalo desde aquí (tabla “Implementaciones”) o desde `AGENTS.md` si es transversal.
+
+### Implementaciones
+
+| Documento | Generador |
+|-----------|-----------|
+| Orden de compra (OC) | `purchase-order-pdf.generator.ts` |
