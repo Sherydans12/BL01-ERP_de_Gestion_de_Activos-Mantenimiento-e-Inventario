@@ -22,6 +22,7 @@ import { listItemIdsWithFieldDispatchOutstanding } from '../../common/inventory/
 import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
 import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-events';
 import { buildMailInventoryItemCreated } from '../../common/email/transactional-mail.builder';
+import { AuditService } from '../../common/audit/audit.service';
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 /** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
@@ -56,6 +57,7 @@ export class InventoryItemsService {
     private readonly storageService: StorageService,
     private readonly config: ConfigService,
     private readonly notificationDispatcher: NotificationDispatcherService,
+    private readonly audit: AuditService,
   ) {}
 
   private sortRowsBySearchIdOrder<T extends { id: string }>(
@@ -884,13 +886,38 @@ export class InventoryItemsService {
       return item;
     });
 
-    // Dispatch fuera de la transacción (fire-and-forget; no bloquea la respuesta al cliente).
-    // userIds vacío → solo llegarán correos a los ccEmails configurados por el tenant en la UI.
+    // ── Auditoría: génesis del artículo en el historial ──────────────────────
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'INVENTORY_ITEM',
+      entityId: createdItem.id,
+      action: 'CREATE',
+      newValue: {
+        inventoryCode: createdItem.inventoryCode,
+        name: createdItem.name,
+        categoryId: createdItem.categoryId,
+        unitOfMeasureId: createdItem.unitOfMeasureId,
+        partNumber: createdItem.partNumber ?? null,
+        isSerialized: createdItem.isSerialized,
+        isInventory: createdItem.isInventory,
+        isAsset: createdItem.isAsset,
+        isConsumable: createdItem.isConsumable,
+      },
+    });
+
+    // ── Dispatch enriquecido (fire-and-forget) ────────────────────────────────
+    // userIds vacío → solo llegarán correos a los ccEmails configurados en la UI.
     const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
-    const categoryName =
-      (createdItem as any).itemCategory?.parentCategory?.name ??
-      (createdItem as any).itemCategory?.name ??
-      '';
+    const cat = (createdItem as any).itemCategory;
+    const familyName: string = cat?.parentCategory?.name ?? cat?.name ?? '';
+    const subfamilyName: string = cat?.parentCategoryId ? (cat?.name ?? '') : '';
+    const createdAtFormatted = new Date().toLocaleString('es-CL', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'America/Santiago',
+    });
+
     this.notificationDispatcher
       .dispatch(NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED, user.tenantId, {
         userIds: [],
@@ -898,8 +925,10 @@ export class InventoryItemsService {
         html: buildMailInventoryItemCreated({
           inventoryCode: createdItem.inventoryCode ?? '',
           name: createdItem.name,
-          categoryName,
-          createdByName: user.name ?? user.email ?? 'Sistema',
+          familyName,
+          subfamilyName: subfamilyName || familyName,
+          createdBy: user.name ?? user.email ?? 'Sistema',
+          createdAt: createdAtFormatted,
           appUrl,
           partNumber: createdItem.partNumber,
         }),

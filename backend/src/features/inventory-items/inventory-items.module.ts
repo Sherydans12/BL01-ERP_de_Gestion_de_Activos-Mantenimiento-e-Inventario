@@ -8,9 +8,10 @@ import { InventorySuppliersService } from './inventory-suppliers.service';
 import { InventorySuppliersController } from './inventory-suppliers.controller';
 import { StorageModule } from '../../common/storage/storage.module';
 import { NotificationSettingsModule } from '../notification-settings/notification-settings.module';
+import { AuditModule } from '../../common/audit/audit.module';
 
 @Module({
-  imports: [StorageModule, NotificationSettingsModule],
+  imports: [StorageModule, NotificationSettingsModule, AuditModule],
   controllers: [
     InventoryItemsController,
     ItemCategoriesController,

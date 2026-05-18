@@ -187,29 +187,44 @@ export function buildMailRequisitionSubmitted(params: {
 export function buildMailInventoryItemCreated(params: {
   inventoryCode: string;
   name: string;
-  categoryName: string;
-  createdByName: string;
+  /** Nombre del nodo padre de la categoría (Familia). */
+  familyName: string;
+  /** Nombre de la subcategoría directa (Subfamilia). */
+  subfamilyName: string;
+  /** Nombre completo o correo del usuario que creó el artículo. */
+  createdBy: string;
+  /** Fecha y hora de creación pre-formateada (ej. "18/05/2026 03:14"). */
+  createdAt: string;
   appUrl: string;
   partNumber?: string | null;
 }): string {
-  const pnLine = params.partNumber
-    ? `<br/><span style="color:#94a3b8;">Part Number:</span> <span style="color:#e4e4e7;">${escapeHtml(params.partNumber)}</span>`
-    : '';
+  const metaRow = (label: string, value: string, mono = false) =>
+    `<tr>
+      <td style="padding:7px 14px 7px 0;color:#94a3b8;font-size:12.5px;white-space:nowrap;vertical-align:top;">${label}</td>
+      <td style="padding:7px 0;color:#e4e4e7;font-size:12.5px;${mono ? 'font-family:ui-monospace,monospace;color:#00e5ff;font-weight:600;' : ''}">${escapeHtml(value)}</td>
+    </tr>`;
+
+  const pnRow = params.partNumber ? metaRow('Part Number', params.partNumber, true) : '';
+
   return buildTpmEmailHtml({
     headline: 'Nuevo artículo en catálogo',
-    subhead: `${escapeHtml(params.inventoryCode)} — ${escapeHtml(params.categoryName)}`,
+    subhead: `${escapeHtml(params.inventoryCode)} — ${escapeHtml(params.subfamilyName)}`,
     bodyHtml: `
-      <p style="margin:0 0 12px 0;">Se ha dado de alta un nuevo artículo en el catálogo maestro de inventario.</p>
-      <p style="margin:0 0 8px 0;padding:10px 14px;border-radius:8px;background-color:#0f1419;border:1px solid #2a3441;font-size:13px;line-height:1.7;">
-        <strong style="color:#e4e4e7;display:block;margin-bottom:4px;">Detalles del artículo</strong>
-        <span style="color:#94a3b8;">Código:</span> <span style="color:#00e5ff;font-family:monospace;font-weight:600;">${escapeHtml(params.inventoryCode)}</span><br/>
-        <span style="color:#94a3b8;">Nombre:</span> <span style="color:#e4e4e7;">${escapeHtml(params.name)}</span><br/>
-        <span style="color:#94a3b8;">Familia:</span> <span style="color:#e4e4e7;">${escapeHtml(params.categoryName)}</span>${pnLine}<br/>
-        <span style="color:#94a3b8;">Creado por:</span> <span style="color:#e4e4e7;">${escapeHtml(params.createdByName)}</span>
-      </p>
-      <p style="margin:0;">Puedes consultar el artículo completo, actualizar stock y asignarlo a bodegas desde el catálogo.</p>
+      <p style="margin:0 0 16px 0;">Se ha dado de alta un nuevo artículo en el catálogo maestro de inventario.</p>
+      <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;background-color:#0f1419;border:1px solid #2a3441;">
+        <tbody>
+          ${metaRow('Código', params.inventoryCode, true)}
+          ${metaRow('Nombre', params.name)}
+          ${metaRow('Familia', params.familyName)}
+          ${metaRow('Subfamilia', params.subfamilyName)}
+          ${pnRow}
+          ${metaRow('Registrado por', params.createdBy)}
+          ${metaRow('Fecha / Hora', params.createdAt)}
+        </tbody>
+      </table>
+      <p style="margin:12px 0 0 0;font-size:12.5px;color:#94a3b8;">Este artículo ya está disponible para asignación de stock, solicitudes de compra y órdenes de trabajo.</p>
     `,
-    cta: { href: `${params.appUrl}/app/articulos`, label: 'Ir al Catálogo' },
+    cta: { href: `${params.appUrl}/app/articulos/${params.inventoryCode}`, label: 'Ver artículo' },
   });
 }
 
