@@ -45,6 +45,11 @@ export class UpdateTenantConfigDto {
   @IsOptional()
   logoUrl?: string;
 
+  /** Clave storage del logo solo para PDFs de compras; vacío → quitar (PATCH). */
+  @IsString()
+  @IsOptional()
+  pdfLogoUrl?: string | null;
+
   @IsString()
   @IsOptional()
   @Matches(/^#[0-9a-fA-F]{6}$/i, {

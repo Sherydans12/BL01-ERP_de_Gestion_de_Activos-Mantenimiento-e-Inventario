@@ -51,6 +51,7 @@ export class TenantConfigService {
     invoiceLegalName: string | null;
     ocPdfLegalNotice: string | null;
     logoUrl: string | null;
+    pdfLogoUrl: string | null;
     primaryColor: string;
     laborRatePerHour: unknown;
     backgroundPreference: unknown;
@@ -60,6 +61,10 @@ export class TenantConfigService {
     const rawLogo = (tenant.logoUrl || '').trim();
     const logoPublicUrl = rawLogo
       ? await this.resolveLogoPublicUrl(tenant.logoUrl)
+      : '';
+    const rawPdfLogo = (tenant.pdfLogoUrl || '').trim();
+    const pdfLogoPublicUrl = rawPdfLogo
+      ? await this.resolveLogoPublicUrl(tenant.pdfLogoUrl)
       : '';
     return {
       ...tenant,
@@ -73,6 +78,8 @@ export class TenantConfigService {
       logoUrl: rawLogo,
       /** URL lista para `<img src>` (firmada o pública según driver). */
       logoPublicUrl,
+      pdfLogoUrl: rawPdfLogo,
+      pdfLogoPublicUrl,
       laborRatePerHour: tenant.laborRatePerHour
         ? Number(tenant.laborRatePerHour.toString())
         : 0,
@@ -96,6 +103,7 @@ export class TenantConfigService {
         invoiceLegalName: true,
         ocPdfLegalNotice: true,
         logoUrl: true,
+        pdfLogoUrl: true,
         primaryColor: true,
         laborRatePerHour: true,
         backgroundPreference: true,
@@ -134,6 +142,7 @@ export class TenantConfigService {
       'rut',
       'address',
       'phone',
+      'pdfLogoUrl',
     ]) {
       const v = payload[key];
       if (typeof v === 'string' && v.trim() === '') {
@@ -155,6 +164,7 @@ export class TenantConfigService {
         invoiceLegalName: true,
         ocPdfLegalNotice: true,
         logoUrl: true,
+        pdfLogoUrl: true,
         primaryColor: true,
         laborRatePerHour: true,
         backgroundPreference: true,
@@ -197,6 +207,7 @@ export class TenantConfigService {
         invoiceLegalName: true,
         ocPdfLegalNotice: true,
         logoUrl: true,
+        pdfLogoUrl: true,
         primaryColor: true,
         laborRatePerHour: true,
         backgroundPreference: true,
@@ -215,6 +226,63 @@ export class TenantConfigService {
         await this.storage.deleteFile(old);
       } catch {
         /* no bloquear actualización de marca */
+      }
+    }
+
+    return this.mapTenantToClientResponse(tenant);
+  }
+
+  async uploadTenantPdfLogo(
+    tenantId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Archivo vacío.');
+    }
+
+    const prev = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { pdfLogoUrl: true },
+    });
+    if (!prev) {
+      throw new NotFoundException('Tenant no encontrado');
+    }
+
+    const storageKey = await this.storage.uploadFile(file, 'tenant-pdf-branding');
+
+    const tenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { pdfLogoUrl: storageKey },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        rut: true,
+        address: true,
+        phone: true,
+        city: true,
+        invoiceLegalName: true,
+        ocPdfLegalNotice: true,
+        logoUrl: true,
+        pdfLogoUrl: true,
+        primaryColor: true,
+        laborRatePerHour: true,
+        backgroundPreference: true,
+        sidebarPermissions: true,
+      },
+    });
+
+    const old = prev.pdfLogoUrl?.trim();
+    if (
+      old &&
+      !looksLikeExternalOrLocalUrl(old) &&
+      old !== storageKey &&
+      !/^https?:\/\//i.test(old)
+    ) {
+      try {
+        await this.storage.deleteFile(old);
+      } catch {
+        /* no bloquear actualización */
       }
     }
 

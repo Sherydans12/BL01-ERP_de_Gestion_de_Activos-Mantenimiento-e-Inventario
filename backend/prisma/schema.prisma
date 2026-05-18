@@ -601,6 +601,8 @@ model Tenant {
   ocPdfLegalNotice       String?               @map("oc_pdf_legal_notice") @db.Text
 
   logoUrl               String?               @map("logo_url") @db.VarChar(255)
+  /** Logo horizontal para PDFs de compras (OC, SRC, reporte ejecutivo). Independiente del logo del menú (`logoUrl`). */
+  pdfLogoUrl            String?               @map("pdf_logo_url") @db.VarChar(255)
   primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)
   laborRatePerHour      Decimal?              @default(0) @map("labor_rate_per_hour") @db.Decimal(12, 2)
   backgroundPreference  BackgroundPreference  @default(DARK) @map("background_preference")
