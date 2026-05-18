@@ -39,8 +39,13 @@
     border-color: #E2E8F0 !important;
   }
 
-  /** Búsqueda “icono + input sin borde”: el fondo es el wrapper; no forzar caja blanca sobre el composé. */
-  [data-theme='light'] .tpm-search-combobox > input[type='text'] {
+  /**
+   * Búsqueda con icono custom (`.tpm-search-combobox` + `.tpm-input-leading-icon`):
+   * el fondo/borde es el wrapper; el input va transparente.
+   * No usar lupa `position:absolute` + `padding-left` sobre el mismo input: el placeholder
+   * y la decoración nativa de `type="search"` se superponen a la SVG.
+   */
+  [data-theme='light'] .tpm-search-combobox input.tpm-input-leading-icon {
     background-color: transparent !important;
     border-color: transparent !important;
   }
@@ -241,6 +246,7 @@
    * Texto con **lupa SVG** a la izquierda: Chromium/WebKit mete un contenedor interno
    * `::-webkit-textfield-decoration-container` que vuelve a pintar una lupa / chip.
    * Añadir la clase `tpm-input-leading-icon` al `<input>` (no al wrapper).
+   * Layout: icono como hermano flex del input dentro de `.tpm-search-combobox` (misma regla que el bloque claro arriba).
    */
   .tpm-input-leading-icon::-webkit-textfield-decoration-container {
     display: none !important;

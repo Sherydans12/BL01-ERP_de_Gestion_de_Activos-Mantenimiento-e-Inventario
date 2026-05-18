@@ -296,6 +296,26 @@ export interface PurchaseOrder {
   _count?: { approvals: number; items: number };
 }
 
+/** Query del listado paginado (`GET /purchase-orders`). */
+export interface PurchaseOrderListQuery {
+  contractId?: string;
+  status?: string;
+  search?: string;
+  /** Si no hay `status`, incluye OC `CLOSED` en «todos». */
+  includeClosed?: boolean;
+  page?: number;
+  pageSize?: number;
+  sort?: string;
+  dir?: string;
+}
+
+export interface PurchaseOrderListResponse {
+  data: PurchaseOrder[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface PurchaseOrderItem {
   id: string;
   description: string;
@@ -612,10 +632,31 @@ export class PurchasesService {
   }
 
   // -- Purchase Orders --
-  getOrders(params?: { status?: string }): Observable<PurchaseOrder[]> {
+  getOrders(
+    params?: PurchaseOrderListQuery,
+  ): Observable<PurchaseOrderListResponse> {
+    const q: Record<string, string> = {};
+    if (params?.contractId) q['contractId'] = params.contractId;
+    if (params?.status) q['status'] = params.status;
+    const s = params?.search?.trim();
+    if (s) q['search'] = s;
+    if (params?.includeClosed === true) q['includeClosed'] = 'true';
+    if (params?.page != null && params.page > 0) q['page'] = String(params.page);
+    if (params?.pageSize != null && params.pageSize > 0) {
+      q['pageSize'] = String(params.pageSize);
+    }
+    if (params?.sort) q['sort'] = params.sort;
+    if (params?.dir) q['dir'] = params.dir;
     return this.http
-      .get<PurchaseOrder[]>(`${this.base}/purchase-orders`, { params: params as any })
-      .pipe(map((rows) => rows.map((o) => this.normalizeOrderMedia(o))));
+      .get<PurchaseOrderListResponse>(`${this.base}/purchase-orders`, {
+        params: Object.keys(q).length ? q : undefined,
+      })
+      .pipe(
+        map((res) => ({
+          ...res,
+          data: res.data.map((o) => this.normalizeOrderMedia(o)),
+        })),
+      );
   }
 
   /** OC en SENT | ORDERED | PARTIALLY_RECEIVED | SENT_TO_SUPPLIER (alcance contractual del usuario). */

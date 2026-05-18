@@ -597,6 +597,8 @@ model Tenant {
   city                  String?               @map("city") @db.VarChar(120)
   /** Razón social para facturas y PDF de OC (p. ej. «TPM Minería SpA»). Si vacío, se usa `name`. */
   invoiceLegalName      String?               @map("invoice_legal_name") @db.VarChar(200)
+  /** Texto del recuadro de aviso en el PDF de OC (saltos de línea permitidos). Si vacío, se usa texto por defecto en código. */
+  ocPdfLegalNotice       String?               @map("oc_pdf_legal_notice") @db.Text
 
   logoUrl               String?               @map("logo_url") @db.VarChar(255)
   primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)

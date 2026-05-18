@@ -8,6 +8,8 @@ import {
   Req,
   UseInterceptors,
   UploadedFile,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TenantConfigService } from './tenant-config.service';
@@ -50,6 +52,13 @@ export class TenantConfigController {
 
   @Patch()
   @Roles('ADMIN', 'SUPER_ADMIN')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true,
+    }),
+  )
   updateTenantConfig(
     @Req() req: any,
     @Body() updateTenantConfigDto: UpdateTenantConfigDto,

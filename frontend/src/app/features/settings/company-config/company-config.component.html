@@ -21,7 +21,7 @@
         Empresa
       </h1>
       <p class="text-muted mt-1 font-mono text-sm">
-        Razón social, datos de facturación, ciudad, logo y color de marca. Se usan en el menú lateral y en el PDF de orden de compra.
+        Datos fiscales, tarifa de mantenimiento, logo y color de marca. Compras y PDF de OC se editan en una ventana aparte.
       </p>
     </div>
   </div>
@@ -32,7 +32,7 @@
   >
     <form [formGroup]="configForm" (ngSubmit)="onSubmit()" class="space-y-8">
 
-      <!-- Sección Datos Legales -->
+      <!-- Datos fiscales y contacto -->
       <div class="space-y-4">
         <h3
           class="text-lg font-semibold text-main border-b border-border pb-2 flex items-center gap-2"
@@ -41,7 +41,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          Datos de empresa y facturación
+          Datos fiscales y contacto
         </h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -68,19 +68,6 @@
               </p>
             </div>
           }
-
-          <div class="space-y-2 md:col-span-2">
-            <label class="block text-sm font-medium text-muted">Razón social para facturación y OC</label>
-            <input
-              type="text"
-              formControlName="invoiceLegalName"
-              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-              placeholder="Ej: TPM Minería SpA"
-            />
-            <p class="text-xs text-muted/80">
-              Es el nombre legal que aparece en «Emitir factura a nombre de» en el PDF de orden de compra (prioritario sobre el nombre en aplicación si ambos existen).
-            </p>
-          </div>
 
           <div class="space-y-2">
             <label class="block text-sm font-medium text-muted">RUT Empresa</label>
@@ -121,7 +108,51 @@
               placeholder="Ej: Huechuraba, Santiago"
             />
           </div>
+        </div>
+      </div>
 
+      <!-- Compras y PDF OC — acceso compacto -->
+      <div
+        class="rounded-xl border border-border bg-dark/25 px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <div class="flex items-start gap-3 min-w-0">
+          <span class="shrink-0 mt-0.5 text-muted" aria-hidden="true">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </span>
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold text-main">Compras y PDF de orden de compra</h3>
+            <p class="text-xs text-muted mt-1 leading-relaxed">
+              Razón social en OC y texto del aviso legal del PDF. Podés guardarlos desde la ventana con
+              <span class="font-mono text-main/90">Guardar en servidor</span> o con
+              <span class="font-mono text-main/90">Guardar cambios</span> al pie de la página.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          (click)="openPurchasesConfigModal()"
+          class="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-surface text-sm font-semibold text-main hover:border-primary/50 hover:text-primary transition-colors"
+        >
+          Abrir configuración
+        </button>
+      </div>
+
+      <!-- Mantenimiento y tarifas -->
+      <div class="space-y-4">
+        <h3
+          class="text-lg font-semibold text-main border-b border-border pb-2 flex items-center gap-2"
+        >
+          <svg class="w-5 h-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Mantenimiento y tarifas
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-2 md:col-span-2">
             <label class="block text-sm font-medium text-muted">Costo Hora Hombre (Tarifa HH)</label>
             <input
@@ -133,7 +164,7 @@
               placeholder="Ej: 25000"
             />
             <p class="text-xs text-muted/80">
-              Este valor se utiliza para calcular el costo de mano de obra en los reportes de disponibilidad y OTs.
+              Se usa para calcular el costo de mano de obra en reportes de disponibilidad y OTs.
             </p>
           </div>
         </div>
@@ -343,6 +374,103 @@
           </div>
         </div>
       </div>
+
+      @if (purchasesConfigModalOpen()) {
+        <dialog
+          #purchasesConfigDialog
+          class="dialog-native-shell [&::backdrop]:bg-black/60 [&::backdrop]:backdrop-blur-sm"
+          (close)="onPurchasesConfigDialogClose()"
+        >
+          <div
+            class="flex min-h-full w-full items-center justify-center overflow-y-auto p-4"
+            (click)="closePurchasesConfigModal()"
+          >
+            <div
+              class="relative bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-fade-in"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+                <h2 class="font-bold text-main flex items-center gap-2 text-lg">
+                  <svg class="w-5 h-5 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Compras y PDF de orden de compra
+                </h2>
+                <button
+                  type="button"
+                  (click)="closePurchasesConfigModal()"
+                  class="p-1.5 rounded-lg text-muted hover:text-main hover:bg-dark transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                <p class="text-xs text-muted leading-relaxed">
+                  Usá <span class="font-mono text-main/90">Guardar en servidor</span> para persistir el aviso y la razón social
+                  (así el PDF de OC los toma al instante). <span class="font-mono text-main/90">Cerrar</span> solo cierra la ventana.
+                </p>
+
+                <div class="space-y-2">
+                  <label class="block text-sm font-medium text-muted">Razón social para facturación y OC</label>
+                  <input
+                    type="text"
+                    formControlName="invoiceLegalName"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                    placeholder="Ej: TPM Minería SpA"
+                  />
+                  <p class="text-xs text-muted/80">
+                    Nombre legal en «Emitir factura a nombre de» en el PDF de OC (prioritario sobre el nombre en aplicación si ambos existen).
+                  </p>
+                </div>
+
+                <div class="space-y-2">
+                  <label class="block text-sm font-medium text-muted">Aviso legal en el PDF de OC</label>
+                  <textarea
+                    formControlName="ocPdfLegalNotice"
+                    rows="6"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors font-mono text-sm min-h-[8rem]"
+                    placeholder="Un párrafo por línea. Si queda vacío, se usa el texto por defecto del sistema en el recuadro del PDF."
+                  ></textarea>
+                  <p class="text-xs text-muted/80">
+                    Aparece en el recuadro destacado bajo RUT y contrato en el PDF de orden de compra. Usá una línea por frase o párrafo corto.
+                  </p>
+                  @if (configForm.get('ocPdfLegalNotice')?.invalid && configForm.get('ocPdfLegalNotice')?.touched) {
+                    <p class="text-xs text-error">Máximo 4000 caracteres.</p>
+                  }
+                </div>
+              </div>
+
+              <div class="px-6 py-4 border-t border-border shrink-0 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  (click)="closePurchasesConfigModal()"
+                  [disabled]="isSavingPurchasesModal()"
+                  class="px-5 py-2.5 rounded-lg border border-border text-sm font-semibold text-main hover:bg-dark transition-colors disabled:opacity-50"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  (click)="savePurchasesFromModal()"
+                  [disabled]="isSavingPurchasesModal()"
+                  class="bg-primary text-zinc-950 font-bold px-6 py-2.5 rounded-lg transition-all duration-200 hover:bg-opacity-90 active:scale-95 text-sm uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed min-w-[10rem]"
+                >
+                  @if (isSavingPurchasesModal()) {
+                    Guardando…
+                  } @else {
+                    Guardar en servidor
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </dialog>
+      }
 
       <!-- Footer Buttons -->
       <div class="flex justify-end pt-4 border-t border-border">

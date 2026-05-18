@@ -41,6 +41,51 @@ const SUBCONTRACT_SELECT = {
 /** OC que no bloquean nueva compra / re-adjudicación de líneas. */
 const PO_INACTIVE_STATUSES: PurchaseOrderStatus[] = ['CANCELLED', 'REJECTED'];
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const PO_LIST_SEARCH_MAX_LEN = 120;
+const PO_LIST_PAGE_SIZE_MAX = 100;
+
+const PO_LIST_SORT_FIELDS = [
+  'createdAt',
+  'updatedAt',
+  'correlative',
+  'status',
+  'totalAmount',
+  'sentAt',
+] as const;
+
+type PoListSortField = (typeof PO_LIST_SORT_FIELDS)[number];
+
+function isPoListSortField(v: string): v is PoListSortField {
+  return (PO_LIST_SORT_FIELDS as readonly string[]).includes(v);
+}
+
+function parsePoListSort(
+  sort?: string,
+  dir?: string,
+): { field: PoListSortField; order: 'asc' | 'desc' } {
+  const field: PoListSortField =
+    sort && isPoListSortField(sort) ? sort : 'createdAt';
+  if (dir === 'asc' || dir === 'desc') {
+    return { field, order: dir };
+  }
+  if (
+    field === 'createdAt' ||
+    field === 'updatedAt' ||
+    field === 'totalAmount' ||
+    field === 'sentAt'
+  ) {
+    return { field, order: 'desc' };
+  }
+  return { field, order: 'asc' };
+}
+
+function isUuid(value: string | undefined | null): boolean {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
 @Injectable()
 export class PurchaseOrdersService {
   private readonly logger = new Logger(PurchaseOrdersService.name);
@@ -63,10 +108,11 @@ export class PurchaseOrdersService {
     return `${paymentDays} día${paymentDays === 1 ? '' : 's'}`;
   }
 
-  private buildContractScope(user?: {
-    role?: string;
-    allowedContracts?: string[];
-  }): Prisma.PurchaseOrderWhereInput {
+  private buildContractScope(
+    user?: { role?: string; allowedContracts?: string[] },
+    contractId?: string,
+  ): Prisma.PurchaseOrderWhereInput {
+    if (contractId && contractId !== 'ALL') return { contractId };
     if (!user) return {};
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return {};
     const allowed = user.allowedContracts ?? [];
@@ -77,18 +123,165 @@ export class PurchaseOrdersService {
     return { contractId: { in: allowed } };
   }
 
+  private poListSearchOr(rawTerm: string): Prisma.PurchaseOrderWhereInput[] {
+    const term = rawTerm.trim().slice(0, PO_LIST_SEARCH_MAX_LEN);
+    if (!term) return [];
+    const mode = 'insensitive' as const;
+    const contains = (s: string): Prisma.StringFilter => ({
+      contains: s,
+      mode,
+    });
+    const clauses: Prisma.PurchaseOrderWhereInput[] = [
+      { correlative: contains(term) },
+      { notes: contains(term) },
+      { deliveryAddress: contains(term) },
+      { paymentTerms: contains(term) },
+      { currency: contains(term) },
+      {
+        contract: {
+          OR: [{ code: contains(term) }, { name: contains(term) }],
+        },
+      },
+      {
+        subcontract: {
+          OR: [{ code: contains(term) }, { name: contains(term) }],
+        },
+      },
+      {
+        quotation: {
+          vendor: {
+            OR: [{ name: contains(term) }, { code: contains(term) }],
+          },
+        },
+      },
+      {
+        requisition: {
+          OR: [{ correlative: contains(term) }, { description: contains(term) }],
+        },
+      },
+      {
+        equipment: {
+          OR: [
+            { internalId: contains(term) },
+            { mineInternalId: contains(term) },
+            { plate: contains(term) },
+            { brand: contains(term) },
+            { model: contains(term) },
+            { type: contains(term) },
+          ],
+        },
+      },
+      {
+        workOrder: {
+          OR: [{ correlative: contains(term) }, { description: contains(term) }],
+        },
+      },
+      {
+        items: {
+          some: {
+            OR: [
+              { description: contains(term) },
+              {
+                inventoryItem: {
+                  OR: [
+                    { name: contains(term) },
+                    { partNumber: contains(term) },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ];
+    if (isUuid(term)) {
+      clauses.unshift({ id: term });
+    }
+    return clauses;
+  }
+
+  private buildPurchaseOrderListWhere(
+    tenantId: string,
+    contractId: string | undefined,
+    user: { role?: string; allowedContracts?: string[] } | undefined,
+    filters: {
+      status?: string;
+      includeClosed: boolean;
+      search?: string;
+    },
+  ): Prisma.PurchaseOrderWhereInput {
+    const contractFilter = this.buildContractScope(user, contractId);
+    const searchTerm =
+      typeof filters.search === 'string'
+        ? filters.search.trim().slice(0, PO_LIST_SEARCH_MAX_LEN)
+        : '';
+    const searchOr = searchTerm ? this.poListSearchOr(searchTerm) : [];
+
+    const statusTrim = filters.status?.trim();
+    let statusWhere: Prisma.PurchaseOrderWhereInput = {};
+    if (
+      statusTrim &&
+      (Object.values(PurchaseOrderStatus) as string[]).includes(statusTrim)
+    ) {
+      statusWhere = { status: statusTrim as PurchaseOrderStatus };
+    } else if (!filters.includeClosed) {
+      statusWhere = { status: { not: PurchaseOrderStatus.CLOSED } };
+    }
+
+    return {
+      tenantId,
+      ...contractFilter,
+      ...statusWhere,
+      ...(searchOr.length > 0 ? { OR: searchOr } : {}),
+    };
+  }
+
   async findAll(
     tenantId: string,
-    status?: string,
-    user?: { role?: string; allowedContracts?: string[] },
+    user: { role?: string; allowedContracts?: string[] } | undefined,
+    opts: {
+      contractId?: string;
+      status?: string;
+      includeClosed?: boolean;
+      search?: string;
+      page?: number;
+      pageSize?: number;
+      sort?: string;
+      dir?: string;
+    },
   ) {
-    const contractFilter = this.buildContractScope(user);
-    return this.prisma.purchaseOrder.findMany({
-      where: {
-        tenantId,
-        ...(status && { status: status as any }),
-        ...contractFilter,
+    const pageSize = Math.min(
+      PO_LIST_PAGE_SIZE_MAX,
+      Math.max(1, Math.floor(opts.pageSize ?? 25)),
+    );
+    const requestedPage = Math.max(1, Math.floor(opts.page ?? 1));
+    const { field: sortField, order: sortOrder } = parsePoListSort(
+      opts.sort,
+      opts.dir,
+    );
+
+    const where = this.buildPurchaseOrderListWhere(
+      tenantId,
+      opts.contractId,
+      user,
+      {
+        status: opts.status,
+        includeClosed: opts.includeClosed === true,
+        search: opts.search,
       },
+    );
+
+    const total = await this.prisma.purchaseOrder.count({ where });
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, maxPage);
+    const skip = (page - 1) * pageSize;
+
+    const orderBy = {
+      [sortField]: sortOrder,
+    } as Prisma.PurchaseOrderOrderByWithRelationInput;
+
+    const data = await this.prisma.purchaseOrder.findMany({
+      where,
       include: {
         contract: { select: { id: true, code: true, name: true } },
         subcontract: SUBCONTRACT_SELECT,
@@ -100,8 +293,12 @@ export class PurchaseOrdersService {
         },
         _count: { select: { approvals: true, items: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy,
+      skip,
+      take: pageSize,
     });
+
+    return { data, total, page, pageSize };
   }
 
   /** OCs en las que se puede abrir recepción de bodega (mismo criterio que WarehouseReceiptsService.create). */
@@ -109,7 +306,7 @@ export class PurchaseOrdersService {
     tenantId: string,
     user?: { role?: string; allowedContracts?: string[] },
   ) {
-    const contractFilter = this.buildContractScope(user);
+    const contractFilter = this.buildContractScope(user, undefined);
     return this.prisma.purchaseOrder.findMany({
       where: {
         tenantId,
@@ -536,6 +733,7 @@ export class PurchaseOrdersService {
             phone: true,
             city: true,
             invoiceLegalName: true,
+            ocPdfLegalNotice: true,
             logoUrl: true,
             primaryColor: true,
           },
@@ -577,10 +775,26 @@ export class PurchaseOrdersService {
       throw new NotFoundException('Orden de compra no encontrada');
     }
 
+    /** Lectura directa del tenant: asegura aviso OC / razón social al día (evita desalineación con el include). */
+    const tenantPdfFields = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { ocPdfLegalNotice: true, invoiceLegalName: true },
+    });
+    const orderForPdf = {
+      ...order,
+      tenant: {
+        ...order.tenant,
+        ocPdfLegalNotice:
+          tenantPdfFields?.ocPdfLegalNotice ?? order.tenant.ocPdfLegalNotice,
+        invoiceLegalName:
+          tenantPdfFields?.invoiceLegalName ?? order.tenant.invoiceLegalName,
+      },
+    };
+
     const tenantLogoDataUri = await this.tryFetchTenantLogoDataUri(
       order.tenant.logoUrl,
     );
-    const buffer = await generatePurchaseOrderPdfBuffer(order, {
+    const buffer = await generatePurchaseOrderPdfBuffer(orderForPdf, {
       tenantLogoDataUri,
     });
     return Readable.from(buffer);

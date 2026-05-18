@@ -35,6 +35,12 @@ export class UpdateTenantConfigDto {
   @MaxLength(200)
   invoiceLegalName?: string;
 
+  /** Aviso legal del recuadro superior del PDF de OC (saltos de línea = párrafos). Vacío = texto por defecto del sistema. */
+  @IsString()
+  @IsOptional()
+  @MaxLength(4000)
+  ocPdfLegalNotice?: string;
+
   @IsString()
   @IsOptional()
   logoUrl?: string;

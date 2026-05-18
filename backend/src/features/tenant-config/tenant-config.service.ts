@@ -49,6 +49,7 @@ export class TenantConfigService {
     phone: string | null;
     city: string | null;
     invoiceLegalName: string | null;
+    ocPdfLegalNotice: string | null;
     logoUrl: string | null;
     primaryColor: string;
     laborRatePerHour: unknown;
@@ -67,6 +68,7 @@ export class TenantConfigService {
       phone: tenant.phone || '',
       city: tenant.city || '',
       invoiceLegalName: tenant.invoiceLegalName || '',
+      ocPdfLegalNotice: tenant.ocPdfLegalNotice || '',
       /** Valor persistido (URL externa o clave de storage). No usar como `src` directo si es clave R2. */
       logoUrl: rawLogo,
       /** URL lista para `<img src>` (firmada o pública según driver). */
@@ -92,6 +94,7 @@ export class TenantConfigService {
         phone: true,
         city: true,
         invoiceLegalName: true,
+        ocPdfLegalNotice: true,
         logoUrl: true,
         primaryColor: true,
         laborRatePerHour: true,
@@ -124,7 +127,14 @@ export class TenantConfigService {
     /** Código y nombre de tenant son identidad de plataforma; no se editan desde configuración de empresa. */
     delete payload.name;
     delete payload.code;
-    for (const key of ['invoiceLegalName', 'city', 'rut', 'address', 'phone']) {
+    for (const key of [
+      'invoiceLegalName',
+      'ocPdfLegalNotice',
+      'city',
+      'rut',
+      'address',
+      'phone',
+    ]) {
       const v = payload[key];
       if (typeof v === 'string' && v.trim() === '') {
         payload[key] = null;
@@ -143,6 +153,7 @@ export class TenantConfigService {
         phone: true,
         city: true,
         invoiceLegalName: true,
+        ocPdfLegalNotice: true,
         logoUrl: true,
         primaryColor: true,
         laborRatePerHour: true,
@@ -184,6 +195,7 @@ export class TenantConfigService {
         phone: true,
         city: true,
         invoiceLegalName: true,
+        ocPdfLegalNotice: true,
         logoUrl: true,
         primaryColor: true,
         laborRatePerHour: true,

@@ -11,6 +11,8 @@ export interface Tenant {
   city?: string | null;
   /** Razón social para facturas / OC (persistido). */
   invoiceLegalName?: string | null;
+  /** Aviso legal del recuadro en el PDF de OC (multilínea). Vacío = texto por defecto en el generador. */
+  ocPdfLegalNotice?: string | null;
   /** Clave de storage o URL externa (persistido). */
   logoUrl?: string | null;
   /** URL lista para `<img src>` (p. ej. firmada en R2). */

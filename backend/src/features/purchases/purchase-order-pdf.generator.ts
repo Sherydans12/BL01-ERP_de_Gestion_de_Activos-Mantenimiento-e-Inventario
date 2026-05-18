@@ -40,6 +40,8 @@ export type PoPdfOrder = {
     phone?: string | null;
     city?: string | null;
     invoiceLegalName?: string | null;
+    /** Aviso del recuadro `.warn` en PDF OC; vacío = texto por defecto. */
+    ocPdfLegalNotice?: string | null;
     primaryColor?: string | null;
   } | null;
   equipment?: {
@@ -69,6 +71,23 @@ function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+/** Texto por defecto del aviso en el PDF de OC si `Tenant.ocPdfLegalNotice` está vacío. */
+const DEFAULT_OC_PDF_LEGAL_NOTICE_LINES: readonly string[] = [
+  'Adjuntar la presente orden de compra a la factura emitida, o será rechazada y devuelta.',
+  'Para pago de facturas llamar al fono 2 8988948 o al correo electrónico de don Pablo Ortiz (portiz@powertrak.cl)',
+];
+
+function ocPdfLegalNoticeHtml(tenant: PoPdfOrder['tenant'] | null | undefined): string {
+  const raw = tenant?.ocPdfLegalNotice?.trim();
+  const lines = raw
+    ? raw
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+    : [...DEFAULT_OC_PDF_LEGAL_NOTICE_LINES];
+  return lines.map((line) => escapeHtml(line)).join('<br/>');
 }
 
 function formatNumberEs(n: number, maxFrac = 2): string {
@@ -244,6 +263,7 @@ function buildPurchaseOrderHtml(
       : '';
   const payTermsDisplay = payTermsFromOrder || payFromQuotation || '—';
   const reqCorr = order.requisition?.correlative;
+  const warnNoticeHtml = ocPdfLegalNoticeHtml(tenant);
 
   const logoBlock = options.tenantLogoDataUri
     ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="Logo" />`
@@ -411,6 +431,16 @@ function buildPurchaseOrderHtml(
       color: #64748b;
       line-height: 1.35;
     }
+    .foot-req-ref {
+      text-align: center;
+      font-size: 8.5px;
+      line-height: 1.4;
+      font-weight: 500;
+      color: #0f172a;
+    }
+    .foot-req-ref strong {
+      font-weight: 800;
+    }
     .sig {
       margin-top: 6px;
       width: 100%;
@@ -452,8 +482,7 @@ function buildPurchaseOrderHtml(
           ${tenant?.phone?.trim() ? `<strong>Tel.:</strong> ${escapeHtml(tenant.phone.trim())}` : ''}
         </div>
         <div class="warn">
-          Adjuntar la presente orden de compra a la factura emitida.<br/>
-          Montos referenciales según negociación; IVA se liquida en la factura del proveedor.
+          ${warnNoticeHtml}
         </div>
       </div>
     </div>
@@ -558,8 +587,9 @@ function buildPurchaseOrderHtml(
       <div class="foot-left">
         <table class="grid2" style="margin:0;">
           <tr>
-            <td class="lbl" style="width:42%;">Según requerimiento Nº</td>
-            <td style="text-align:center;">${escapeHtml(reqCorr || '—')}</td>
+            <td colspan="2" class="foot-req-ref">
+              Según requerimiento Nº <strong>${escapeHtml(reqCorr || '—')}</strong> del sistema EAM BaseLogic
+            </td>
           </tr>
           ${
             order.subcontract

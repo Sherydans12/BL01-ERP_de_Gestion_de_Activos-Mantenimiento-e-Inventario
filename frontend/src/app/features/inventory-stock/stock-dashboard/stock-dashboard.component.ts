@@ -665,10 +665,14 @@ export class StockDashboardComponent implements OnInit {
   private loadPurchaseOrdersForAdjust(): void {
     this.purchaseOrdersAdjLoading.set(true);
     this.purchasesService
-      .getOrders()
+      .getOrders({
+        page: 1,
+        pageSize: 100,
+        includeClosed: true,
+      })
       .pipe(finalize(() => this.purchaseOrdersAdjLoading.set(false)))
       .subscribe({
-        next: (rows) => this.purchaseOrdersForAdjust.set(rows),
+        next: (res) => this.purchaseOrdersForAdjust.set(res.data),
         error: () => this.purchaseOrdersForAdjust.set([]),
       });
   }

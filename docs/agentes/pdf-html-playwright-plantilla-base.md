@@ -7,7 +7,8 @@ Este documento fija el **patrón oficial** para PDFs generados en el backend: **
 | Pieza | Ubicación |
 |-------|-----------|
 | Plantilla OC + helpers | `backend/src/features/purchases/purchase-order-pdf.generator.ts` |
-| Stream PDF OC (include Prisma + logo) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
+| Stream PDF OC (include Prisma + logo; merge aviso/razón social desde `tenants`) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
+| PDF OC HTTP (`Cache-Control: no-store`) | `backend/src/features/purchases/purchase-orders.controller.ts` → `GET :id/pdf` |
 | Chromium en imagen Docker | `backend/Dockerfile` (deps sistema + `playwright install chromium` en runner) |
 | Variable ejecutable opcional | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` |
 
@@ -36,6 +37,10 @@ Orden conceptual reutilizable; **omití** bloques que el documento no necesite.
 5. **Tabla maestra de líneas** (`table.items`): `table-layout: fixed`, `<colgroup>` con porcentajes, descripción con `overflow-wrap`, `thead` repetible en impresión.
 6. **Pie** (`div.foot`): tablas auxiliares + totales (`table.totals` con primera columna en negrita; fila total con clase `b` si aplica).
 7. **Nota legal / pie de página** opcional (generación electrónica, correlativo, etc.).
+
+## Configuración del aviso legal (PDF OC)
+
+El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPdfLegalNotice`** (`oc_pdf_legal_notice`, multilínea). Se edita en **Configuración → Empresa → Compras y PDF de orden de compra**. Si queda vacío, `purchase-order-pdf.generator.ts` usa el arreglo por defecto `DEFAULT_OC_PDF_LEGAL_NOTICE_LINES` (cada línea se escapa con `escapeHtml` y se une con `<br/>`).
 
 ## Estilo y legibilidad
 

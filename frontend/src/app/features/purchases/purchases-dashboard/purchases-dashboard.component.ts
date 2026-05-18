@@ -261,14 +261,19 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
   private refreshPurchaseWidgets() {
     const cid = this.contractId().trim();
     forkJoin({
-      orders: this.purchasesService.getOrders(),
+      ordersPage: this.purchasesService.getOrders({
+        page: 1,
+        pageSize: 100,
+        includeClosed: true,
+        ...(cid ? { contractId: cid } : {}),
+      }),
       invoices: this.purchasesService.listPurchaseInvoices({
         status: 'PENDING',
         ...(cid ? { contractId: cid } : {}),
       }),
     }).subscribe({
-      next: ({ orders, invoices }) => {
-        let ords = [...orders];
+      next: ({ ordersPage, invoices }) => {
+        let ords = [...ordersPage.data];
         if (cid) {
           ords = ords.filter((o) => o.contractId === cid);
         }

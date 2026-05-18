@@ -1,4 +1,13 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  OnInit,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import {
   FormBuilder,
   FormGroup,
@@ -74,13 +83,18 @@ function isHttpLogoUrl(v: string | null | undefined): boolean {
 })
 export class CompanyConfigComponent implements OnInit {
   private fb = inject(FormBuilder);
+  private injector = inject(Injector);
   tenantService = inject(TenantService);
   private notification = inject(NotificationService);
 
   configForm: FormGroup;
   isSaving = signal(false);
+  isSavingPurchasesModal = signal(false);
   isUploadingLogo = signal(false);
   readonly palette = BRAND_PALETTE;
+
+  purchasesConfigModalOpen = signal(false);
+  purchasesConfigDialog = viewChild<ElementRef<HTMLDialogElement>>('purchasesConfigDialog');
 
   constructor() {
     this.configForm = this.fb.group({
@@ -89,6 +103,7 @@ export class CompanyConfigComponent implements OnInit {
       city: [''],
       phone: [''],
       invoiceLegalName: [''],
+      ocPdfLegalNotice: ['', Validators.maxLength(4000)],
       primaryColor: [
         '#00E5FF',
         [Validators.required, Validators.pattern(/^#[0-9a-fA-F]{6}$/i)],
@@ -126,6 +141,7 @@ export class CompanyConfigComponent implements OnInit {
       city: t.city || '',
       phone: t.phone || '',
       invoiceLegalName: t.invoiceLegalName || '',
+      ocPdfLegalNotice: t.ocPdfLegalNotice || '',
       primaryColor: t.primaryColor || '#00E5FF',
       logoUrl: isHttpLogoUrl(rawLogo) ? rawLogo : '',
       laborRatePerHour: t.laborRatePerHour ?? 0,
@@ -201,6 +217,63 @@ export class CompanyConfigComponent implements OnInit {
       : { color: '#B45309', backgroundColor: 'rgba(180,83,9,0.10)', borderColor: '#B45309' };
   }
 
+  openPurchasesConfigModal(): void {
+    this.purchasesConfigModalOpen.set(true);
+    afterNextRender(
+      () => {
+        const el = this.purchasesConfigDialog()?.nativeElement;
+        if (el && !el.open) {
+          el.showModal();
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  closePurchasesConfigModal(): void {
+    const el = this.purchasesConfigDialog()?.nativeElement;
+    if (el?.open) {
+      el.close();
+    } else {
+      this.purchasesConfigModalOpen.set(false);
+    }
+  }
+
+  onPurchasesConfigDialogClose(): void {
+    this.purchasesConfigModalOpen.set(false);
+  }
+
+  /** Persiste solo razón social + aviso PDF OC (sin depender del «Guardar cambios» del pie). */
+  savePurchasesFromModal(): void {
+    const noticeCtrl = this.configForm.get('ocPdfLegalNotice');
+    const legalCtrl = this.configForm.get('invoiceLegalName');
+    if (!noticeCtrl || !legalCtrl) return;
+    if (noticeCtrl.invalid) {
+      noticeCtrl.markAsTouched();
+      this.notification.error('Revisa el aviso legal (máximo 4000 caracteres).');
+      return;
+    }
+    this.isSavingPurchasesModal.set(true);
+    this.tenantService
+      .updateTenantConfig({
+        invoiceLegalName: (legalCtrl.value as string) ?? '',
+        ocPdfLegalNotice: (noticeCtrl.value as string) ?? '',
+      })
+      .subscribe({
+        next: (config: Tenant) => {
+          this.tenantService.setTenant(config);
+          this.patchForm(config);
+          this.notification.success('Compras y aviso del PDF guardados en el servidor');
+          this.isSavingPurchasesModal.set(false);
+          this.closePurchasesConfigModal();
+        },
+        error: () => {
+          this.notification.error('No se pudo guardar la configuración de compras');
+          this.isSavingPurchasesModal.set(false);
+        },
+      });
+  }
+
   onSubmit() {
     if (this.configForm.invalid) {
       this.notification.error('Formulario inválido. Verifica los campos.');
@@ -218,6 +291,7 @@ export class CompanyConfigComponent implements OnInit {
       next: (config: Tenant) => {
         this.tenantService.setTenant(config);
         this.notification.success('Configuración actualizada exitosamente');
+        this.closePurchasesConfigModal();
         this.isSaving.set(false);
       },
       error: () => {

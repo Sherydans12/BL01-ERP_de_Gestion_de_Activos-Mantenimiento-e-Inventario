@@ -9,6 +9,7 @@ import {
   Req,
   UseGuards,
   StreamableFile,
+  Header,
 } from '@nestjs/common';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,8 +22,34 @@ export class PurchaseOrdersController {
   constructor(private readonly service: PurchaseOrdersService) {}
 
   @Get()
-  findAll(@Req() req: any, @Query('status') status?: string) {
-    return this.service.findAll(req.user.tenantId, status, req.user);
+  findAll(
+    @Req() req: any,
+    @Query('contractId') contractId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+    @Query('includeClosed') includeClosedRaw?: string,
+  ) {
+    const parseOptionalPositiveInt = (
+      raw: string | undefined,
+    ): number | undefined => {
+      if (raw === undefined || raw === '') return undefined;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    return this.service.findAll(req.user.tenantId, req.user, {
+      contractId,
+      status,
+      includeClosed: includeClosedRaw === 'true',
+      search,
+      page: parseOptionalPositiveInt(pageRaw),
+      pageSize: parseOptionalPositiveInt(pageSizeRaw),
+      sort,
+      dir,
+    });
   }
 
   /**
@@ -55,6 +82,8 @@ export class PurchaseOrdersController {
 
   @Get(':id/pdf')
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
   async streamPdf(
     @Param('id') id: string,
     @Req() req: any,
