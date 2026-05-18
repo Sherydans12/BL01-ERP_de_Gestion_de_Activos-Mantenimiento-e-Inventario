@@ -11,8 +11,12 @@
   <div
     class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-xl border border-border shadow-sm backdrop-blur-xl"
   >
-    <div class="flex items-center gap-4 flex-1">
-      <div class="tpm-search-combobox relative flex flex-1 max-w-md min-w-0 items-center rounded-lg border border-border bg-dark focus-within:border-primary">
+    <div
+      class="flex flex-wrap items-center gap-3 sm:gap-4 flex-1 min-w-0"
+    >
+      <div
+        class="tpm-search-combobox relative flex min-w-0 w-full sm:flex-1 sm:max-w-md items-center rounded-lg border border-border bg-dark focus-within:border-primary"
+      >
         <span
           class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted"
           aria-hidden="true"
@@ -33,32 +37,35 @@
         </span>
         <input
           type="text"
-          placeholder="Buscar por ID..."
-          [ngModel]="searchQuery()"
-          (input)="onSearch($event)"
-          class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2 pr-3 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted"
+          inputmode="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="N° interno, mina o patente…"
+          [(ngModel)]="searchDraft"
+          (ngModelChange)="onSearchDraftChange($event)"
+          class="tpm-input-leading-icon min-w-0 flex-1 max-w-full border-0 bg-transparent py-2.5 pl-0 pr-3 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted"
         />
       </div>
 
       <select
         [ngModel]="filterType()"
         (ngModelChange)="filterType.set($event); onFilterChange()"
-        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-primary"
+        class="w-auto min-w-[10.5rem] shrink-0 bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-primary"
       >
         <option value="">Todos los Tipos</option>
         @for (item of equipmentTypes(); track item.id) {
-          <option [value]="item.id">{{ item.name }}</option>
+          <option [value]="item.name">{{ item.name }}</option>
         }
       </select>
 
       <select
         [ngModel]="filterBrand()"
         (ngModelChange)="filterBrand.set($event); onFilterChange()"
-        class="bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-primary"
+        class="w-auto min-w-[10.5rem] shrink-0 bg-dark border border-border rounded-lg px-3 py-2 text-sm text-muted focus:outline-none focus:border-primary"
       >
         <option value="">Todas las Marcas</option>
         @for (item of brands(); track item.id) {
-          <option [value]="item.id">{{ item.name }}</option>
+          <option [value]="item.name">{{ item.name }}</option>
         }
       </select>
     </div>

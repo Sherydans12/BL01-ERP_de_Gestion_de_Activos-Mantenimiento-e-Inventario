@@ -91,6 +91,8 @@ export class FleetMasterComponent implements OnInit {
   totalPages = computed(() => Math.ceil(this.totalItems() / this.pageSize()));
 
   searchQuery = signal('');
+  /** Texto del input de búsqueda (sincronía inmediata; `searchQuery` va con debounce para el API). */
+  searchDraft = '';
   filterType = signal('');
   filterBrand = signal('');
 
@@ -216,8 +218,7 @@ export class FleetMasterComponent implements OnInit {
     });
   }
 
-  onSearch(event: Event) {
-    const value = (event.target as HTMLInputElement).value;
+  onSearchDraftChange(value: string) {
     this.searchSubject.next(value);
   }
 

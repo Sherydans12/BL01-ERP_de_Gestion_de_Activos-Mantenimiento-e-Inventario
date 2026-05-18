@@ -210,12 +210,16 @@ export class EquipmentsService {
 
     // Lógica de Búsqueda
     if (query?.search) {
-      andConditions.push({
-        OR: [
-          { internalId: { contains: query.search, mode: 'insensitive' } },
-          { plate: { contains: query.search, mode: 'insensitive' } },
-        ],
-      });
+      const q = query.search.trim();
+      if (q.length > 0) {
+        andConditions.push({
+          OR: [
+            { internalId: { contains: q, mode: 'insensitive' } },
+            { plate: { contains: q, mode: 'insensitive' } },
+            { mineInternalId: { contains: q, mode: 'insensitive' } },
+          ],
+        });
+      }
     }
 
     // Inyectar conditions al where si existen
