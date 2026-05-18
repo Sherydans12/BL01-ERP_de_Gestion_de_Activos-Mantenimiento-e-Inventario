@@ -7,11 +7,9 @@ import {
   ReactiveFormsModule,
 } from '@angular/forms';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
-import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import {
   InventoryItemsService,
   ItemCategory,
-  ItemLedgerRow,
   InventoryItemAttachmentRow,
   CreateInventoryItemPayload,
 } from '../../../core/services/inventory-items/inventory-items.service';
@@ -23,8 +21,7 @@ import {
   UnitsOfMeasureService,
   UnitOfMeasureRow,
 } from '../../../core/services/units-of-measure/units-of-measure.service';
-import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
-import { parseInventoryAdjustmentNotes } from '../../../core/utils/inventory-adjustment-notes';
+import { ItemLedgerTableComponent } from '../../../shared/components/item-ledger-table/item-ledger-table.component';
 
 @Component({
   selector: 'app-inventory-item-form',
@@ -33,8 +30,7 @@ import { parseInventoryAdjustmentNotes } from '../../../core/utils/inventory-adj
     CommonModule,
     ReactiveFormsModule,
     RouterLink,
-    WorkOrderDetailModalComponent,
-    EntityLinkComponent,
+    ItemLedgerTableComponent,
   ],
   templateUrl: './inventory-item-form.component.html',
 })
@@ -59,17 +55,6 @@ export class InventoryItemFormComponent implements OnInit {
   warehousesLoading = signal(false);
 
   activeTab = signal<'ficha' | 'historial'>('ficha');
-  ledgerRows = signal<ItemLedgerRow[]>([]);
-  ledgerTotal = signal(0);
-  ledgerPage = signal(1);
-  readonly ledgerPageSize = 25;
-  ledgerLoading = signal(false);
-
-  adjustDetailOpen = signal(false);
-  adjustDetailRow = signal<ItemLedgerRow | null>(null);
-
-  ledgerOtModalOpen = signal(false);
-  ledgerOtModalId = signal<string | null>(null);
 
   attachments = signal<InventoryItemAttachmentRow[]>([]);
   attachmentsLoading = signal(false);
@@ -195,48 +180,6 @@ export class InventoryItemFormComponent implements OnInit {
 
   setTab(tab: 'ficha' | 'historial') {
     this.activeTab.set(tab);
-    if (tab === 'historial' && this.itemId) {
-      this.loadLedger(1);
-    }
-  }
-
-  loadLedger(page: number) {
-    const id = this.itemId;
-    if (!id) return;
-    this.ledgerLoading.set(true);
-    this.inventoryItemsService
-      .getItemLedger(id, { page, pageSize: this.ledgerPageSize })
-      .subscribe({
-        next: (res) => {
-          this.ledgerRows.set(res.data);
-          this.ledgerTotal.set(res.total);
-          this.ledgerPage.set(res.page);
-          this.ledgerLoading.set(false);
-        },
-        error: () => {
-          this.ledgerRows.set([]);
-          this.ledgerTotal.set(0);
-          this.ledgerLoading.set(false);
-          this.notificationService.error('No se pudo cargar el historial de movimientos.');
-        },
-      });
-  }
-
-  ledgerTotalPages(): number {
-    return Math.max(
-      1,
-      Math.ceil(this.ledgerTotal() / this.ledgerPageSize),
-    );
-  }
-
-  prevLedgerPage() {
-    if (this.ledgerPage() <= 1) return;
-    this.loadLedger(this.ledgerPage() - 1);
-  }
-
-  nextLedgerPage() {
-    if (this.ledgerPage() >= this.ledgerTotalPages()) return;
-    this.loadLedger(this.ledgerPage() + 1);
   }
 
   attachmentPublicUrl(url: string): string {
@@ -300,74 +243,6 @@ export class InventoryItemFormComponent implements OnInit {
     });
   }
 
-  ledgerTypeLabel(type: string): string {
-    const map: Record<string, string> = {
-      IN: 'Entrada',
-      OUT: 'Salida',
-      ADJUST: 'Ajuste',
-      RETURN: 'Devolución',
-      PURCHASE_RECEIPT: 'Recepción compra',
-      WORK_ORDER_ISSUE: 'Consumo OT',
-      WORK_ORDER_RETURN: 'Devolución a bodega (OT)',
-      TRANSFER_OUT: 'Transferencia (salida)',
-      TRANSFER_IN: 'Transferencia (ingreso)',
-    };
-    return map[type] ?? type;
-  }
-
-  /** Título de tipo en ledger (variante saldo pendiente sincronizado con compras). */
-  ledgerMovementTitle(row: ItemLedgerRow): string {
-    if (
-      row.type === 'ADJUST' &&
-      row.reference?.kind === 'ADJUST_SALDO_PENDIENTE'
-    ) {
-      return 'Ajuste · saldo pendiente (recepción)';
-    }
-    return this.ledgerTypeLabel(row.type);
-  }
-
-  /**
-   * Cantidad con signo para lectura de kardex (salidas/consumos negativos).
-   */
-  ledgerSignedQty(row: ItemLedgerRow): number {
-    const q = Number(row.quantity);
-    switch (row.type) {
-      case 'TRANSFER_OUT':
-      case 'OUT':
-      case 'WORK_ORDER_ISSUE':
-        return -Math.abs(q);
-      case 'TRANSFER_IN':
-      case 'IN':
-      case 'PURCHASE_RECEIPT':
-      case 'RETURN':
-      case 'WORK_ORDER_RETURN':
-        return Math.abs(q);
-      default:
-        return q;
-    }
-  }
-
-  openAdjustDetail(row: ItemLedgerRow) {
-    if (row.type !== 'ADJUST') return;
-    this.adjustDetailRow.set(row);
-    this.adjustDetailOpen.set(true);
-  }
-
-  closeAdjustDetail() {
-    this.adjustDetailOpen.set(false);
-    this.adjustDetailRow.set(null);
-  }
-
-  openLedgerOtModal(workOrderId: string) {
-    this.ledgerOtModalId.set(workOrderId);
-    this.ledgerOtModalOpen.set(true);
-  }
-
-  closeLedgerOtModal() {
-    this.ledgerOtModalOpen.set(false);
-    this.ledgerOtModalId.set(null);
-  }
-
   printItemLabel() {
     const id = this.itemId;
     if (!id) {
@@ -405,10 +280,6 @@ export class InventoryItemFormComponent implements OnInit {
         this.notificationService.error('No se pudo generar la etiqueta PDF.');
       },
     });
-  }
-
-  parseAdjustmentNotes(notes: string | null): { reason: string; comment: string } {
-    return parseInventoryAdjustmentNotes(notes);
   }
 
   onFamilyChangeFromUi() {

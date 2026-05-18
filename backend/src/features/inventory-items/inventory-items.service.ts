@@ -1463,7 +1463,47 @@ export class InventoryItemsService {
       };
     });
 
-    return { data, total, page, pageSize };
+    /**
+     * Fila sintética de Génesis: consulta el primer registro de auditoría
+     * `CREATE / INVENTORY_ITEM` y lo inyecta al final de la última página
+     * del ledger. No tiene warehouse real ni referencia, ya que es un hito
+     * de catálogo, no una transacción física de stock.
+     */
+    const genesisLog = await this.prisma.activityLog.findFirst({
+      where: {
+        entityId: itemId,
+        entityType: 'INVENTORY_ITEM',
+        action: 'CREATE',
+      },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const adjustedTotal = total + (genesisLog ? 1 : 0);
+    const isLastPage = skip + rows.length >= total;
+    type LedgerRow = (typeof data)[number];
+    const finalData: LedgerRow[] = [...data];
+
+    if (genesisLog && isLastPage) {
+      finalData.push({
+        id: genesisLog.id,
+        date: genesisLog.createdAt.toISOString(),
+        // 'ITEM_GENESIS' es un tipo sintético fuera del enum TransactionType de Prisma;
+        // se castea como unknown para que el frontend lo trate como string discriminante.
+        type: 'ITEM_GENESIS' as unknown as LedgerRow['type'],
+        quantity: 0,
+        previousStock: 0,
+        newStock: 0,
+        notes: 'Alta en catálogo maestro',
+        isPendingRegularization: false,
+        referenceType: null,
+        warehouse: { id: '', code: '—', name: 'Catálogo maestro' },
+        user: { id: genesisLog.userId, name: genesisLog.user.name },
+        reference: null,
+      });
+    }
+
+    return { data: finalData, total: adjustedTotal, page, pageSize };
   }
 
   async search(user: any, q: string) {
