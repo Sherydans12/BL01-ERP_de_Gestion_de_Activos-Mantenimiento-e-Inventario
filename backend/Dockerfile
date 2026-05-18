@@ -1,28 +1,40 @@
 # 1. Dependencias (Instalación limpia)
-FROM node:20-alpine AS deps
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 COPY prisma ./prisma/
-# Instalamos dependencias incluyendo devDeps para el build
+# prisma.config.ts carga `DATABASE_URL`; `postinstall` → `prisma generate`
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN npm install
 
 # 2. Build (Compilación y generación de cliente)
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Inyectamos una URL temporal para que Prisma no falle al generar el cliente
-RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
+# prisma.config.ts exige DATABASE_URL al cargar; `npm run build` ejecuta `prebuild` → `prisma generate`
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN npm run build
 
 # 3. Producción (imagen final, usuario sin privilegios + healthcheck)
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/ms-playwright
 
-# curl: solo para HEALTHCHECK (imagen mínima en runtime)
-RUN apk add --no-cache curl
+# curl: HEALTHCHECK; libs: Chromium (PDF OC vía Playwright)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+    libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+    libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libatspi2.0-0 \
+    libxshmfence1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/node_modules ./node_modules
@@ -31,7 +43,11 @@ COPY --chown=node:node --from=builder /app/prisma ./prisma
 COPY --chown=node:node --from=builder /app/prisma.config.ts ./
 COPY --chown=node:node --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
+RUN mkdir -p /app/ms-playwright && chown node:node /app/ms-playwright
+
 USER node
+
+RUN cd /app && npx playwright install chromium
 
 EXPOSE 3000
 

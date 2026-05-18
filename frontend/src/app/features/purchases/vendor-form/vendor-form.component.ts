@@ -29,6 +29,9 @@ export class VendorFormComponent implements OnInit {
     contactEmail: '',
     contactPhone: '',
     address: '',
+    businessActivity: '',
+    fax: '',
+    city: '',
   });
 
   ngOnInit() {
@@ -41,6 +44,9 @@ export class VendorFormComponent implements OnInit {
           code: v.code, name: v.name, rut: v.rut || '',
           contactName: v.contactName || '', contactEmail: v.contactEmail || '',
           contactPhone: v.contactPhone || '', address: v.address || '',
+          businessActivity: v.businessActivity || '',
+          fax: v.fax || '',
+          city: v.city || '',
         }),
         error: () => this.notify.error('Error al cargar proveedor'),
       });

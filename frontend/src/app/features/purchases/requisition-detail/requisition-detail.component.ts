@@ -84,6 +84,7 @@ export class RequisitionDetailComponent implements OnInit {
       totalAmount: number;
       currency: string;
       deliveryDays?: number;
+      paymentDays?: number;
       validUntil?: string;
       items: Array<{
         requisitionItemId: string;
@@ -492,6 +493,8 @@ export class RequisitionDetailComponent implements OnInit {
   newVendorRut = '';
   quotationVendorId = '';
   quotationDeliveryDays: number | null = null;
+  /** Plazo de pago en días (oferta; 0 = contado). Vacío = no informado. */
+  quotationPaymentDays: number | null = null;
   quotationValidUntil = '';
   quotationFile: File | null = null;
   /** Precio unitario por ítem del requerimiento (id de línea → monto). */
@@ -759,6 +762,7 @@ export class RequisitionDetailComponent implements OnInit {
     this.lineNotes = {};
     this.quotationVendorId = '';
     this.quotationDeliveryDays = null;
+    this.quotationPaymentDays = null;
     this.quotationValidUntil = '';
     this.quotationFile = null;
     this.showQuotationForm.set(false);
@@ -1008,6 +1012,18 @@ export class RequisitionDetailComponent implements OnInit {
       this.notify.warning('El adjunto supera el máximo de 20 MB.');
       return null;
     }
+    let paymentDays: number | undefined;
+    if (
+      this.quotationPaymentDays !== null &&
+      this.quotationPaymentDays !== undefined
+    ) {
+      const pd = Math.trunc(Number(this.quotationPaymentDays));
+      if (!Number.isFinite(pd) || pd < 0 || pd > 3650) {
+        this.notify.warning('Plazo de pago (días): número entre 0 y 3650, o deje vacío');
+        return null;
+      }
+      paymentDays = pd;
+    }
     return {
       requisitionId: req.id,
       payload: {
@@ -1015,6 +1031,7 @@ export class RequisitionDetailComponent implements OnInit {
         totalAmount,
         currency: 'CLP',
         deliveryDays: this.quotationDeliveryDays ?? undefined,
+        ...(paymentDays !== undefined ? { paymentDays } : {}),
         validUntil: this.quotationValidUntil || undefined,
         items,
       },

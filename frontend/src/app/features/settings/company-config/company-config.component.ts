@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import {
   FormBuilder,
   FormGroup,
@@ -61,6 +61,11 @@ export const BRAND_PALETTE: BrandColor[] = [
 const BG_DARK = '#161C24';
 const BG_LIGHT = '#F8FAFC';
 
+function isHttpLogoUrl(v: string | null | undefined): boolean {
+  const s = (v || '').trim();
+  return /^https?:\/\//i.test(s);
+}
+
 @Component({
   selector: 'app-company-config',
   standalone: true,
@@ -69,19 +74,21 @@ const BG_LIGHT = '#F8FAFC';
 })
 export class CompanyConfigComponent implements OnInit {
   private fb = inject(FormBuilder);
-  private tenantService = inject(TenantService);
+  tenantService = inject(TenantService);
   private notification = inject(NotificationService);
 
   configForm: FormGroup;
   isSaving = signal(false);
+  isUploadingLogo = signal(false);
   readonly palette = BRAND_PALETTE;
 
   constructor() {
     this.configForm = this.fb.group({
-      name: ['', Validators.required],
       rut: [''],
       address: [''],
+      city: [''],
       phone: [''],
+      invoiceLegalName: [''],
       primaryColor: [
         '#00E5FF',
         [Validators.required, Validators.pattern(/^#[0-9a-fA-F]{6}$/i)],
@@ -96,28 +103,60 @@ export class CompanyConfigComponent implements OnInit {
   }
 
   loadConfig() {
-    const tenant = this.tenantService.currentTenant();
-    if (tenant) {
-      this.patchForm(tenant);
-    } else {
-      this.tenantService.getTenantConfig().subscribe({
-        next: (config: Tenant) => {
-          this.tenantService.setTenant(config);
-          this.patchForm(config);
-        },
-      });
-    }
+    this.tenantService.getTenantConfig().subscribe({
+      next: (config: Tenant) => {
+        this.tenantService.setTenant(config);
+        this.patchForm(config);
+      },
+      error: () => {
+        const tenant = this.tenantService.currentTenant();
+        if (tenant) {
+          this.patchForm(tenant);
+        }
+        this.notification.error('No se pudo cargar la configuración de empresa.');
+      },
+    });
   }
 
   private patchForm(t: Tenant) {
+    const rawLogo = (t.logoUrl || '').trim();
     this.configForm.patchValue({
-      name: t.name || '',
       rut: t.rut || '',
       address: t.address || '',
+      city: t.city || '',
       phone: t.phone || '',
+      invoiceLegalName: t.invoiceLegalName || '',
       primaryColor: t.primaryColor || '#00E5FF',
-      logoUrl: t.logoUrl || '',
+      logoUrl: isHttpLogoUrl(rawLogo) ? rawLogo : '',
       laborRatePerHour: t.laborRatePerHour ?? 0,
+    });
+  }
+
+  logoPreviewSrc(t: Tenant | null): string | null {
+    if (!t) return null;
+    const pub = (t.logoPublicUrl || '').trim();
+    if (pub) return pub;
+    const raw = (t.logoUrl || '').trim();
+    return isHttpLogoUrl(raw) ? raw : null;
+  }
+
+  onLogoFileSelected(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.isUploadingLogo.set(true);
+    this.tenantService.uploadTenantLogo(file).subscribe({
+      next: (config) => {
+        this.tenantService.setTenant(config);
+        this.patchForm(config);
+        this.notification.success('Logo actualizado');
+        this.isUploadingLogo.set(false);
+      },
+      error: () => {
+        this.notification.error('No se pudo subir el logo (máx. 2 MB, PNG/JPEG/WebP).');
+        this.isUploadingLogo.set(false);
+      },
     });
   }
 
@@ -169,7 +208,11 @@ export class CompanyConfigComponent implements OnInit {
     }
 
     this.isSaving.set(true);
-    const data = this.configForm.value;
+    const raw = { ...this.configForm.value } as Record<string, unknown>;
+    if (!(raw['logoUrl'] as string)?.toString().trim()) {
+      delete raw['logoUrl'];
+    }
+    const data = raw as Partial<Tenant>;
 
     this.tenantService.updateTenantConfig(data).subscribe({
       next: (config: Tenant) => {

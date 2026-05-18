@@ -61,9 +61,13 @@ docker-compose up -d
 ```bash
 cd backend
 npm install
-npx prisma migrate dev
+# Tras pull con cambios de schema: migraciones + cliente (requiere Postgres y .env)
+npm run db:sync
+# o, en desarrollo con historial interactivo: npx prisma migrate dev
 npm run start:dev
 ```
+
+Tras tocar `schema.prisma` o migraciones: el cliente se regenera solo con **`npm install`** y con **`npm run build`** (`postinstall` / `prebuild`). Detalle y ritual post-pull: [docs/agentes/prisma-client-y-migraciones.md](docs/agentes/prisma-client-y-migraciones.md).
 
 ### 4. Frontend
 

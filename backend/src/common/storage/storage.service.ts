@@ -106,7 +106,14 @@ export class StorageService {
     return raw;
   }
 
-  async getReadOnlyUrl(storageKey: string): Promise<string> {
+  /**
+   * URL usable por el navegador (local o firmada en R2/S3).
+   * `signedTtlSeconds` solo aplica a almacenamiento privado firmado (default 300s).
+   */
+  async getReadOnlyUrl(
+    storageKey: string,
+    opts?: { signedTtlSeconds?: number },
+  ): Promise<string> {
     const raw = (storageKey || '').trim();
     if (!raw) return raw;
 
@@ -125,7 +132,8 @@ export class StorageService {
       return this.buildLocalUrl(`/uploads/${normalized}`);
     }
 
-    return this.getSignedDownloadUrl(normalized, 300);
+    const ttl = opts?.signedTtlSeconds ?? 300;
+    return this.getSignedDownloadUrl(normalized, ttl);
   }
 
   async canTenantReadStorageKey(

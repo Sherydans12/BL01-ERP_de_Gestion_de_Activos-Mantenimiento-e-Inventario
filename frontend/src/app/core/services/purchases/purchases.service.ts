@@ -137,6 +137,7 @@ export interface PurchaseQuotation {
   totalAmount: number;
   currency: string;
   deliveryDays?: number;
+  paymentDays?: number | null;
   validUntil?: string;
   attachmentUrl?: string;
   status: string;
@@ -147,7 +148,11 @@ export interface PurchaseQuotation {
     name: string;
     rut?: string | null;
     address?: string | null;
+    city?: string | null;
+    businessActivity?: string | null;
+    fax?: string | null;
     contactPhone?: string | null;
+    contactEmail?: string | null;
   };
   items: QuotationItem[];
   createdAt: string;

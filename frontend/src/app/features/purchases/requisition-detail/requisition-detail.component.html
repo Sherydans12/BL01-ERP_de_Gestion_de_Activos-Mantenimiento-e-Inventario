@@ -316,6 +316,13 @@
                        class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none" />
               </div>
               <div>
+                <label class="block text-xs text-muted uppercase tracking-wider mb-1">Plazo de pago (días)</label>
+                <p class="text-[10px] text-muted mb-1">Desde fecha de factura (ej. 30 = «30 días» en OC). 0 = contado. Opcional.</p>
+                <input type="number" [(ngModel)]="quotationPaymentDays" min="0" max="3650" step="1"
+                       class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+                       placeholder="Ej. 30" />
+              </div>
+              <div>
                 <label class="block text-xs text-muted uppercase tracking-wider mb-1">Válida hasta</label>
                 <input type="date" [(ngModel)]="quotationValidUntil"
                        class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none" />
@@ -370,7 +377,8 @@
               <tr class="border-b border-border">
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Proveedor</th>
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Monto Total</th>
-                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Plazo (días)</th>
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Entrega (días)</th>
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Pago (días)</th>
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Estado</th>
                 <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Adjunto</th>
                 <th class="px-4 py-3 text-xs font-medium text-muted uppercase text-right">Ganadora única</th>
@@ -379,7 +387,7 @@
             <tbody>
               @if ((requisition()!.quotations?.length ?? 0) === 0) {
                 <tr>
-                  <td colspan="6" class="px-4 py-8 text-center text-muted text-sm">
+                  <td colspan="7" class="px-4 py-8 text-center text-muted text-sm">
                     Aún no hay cotizaciones registradas.
                     @if (canAddQuotation()) {
                       <span class="block mt-1">Use «Agregar cotización» para cargar la primera oferta.</span>
@@ -391,7 +399,8 @@
                   <tr class="border-b border-border/50" [ngClass]="{'bg-green-500/5': q.isWinner, 'bg-amber-500/5': q.status === 'PARTIALLY_SELECTED'}">
                     <td class="px-4 py-3 text-sm text-main font-medium">{{ q.vendor?.name }}</td>
                     <td class="px-4 py-3 text-sm text-main font-mono">{{ q.totalAmount | clpCurrency:q.currency }}</td>
-                    <td class="px-4 py-3 text-sm text-muted">{{ q.deliveryDays || '—' }}</td>
+                    <td class="px-4 py-3 text-sm text-muted">{{ q.deliveryDays ?? '—' }}</td>
+                    <td class="px-4 py-3 text-sm text-muted">{{ q.paymentDays != null ? q.paymentDays : '—' }}</td>
                     <td class="px-4 py-3">
                       @if (q.isWinner) {
                         <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400">Ganadora</span>

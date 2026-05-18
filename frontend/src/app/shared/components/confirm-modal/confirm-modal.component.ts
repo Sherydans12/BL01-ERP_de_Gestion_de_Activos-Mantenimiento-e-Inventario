@@ -30,11 +30,11 @@ import { FormsModule } from '@angular/forms';
           (click)="onCancelClick()"
         >
           <div
-            class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md flex flex-col scale-in"
+            class="confirm-dialog-panel border border-border rounded-xl shadow-2xl w-full max-w-md flex flex-col scale-in"
             (click)="$event.stopPropagation()"
           >
           <div
-            class="flex items-center gap-3 p-5 border-b border-border bg-dark/50"
+            class="confirm-dialog-header flex items-center gap-3 p-5 border-b border-border bg-sidebar/90"
           >
             <div
               [class]="iconClasses()"
@@ -53,13 +53,13 @@ import { FormsModule } from '@angular/forms';
                 />
               </svg>
             </div>
-            <h3 class="text-lg font-bold text-white">{{ title }}</h3>
+            <h3 class="text-lg font-bold text-main">{{ title }}</h3>
           </div>
 
-          <div class="p-5 text-gray-300">
-            <p>{{ message }}</p>
+          <div class="p-5 text-main">
+            <p class="text-main">{{ message }}</p>
             @if (consequenceSummary.trim()) {
-              <div class="mt-3 rounded-lg border border-border bg-dark/40 p-3">
+              <div class="mt-3 rounded-lg border border-border bg-dark/30 p-3">
                 <p class="text-xs text-muted uppercase tracking-wide mb-1">
                   Impacto
                 </p>
@@ -90,12 +90,12 @@ import { FormsModule } from '@angular/forms';
           </div>
 
           <div
-            class="p-5 border-t border-border bg-dark/30 flex justify-end gap-3"
+            class="confirm-dialog-footer p-5 border-t border-border bg-dark/25 flex justify-end gap-3"
           >
             <button
               type="button"
               (click)="onCancelClick()"
-              class="px-5 py-2 rounded-lg bg-dark border border-border text-white hover:bg-surface transition-colors font-medium text-sm"
+              class="px-5 py-2 rounded-lg bg-dark border border-border text-main hover:bg-sidebar transition-colors font-medium text-sm"
             >
               {{ cancelText }}
             </button>
@@ -181,7 +181,7 @@ export class ConfirmModalComponent implements OnChanges {
     const level = this.effectiveRiskLevel();
     if (level === 'danger') return 'p-2 bg-error/10 text-error rounded-full';
     if (level === 'warning')
-      return 'p-2 bg-amber-500/15 text-amber-300 rounded-full';
+      return 'p-2 bg-amber-500/15 text-amber-600 rounded-full';
     return 'p-2 bg-primary/10 text-primary rounded-full';
   }
 

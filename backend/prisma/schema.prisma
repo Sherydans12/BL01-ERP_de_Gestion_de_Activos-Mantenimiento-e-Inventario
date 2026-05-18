@@ -593,6 +593,10 @@ model Tenant {
   rut                   String?               @db.VarChar(20)
   address               String?               @db.VarChar(255)
   phone                 String?               @db.VarChar(20)
+  /** Ciudad o comuna (facturación / pie de OC). */
+  city                  String?               @map("city") @db.VarChar(120)
+  /** Razón social para facturas y PDF de OC (p. ej. «TPM Minería SpA»). Si vacío, se usa `name`. */
+  invoiceLegalName      String?               @map("invoice_legal_name") @db.VarChar(200)
 
   logoUrl               String?               @map("logo_url") @db.VarChar(255)
   primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)
@@ -1132,6 +1136,10 @@ model Vendor {
   contactEmail  String?   @map("contact_email") @db.VarChar(100)
   contactPhone  String?   @map("contact_phone") @db.VarChar(20)
   address       String?   @db.VarChar(255)
+  /** Giro comercial (PDF OC, datos proveedor). */
+  businessActivity String? @map("business_activity") @db.VarChar(255)
+  fax           String?   @db.VarChar(30)
+  city          String?   @db.VarChar(120)
   isActive      Boolean   @default(true) @map("is_active")
 
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -1271,6 +1279,8 @@ model PurchaseQuotation {
   totalAmount     Decimal             @map("total_amount") @db.Decimal(18, 2)
   currency        String              @default("CLP") @db.VarChar(10)
   deliveryDays    Int?                @map("delivery_days")
+  /** Plazo de pago pactado en la oferta (días desde factura; ej. 30 → «30 días» en OC). */
+  paymentDays     Int?                @map("payment_days")
   validUntil      DateTime?           @map("valid_until")
   attachmentUrl   String?             @map("attachment_url") @db.VarChar(500)
   status          QuotationStatus     @default(RECEIVED)

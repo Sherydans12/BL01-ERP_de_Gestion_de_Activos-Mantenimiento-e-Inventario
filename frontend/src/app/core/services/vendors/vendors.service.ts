@@ -13,6 +13,9 @@ export interface Vendor {
   contactEmail?: string;
   contactPhone?: string;
   address?: string;
+  businessActivity?: string;
+  fax?: string;
+  city?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

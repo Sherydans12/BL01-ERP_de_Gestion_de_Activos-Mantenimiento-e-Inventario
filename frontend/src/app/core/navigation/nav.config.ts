@@ -224,7 +224,7 @@ export const NAV_SECTIONS: NavSection[] = [
         exact: true,
       },
       {
-        label: 'Config. Empresa',
+        label: 'Empresa',
         route: '/app/configuracion/empresa',
         icon: ICONS.adjustments,
       },

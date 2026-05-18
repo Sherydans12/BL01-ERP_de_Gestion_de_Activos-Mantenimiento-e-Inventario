@@ -6,15 +6,12 @@ import {
   Matches,
   IsNumber,
   Min,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BackgroundPreference } from '@prisma/client';
 
 export class UpdateTenantConfigDto {
-  @IsString()
-  @IsOptional()
-  name?: string;
-
   @IsString()
   @IsOptional()
   rut?: string;
@@ -26,6 +23,17 @@ export class UpdateTenantConfigDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  city?: string;
+
+  /** Razón social para emitir factura / PDF OC (ej. «TPM Minería SpA»). */
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  invoiceLegalName?: string;
 
   @IsString()
   @IsOptional()

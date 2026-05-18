@@ -34,6 +34,9 @@ export class VendorsService {
       contactEmail?: string;
       contactPhone?: string;
       address?: string;
+      businessActivity?: string;
+      fax?: string;
+      city?: string;
     },
     tenantId: string,
   ) {
@@ -63,6 +66,9 @@ export class VendorsService {
       contactEmail?: string;
       contactPhone?: string;
       address?: string;
+      businessActivity?: string;
+      fax?: string;
+      city?: string;
       isActive?: boolean;
     },
     tenantId: string,

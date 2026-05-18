@@ -453,7 +453,7 @@ export const routes: Routes = [
       {
         path: 'configuracion/empresa',
         canActivate: [authGuard],
-        data: { roles: ['ADMIN'] },
+        data: { roles: ['ADMIN'], pageTitle: 'Empresa' },
         loadComponent: () =>
           import('./features/settings/company-config/company-config.component').then(
             (m) => m.CompanyConfigComponent,

@@ -8,7 +8,13 @@ export interface Tenant {
   rut?: string | null;
   address?: string | null;
   phone?: string | null;
+  city?: string | null;
+  /** Razón social para facturas / OC (persistido). */
+  invoiceLegalName?: string | null;
+  /** Clave de storage o URL externa (persistido). */
   logoUrl?: string | null;
+  /** URL lista para `<img src>` (p. ej. firmada en R2). */
+  logoPublicUrl?: string | null;
   primaryColor?: string;
   laborRatePerHour?: number | null;
   backgroundPreference?: 'DARK' | 'LIGHT';
@@ -66,6 +72,16 @@ export class TenantService {
 
   updateTenantConfig(data: Partial<Tenant>): Observable<Tenant> {
     return this.http.patch<Tenant>(`${environment.apiUrl}/tenant-config`, data);
+  }
+
+  /** Sube logo de marca (PNG/JPEG/WebP, máx. 2 MB). Devuelve tenant con `logoUrl` + `logoPublicUrl`. */
+  uploadTenantLogo(file: File): Observable<Tenant> {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<Tenant>(
+      `${environment.apiUrl}/tenant-config/logo`,
+      fd,
+    );
   }
 
   // --- MÉTODOS PARA SUPER ADMIN ---

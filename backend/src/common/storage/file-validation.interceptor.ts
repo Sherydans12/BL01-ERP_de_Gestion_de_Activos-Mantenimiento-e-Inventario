@@ -73,3 +73,9 @@ export const documentUploadPolicy: FileValidationPolicy = {
   maxBytes: 20 * 1024 * 1024,
   allowedMimeTypes: new Set(['application/pdf', 'image/jpeg', 'image/png']),
 };
+
+/** Logo de marca tenant (sidebar, PDF OC): imágenes ligeras. */
+export const tenantLogoUploadPolicy: FileValidationPolicy = {
+  maxBytes: 2 * 1024 * 1024,
+  allowedMimeTypes: new Set(['image/jpeg', 'image/png', 'image/webp']),
+};

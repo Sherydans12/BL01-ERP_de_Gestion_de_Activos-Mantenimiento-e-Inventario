@@ -1117,6 +1117,8 @@ export class PurchaseRequisitionsService {
       totalAmount: number;
       currency?: string;
       deliveryDays?: number;
+      /** Plazo de pago en días (desde factura); 0 = contado. */
+      paymentDays?: number;
       validUntil?: string;
       items: Array<{
         requisitionItemId: string;
@@ -1172,6 +1174,15 @@ export class PurchaseRequisitionsService {
       );
     }
 
+    if (data.paymentDays !== undefined && data.paymentDays !== null) {
+      const pd = Number(data.paymentDays);
+      if (!Number.isFinite(pd) || !Number.isInteger(pd) || pd < 0 || pd > 3650) {
+        throw new BadRequestException(
+          'Plazo de pago (días) inválido: use un entero entre 0 y 3650',
+        );
+      }
+    }
+
     const quotation = await this.prisma.$transaction(async (tx) => {
       const q = await tx.purchaseQuotation.create({
         data: {
@@ -1181,6 +1192,10 @@ export class PurchaseRequisitionsService {
           totalAmount: data.totalAmount,
           currency: data.currency ?? 'CLP',
           deliveryDays: data.deliveryDays,
+          paymentDays:
+            data.paymentDays !== undefined && data.paymentDays !== null
+              ? Math.trunc(Number(data.paymentDays))
+              : undefined,
           validUntil: data.validUntil ? new Date(data.validUntil) : undefined,
           attachmentUrl,
           items: {

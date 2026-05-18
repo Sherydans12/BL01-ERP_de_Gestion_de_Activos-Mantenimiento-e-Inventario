@@ -25,8 +25,9 @@ Seguí **`.cursor/rules/tpm-arquitectura.mdc`** (persona, tenant/site, NestJS, A
 
 ## Prisma y migraciones
 
+- **Cliente generado (`@prisma/client`):** en `backend/package.json`, `postinstall` y `prebuild` ejecutan `prisma generate`. Tras un `git pull` con cambios de schema, alcanza con **`npm install`** o **`npm run build`** en `backend/` para alinear tipos y runtime del cliente. Guía: [docs/agentes/prisma-client-y-migraciones.md](../../docs/agentes/prisma-client-y-migraciones.md).
 - Tras **añadir o tocar** `backend/prisma/migrations/**` o `schema.prisma`, ejecutá en **local** (desde `backend/`) `npx prisma migrate deploy` o el flujo equivalente (`migrate dev`) para aplicar cambios y validar. Así la base local queda alineada con el historial de migraciones.
-- **Producción:** las migraciones se aplican en el **despliegue** (p. ej. Coolify ejecuta `prisma migrate deploy` en el build); no se asume que el push a `main` migre la DB de producción por separado.
+- **Producción (Docker):** al arrancar el contenedor, `docker-entrypoint.sh` ejecuta `prisma migrate deploy` antes de Nest; el **build** de la imagen ya incluye `prisma generate` vía `prebuild`. En Coolify, conservá ese entrypoint / comando de inicio.
 
 ## Memoria tipo claude-mem (Cursor)
 

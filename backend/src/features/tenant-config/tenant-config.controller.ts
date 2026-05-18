@@ -1,9 +1,28 @@
-import { Controller, Get, Body, Patch, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  UseGuards,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { TenantConfigService } from './tenant-config.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateTenantConfigDto } from './dto/update-tenant-config.dto';
+import {
+  tenantLogoUploadPolicy,
+  FileValidationInterceptor,
+} from '../../common/storage/file-validation.interceptor';
+
+const tenantLogoUploadLimits = {
+  limits: { fileSize: tenantLogoUploadPolicy.maxBytes },
+};
 
 @Controller('tenant-config')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,6 +32,20 @@ export class TenantConfigController {
   @Get()
   getTenantConfig(@Req() req: any) {
     return this.tenantConfigService.getTenantConfig(req.user.tenantId);
+  }
+
+  @Post('logo')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseInterceptors(
+    FileInterceptor('file', tenantLogoUploadLimits),
+    new FileValidationInterceptor(tenantLogoUploadPolicy),
+  )
+  uploadTenantLogo(
+    @Req() req: any,
+    @UploadedFile()
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+  ) {
+    return this.tenantConfigService.uploadTenantLogo(req.user.tenantId, file);
   }
 
   @Patch()

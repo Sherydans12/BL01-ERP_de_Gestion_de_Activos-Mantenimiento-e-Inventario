@@ -74,9 +74,11 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [../PURCHASE-FLOWS.md](../PURCHASE-FLOWS.md) y [../PURCHASE-GOVERNANCE.md](../PURCHASE-GOVERNANCE.md) | **Compras:** flujos SRC → OC → recepción (cantidades, catálogo por línea, generación OC) y matriz de firmas ACL / `minAmount` |
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |
+| [prisma-client-y-migraciones.md](prisma-client-y-migraciones.md) | **Prisma:** `postinstall` / `prebuild` → `generate`; cuándo correr `migrate deploy`; Docker y dev local |
 | [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md) | **Inventario:** maestro de artículos, `ItemStock`, kardex (`InventoryTransaction`), ajustes, transferencias W2W, picker y rutas de código |
 | [inventario-alta-articulos-y-selector-global.md](inventario-alta-articulos-y-selector-global.md) | **Inventario:** política de umbrales sin `item_stocks` hasta primer movimiento; alta `/articulos/nuevo`; selector global unificado (`GLOBAL_ITEM_PICKER_CATALOG`) |
 | [ui-quickadd-global-picker-dialogos-nativos.md](ui-quickadd-global-picker-dialogos-nativos.md) | **UI:** `QuickAddItemModal` + `GlobalItemPicker` + `<dialog>` nativos (control de stock / no usar `overlayInsideDialog=true` en el picker) |
+| [ui-modales-tema-claro.md](ui-modales-tema-claro.md) | **UI:** modales en `data-theme='light'` — tokens (`text-main`, `bg-surface`), evitar `text-white` sobre `bg-dark`; `app-confirm-modal` + overrides en `styles.scss` |
 | [control-stock-umbrales-vs-correccion-fisica.md](control-stock-umbrales-vs-correccion-fisica.md) | **Control de stock:** dos acciones (Umbrales vs Corregir físico); no mezclar conteo con mín/máx |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.
