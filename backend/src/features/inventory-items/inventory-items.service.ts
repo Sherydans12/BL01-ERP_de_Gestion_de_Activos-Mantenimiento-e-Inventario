@@ -28,6 +28,10 @@ const INV_SKU_DOC_TYPE = 'INV_SKU';
 /** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
 const INV_SKU_PREFIX = 'IN';
 
+/** UUID v1–v5 (Prisma / `randomUUID()` usan v4; aceptamos el formato estándar). */
+const UUID_PARAM_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const ITEM_CATEGORY_SELECT = {
   id: true,
   name: true,
@@ -68,6 +72,80 @@ export class InventoryItemsService {
     return [...rows].sort(
       (a, b) => (rank.get(a.id) ?? 999_999) - (rank.get(b.id) ?? 999_999),
     );
+  }
+
+  private isInventoryItemUuidParam(value: string): boolean {
+    return UUID_PARAM_RE.test(value.trim());
+  }
+
+  /**
+   * Resuelve `:id` de rutas HTTP: UUID del registro o **código de inventario** único por tenant (`IN####`).
+   * Evita `P2007` en Postgres cuando el cliente envía el SKU en lugar del UUID.
+   */
+  private async resolveInventoryItemRecordId(
+    idOrCode: string,
+    tenantId: string,
+  ): Promise<string> {
+    const raw = idOrCode.trim();
+    if (!raw) {
+      throw new BadRequestException('Identificador de artículo requerido.');
+    }
+    if (this.isInventoryItemUuidParam(raw)) {
+      return raw;
+    }
+    const row = await this.prisma.inventoryItem.findFirst({
+      where: { tenantId, inventoryCode: raw },
+      select: { id: true },
+    });
+    if (!row) {
+      throw new NotFoundException('Artículo no encontrado');
+    }
+    return row.id;
+  }
+
+  private duplicatePartNumberMessage(existing: {
+    inventoryCode: string | null;
+    name: string;
+  }): string {
+    const code =
+      (existing.inventoryCode ?? '').trim() || 'sin código de inventario';
+    return `Ya existe un artículo con este Número de Parte: ${code} — ${existing.name}.`;
+  }
+
+  /** Mapea violación única de `part_number` (carrera entre requests) a 400 legible. */
+  private async rethrowIfPartNumberUniqueViolation(
+    e: unknown,
+    tenantId: string,
+    partNumber: string | null,
+  ): Promise<void> {
+    if (
+      !partNumber ||
+      !(e instanceof Prisma.PrismaClientKnownRequestError) ||
+      e.code !== 'P2002'
+    ) {
+      return;
+    }
+    const target = e.meta?.target;
+    const parts = Array.isArray(target)
+      ? (target as string[])
+      : typeof target === 'string'
+        ? [target]
+        : [];
+    const hitsPartNumber = parts.some(
+      (t) =>
+        typeof t === 'string' &&
+        (t.includes('part_number') || t.includes('partNumber')),
+    );
+    if (!hitsPartNumber && parts.length > 0) {
+      return;
+    }
+    const row = await this.prisma.inventoryItem.findFirst({
+      where: { tenantId, partNumber },
+      select: { inventoryCode: true, name: true },
+    });
+    if (row) {
+      throw new BadRequestException(this.duplicatePartNumberMessage(row));
+    }
   }
 
   private isMechanic(user: { role?: string } | null | undefined): boolean {
@@ -690,7 +768,8 @@ export class InventoryItemsService {
     };
   }
 
-  async findOne(id: string, user: any) {
+  async findOne(idOrCode: string, user: any) {
+    const id = await this.resolveInventoryItemRecordId(idOrCode, user.tenantId);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id, tenantId: user.tenantId },
       include: {
@@ -707,10 +786,11 @@ export class InventoryItemsService {
    * PDF de etiqueta térmica con QR (URL al detalle en la webapp o JSON { id, sku }).
    */
   async getItemLabelPdf(
-    id: string,
+    idOrCode: string,
     user: any,
     options: { qr: InventoryLabelQrMode; size: InventoryLabelSize },
   ): Promise<{ stream: Readable; filename: string }> {
+    const id = await this.resolveInventoryItemRecordId(idOrCode, user.tenantId);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id, tenantId: user.tenantId },
       select: {
@@ -851,11 +931,11 @@ export class InventoryItemsService {
     if (pn) {
       const existingPn = await this.prisma.inventoryItem.findFirst({
         where: { tenantId: user.tenantId, partNumber: pn },
-        select: { id: true },
+        select: { id: true, inventoryCode: true, name: true },
       });
       if (existingPn) {
         throw new BadRequestException(
-          'Ya existe un artículo con este Número de Parte.',
+          this.duplicatePartNumberMessage(existingPn),
         );
       }
     }
@@ -866,102 +946,107 @@ export class InventoryItemsService {
       );
     }
 
-    const createdItem = await this.prisma.$transaction(async (tx) => {
-      await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
-      const inventoryCode = await this.sequenceService.getNextCorrelative(
-        user.tenantId,
-        INV_SKU_DOC_TYPE,
-        INV_SKU_PREFIX,
-        {
-          tx,
-          padWidth: 4,
-          separator: '',
-        },
-      );
+    const createdItem = await this.prisma
+      .$transaction(async (tx) => {
+        await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
+        const inventoryCode = await this.sequenceService.getNextCorrelative(
+          user.tenantId,
+          INV_SKU_DOC_TYPE,
+          INV_SKU_PREFIX,
+          {
+            tx,
+            padWidth: 4,
+            separator: '',
+          },
+        );
 
-      const id = randomUUID();
-      const qrCode = `INV:${id}`;
+        const id = randomUUID();
+        const qrCode = `INV:${id}`;
 
-      let policyExtra: {
-        policyTargetWarehouseId: string;
-        policyMinStock: number;
-        policyMaxStock: number;
-      } | null = null;
+        let policyExtra: {
+          policyTargetWarehouseId: string;
+          policyMinStock: number;
+          policyMaxStock: number;
+        } | null = null;
 
-      const wh = dto.warehouseId?.trim();
-      if (wh) {
-        if (
-          dto.minStock === undefined ||
-          dto.minStock === null ||
-          dto.maxStock === undefined ||
-          dto.maxStock === null
-        ) {
-          throw new BadRequestException(
-            'Si indica una bodega inicial, debe enviar stock mínimo y stock máximo (números ≥ 0).',
-          );
+        const wh = dto.warehouseId?.trim();
+        if (wh) {
+          if (
+            dto.minStock === undefined ||
+            dto.minStock === null ||
+            dto.maxStock === undefined ||
+            dto.maxStock === null
+          ) {
+            throw new BadRequestException(
+              'Si indica una bodega inicial, debe enviar stock mínimo y stock máximo (números ≥ 0).',
+            );
+          }
+          const minStock = Number(dto.minStock);
+          const maxStock = Number(dto.maxStock);
+          if (!Number.isFinite(minStock) || minStock < 0) {
+            throw new BadRequestException(
+              'El stock mínimo debe ser un número mayor o igual a cero.',
+            );
+          }
+          if (!Number.isFinite(maxStock) || maxStock < 0) {
+            throw new BadRequestException(
+              'El stock máximo debe ser un número mayor o igual a cero.',
+            );
+          }
+          if (maxStock > 0 && maxStock < minStock) {
+            throw new BadRequestException(
+              'El stock máximo no puede ser menor que el stock mínimo.',
+            );
+          }
+          const warehouse = await tx.warehouse.findFirst({
+            where: { id: wh, tenantId: user.tenantId },
+            select: { id: true },
+          });
+          if (!warehouse) {
+            throw new BadRequestException(
+              'La bodega seleccionada no existe o no pertenece a su empresa.',
+            );
+          }
+          policyExtra = {
+            policyTargetWarehouseId: warehouse.id,
+            policyMinStock: minStock,
+            policyMaxStock: maxStock,
+          };
         }
-        const minStock = Number(dto.minStock);
-        const maxStock = Number(dto.maxStock);
-        if (!Number.isFinite(minStock) || minStock < 0) {
-          throw new BadRequestException(
-            'El stock mínimo debe ser un número mayor o igual a cero.',
-          );
-        }
-        if (!Number.isFinite(maxStock) || maxStock < 0) {
-          throw new BadRequestException(
-            'El stock máximo debe ser un número mayor o igual a cero.',
-          );
-        }
-        if (maxStock > 0 && maxStock < minStock) {
-          throw new BadRequestException(
-            'El stock máximo no puede ser menor que el stock mínimo.',
-          );
-        }
-        const warehouse = await tx.warehouse.findFirst({
-          where: { id: wh, tenantId: user.tenantId },
-          select: { id: true },
+
+        const item = await tx.inventoryItem.create({
+          data: {
+            id,
+            qrCode,
+            tenantId: user.tenantId,
+            inventoryCode,
+            partNumber: pn,
+            name: dto.name,
+            description: dto.description,
+            categoryId: dto.categoryId,
+            unitOfMeasureId: dto.unitOfMeasureId,
+            brand: dto.brand,
+            supplierId: dto.supplierId ?? null,
+            isSerialized: dto.isSerialized ?? false,
+            isInventory: dto.isInventory ?? true,
+            isAsset: dto.isAsset ?? false,
+            isConsumable: dto.isConsumable ?? true,
+            compatibilityInfo: dto.compatibilityInfo?.trim() || null,
+            ...(policyExtra ?? {}),
+          },
+          include: {
+            itemCategory: { select: ITEM_CATEGORY_SELECT },
+            unitOfMeasure: { select: UOM_SELECT },
+            inventorySupplier: { select: { id: true, name: true } },
+          },
         });
-        if (!warehouse) {
-          throw new BadRequestException(
-            'La bodega seleccionada no existe o no pertenece a su empresa.',
-          );
-        }
-        policyExtra = {
-          policyTargetWarehouseId: warehouse.id,
-          policyMinStock: minStock,
-          policyMaxStock: maxStock,
-        };
-      }
 
-      const item = await tx.inventoryItem.create({
-        data: {
-          id,
-          qrCode,
-          tenantId: user.tenantId,
-          inventoryCode,
-          partNumber: pn,
-          name: dto.name,
-          description: dto.description,
-          categoryId: dto.categoryId,
-          unitOfMeasureId: dto.unitOfMeasureId,
-          brand: dto.brand,
-          supplierId: dto.supplierId ?? null,
-          isSerialized: dto.isSerialized ?? false,
-          isInventory: dto.isInventory ?? true,
-          isAsset: dto.isAsset ?? false,
-          isConsumable: dto.isConsumable ?? true,
-          compatibilityInfo: dto.compatibilityInfo?.trim() || null,
-          ...(policyExtra ?? {}),
-        },
-        include: {
-          itemCategory: { select: ITEM_CATEGORY_SELECT },
-          unitOfMeasure: { select: UOM_SELECT },
-          inventorySupplier: { select: { id: true, name: true } },
-        },
+        return item;
+      })
+      .catch(async (e: unknown) => {
+        await this.rethrowIfPartNumberUniqueViolation(e, user.tenantId, pn);
+        throw e;
       });
-
-      return item;
-    });
 
     // ── Auditoría: génesis del artículo en el historial ──────────────────────
     await this.audit.log({
@@ -989,7 +1074,8 @@ export class InventoryItemsService {
     return createdItem;
   }
 
-  async update(id: string, dto: UpdateInventoryItemDto, user: any) {
+  async update(idOrCode: string, dto: UpdateInventoryItemDto, user: any) {
+    const id = await this.resolveInventoryItemRecordId(idOrCode, user.tenantId);
     const existing = await this.findOne(id, user);
     if (dto.inventoryCode !== undefined) {
       const incoming = (dto.inventoryCode ?? '').trim();
@@ -1043,11 +1129,11 @@ export class InventoryItemsService {
     if (mergedPn) {
       const existingPn = await this.prisma.inventoryItem.findFirst({
         where: { tenantId: user.tenantId, partNumber: mergedPn, id: { not: id } },
-        select: { id: true },
+        select: { id: true, inventoryCode: true, name: true },
       });
       if (existingPn) {
         throw new BadRequestException(
-          'El Número de Parte ya está siendo usado por otro artículo.',
+          this.duplicatePartNumberMessage(existingPn),
         );
       }
     }
@@ -1122,10 +1208,11 @@ export class InventoryItemsService {
             partNumber: requestedPn,
           },
         },
+        select: { inventoryCode: true, name: true },
       });
       if (existingPn) {
         throw new BadRequestException(
-          'Ya existe un artículo con este Número de Parte.',
+          this.duplicatePartNumberMessage(existingPn),
         );
       }
     }
@@ -1134,118 +1221,129 @@ export class InventoryItemsService {
     const isAsset = dto.isAsset ?? false;
     const isConsumable = dto.isConsumable ?? true;
 
-    const createdItem = await this.prisma.$transaction(
-      async (tx) => {
-        await this.assertLeafCategoryWithTx(tx, dto.categoryId, user.tenantId);
-        await this.assertUnitOfMeasureTx(
-          tx,
-          dto.unitOfMeasureId,
-          user.tenantId,
-        );
+    const partNumberForConflict = requestedPn ? requestedPn : null;
 
-        await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
-
-        const partNumber = requestedPn ? requestedPn : null;
-        const inventoryCode = await this.sequenceService.getNextCorrelative(
-          user.tenantId,
-          INV_SKU_DOC_TYPE,
-          INV_SKU_PREFIX,
-          {
+    const createdItem = await this.prisma
+      .$transaction(
+        async (tx) => {
+          await this.assertLeafCategoryWithTx(tx, dto.categoryId, user.tenantId);
+          await this.assertUnitOfMeasureTx(
             tx,
-            padWidth: 4,
-            separator: '',
-          },
-        );
+            dto.unitOfMeasureId,
+            user.tenantId,
+          );
 
-        const id = randomUUID();
-        const qrCode = `INV:${id}`;
+          await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
 
-        let policyExtra: {
-          policyTargetWarehouseId: string;
-          policyMinStock: number;
-          policyMaxStock: number;
-        } | null = null;
+          const partNumber = partNumberForConflict;
+          const inventoryCode = await this.sequenceService.getNextCorrelative(
+            user.tenantId,
+            INV_SKU_DOC_TYPE,
+            INV_SKU_PREFIX,
+            {
+              tx,
+              padWidth: 4,
+              separator: '',
+            },
+          );
 
-        if (dto.warehouseId?.trim()) {
-          const wh = dto.warehouseId.trim();
-          const minStock =
-            dto.minStock !== undefined && dto.minStock !== null
-              ? Number(dto.minStock)
-              : 0;
-          const maxStock =
-            dto.maxStock !== undefined && dto.maxStock !== null
-              ? Number(dto.maxStock)
-              : 0;
-          if (!Number.isFinite(minStock) || minStock < 0) {
-            throw new BadRequestException(
-              'El stock mínimo debe ser un número mayor o igual a cero.',
-            );
+          const id = randomUUID();
+          const qrCode = `INV:${id}`;
+
+          let policyExtra: {
+            policyTargetWarehouseId: string;
+            policyMinStock: number;
+            policyMaxStock: number;
+          } | null = null;
+
+          if (dto.warehouseId?.trim()) {
+            const wh = dto.warehouseId.trim();
+            const minStock =
+              dto.minStock !== undefined && dto.minStock !== null
+                ? Number(dto.minStock)
+                : 0;
+            const maxStock =
+              dto.maxStock !== undefined && dto.maxStock !== null
+                ? Number(dto.maxStock)
+                : 0;
+            if (!Number.isFinite(minStock) || minStock < 0) {
+              throw new BadRequestException(
+                'El stock mínimo debe ser un número mayor o igual a cero.',
+              );
+            }
+            if (!Number.isFinite(maxStock) || maxStock < 0) {
+              throw new BadRequestException(
+                'El stock máximo debe ser un número mayor o igual a cero.',
+              );
+            }
+            if (maxStock > 0 && maxStock < minStock) {
+              throw new BadRequestException(
+                'El stock máximo no puede ser menor que el stock mínimo.',
+              );
+            }
+            const warehouse = await tx.warehouse.findFirst({
+              where: { id: wh, tenantId: user.tenantId },
+              select: { id: true },
+            });
+            if (!warehouse) {
+              throw new BadRequestException(
+                'La bodega seleccionada no existe o no pertenece a su empresa.',
+              );
+            }
+            policyExtra = {
+              policyTargetWarehouseId: warehouse.id,
+              policyMinStock: minStock,
+              policyMaxStock: maxStock,
+            };
           }
-          if (!Number.isFinite(maxStock) || maxStock < 0) {
-            throw new BadRequestException(
-              'El stock máximo debe ser un número mayor o igual a cero.',
-            );
-          }
-          if (maxStock > 0 && maxStock < minStock) {
-            throw new BadRequestException(
-              'El stock máximo no puede ser menor que el stock mínimo.',
-            );
-          }
-          const warehouse = await tx.warehouse.findFirst({
-            where: { id: wh, tenantId: user.tenantId },
-            select: { id: true },
+
+          const item = await tx.inventoryItem.create({
+            data: {
+              id,
+              qrCode,
+              tenantId: user.tenantId,
+              inventoryCode,
+              partNumber,
+              name,
+              description: description ?? null,
+              categoryId: dto.categoryId,
+              unitOfMeasureId: dto.unitOfMeasureId,
+              brand: brand ?? null,
+              compatibilityInfo: compatibilityInfo ?? null,
+              isSerialized,
+              isInventory,
+              isAsset,
+              isConsumable,
+              ...(policyExtra ?? {}),
+            },
+            select: {
+              id: true,
+              qrCode: true,
+              inventoryCode: true,
+              partNumber: true,
+              name: true,
+              categoryId: true,
+              unitOfMeasure: { select: UOM_SELECT },
+              itemCategory: { select: ITEM_CATEGORY_SELECT },
+            },
           });
-          if (!warehouse) {
-            throw new BadRequestException(
-              'La bodega seleccionada no existe o no pertenece a su empresa.',
-            );
-          }
-          policyExtra = {
-            policyTargetWarehouseId: warehouse.id,
-            policyMinStock: minStock,
-            policyMaxStock: maxStock,
-          };
-        }
 
-        const item = await tx.inventoryItem.create({
-          data: {
-            id,
-            qrCode,
-            tenantId: user.tenantId,
-            inventoryCode,
-            partNumber,
-            name,
-            description: description ?? null,
-            categoryId: dto.categoryId,
-            unitOfMeasureId: dto.unitOfMeasureId,
-            brand: brand ?? null,
-            compatibilityInfo: compatibilityInfo ?? null,
-            isSerialized,
-            isInventory,
-            isAsset,
-            isConsumable,
-            ...(policyExtra ?? {}),
-          },
-          select: {
-            id: true,
-            qrCode: true,
-            inventoryCode: true,
-            partNumber: true,
-            name: true,
-            categoryId: true,
-            unitOfMeasure: { select: UOM_SELECT },
-            itemCategory: { select: ITEM_CATEGORY_SELECT },
-          },
-        });
-
-        return item;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        maxWait: 10_000,
-        timeout: 30_000,
-      },
-    );
+          return item;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10_000,
+          timeout: 30_000,
+        },
+      )
+      .catch(async (e: unknown) => {
+        await this.rethrowIfPartNumberUniqueViolation(
+          e,
+          user.tenantId,
+          partNumberForConflict,
+        );
+        throw e;
+      });
 
     this.dispatchInventoryItemCreatedMail(user, createdItem);
 
@@ -1289,11 +1387,12 @@ export class InventoryItemsService {
    * Kardex: movimientos de inventario del artículo (paginado), con referencia a OC/OT cuando aplica.
    */
   async findItemLedger(
-    itemId: string,
+    itemIdOrCode: string,
     user: any,
     opts: { page?: number; pageSize?: number; warehouseId?: string },
   ) {
     const tenantId = user.tenantId as string;
+    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
     const exists = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -1591,8 +1690,8 @@ export class InventoryItemsService {
     return this.sortRowsBySearchIdOrder(rows, pageIds);
   }
 
-  async remove(id: string, user: any) {
-    await this.findOne(id, user);
+  async remove(idOrCode: string, user: any) {
+    const { id } = await this.findOne(idOrCode, user);
 
     try {
       return await this.prisma.inventoryItem.delete({
@@ -1605,8 +1704,9 @@ export class InventoryItemsService {
     }
   }
 
-  async listAttachments(itemId: string, user: any) {
+  async listAttachments(itemIdOrCode: string, user: any) {
     const tenantId = user.tenantId as string;
+    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -1641,7 +1741,7 @@ export class InventoryItemsService {
   }
 
   async addAttachment(
-    itemId: string,
+    itemIdOrCode: string,
     file: {
       buffer: Buffer;
       originalname: string;
@@ -1656,6 +1756,7 @@ export class InventoryItemsService {
       throw new BadRequestException('Usuario no identificado.');
     }
 
+    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -1704,8 +1805,9 @@ export class InventoryItemsService {
     };
   }
 
-  async removeAttachment(itemId: string, attachmentId: string, user: any) {
+  async removeAttachment(itemIdOrCode: string, attachmentId: string, user: any) {
     const tenantId = user.tenantId as string;
+    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
     const att = await this.prisma.inventoryItemAttachment.findFirst({
       where: { id: attachmentId, itemId, tenantId },
     });

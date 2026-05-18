@@ -46,6 +46,7 @@ La pantalla **Transferencia W2W** (`inventory-transfer`) **no** es el mismo fluj
 - **Control de stock** enlaza `allowQuickAdd` según tipo de movimiento (ver §3); **requerimiento** y **detalle OC** usan `GLOBAL_ITEM_PICKER_CATALOG`. La pantalla **W2W dedicada** (`inventory-transfer`) monta el mismo picker pero con **`allowQuickAdd` en false**.
 - **`warehouseId`** sigue siendo responsabilidad de cada pantalla (stock pasa la bodega seleccionada; SRC no tiene bodega fija en el picker).
 - **Quick-add desde el picker:** usar **`overlayInsideDialog=false`** en `GlobalItemPicker` (overlay `fixed`). Con `true` se rompe el flujo **Nuevo movimiento** + catálogo (dos `<dialog>` nativos). Ver [ui-quickadd-global-picker-dialogos-nativos.md](ui-quickadd-global-picker-dialogos-nativos.md).
+- **Toasts sobre `<dialog>` nativo:** `NotificationService` + `app-toast` deben verse también con el picker abierto; ver [ui-notificaciones-toasts-top-layer.md](ui-notificaciones-toasts-top-layer.md) (Popover API / top layer).
 
 ## 5. Rutas de código útiles
 
@@ -63,6 +64,17 @@ La pantalla **Transferencia W2W** (`inventory-transfer`) **no** es el mismo fluj
 ## 6. Despliegue
 
 Tras pull: en `backend/` ejecutar **`npx prisma migrate deploy`** (o el flujo del entorno) para aplicar columnas nuevas.
+
+## 7. Disparadores HTTP de alta y detalle por `:id`
+
+| Flujo UI típico | HTTP (prefijo global `/api`) |
+|------------------|------------------------------|
+| `/app/articulos/nuevo` (catálogo maestro) | `POST /inventory-items` → `InventoryItemsService.create` |
+| Modal **+ Nuevo artículo** (`QuickAddItemModal` vía picker) | `POST /inventory-items/quick-create` → `quickCreate` |
+
+- **Correo / motor de notificaciones** (`INVENTORY_ITEM_CREATED`): ambos POST disparan el mismo helper `dispatchInventoryItemCreatedMail` (catálogo en [CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md)).
+- **Número de parte duplicado** (`@@unique([tenantId, partNumber])`): respuesta **400** con mensaje que incluye **código de inventario (`IN####`) y nombre** del artículo existente; en carrera bajo transacción serializable se mapea **`P2002`** a ese mensaje cuando aplica.
+- **`GET` / `PUT` / `DELETE` `/inventory-items/:id`** y subrutas (`:id/ledger`, `:id/attachments`, `:id/label`, etc.): el segmento `:id` acepta **UUID** del registro o **código de inventario** único por tenant (`IN####`), de modo que no se produzca error de tipo UUID en Postgres si el cliente armó la URL con el SKU.
 
 ---
 *Índice agentes:* [README.md](README.md) · Inventario general: [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md)

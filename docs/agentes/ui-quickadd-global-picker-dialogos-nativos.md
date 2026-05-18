@@ -17,6 +17,7 @@ Si `app-quick-add-item-modal` recibe **`overlayInsideDialog=true`**, el overlay 
 1. **No cambiar** `overlayInsideDialog` a `true` en `GlobalItemPicker` sin probar **Nuevo movimiento → Entrada por compra → Buscar o crear → + Nuevo artículo**.
 2. **`overlayInsideDialog=true`** solo tiene sentido si el quick-add está **dentro** de un contenedor con posición/scroll **y no** hay otro `<dialog>` nativo abierto detrás que deba quedar por debajo del overlay de alta rápida (caso raro en este repo).
 3. Si se introduce un tercer nivel de UI modal, preferir **un solo** `<dialog>` a la vez (cerrar el anterior) o documentar aquí el nuevo flujo.
+4. **Errores globales (toasts)** sobre el picker: ver [ui-notificaciones-toasts-top-layer.md](ui-notificaciones-toasts-top-layer.md) — el `<dialog>` nativo usa **top layer**; no basta con subir `z-index` al toast.
 
 ## Código
 

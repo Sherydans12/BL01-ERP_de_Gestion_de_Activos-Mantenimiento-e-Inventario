@@ -1,4 +1,10 @@
-import { Component, inject } from '@angular/core';
+import {
+  Component,
+  inject,
+  viewChild,
+  effect,
+  ElementRef,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   NotificationService,
@@ -11,7 +17,9 @@ import {
   imports: [CommonModule],
   template: `
     <div
+      #toastStack
       class="fixed bottom-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none"
+      [attr.popover]="popoverTopLayer ? 'manual' : null"
     >
       @for (toast of notificationService.toasts(); track toast.id) {
         <div
@@ -131,4 +139,42 @@ import {
 })
 export class ToastComponent {
   notificationService = inject(NotificationService);
+  private stackRef = viewChild<ElementRef<HTMLElement>>('toastStack');
+
+  /**
+   * `<dialog showModal>` vive en el **top layer** del navegador: un toast con
+   * solo `z-index` alto sigue **debajo**. `popover="manual"` mete el host en
+   * el mismo mecanismo y queda visible sobre diálogos nativos.
+   * @see docs/agentes/ui-notificaciones-toasts-top-layer.md
+   */
+  readonly popoverTopLayer =
+    typeof document !== 'undefined' &&
+    typeof HTMLElement !== 'undefined' &&
+    'popover' in HTMLElement.prototype;
+
+  constructor() {
+    effect(() => {
+      const list = this.notificationService.toasts();
+      const el = this.stackRef()?.nativeElement;
+      if (!el || !this.popoverTopLayer) return;
+
+      queueMicrotask(() => {
+        try {
+          const anyEl = el as HTMLElement & {
+            showPopover?: () => void;
+            hidePopover?: () => void;
+          };
+          if (list.length > 0) {
+            if (!el.matches(':popover-open')) {
+              anyEl.showPopover?.();
+            }
+          } else if (el.matches(':popover-open')) {
+            anyEl.hidePopover?.();
+          }
+        } catch {
+          /* API popover o :popover-open no disponible */
+        }
+      });
+    });
+  }
 }
