@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Readable } from 'stream';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
@@ -21,6 +22,7 @@ import {
   type QuotationStatusChange,
 } from './purchase-quotation-status-sync.util';
 import { buildRequisitionReconciliationSnapshot } from './purchase-requisition-reconciliation.util';
+import { generatePurchaseRequisitionPdfBuffer } from './purchase-requisition-pdf.generator';
 
 const PO_INACTIVE_FOR_LINK = ['CANCELLED', 'REJECTED'] as const;
 
@@ -1672,5 +1674,98 @@ export class PurchaseRequisitionsService {
     }
 
     return result;
+  }
+
+  /** Logo tenant embebido en HTML del PDF (evita URLs firmadas inaccesibles desde Chromium). */
+  private async tryFetchTenantLogoDataUri(
+    storageKey: string | null | undefined,
+  ): Promise<string | null> {
+    const raw = storageKey?.trim();
+    if (!raw) return null;
+    try {
+      const url = (await this.storageService.getReadOnlyUrl(raw)).trim();
+      if (!url) return null;
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 12_000);
+      const res = await fetch(url, { signal: ac.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const ct =
+        res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+      if (!ct.startsWith('image/')) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 2_500_000) return null;
+      return `data:${ct};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * PDF resumen SRC (HTML + Chromium), alineado a `purchase-order-pdf.generator.ts`.
+   */
+  async getRequisitionPdfStream(
+    id: string,
+    tenantId: string,
+    user?: { role?: string; allowedContracts?: string[] },
+  ): Promise<Readable> {
+    const requisition = await this.prisma.purchaseRequisition.findFirst({
+      where: { id, tenantId },
+      include: {
+        tenant: {
+          select: { name: true, rut: true, logoUrl: true, primaryColor: true },
+        },
+        requestedBy: { select: { name: true, email: true } },
+        contract: { select: { code: true, name: true } },
+        subcontract: SUBCONTRACT_SELECT,
+        equipment: EQUIPMENT_LINK_SELECT,
+        workOrder: WORK_ORDER_LINK_SELECT,
+        items: {
+          include: {
+            inventoryItem: { select: { partNumber: true, name: true } },
+            awardedQuotationItem: {
+              include: {
+                quotation: {
+                  select: {
+                    currency: true,
+                    vendor: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        purchaseOrders: {
+          select: {
+            correlative: true,
+            status: true,
+            totalAmount: true,
+            currency: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        quotations: {
+          select: {
+            isWinner: true,
+            vendor: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!requisition) {
+      throw new NotFoundException('Requerimiento no encontrado');
+    }
+    if (user) {
+      assertUserHasContractAccess(user, requisition.contractId);
+    }
+
+    const tenantLogoDataUri = await this.tryFetchTenantLogoDataUri(
+      requisition.tenant.logoUrl,
+    );
+    const buffer = await generatePurchaseRequisitionPdfBuffer(requisition, {
+      tenantLogoDataUri,
+    });
+    return Readable.from(buffer);
   }
 }

@@ -7,8 +7,12 @@ Este documento fija el **patrón oficial** para PDFs generados en el backend: **
 | Pieza | Ubicación |
 |-------|-----------|
 | Plantilla OC + helpers | `backend/src/features/purchases/purchase-order-pdf.generator.ts` |
+| Plantilla SRC (resumen) | `backend/src/features/purchases/purchase-requisition-pdf.generator.ts` |
+| Plantilla reporte ejecutivo compras | `backend/src/features/purchases/purchases-analytics-report-pdf.generator.ts` |
 | Stream PDF OC (include Prisma + logo; merge aviso/razón social desde `tenants`) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
+| Stream PDF SRC | `backend/src/features/purchases/purchase-requisitions.service.ts` → `getRequisitionPdfStream` |
 | PDF OC HTTP (`Cache-Control: no-store`) | `backend/src/features/purchases/purchase-orders.controller.ts` → `GET :id/pdf` |
+| PDF SRC HTTP | `backend/src/features/purchases/purchase-requisitions.controller.ts` → `GET :id/pdf` |
 | Chromium en imagen Docker | `backend/Dockerfile` (deps sistema + `playwright install chromium` en runner) |
 | Variable ejecutable opcional | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` |
 
@@ -82,3 +86,5 @@ Al añadir un PDF nuevo que siga este patrón, enlazalo desde aquí (tabla “Im
 | Documento | Generador |
 |-----------|-----------|
 | Orden de compra (OC) | `purchase-order-pdf.generator.ts` |
+| Requerimiento de compra (SRC) — resumen | `purchase-requisition-pdf.generator.ts` |
+| Reporte ejecutivo de compras (analytics) | `purchases-analytics-report-pdf.generator.ts` |

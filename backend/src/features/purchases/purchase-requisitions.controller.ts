@@ -12,6 +12,8 @@ import {
   UploadedFile,
   UsePipes,
   ValidationPipe,
+  StreamableFile,
+  Header,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PurchaseRequisitionsService } from './purchase-requisitions.service';
@@ -71,6 +73,24 @@ export class PurchaseRequisitionsController {
   @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
   findActivityLogs(@Param('id') id: string, @Req() req: any) {
     return this.service.findActivityLogs(id, req.user.tenantId);
+  }
+
+  @Get(':id/pdf')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  async streamRequisitionPdf(
+    @Param('id') id: string,
+    @Req() req: any,
+  ): Promise<StreamableFile> {
+    const stream = await this.service.getRequisitionPdfStream(
+      id,
+      req.user.tenantId,
+      req.user,
+    );
+    return new StreamableFile(stream, {
+      type: 'application/pdf',
+      disposition: 'inline',
+    });
   }
 
   @Get(':id')

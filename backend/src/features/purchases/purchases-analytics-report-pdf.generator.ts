@@ -1,4 +1,9 @@
-import PDFDocument from 'pdfkit';
+import { chromium } from 'playwright';
+
+/**
+ * PDF ejecutivo de compras (analytics) — HTML + Chromium.
+ * Patrón: `docs/agentes/pdf-html-playwright-plantilla-base.md`.
+ */
 
 /** Subconjunto del resultado de `PurchasesAnalyticsService.getDashboard`. */
 export type PurchasesAnalyticsDashboardPdfData = {
@@ -9,7 +14,6 @@ export type PurchasesAnalyticsDashboardPdfData = {
     invoiceDiscrepancyRate: number;
     invoiceDiscrepancyCount: number;
     invoiceTotalForRate: number;
-    /** Σ (max P.U. cotizado − adjudicado) × cantidad en SRC del período. */
     multiproviderAdjudicationSavings?: number;
   };
   requisitionPipeline?: Record<string, number>;
@@ -35,6 +39,21 @@ export type PurchasesAnalyticsDashboardPdfData = {
   overpaymentPrevention: number;
 };
 
+export type PurchasesAnalyticsPdfOptions = {
+  tenantLogoDataUri?: string | null;
+  /** Color de marca (#RRGGBB) para acentos; fallback cyan TPM. */
+  tenantPrimaryColor?: string | null;
+};
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function formatClp(n: number): string {
   try {
     return `$ ${n.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
@@ -45,6 +64,16 @@ function formatClp(n: number): string {
 
 function formatPct(n: number): string {
   return `${(n * 100).toLocaleString('es-CL', { maximumFractionDigits: 1 })} %`;
+}
+
+function formatLongRange(from: Date, to: Date): string {
+  try {
+    const a = from.toLocaleDateString('es-CL', { timeZone: 'UTC' });
+    const b = to.toLocaleDateString('es-CL', { timeZone: 'UTC' });
+    return `${a} — ${b}`;
+  } catch {
+    return `${from.toISOString().slice(0, 10)} — ${to.toISOString().slice(0, 10)}`;
+  }
 }
 
 /** Lead time medio ponderado por volumen de compra (top proveedores). */
@@ -63,287 +92,448 @@ export function weightedAvgLeadTimeDays(
   return Math.round((num / den) * 10) / 10;
 }
 
-function barAscii(pct: number, width = 24): string {
-  const p = Math.max(0, Math.min(100, pct));
-  const filled = Math.round((p / 100) * width);
-  return `${'█'.repeat(filled)}${'░'.repeat(width - filled)} ${p.toFixed(0)}%`;
+function barFillPct(pct: number): number {
+  return Math.max(0, Math.min(100, pct));
 }
 
-/**
- * PDF ejecutivo de compras (tablas + barras ASCII; sin JS en cliente).
- */
-export function generatePurchasesAnalyticsReportPdfBuffer(
+function buildPurchasesAnalyticsHtml(
   tenantName: string,
-  logoBuffer: Buffer | null,
   contractLabel: string,
   periodFrom: Date,
   periodTo: Date,
   data: PurchasesAnalyticsDashboardPdfData,
-): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 48 });
-    const chunks: Buffer[] = [];
-    doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+  options: PurchasesAnalyticsPdfOptions,
+): string {
+  const accent =
+    options.tenantPrimaryColor?.trim() &&
+    /^#[0-9A-Fa-f]{6}$/.test(options.tenantPrimaryColor.trim())
+      ? options.tenantPrimaryColor.trim()
+      : '#0891b2';
 
-    const left = doc.page.margins.left;
-    const width =
-      doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const leadAvg = weightedAvgLeadTimeDays(data.topVendors);
+  const logoBlock = options.tenantLogoDataUri
+    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="Logo" />`
+    : `<div class="logo-ph">${escapeHtml(tenantName.slice(0, 3).toUpperCase() || 'BL')}</div>`;
 
-    if (logoBuffer) {
-      try {
-        const imgW = Math.min(100, width * 0.35);
-        const logoTop = doc.y;
-        doc.image(logoBuffer, left, logoTop, { width: imgW });
-        doc.y = logoTop + 52;
-      } catch {
-        /* omitir logo si formato no soportado */
-      }
-    }
+  const leadAvg = weightedAvgLeadTimeDays(data.topVendors);
 
-    doc
-      .fontSize(16)
-      .fillColor('#1a1a1a')
-      .text(tenantName, left, doc.y, { width });
-    doc.moveDown(0.3);
+  const kpiSpend = escapeHtml(formatClp(data.kpis.totalApprovedSpend));
+  const kpiPrev = escapeHtml(formatClp(data.overpaymentPrevention));
+  const kpiLead =
+    leadAvg != null ? escapeHtml(`${leadAvg} días`) : escapeHtml('—');
 
-    doc
-      .fontSize(18)
-      .fillColor('#111111')
-      .text('Reporte Ejecutivo de Gestión de Compras', { align: 'center' });
-    doc.moveDown(0.4);
-    doc
-      .fontSize(10)
-      .fillColor('#555555')
-      .text(
-        `Período: ${periodFrom.toLocaleDateString('es-CL', { timeZone: 'UTC' })} — ${periodTo.toLocaleDateString('es-CL', { timeZone: 'UTC' })}`,
-        { align: 'center' },
-      );
-    doc.fontSize(10).text(`Alcance: ${contractLabel}`, { align: 'center' });
-    doc.moveDown(1.2);
+  const mpSave = data.kpis.multiproviderAdjudicationSavings ?? 0;
+  const mpLine = escapeHtml(formatClp(mpSave));
 
-    doc.fontSize(12).fillColor('#000000').text('Resumen ejecutivo', {
-      underline: true,
-    });
-    doc.moveDown(0.6);
+  const part = data.partialRequisitionPurchaseProgress;
+  const partialHtml =
+    part && part.lineItemsTotal > 0
+      ? `<p class="callout callout-info"><strong>Compras parciales:</strong> ${escapeHtml(String(part.lineItemsWithActivePo))} / ${escapeHtml(String(part.lineItemsTotal))} líneas de ítem con OC activa (${escapeHtml(String(part.partialRequisitionCount))} SRC en estado compra parcial).</p>`
+      : '';
 
-    const kpiH = 52;
-    const gap = 10;
-    const colW = (width - gap * 2) / 3;
-    const boxY = doc.y;
+  const rowsReq = data.requisitionPurchaseRows ?? [];
+  const reqRowsHtml =
+    rowsReq.length > 0
+      ? rowsReq
+          .slice(0, 40)
+          .map((r) => {
+            const ocText =
+              r.ocLines.length > 0
+                ? escapeHtml(r.ocLines.join(' · '))
+                : escapeHtml('Sin OC activa');
+            return `<tr>
+            <td class="c">${escapeHtml(r.correlative)}</td>
+            <td class="c">${escapeHtml(r.status)}</td>
+            <td class="l">${ocText}</td>
+          </tr>`;
+          })
+          .join('')
+      : `<tr><td colspan="3" class="c muted">Sin filas en el período seleccionado</td></tr>`;
 
-    const drawKpi = (x: number, title: string, value: string) => {
-      doc.save();
-      doc.roundedRect(x, boxY, colW, kpiH, 4).stroke('#cccccc');
-      doc
-        .fontSize(8)
-        .fillColor('#666666')
-        .text(title, x + 8, boxY + 8, { width: colW - 16 });
-      doc
-        .fontSize(11)
-        .fillColor('#111111')
-        .text(value, x + 8, boxY + 26, {
-          width: colW - 16,
-        });
-      doc.restore();
-    };
+  const imp = data.imputationSpend;
+  const impSum = imp.general + imp.equipment + imp.workOrder;
+  const impSumSafe = impSum > 0 ? impSum : 1;
+  const rowsImp: [string, number][] = [
+    ['Gasto general', imp.general],
+    ['Por equipo', imp.equipment],
+    ['Por orden de trabajo', imp.workOrder],
+  ];
+  const impHtml = rowsImp
+    .map(([label, amt]) => {
+      const pct = (amt / impSumSafe) * 100;
+      const w = barFillPct(pct);
+      return `<tr>
+        <td class="lbl">${escapeHtml(label)}</td>
+        <td class="r">${escapeHtml(formatClp(amt))}</td>
+        <td class="bar-cell">
+          <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="width:${w}%;"></div></div>
+          <span class="bar-pct">${escapeHtml(`${pct.toFixed(0)} %`)}</span>
+        </td>
+      </tr>`;
+    })
+    .join('');
 
-    drawKpi(
-      left,
-      'Gasto total aprobado (OC)',
-      formatClp(data.kpis.totalApprovedSpend),
-    );
-    drawKpi(
-      left + colW + gap,
-      'Prevención de sobrepagos',
-      formatClp(data.overpaymentPrevention),
-    );
-    drawKpi(
-      left + (colW + gap) * 2,
-      'Lead time promedio (ponderado)',
-      leadAvg != null ? `${leadAvg} días` : '—',
-    );
-    doc.y = boxY + kpiH + 16;
-
-    const mpSave = data.kpis.multiproviderAdjudicationSavings ?? 0;
-    doc
-      .fontSize(10)
-      .fillColor('#0f766e')
-      .text(
-        `Ahorro por adjudicación multiproveedor (SRC actualizados en el período): ${formatClp(mpSave)}`,
-        left,
-        doc.y,
-        { width },
-      );
-    doc.moveDown(0.4);
-    doc
-      .fontSize(8)
-      .fillColor('#666666')
-      .text(
-        'Estimación: por cada ítem adjudicado se compara el precio unitario máximo cotizado frente al adjudicado, multiplicado por la cantidad solicitada.',
-        left,
-        doc.y,
-        { width },
-      );
-    doc.moveDown(0.8);
-
-    const part = data.partialRequisitionPurchaseProgress;
-    if (part && part.lineItemsTotal > 0) {
-      doc
-        .fontSize(10)
-        .fillColor('#0c4a6e')
-        .text(
-          `Compras parciales: ${part.lineItemsWithActivePo} / ${part.lineItemsTotal} líneas de ítem con OC activa ` +
-            `(${part.partialRequisitionCount} SRC en estado compra parcial).`,
-          left,
-          doc.y,
-          { width },
-        );
-      doc.moveDown(0.6);
-    }
-
-    const rowsReq = data.requisitionPurchaseRows ?? [];
-    if (rowsReq.length > 0) {
-      doc
-        .fontSize(11)
-        .fillColor('#111111')
-        .text('Requerimientos — OC y proveedor', {
-          underline: true,
-        });
-      doc.moveDown(0.4);
-      doc.fontSize(8).fillColor('#333333');
-      for (const r of rowsReq.slice(0, 28)) {
-        const ocText =
-          r.ocLines.length > 0 ? r.ocLines.join(' · ') : 'Sin OC activa';
-        doc.text(`• ${r.correlative} (${r.status}): ${ocText}`, {
-          width,
-        });
-        doc.moveDown(0.35);
-      }
-      doc.moveDown(0.5);
-    }
-
-    doc.fontSize(12).text('Distribución del gasto por imputación', {
-      underline: true,
-    });
-    doc.moveDown(0.5);
-    const imp = data.imputationSpend;
-    const impSum = imp.general + imp.equipment + imp.workOrder || 1;
-    const rowsImp: [string, number][] = [
-      ['Gasto general', imp.general],
-      ['Por equipo', imp.equipment],
-      ['Por orden de trabajo', imp.workOrder],
-    ];
-    doc.fontSize(9).fillColor('#333333');
-    for (const [label, amt] of rowsImp) {
-      const pct = impSum > 0 ? (amt / impSum) * 100 : 0;
-      const rowY = doc.y;
-      doc.text(label, left, rowY, { width: 200 });
-      doc.text(formatClp(amt), left + 210, rowY, { width: width - 220 });
-      doc.y = rowY + 14;
-      doc.fontSize(8).fillColor('#666666').text(barAscii(pct), left);
-      doc.fontSize(9).fillColor('#333333');
-      doc.moveDown(0.55);
-    }
-    doc.moveDown(0.5);
-
-    doc.fontSize(12).fillColor('#000000').text('Top proveedores por volumen', {
-      underline: true,
-    });
-    doc.moveDown(0.5);
-
-    const volSum =
-      data.topVendors.reduce((s, v) => s + v.purchaseVolume, 0) || 1;
-    doc.fontSize(9);
-    const headY = doc.y;
-    doc.text('Proveedor', left, headY, { width: width * 0.44 });
-    doc.text('Volumen', left + width * 0.45, headY, { width: width * 0.24 });
-    doc.text('% s/ top', left + width * 0.72, headY, { width: width * 0.26 });
-    doc.moveDown(0.4);
-    doc
-      .moveTo(left, doc.y)
-      .lineTo(left + width, doc.y)
-      .stroke('#dddddd');
-    doc.moveDown(0.3);
-
-    for (const v of data.topVendors) {
+  const volSum =
+    data.topVendors.reduce((s, v) => s + v.purchaseVolume, 0) || 1;
+  const vendorRows = data.topVendors
+    .map((v) => {
       const share = volSum > 0 ? (v.purchaseVolume / volSum) * 100 : 0;
-      const line = doc.y;
-      doc
-        .fontSize(8)
-        .fillColor('#222222')
-        .text(`${v.vendorCode} — ${v.vendorName}`, left, line, {
-          width: width * 0.44,
-        });
-      doc.text(formatClp(v.purchaseVolume), left + width * 0.46, line, {
-        width: width * 0.22,
-      });
-      doc.text(`${share.toFixed(1)} %`, left + width * 0.7, line, {
-        width: width * 0.2,
-      });
-      doc.moveDown(0.35);
-      doc
-        .fontSize(7)
-        .fillColor('#888888')
-        .text(barAscii(share, 28), left, doc.y);
-      doc.moveDown(0.45);
-    }
+      const w = barFillPct(share);
+      return `<tr>
+        <td class="l">${escapeHtml(`${v.vendorCode} — ${v.vendorName}`)}</td>
+        <td class="r">${escapeHtml(formatClp(v.purchaseVolume))}</td>
+        <td class="r">${escapeHtml(`${share.toFixed(1)} %`)}</td>
+        <td class="bar-cell">
+          <div class="bar-track"><div class="bar-fill" style="width:${w}%;"></div></div>
+        </td>
+      </tr>`;
+    })
+    .join('');
 
-    doc.addPage();
-    doc
-      .fontSize(12)
-      .fillColor('#000000')
-      .text('Detalle de eficiencia — lead time por proveedor', {
-        underline: true,
-      });
-    doc.moveDown(0.6);
-    doc.fontSize(9).fillColor('#333333');
-    for (const v of data.topVendors) {
+  const leadDetailRows = data.topVendors
+    .map((v) => {
       const lt =
         v.avgLeadTimeDays != null
           ? `${v.avgLeadTimeDays} días`
           : 'Sin recepciones en período';
-      doc.text(`• ${v.vendorName} (${v.vendorCode}): ${lt}`, { width });
-      doc.moveDown(0.35);
+      return `<tr><td colspan="2">${escapeHtml(`${v.vendorName} (${v.vendorCode}): ${lt}`)}</td></tr>`;
+    })
+    .join('');
+
+  const discNote = escapeHtml(
+    `En el período se registraron ${data.kpis.invoiceDiscrepancyCount} factura(s) con discrepancia sobre ${data.kpis.invoiceTotalForRate} validada(s) para tasa ${formatPct(data.kpis.invoiceDiscrepancyRate)}.`,
+  );
+  const prevNote = escapeHtml(
+    `El monto acumulado asociado a prevención de sobrepagos (correcciones tras discrepancia) es ${formatClp(data.overpaymentPrevention)}.`,
+  );
+  const policyNote = escapeHtml(
+    'Las discrepancias indican diferencias entre OC, recepción en bodega y monto facturado, según la política de margen configurada en Compras.',
+  );
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reporte de compras</title>
+  <style>
+    @page { size: A4; margin: 9mm; }
+    :root { --accent: ${accent}; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+      font-size: 9.5px;
+      color: #111827;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    doc.moveDown(0.8);
+    .wrap { max-width: 190mm; margin: 0 auto; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .title-block { width: 34%; padding-top: 4px; }
+    .title-block h1 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #0f172a;
+      border-left: 4px solid var(--accent);
+      padding-left: 8px;
+    }
+    .logo-cell { flex: 1; text-align: center; }
+    .logo { max-height: 44px; max-width: 200px; object-fit: contain; }
+    .logo-ph {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      min-width: 120px;
+      border: 1px dashed #94a3b8;
+      color: #64748b;
+      font-weight: 700;
+      font-size: 11px;
+      border-radius: 4px;
+    }
+    .meta { width: 36%; }
+    table.meta-t { width: 100%; border-collapse: collapse; }
+    table.meta-t td {
+      border: 1px solid #0f172a;
+      padding: 3px 5px;
+      vertical-align: middle;
+    }
+    table.meta-t td:first-child {
+      font-weight: 700;
+      color: #0f172a;
+      width: 56px;
+    }
+    .muted { color: #475569; font-size: 8.5px; }
+    .dest {
+      border: 1px solid #64748b;
+      background: #f1f5f9;
+      padding: 6px 8px;
+      border-radius: 3px;
+      font-size: 8.5px;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      margin: 10px 0 5px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 2px;
+    }
+    .kpi-row { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    .kpi-row td {
+      border: 1px solid #0f172a;
+      width: 33.33%;
+      vertical-align: top;
+      padding: 6px 8px;
+    }
+    .kpi-row .kt {
+      font-size: 8px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .kpi-row .kv { font-size: 11px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+    .callout {
+      border: 1px solid #0f172a;
+      padding: 5px 7px;
+      margin: 0 0 8px;
+      font-size: 9px;
+      line-height: 1.35;
+    }
+    .callout-teal {
+      background: #ecfdf5;
+      border-color: #0f766e;
+      color: #064e3b;
+    }
+    .callout-info {
+      background: #f0f9ff;
+      border-color: #0c4a6e;
+      color: #0c4a6e;
+    }
+    .grid2 { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    .grid2 td {
+      border: 1px solid #0f172a;
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+    .grid2 td.lbl {
+      font-weight: 700;
+      color: #0f172a;
+      width: 34%;
+    }
+    .grid2 td.r { text-align: right; white-space: nowrap; }
+    .grid2 td.c { text-align: center; }
+    .grid2 td.l { text-align: left; word-wrap: break-word; overflow-wrap: anywhere; }
+    .items {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+    .items thead { display: table-header-group; }
+    .items th {
+      background: #e2e8f0;
+      font-weight: 700;
+      text-align: center;
+      border: 1px solid #0f172a;
+      padding: 4px 3px;
+      font-size: 8.5px;
+    }
+    .items td {
+      border: 1px solid #0f172a;
+      padding: 3px 4px;
+      vertical-align: top;
+      font-size: 8.5px;
+    }
+    .bar-cell { vertical-align: middle; }
+    .bar-track {
+      height: 9px;
+      background: #e2e8f0;
+      border: 1px solid #0f172a;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      opacity: 0.85;
+    }
+    .bar-pct { font-size: 7.5px; color: #64748b; margin-left: 4px; }
+    .page-break { break-before: page; page-break-before: always; }
+    .foot-note {
+      margin-top: 12px;
+      font-size: 7.5px;
+      color: #64748b;
+      line-height: 1.35;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title-block">
+        <h1>REPORTE EJECUTIVO DE GESTIÓN DE COMPRAS</h1>
+        <p class="muted" style="margin:4px 0 0;">Analítica consolidada del período</p>
+      </div>
+      <div class="logo-cell">${logoBlock}</div>
+      <div class="meta">
+        <table class="meta-t">
+          <tr>
+            <td>Organización</td>
+            <td>${escapeHtml(tenantName)}</td>
+          </tr>
+          <tr>
+            <td>Período</td>
+            <td>${escapeHtml(formatLongRange(periodFrom, periodTo))}</td>
+          </tr>
+          <tr>
+            <td>Alcance</td>
+            <td>${escapeHtml(contractLabel)}</td>
+          </tr>
+        </table>
+      </div>
+    </div>
 
-    doc.fontSize(12).text('Notas de control — facturación y 3-way match', {
-      underline: true,
-    });
-    doc.moveDown(0.5);
-    doc.fontSize(9).fillColor('#333333');
-    doc.text(
-      `En el período se registraron ${data.kpis.invoiceDiscrepancyCount} factura(s) con discrepancia ` +
-        `sobre ${data.kpis.invoiceTotalForRate} validada(s) para tasa ${formatPct(data.kpis.invoiceDiscrepancyRate)}.`,
-      { width },
-    );
-    doc.moveDown(0.5);
-    doc.text(
-      `El monto acumulado asociado a prevención de sobrepagos (correcciones tras discrepancia) es ${formatClp(data.overpaymentPrevention)}.`,
-      { width },
-    );
-    doc.moveDown(0.5);
-    doc
-      .fontSize(8)
-      .fillColor('#666666')
-      .text(
-        'Las discrepancias indican diferencias entre OC, recepción en bodega y monto facturado, ' +
-          'según la política de margen configurada en Compras.',
-        { width },
-      );
+    <div class="dest">
+      <strong>Contexto</strong><br/>
+      Resumen de KPIs, imputación de gasto, concentración por proveedor y notas de control (3-way match / discrepancias)
+      según el alcance de contrato y fechas indicados en la cabecera.
+    </div>
 
-    doc.moveDown(1.5);
-    doc
-      .fontSize(8)
-      .fillColor('#999999')
-      .text(
-        `Documento generado ${new Date().toLocaleString('es-CL')} · ${tenantName}`,
-        { align: 'center' },
-      );
+    <p class="section-title">Resumen ejecutivo</p>
+    <table class="kpi-row">
+      <tr>
+        <td>
+          <div class="kt">Gasto total aprobado (OC)</div>
+          <div class="kv">${kpiSpend}</div>
+        </td>
+        <td>
+          <div class="kt">Prevención de sobrepagos</div>
+          <div class="kv">${kpiPrev}</div>
+        </td>
+        <td>
+          <div class="kt">Lead time promedio (ponderado)</div>
+          <div class="kv">${kpiLead}</div>
+        </td>
+      </tr>
+    </table>
 
-    doc.end();
+    <p class="callout callout-teal">
+      <strong>Ahorro por adjudicación multiproveedor</strong> (SRC actualizados en el período): ${mpLine}.<br/>
+      <span class="muted">Estimación: por cada ítem adjudicado se compara el precio unitario máximo cotizado frente al adjudicado, multiplicado por la cantidad solicitada.</span>
+    </p>
+    ${partialHtml}
+
+    <p class="section-title">Requerimientos — OC y proveedor</p>
+    <table class="items">
+      <colgroup>
+        <col style="width:18%;" />
+        <col style="width:22%;" />
+        <col style="width:60%;" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>SRC</th>
+          <th>Estado</th>
+          <th>OC / proveedor (referencia)</th>
+        </tr>
+      </thead>
+      <tbody>${reqRowsHtml}</tbody>
+    </table>
+
+    <p class="section-title">Distribución del gasto por imputación</p>
+    <table class="grid2">
+      ${impHtml}
+    </table>
+
+    <p class="section-title">Top proveedores por volumen</p>
+    <table class="items">
+      <colgroup>
+        <col style="width:44%;" />
+        <col style="width:20%;" />
+        <col style="width:14%;" />
+        <col style="width:22%;" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Proveedor</th>
+          <th>Volumen</th>
+          <th>% s/ top</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${vendorRows}</tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <p class="section-title">Detalle de eficiencia — lead time por proveedor</p>
+    <table class="grid2">
+      ${leadDetailRows || `<tr><td class="muted">Sin datos de proveedores en el período</td></tr>`}
+    </table>
+
+    <p class="section-title">Notas de control — facturación y 3-way match</p>
+    <p style="font-size:9px;line-height:1.45;color:#334155;">${discNote}</p>
+    <p style="font-size:9px;line-height:1.45;color:#334155;">${prevNote}</p>
+    <p class="muted" style="font-size:8px;">${policyNote}</p>
+
+    <p class="foot-note">
+      Documento generado ${escapeHtml(new Date().toLocaleString('es-CL'))} · ${escapeHtml(tenantName)} · TPM / BaseLogic
+    </p>
+  </div>
+</body>
+</html>`;
+}
+
+export async function generatePurchasesAnalyticsReportPdfBuffer(
+  tenantName: string,
+  contractLabel: string,
+  periodFrom: Date,
+  periodTo: Date,
+  data: PurchasesAnalyticsDashboardPdfData,
+  options: PurchasesAnalyticsPdfOptions = {},
+): Promise<Buffer> {
+  const html = buildPurchasesAnalyticsHtml(
+    tenantName,
+    contractLabel,
+    periodFrom,
+    periodTo,
+    data,
+    options,
+  );
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--disable-dev-shm-usage', '--no-sandbox'],
+    executablePath:
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim() || undefined,
   });
+  try {
+    const page = await browser.newPage();
+    try {
+      await page.setContent(html, { waitUntil: 'load' });
+      const pdf = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '7mm', bottom: '7mm', left: '9mm', right: '9mm' },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
 }

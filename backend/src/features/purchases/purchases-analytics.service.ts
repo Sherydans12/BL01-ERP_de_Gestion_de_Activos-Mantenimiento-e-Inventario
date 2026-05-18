@@ -645,10 +645,10 @@ export class PurchasesAnalyticsService {
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { name: true, logoUrl: true },
+      select: { name: true, logoUrl: true, primaryColor: true },
     });
 
-    let logoBuffer: Buffer | null = null;
+    let tenantLogoDataUri: string | null = null;
     const logoUrl = tenant?.logoUrl?.trim();
     if (
       logoUrl &&
@@ -658,10 +658,18 @@ export class PurchasesAnalyticsService {
         const res = await fetch(logoUrl);
         if (res.ok) {
           const ab = await res.arrayBuffer();
-          logoBuffer = Buffer.from(ab);
+          const buf = Buffer.from(ab);
+          if (buf.length <= 2_500_000) {
+            const ct =
+              res.headers.get('content-type')?.split(';')[0]?.trim() ||
+              'image/png';
+            if (ct.startsWith('image/')) {
+              tenantLogoDataUri = `data:${ct};base64,${buf.toString('base64')}`;
+            }
+          }
         }
       } catch {
-        logoBuffer = null;
+        tenantLogoDataUri = null;
       }
     }
 
@@ -689,11 +697,14 @@ export class PurchasesAnalyticsService {
 
     const buffer = await generatePurchasesAnalyticsReportPdfBuffer(
       tenant?.name ?? 'Organización',
-      logoBuffer,
       contractLabel,
       fromDate,
       toDate,
       data,
+      {
+        tenantLogoDataUri,
+        tenantPrimaryColor: tenant?.primaryColor ?? null,
+      },
     );
 
     const filename = `Reporte_Compras_${contractFile}_${yyyy}-${mm}.pdf`;

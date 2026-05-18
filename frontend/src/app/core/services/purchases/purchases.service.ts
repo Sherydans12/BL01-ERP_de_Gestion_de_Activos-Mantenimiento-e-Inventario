@@ -564,6 +564,12 @@ export class PurchasesService {
       .pipe(map((row) => this.normalizeRequisitionMedia(row)));
   }
 
+  getRequisitionPdf(id: string): Observable<Blob> {
+    return this.http.get(`${this.base}/purchase-requisitions/${id}/pdf`, {
+      responseType: 'blob',
+    });
+  }
+
   getRequisitionActivityLogs(id: string): Observable<ActivityLogEntry[]> {
     return this.http.get<ActivityLogEntry[]>(
       `${this.base}/purchase-requisitions/${id}/logs`,

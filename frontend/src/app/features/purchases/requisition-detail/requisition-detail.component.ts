@@ -1,6 +1,7 @@
 import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, ActivatedRoute, Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import {
   PurchasesService,
@@ -22,8 +23,8 @@ import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-deta
 import { ActivityTimelineComponent } from '../../../shared/components/activity-timeline/activity-timeline.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
-import { PdfService } from '../../../core/services/pdf/pdf.service';
 import { MAX_UPLOAD_FILE_BYTES } from '../../../core/constants/file-upload.constants';
+import { finalize } from 'rxjs/operators';
 
 const PO_INACTIVE = new Set(['CANCELLED', 'REJECTED']);
 
@@ -52,7 +53,6 @@ export class RequisitionDetailComponent implements OnInit {
   private vendorsService = inject(VendorsService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private pdfService = inject(PdfService);
 
   requisition = signal<PurchaseRequisition | null>(null);
   isLoading = signal(true);
@@ -61,6 +61,7 @@ export class RequisitionDetailComponent implements OnInit {
   isSubmitting = signal(false);
   isDuplicating = signal(false);
   isStartingQuotation = signal(false);
+  isRequisitionPdfDownloading = signal(false);
   isSavingQuotation = signal(false);
   /** Modal de advertencia antes de enviar un requerimiento en borrador. */
   showSubmitConfirmModal = signal(false);
@@ -472,16 +473,49 @@ export class RequisitionDetailComponent implements OnInit {
   downloadRequisitionPdf(): void {
     const r = this.requisition();
     if (!r) return;
-    this.pdfService.generatePurchaseRequisitionSummaryPdf({
-      correlative: r.correlative,
-      description: r.description,
-      status: r.status,
-      contract: r.contract,
-      subcontract: r.subcontract ?? null,
-      items: r.items,
-      quotations: r.quotations,
-      purchaseOrders: r.purchaseOrders,
-    });
+    this.isRequisitionPdfDownloading.set(true);
+    this.purchasesService
+      .getRequisitionPdf(r.id)
+      .pipe(finalize(() => this.isRequisitionPdfDownloading.set(false)))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `SRC_${r.correlative}.pdf`;
+          a.rel = 'noopener';
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+        error: (err: unknown) => {
+          const blob =
+            err instanceof HttpErrorResponse && err.error instanceof Blob
+              ? err.error
+              : null;
+          if (blob) {
+            blob.text().then((t) => {
+              try {
+                const j = JSON.parse(t) as { message?: string };
+                this.notify.error(
+                  typeof j.message === 'string'
+                    ? j.message
+                    : 'No se pudo generar el PDF del requerimiento',
+                );
+              } catch {
+                this.notify.error('No se pudo generar el PDF del requerimiento');
+              }
+            });
+            return;
+          }
+          const msg =
+            err && typeof err === 'object' && 'message' in err
+              ? String((err as { message?: string }).message)
+              : '';
+          this.notify.error(
+            msg || 'No se pudo generar el PDF del requerimiento',
+          );
+        },
+      });
   }
 
   showQuotationForm = signal(false);
