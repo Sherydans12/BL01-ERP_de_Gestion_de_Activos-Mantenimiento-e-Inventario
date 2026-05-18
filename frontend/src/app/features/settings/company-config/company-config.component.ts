@@ -337,14 +337,14 @@ export class CompanyConfigComponent implements OnInit {
     this.purchasesConfigModalOpen.set(false);
   }
 
-  /** Persiste solo razón social + aviso PDF OC (sin depender del «Guardar cambios» del pie). */
+  /** Persiste razón social + aviso legal solo-OC (sin depender del «Guardar cambios» del pie). */
   savePurchasesFromModal(): void {
     const noticeCtrl = this.configForm.get('ocPdfLegalNotice');
     const legalCtrl = this.configForm.get('invoiceLegalName');
     if (!noticeCtrl || !legalCtrl) return;
     if (noticeCtrl.invalid) {
       noticeCtrl.markAsTouched();
-      this.notification.error('Revisa el aviso legal (máximo 4000 caracteres).');
+      this.notification.error('Revisa el aviso legal de la OC (máximo 4000 caracteres).');
       return;
     }
     this.isSavingPurchasesModal.set(true);
@@ -357,12 +357,12 @@ export class CompanyConfigComponent implements OnInit {
         next: (config: Tenant) => {
           this.tenantService.setTenant(config);
           this.patchForm(config);
-          this.notification.success('Compras y aviso del PDF guardados en el servidor');
+          this.notification.success('Configuración para emisión de documentos guardada en el servidor');
           this.isSavingPurchasesModal.set(false);
           this.closePurchasesConfigModal();
         },
         error: () => {
-          this.notification.error('No se pudo guardar la configuración de compras');
+          this.notification.error('No se pudo guardar la configuración de emisión de documentos');
           this.isSavingPurchasesModal.set(false);
         },
       });
