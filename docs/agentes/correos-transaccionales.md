@@ -5,6 +5,8 @@
 **Fuente de verdad** de **todos** los correos que dispara el sistema (incluidos HTML mínimos): **[`docs/CORREOS-SISTEMA.md`](../CORREOS-SISTEMA.md)**.  
 Cualquier **nueva** implementación que llame a `EmailService.sendMail` debe **registrarse ahí** (fila nueva o actualización), además de lo que sigue en este archivo.
 
+**Canal Web Push** (no correo): inventario y checklist en [`notificaciones-sistema.md`](notificaciones-sistema.md).
+
 ## Dónde está el código
 
 - Plantilla base y firma: `backend/src/common/email/email-templates.ts` (`buildTpmEmailHtml`, `escapeHtml`, `getSystemEmailSignatureHtml`).

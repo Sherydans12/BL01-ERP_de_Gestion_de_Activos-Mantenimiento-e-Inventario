@@ -12,7 +12,7 @@ Documento **maestro** de todo lo que el backend puede enviar vía `EmailService.
 | `OT_WARRANTY_NOTIFY` | `[TPM] Solicitud de garantía · {OT}` | Cierre de OT marcada posible garantía (si `WARRANTY_NOTIFY_EMAILS` está definida) | Lista de correos (env) | `work-orders.service` | HTML mínimo en línea | — (pendiente alinear a `buildTpmEmailHtml`) |
 | `PURCHASE_PO_BATCH_SIGNATURE` | Dinámico (p. ej. N órdenes pendientes de firma) | Lote de OC generadas, pendientes de firma | Aprobadores (emails de usuarios internos) | `purchase-orders.service` | HTML mínimo (`<p>…</p>`) | — (pendiente alinear a `buildTpmEmailHtml`) |
 
-**Nota:** en compras, el mismo evento puede generar además **notificaciones in-app** (`sendNotification`); no sustituyen al correo y no están en esta tabla salvo que también llamen a `sendMail`.
+**Nota:** en compras, el mismo evento puede generar además **Web Push** (`NotificationsService.sendNotification`); no sustituyen al correo. Inventario y payloads: [`docs/agentes/notificaciones-sistema.md`](agentes/notificaciones-sistema.md).
 
 ## Cómo mantener este documento (obligatorio para implementaciones nuevas)
 
@@ -23,5 +23,6 @@ Documento **maestro** de todo lo que el backend puede enviar vía `EmailService.
 ## Referencias técnicas
 
 - Guía de formato y flujo: [`docs/agentes/correos-transaccionales.md`](agentes/correos-transaccionales.md)
+- Web Push (canal paralelo, no es `sendMail`): [`docs/agentes/notificaciones-sistema.md`](agentes/notificaciones-sistema.md)
 - Código: `backend/src/common/email/email-templates.ts`, `transactional-mail.builder.ts`, `preview-renderer.ts`
 - Seguridad / 2FA Super Admin: [`docs/agentes/seguridad-auth.md`](agentes/seguridad-auth.md)
