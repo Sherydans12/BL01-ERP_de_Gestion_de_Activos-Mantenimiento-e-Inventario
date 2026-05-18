@@ -105,6 +105,26 @@ export interface PurchaseRequisition {
   reconciliationSnapshot?: RequisitionReconciliationSnapshot;
 }
 
+/** Query del listado paginado (`GET /purchase-requisitions`). */
+export interface PurchaseRequisitionListQuery {
+  contractId?: string;
+  status?: string;
+  search?: string;
+  /** Si no hay `status`, incluye requerimientos `CLOSED` en «todos». */
+  includeClosed?: boolean;
+  page?: number;
+  pageSize?: number;
+  sort?: string;
+  dir?: string;
+}
+
+export interface PurchaseRequisitionListResponse {
+  data: PurchaseRequisition[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface RequisitionItem {
   id: string;
   description: string;
@@ -454,10 +474,31 @@ export class PurchasesService {
   }
 
   // -- Requisitions --
-  getRequisitions(params?: { contractId?: string; status?: string }): Observable<PurchaseRequisition[]> {
+  getRequisitions(
+    params?: PurchaseRequisitionListQuery,
+  ): Observable<PurchaseRequisitionListResponse> {
+    const q: Record<string, string> = {};
+    if (params?.contractId) q['contractId'] = params.contractId;
+    if (params?.status) q['status'] = params.status;
+    const s = params?.search?.trim();
+    if (s) q['search'] = s;
+    if (params?.includeClosed === true) q['includeClosed'] = 'true';
+    if (params?.page != null && params.page > 0) q['page'] = String(params.page);
+    if (params?.pageSize != null && params.pageSize > 0) {
+      q['pageSize'] = String(params.pageSize);
+    }
+    if (params?.sort) q['sort'] = params.sort;
+    if (params?.dir) q['dir'] = params.dir;
     return this.http
-      .get<PurchaseRequisition[]>(`${this.base}/purchase-requisitions`, { params: params as any })
-      .pipe(map((rows) => rows.map((r) => this.normalizeRequisitionMedia(r))));
+      .get<PurchaseRequisitionListResponse>(`${this.base}/purchase-requisitions`, {
+        params: Object.keys(q).length ? q : undefined,
+      })
+      .pipe(
+        map((res) => ({
+          ...res,
+          data: res.data.map((r) => this.normalizeRequisitionMedia(r)),
+        })),
+      );
   }
 
   getRequisition(id: string): Observable<PurchaseRequisition> {

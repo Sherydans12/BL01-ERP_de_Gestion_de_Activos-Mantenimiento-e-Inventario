@@ -27,6 +27,42 @@ const PO_INACTIVE_FOR_LINK = ['CANCELLED', 'REJECTED'] as const;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Límite práctico para `search` en listado (evita consultas enormes por query string). */
+const REQUISITION_LIST_SEARCH_MAX_LEN = 120;
+
+const REQUISITION_LIST_PAGE_SIZE_MAX = 100;
+
+const REQUISITION_LIST_SORT_FIELDS = [
+  'createdAt',
+  'updatedAt',
+  'correlative',
+  'description',
+  'status',
+  'priority',
+] as const;
+
+type RequisitionListSortField = (typeof REQUISITION_LIST_SORT_FIELDS)[number];
+
+function isRequisitionListSortField(v: string): v is RequisitionListSortField {
+  return (REQUISITION_LIST_SORT_FIELDS as readonly string[]).includes(v);
+}
+
+function parseRequisitionListSort(
+  sort?: string,
+  dir?: string,
+): { field: RequisitionListSortField; order: 'asc' | 'desc' } {
+  const field: RequisitionListSortField = sort && isRequisitionListSortField(sort)
+    ? sort
+    : 'createdAt';
+  if (dir === 'asc' || dir === 'desc') {
+    return { field, order: dir };
+  }
+  if (field === 'createdAt' || field === 'updatedAt') {
+    return { field, order: 'desc' };
+  }
+  return { field, order: 'asc' };
+}
+
 function isUuid(value: string | undefined | null): boolean {
   return typeof value === 'string' && UUID_RE.test(value);
 }
@@ -275,19 +311,161 @@ export class PurchaseRequisitionsService {
     return { contractId: { in: allowed } };
   }
 
+  /** Condiciones OR para búsqueda en listado (correlativo, texto, vínculos, líneas). */
+  private requisitionListSearchOr(
+    rawTerm: string,
+  ): Prisma.PurchaseRequisitionWhereInput[] {
+    const term = rawTerm.trim().slice(0, REQUISITION_LIST_SEARCH_MAX_LEN);
+    if (!term) return [];
+    const mode = 'insensitive' as const;
+    const contains = (s: string): Prisma.StringFilter => ({
+      contains: s,
+      mode,
+    });
+    const clauses: Prisma.PurchaseRequisitionWhereInput[] = [
+      { correlative: contains(term) },
+      { description: contains(term) },
+      { justification: contains(term) },
+      {
+        requestedBy: {
+          OR: [{ name: contains(term) }, { email: contains(term) }],
+        },
+      },
+      {
+        contract: {
+          OR: [{ code: contains(term) }, { name: contains(term) }],
+        },
+      },
+      {
+        subcontract: {
+          OR: [{ code: contains(term) }, { name: contains(term) }],
+        },
+      },
+      {
+        equipment: {
+          OR: [
+            { internalId: contains(term) },
+            { mineInternalId: contains(term) },
+            { plate: contains(term) },
+            { brand: contains(term) },
+            { model: contains(term) },
+            { type: contains(term) },
+          ],
+        },
+      },
+      {
+        workOrder: {
+          OR: [{ correlative: contains(term) }, { description: contains(term) }],
+        },
+      },
+      {
+        items: {
+          some: {
+            OR: [
+              { description: contains(term) },
+              { partNumber: contains(term) },
+              { itemNotes: contains(term) },
+              {
+                inventoryItem: {
+                  OR: [
+                    { name: contains(term) },
+                    { partNumber: contains(term) },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ];
+    if (isUuid(term)) {
+      clauses.unshift({ id: term });
+    }
+    return clauses;
+  }
+
+  private buildRequisitionListWhere(
+    tenantId: string,
+    contractId: string | undefined,
+    user: { role?: string; allowedContracts?: string[] } | undefined,
+    filters: {
+      status?: string;
+      includeClosed: boolean;
+      search?: string;
+    },
+  ): Prisma.PurchaseRequisitionWhereInput {
+    const contractFilter = this.buildContractScope(user, contractId);
+    const searchTerm =
+      typeof filters.search === 'string'
+        ? filters.search.trim().slice(0, REQUISITION_LIST_SEARCH_MAX_LEN)
+        : '';
+    const searchOr = searchTerm ? this.requisitionListSearchOr(searchTerm) : [];
+
+    const statusTrim = filters.status?.trim();
+    let statusWhere: Prisma.PurchaseRequisitionWhereInput = {};
+    if (
+      statusTrim &&
+      (Object.values(RequisitionStatus) as string[]).includes(statusTrim)
+    ) {
+      statusWhere = { status: statusTrim as RequisitionStatus };
+    } else if (!filters.includeClosed) {
+      statusWhere = { status: { not: RequisitionStatus.CLOSED } };
+    }
+
+    return {
+      tenantId,
+      ...contractFilter,
+      ...statusWhere,
+      ...(searchOr.length > 0 ? { OR: searchOr } : {}),
+    };
+  }
+
   async findAll(
     tenantId: string,
-    contractId?: string,
-    status?: string,
-    user?: { role?: string; allowedContracts?: string[] },
+    user: { role?: string; allowedContracts?: string[] } | undefined,
+    opts: {
+      contractId?: string;
+      status?: string;
+      includeClosed?: boolean;
+      search?: string;
+      page?: number;
+      pageSize?: number;
+      sort?: string;
+      dir?: string;
+    },
   ) {
-    const contractFilter = this.buildContractScope(user, contractId);
-    return this.prisma.purchaseRequisition.findMany({
-      where: {
-        tenantId,
-        ...contractFilter,
-        ...(status && { status: status as RequisitionStatus }),
+    const pageSize = Math.min(
+      REQUISITION_LIST_PAGE_SIZE_MAX,
+      Math.max(1, Math.floor(opts.pageSize ?? 25)),
+    );
+    const requestedPage = Math.max(1, Math.floor(opts.page ?? 1));
+    const { field: sortField, order: sortOrder } = parseRequisitionListSort(
+      opts.sort,
+      opts.dir,
+    );
+
+    const where = this.buildRequisitionListWhere(
+      tenantId,
+      opts.contractId,
+      user,
+      {
+        status: opts.status,
+        includeClosed: opts.includeClosed === true,
+        search: opts.search,
       },
+    );
+
+    const total = await this.prisma.purchaseRequisition.count({ where });
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, maxPage);
+    const skip = (page - 1) * pageSize;
+
+    const orderBy = {
+      [sortField]: sortOrder,
+    } as Prisma.PurchaseRequisitionOrderByWithRelationInput;
+
+    const data = await this.prisma.purchaseRequisition.findMany({
+      where,
       include: {
         requestedBy: { select: { id: true, name: true, email: true } },
         contract: { select: { id: true, code: true, name: true } },
@@ -296,8 +474,12 @@ export class PurchaseRequisitionsService {
         workOrder: WORK_ORDER_LINK_SELECT,
         _count: { select: { items: true, quotations: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy,
+      skip,
+      take: pageSize,
     });
+
+    return { data, total, page, pageSize };
   }
 
   async findById(

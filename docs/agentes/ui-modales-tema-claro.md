@@ -15,3 +15,4 @@ En modo claro, **`--bg-dark`** y **`--bg-surface`** del proyecto **no** son oscu
 - Tokens y shell: `.cursor/rules/tpm-arquitectura.mdc` (sección 5 — modo claro / superficies críticas).
 - Variables CSS: `frontend/src/styles.scss` (`:root` y `[data-theme='light']`).
 - Ejemplo de modal con overrides: comentarios `equipment-detail-modal-*` y `confirm-dialog-*` en el mismo `styles.scss`.
+- Búsquedas / checkboxes y cascada global: [ui-busquedas-iconos-checkbox.md](ui-busquedas-iconos-checkbox.md).

@@ -39,13 +39,31 @@ export class PurchaseRequisitionsController {
     @Req() req: any,
     @Query('contractId') contractId?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+    @Query('includeClosed') includeClosedRaw?: string,
   ) {
-    return this.service.findAll(
-      req.user.tenantId,
+    const parseOptionalPositiveInt = (
+      raw: string | undefined,
+    ): number | undefined => {
+      if (raw === undefined || raw === '') return undefined;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+
+    return this.service.findAll(req.user.tenantId, req.user, {
       contractId,
       status,
-      req.user,
-    );
+      includeClosed: includeClosedRaw === 'true',
+      search,
+      page: parseOptionalPositiveInt(pageRaw),
+      pageSize: parseOptionalPositiveInt(pageSizeRaw),
+      sort,
+      dir,
+    });
   }
 
   /** Historial de auditoría del requerimiento. Debe declararse antes de `GET :id`. */

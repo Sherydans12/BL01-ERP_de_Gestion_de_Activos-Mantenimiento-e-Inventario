@@ -400,6 +400,9 @@
             <input
               id="stock-article-quick-search"
               type="text"
+              role="searchbox"
+              inputmode="search"
+              spellcheck="false"
               [value]="articleQuickSearch()"
               (input)="onArticleQuickSearchInput($any($event.target).value)"
               (keydown)="onArticleQuickSearchKeydown($event)"

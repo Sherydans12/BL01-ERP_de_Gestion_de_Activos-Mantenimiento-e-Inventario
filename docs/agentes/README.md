@@ -81,6 +81,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [inventario-alta-articulos-y-selector-global.md](inventario-alta-articulos-y-selector-global.md) | **Inventario:** política de umbrales sin `item_stocks` hasta primer movimiento; alta `/articulos/nuevo`; selector global unificado (`GLOBAL_ITEM_PICKER_CATALOG`) |
 | [ui-quickadd-global-picker-dialogos-nativos.md](ui-quickadd-global-picker-dialogos-nativos.md) | **UI:** `QuickAddItemModal` + `GlobalItemPicker` + `<dialog>` nativos (control de stock / no usar `overlayInsideDialog=true` en el picker) |
 | [ui-modales-tema-claro.md](ui-modales-tema-claro.md) | **UI:** modales en `data-theme='light'` — tokens (`text-main`, `bg-surface`), evitar `text-white` sobre `bg-dark`; `app-confirm-modal` + overrides en `styles.scss` |
+| [ui-busquedas-iconos-checkbox.md](ui-busquedas-iconos-checkbox.md) | **UI:** lupa duplicada (`type="search"` vs icono SVG), reset en `styles.scss`, `role="searchbox"`; checkboxes custom y `:where()` |
 | [control-stock-umbrales-vs-correccion-fisica.md](control-stock-umbrales-vs-correccion-fisica.md) | **Control de stock:** dos acciones (Umbrales vs Corregir físico); no mezclar conteo con mín/máx |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.
