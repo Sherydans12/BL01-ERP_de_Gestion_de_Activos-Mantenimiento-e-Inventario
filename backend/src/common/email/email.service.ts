@@ -11,6 +11,7 @@ export interface SendMailOptions {
   subject: string;
   html: string;
   from?: string;
+  cc?: string | string[];
 }
 
 @Injectable()
@@ -51,6 +52,7 @@ export class EmailService {
     const { error } = await this.client.emails.send({
       from: options.from ?? this.defaultFrom,
       to: options.to,
+      ...(options.cc ? { cc: options.cc } : {}),
       subject: options.subject,
       html: options.html,
     });

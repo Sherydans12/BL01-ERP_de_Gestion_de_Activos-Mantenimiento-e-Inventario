@@ -580,6 +580,7 @@ model User {
   workOrdersCreated        WorkOrder[]           @relation("WorkOrderCreatedBy")
   workOrdersSupervised     WorkOrder[]           @relation("WorkOrderShiftSupervisor")
   purchaseInvoiceThreeWayOverrules PurchaseInvoice[] @relation("PurchaseInvoiceThreeWayOverruleApprover")
+  userNotificationSettings UserNotificationSetting[]
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -641,6 +642,8 @@ model Tenant {
   inventoryTransfers    InventoryTransfer[]
   purchaseDocuments     PurchaseDocument[]
   purchaseCreditNotes   PurchaseCreditNote[]
+  tenantNotificationSettings TenantNotificationSetting[]
+  userNotificationSettings   UserNotificationSetting[]
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -1663,4 +1666,55 @@ enum ActivityAction {
   SIGNATURE
   SYSTEM_UPDATE
   FILE_ACCESS
+}
+
+// ─── Motor Omnicanal de Notificaciones ───────────────────────────────────────
+
+enum NotificationChannel {
+  EMAIL
+  WEB_PUSH
+}
+
+/// Interruptor maestro por evento y tenant: si `enabled = false`, ningún usuario
+/// del tenant recibe ese tipo de notificación, independientemente de su config.
+model TenantNotificationSetting {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  /// Clave estable del evento; véase `notification-events.ts`.
+  eventKey  String   @map("event_key") @db.VarChar(100)
+  enabled   Boolean  @default(true)
+  /// Correos adicionales fijos que siempre reciben copia (CC) cuando el evento se despacha vía EMAIL.
+  ccEmails  String[] @default([]) @map("cc_emails")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, eventKey])
+  @@index([tenantId])
+  @@map("tenant_notification_settings")
+}
+
+/// Suscripción individual: cada usuario puede activar / desactivar un canal
+/// por evento. Si no existe registro, se asume el canal activo por defecto.
+model UserNotificationSetting {
+  id        String              @id @default(uuid()) @db.Uuid
+  tenantId  String              @map("tenant_id") @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  /// Clave estable del evento; véase `notification-events.ts`.
+  eventKey  String              @map("event_key") @db.VarChar(100)
+  channel   NotificationChannel
+  enabled   Boolean             @default(true)
+
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, eventKey, channel])
+  @@index([tenantId, eventKey])
+  @@index([userId])
+  @@map("user_notification_settings")
 }

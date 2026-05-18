@@ -19,6 +19,9 @@ import {
   type InventoryLabelSize,
 } from './inventory-item-label-pdf.generator';
 import { listItemIdsWithFieldDispatchOutstanding } from '../../common/inventory/field-dispatch-outstanding';
+import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
+import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-events';
+import { buildMailInventoryItemCreated } from '../../common/email/transactional-mail.builder';
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 /** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
@@ -52,6 +55,7 @@ export class InventoryItemsService {
     private readonly sequenceService: SequenceService,
     private readonly storageService: StorageService,
     private readonly config: ConfigService,
+    private readonly notificationDispatcher: NotificationDispatcherService,
   ) {}
 
   private sortRowsBySearchIdOrder<T extends { id: string }>(
@@ -783,7 +787,7 @@ export class InventoryItemsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const createdItem = await this.prisma.$transaction(async (tx) => {
       await this.ensureInventorySkuCounterFloor(user.tenantId, tx);
       const inventoryCode = await this.sequenceService.getNextCorrelative(
         user.tenantId,
@@ -879,6 +883,32 @@ export class InventoryItemsService {
 
       return item;
     });
+
+    // Dispatch fuera de la transacción (fire-and-forget; no bloquea la respuesta al cliente).
+    // userIds vacío → solo llegarán correos a los ccEmails configurados por el tenant en la UI.
+    const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
+    const categoryName =
+      (createdItem as any).itemCategory?.parentCategory?.name ??
+      (createdItem as any).itemCategory?.name ??
+      '';
+    this.notificationDispatcher
+      .dispatch(NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED, user.tenantId, {
+        userIds: [],
+        subject: `Nuevo artículo en catálogo: ${createdItem.inventoryCode ?? ''} — ${createdItem.name}`,
+        html: buildMailInventoryItemCreated({
+          inventoryCode: createdItem.inventoryCode ?? '',
+          name: createdItem.name,
+          categoryName,
+          createdByName: user.name ?? user.email ?? 'Sistema',
+          appUrl,
+          partNumber: createdItem.partNumber,
+        }),
+      })
+      .catch(() => {
+        /* fallo en notificación no debe interrumpir la respuesta */
+      });
+
+    return createdItem;
   }
 
   async update(id: string, dto: UpdateInventoryItemDto, user: any) {

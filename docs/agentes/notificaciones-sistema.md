@@ -75,8 +75,70 @@ El resto de correos del sistema siguen el workflow de **Correos** en [`tpm-arqui
 
 ---
 
-## 6. Historial de cambios (opcional)
+## 6. Motor Omnicanal — `NotificationDispatcherService`
+
+Desde 2026-05-18 existe una capa de despacho unificada para envíos nuevos. Los flujos legados (OC, factura, etc.) siguen llamando directamente a `sendNotification` / `sendMail` hasta que sean migrados.
+
+| Capa | Archivo |
+|------|---------|
+| Despachador | `backend/src/common/notifications/notification-dispatcher.service.ts` |
+| Catálogo de eventos | `backend/src/common/notifications/notification-events.ts` (`NOTIFICATION_EVENTS`) |
+| Config de tenant | `TenantNotificationSetting` — interruptor maestro + `ccEmails` (listas externas) |
+| Config de usuario | `UserNotificationSetting` — canal EMAIL / WEB_PUSH por evento (**opt-in estricto**) |
+| API REST (ADMIN) | `GET/PUT /api/notification-settings/tenant`, `GET/PUT /api/notification-settings/user`, `GET /api/notification-settings/event` |
+| UI de gobernanza | `frontend/src/app/features/settings/notification-governance/` (`/app/configuracion/notificaciones`) |
+| Interfaces Angular | `frontend/src/app/core/models/notification-settings.interface.ts` |
+| Servicio Angular | `frontend/src/app/core/services/notification-settings/notification-settings.service.ts` |
+
+### Modelo Opt-in estricto
+
+> **Por defecto ningún usuario recibe notificaciones.** Se requiere un registro explícito `UserNotificationSetting { eventKey, channel, enabled: true }` para recibir por EMAIL o WEB_PUSH.
+
+Flujo del dispatcher al recibir un `dispatch(eventKey, tenantId, payload)`:
+
+1. Busca `TenantNotificationSetting` para el evento: si `enabled = false` o no existe, aborta silenciosamente.
+2. Extrae `ccEmails` del registro de tenant (destinatarios externos; no requieren opt-in).
+3. Si `payload.userIds` está vacío, solo se envía a `ccEmails` (caso `INVENTORY_ITEM_CREATED`).
+4. Para cada `userId`, consulta `UserNotificationSetting` con `enabled: true` y verifica `User.isActive`. Descarta los demás.
+5. Despacha en paralelo por canal: `EmailService.sendMail` (con `cc: ccEmails`) para EMAIL; `NotificationsService.sendNotification` para WEB_PUSH.
+
+### `ccEmails` — listas de distribución externas
+
+`TenantNotificationSetting.ccEmails` es un array de strings con correos externos (p. ej. grupos de bodega, listas de jefes de planta). Se administran desde la UI de gobernanza y se inyectan automáticamente como `cc` en cada envío del evento. **No requieren que existan como usuarios en la plataforma.**
+
+### Catálogo de eventos activos con dispatch inyectado
+
+| `NOTIFICATION_EVENTS.*` | Disparador en código | Pool de `userIds` | Canal(es) |
+|-------------------------|---------------------|-------------------|-----------|
+| `PURCHASE_REQUISITION_DRAFT_CREATED` | `purchase-requisitions.service` → `create` | ADMINs activos del tenant | EMAIL + ccEmails |
+| `PURCHASE_REQUISITION_SUBMITTED` | `purchase-requisitions.service` → `submit` | ADMINs activos del tenant | EMAIL + WEB_PUSH + ccEmails |
+| `INVENTORY_ITEM_CREATED` | `inventory-items.service` → `create` | `[]` vacío (solo correo externo) | EMAIL (solo ccEmails) |
+
+### Uso en nuevas funcionalidades
+
+```typescript
+// Fire-and-forget (no bloquea la respuesta)
+this.notificationDispatcher
+  .dispatch(NOTIFICATION_EVENTS.PURCHASE_REQUISITION_SUBMITTED, tenantId, {
+    userIds: adminIds,           // pool de candidatos; el dispatcher filtra opt-in
+    subject: 'SRC emitido: ...',
+    html: buildMailRequisitionSubmitted({ ... }),
+    pushPayload: {               // opcional: activa WEB_PUSH además de EMAIL
+      title: 'SRC emitido',
+      body: 'Ver en compras',
+      data: { type: 'PURCHASE_REQUISITION_SUBMITTED', requisitionId: id },
+    },
+  })
+  .catch(() => { /* fallo silencioso */ });
+```
+
+---
+
+## 7. Historial de cambios (opcional)
 
 | Fecha | Cambio |
 |-------|--------|
 | 2026-05-17 | Creación del documento; inventario alineado con `sendNotification` en compras (OC + factura discrepancia). |
+| 2026-05-18 | Motor Omnicanal: `NotificationDispatcherService`, catálogo `NOTIFICATION_EVENTS`, modelos `TenantNotificationSetting` / `UserNotificationSetting`, API REST de configuración, UI de gobernanza. |
+| 2026-05-18 | Opt-in estricto + RBAC delegado: el dispatcher consulta directamente `UserNotificationSetting`; admins pueden configurar notificaciones de otros usuarios. `ccEmails` en `TenantNotificationSetting`. |
+| 2026-05-18 | Sprint closure: 3 eventos nuevos (`PURCHASE_REQUISITION_DRAFT_CREATED`, `PURCHASE_REQUISITION_SUBMITTED`, `INVENTORY_ITEM_CREATED`), builders en `transactional-mail.builder.ts`, dispatch inyectado en `purchase-requisitions.service` y `inventory-items.service`. Sidebar acordeón en UI. |

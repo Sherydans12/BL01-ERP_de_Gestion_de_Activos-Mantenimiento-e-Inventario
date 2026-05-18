@@ -459,6 +459,15 @@ export const routes: Routes = [
             (m) => m.CompanyConfigComponent,
           ),
       },
+      {
+        path: 'configuracion/notificaciones',
+        canActivate: [authGuard],
+        data: { roles: ['ADMIN', 'SUPER_ADMIN'], pageTitle: 'Gobernanza de Notificaciones' },
+        loadComponent: () =>
+          import('./features/settings/notification-governance/notification-governance.component').then(
+            (m) => m.NotificationGovernanceComponent,
+          ),
+      },
       // ── Administración (ADMIN) ─────────────────────────────────────────────
       {
         path: 'usuarios',

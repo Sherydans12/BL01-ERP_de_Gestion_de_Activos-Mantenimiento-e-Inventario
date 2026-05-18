@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AuditModule } from '../../common/audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationSettingsModule } from '../notification-settings/notification-settings.module';
 import { InventoryStockModule } from '../inventory-stock/inventory-stock.module';
 import { PurchaseSettingsController } from './purchase-settings.controller';
 import { PurchaseSettingsService } from './purchase-settings.service';
@@ -26,6 +27,7 @@ import { PurchaseCreditNotesService } from './purchase-credit-notes.service';
     PrismaModule,
     AuditModule,
     NotificationsModule,
+    NotificationSettingsModule,
     InventoryStockModule,
     UsersModule,
   ],

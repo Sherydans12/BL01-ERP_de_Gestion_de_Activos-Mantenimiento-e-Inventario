@@ -7,9 +7,10 @@ import { ItemCategoryBootstrapService } from './item-category-bootstrap.service'
 import { InventorySuppliersService } from './inventory-suppliers.service';
 import { InventorySuppliersController } from './inventory-suppliers.controller';
 import { StorageModule } from '../../common/storage/storage.module';
+import { NotificationSettingsModule } from '../notification-settings/notification-settings.module';
 
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, NotificationSettingsModule],
   controllers: [
     InventoryItemsController,
     ItemCategoriesController,

@@ -228,6 +228,12 @@ export const NAV_SECTIONS: NavSection[] = [
         route: '/app/configuracion/empresa',
         icon: ICONS.adjustments,
       },
+      {
+        label: 'Notificaciones',
+        route: '/app/configuracion/notificaciones',
+        icon: ICONS.shieldCheck,
+        roles: ['SUPER_ADMIN', 'ADMIN'],
+      },
     ],
   },
   {

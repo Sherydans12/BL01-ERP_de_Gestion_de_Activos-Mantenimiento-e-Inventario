@@ -28,6 +28,7 @@ import { WorkOrderAnalyticsModule } from './features/work-order-analytics/work-o
 import { SecurityAdminModule } from './features/security-admin/security-admin.module';
 import { PlatformDataAdminModule } from './features/platform-data-admin/platform-data-admin.module';
 import { EmailModule } from './common/email/email.module';
+import { NotificationSettingsModule } from './features/notification-settings/notification-settings.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { EmailModule } from './common/email/email.module';
     SecurityAdminModule,
     PlatformDataAdminModule,
     EmailModule,
+    NotificationSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

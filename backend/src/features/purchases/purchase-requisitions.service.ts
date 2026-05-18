@@ -5,12 +5,19 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Readable } from 'stream';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { AuditService, pickChanged } from '../../common/audit/audit.service';
 import type { Prisma } from '@prisma/client';
 import { RequisitionStatus } from '@prisma/client';
+import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
+import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-events';
+import {
+  buildMailRequisitionDraftCreated,
+  buildMailRequisitionSubmitted,
+} from '../../common/email/transactional-mail.builder';
 import {
   EQUIPMENT_LINK_SELECT,
   WORK_ORDER_LINK_SELECT,
@@ -139,7 +146,22 @@ export class PurchaseRequisitionsService {
     private readonly sequenceService: SequenceService,
     private readonly storageService: StorageService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
+    private readonly notificationDispatcher: NotificationDispatcherService,
   ) {}
+
+  /**
+   * Resuelve los IDs de usuarios ADMIN activos del tenant como candidatos
+   * para recibir notificaciones de SRC. La suscripción real se filtra en el
+   * dispatcher según `UserNotificationSetting` (opt-in estricto).
+   */
+  private async resolveAdminUserIds(tenantId: string): Promise<string[]> {
+    const admins = await this.prisma.user.findMany({
+      where: { tenantId, role: 'ADMIN', isActive: true },
+      select: { id: true },
+    });
+    return admins.map((u) => u.id);
+  }
 
   /**
    * Cada línea debe referenciar un `inventory_items` del mismo tenant (catálogo maestro).
@@ -771,6 +793,30 @@ export class PurchaseRequisitionsService {
       },
     });
 
+    // Dispatch DRAFT_CREATED — fire-and-forget; no bloquea la respuesta.
+    // Candidatos: ADMINs activos del tenant; llegan solo los que han hecho opt-in.
+    this.resolveAdminUserIds(tenantId)
+      .then((adminIds) => {
+        const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
+        return this.notificationDispatcher.dispatch(
+          NOTIFICATION_EVENTS.PURCHASE_REQUISITION_DRAFT_CREATED,
+          tenantId,
+          {
+            userIds: adminIds,
+            subject: `Nuevo borrador de requerimiento: ${created.correlative}`,
+            html: buildMailRequisitionDraftCreated({
+              correlative: created.correlative,
+              requesterName: created.requestedBy?.name ?? user.name ?? user.email,
+              description: created.description,
+              itemsCount: created.items.length,
+              appUrl,
+              contractName: (created as any).contract?.name,
+            }),
+          },
+        );
+      })
+      .catch(() => { /* fallo silencioso */ });
+
     return created;
   }
 
@@ -1182,6 +1228,35 @@ export class PurchaseRequisitionsService {
       oldValue: { status: prevStatus },
       newValue: { status: updated.status },
     });
+
+    // Dispatch SUBMITTED — fire-and-forget.
+    this.resolveAdminUserIds(user.tenantId)
+      .then((adminIds) => {
+        const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
+        return this.notificationDispatcher.dispatch(
+          NOTIFICATION_EVENTS.PURCHASE_REQUISITION_SUBMITTED,
+          user.tenantId,
+          {
+            userIds: adminIds,
+            subject: `Requerimiento emitido: ${requisition.correlative}`,
+            html: buildMailRequisitionSubmitted({
+              correlative: requisition.correlative,
+              requesterName: (requisition as any).requestedBy?.name ?? user.name ?? user.email,
+              description: requisition.description,
+              itemsCount: requisition.items.length,
+              priority: requisition.priority ?? 'MEDIUM',
+              appUrl,
+              contractName: (requisition as any).contract?.name,
+            }),
+            pushPayload: {
+              title: `SRC ${requisition.correlative} emitido`,
+              body: `${requisition.description} — ${requisition.items.length} ítem(s)`,
+              data: { type: 'PURCHASE_REQUISITION_SUBMITTED', requisitionId: id },
+            },
+          },
+        );
+      })
+      .catch(() => { /* fallo silencioso */ });
 
     return updated;
   }

@@ -104,6 +104,115 @@ export function buildMailUnusualLogin(params: {
   });
 }
 
+// ── Motor Omnicanal — Compras / Inventario ────────────────────────────────────
+
+/**
+ * SRC guardado como borrador — notifica al Jefe de Compras para revisión temprana.
+ * Evento: `PURCHASE_REQUISITION_DRAFT_CREATED`.
+ */
+export function buildMailRequisitionDraftCreated(params: {
+  correlative: string;
+  requesterName: string;
+  description: string;
+  itemsCount: number;
+  appUrl: string;
+  contractName?: string;
+}): string {
+  const contractLine = params.contractName
+    ? `<p style="margin:0 0 8px 0;padding:10px 14px;border-radius:8px;background-color:#0f1419;border:1px solid #2a3441;font-size:13px;color:#94a3b8;"><strong style="color:#e4e4e7;">Contrato</strong> — ${escapeHtml(params.contractName)}</p>`
+    : '';
+  return buildTpmEmailHtml({
+    headline: `Borrador de Requerimiento ${escapeHtml(params.correlative)}`,
+    subhead: 'Guardado como DRAFT — pendiente de revisión antes de emitir.',
+    bodyHtml: `
+      <p style="margin:0 0 12px 0;">Se ha registrado un nuevo borrador de Requerimiento de Compra (SRC) en el sistema.</p>
+      ${contractLine}
+      <p style="margin:0 0 8px 0;padding:10px 14px;border-radius:8px;background-color:#0f1419;border:1px solid #2a3441;font-size:13px;line-height:1.6;">
+        <strong style="color:#e4e4e7;display:block;margin-bottom:4px;">Detalles</strong>
+        <span style="color:#94a3b8;">Solicitado por:</span> <span style="color:#e4e4e7;">${escapeHtml(params.requesterName)}</span><br/>
+        <span style="color:#94a3b8;">Descripción:</span> <span style="color:#e4e4e7;">${escapeHtml(params.description)}</span><br/>
+        <span style="color:#94a3b8;">Ítems:</span> <span style="color:#e4e4e7;">${params.itemsCount}</span>
+      </p>
+      <p style="margin:0;">Este borrador aún no ha sido emitido formalmente. Puedes revisarlo y coordinar con el solicitante si es necesario.</p>
+    `,
+    cta: { href: `${params.appUrl}/app/compras/requerimientos`, label: 'Ver Requerimientos' },
+  });
+}
+
+/**
+ * SRC emitido formalmente (SUBMITTED) — notifica al Jefe de Compras para acción inmediata.
+ * Evento: `PURCHASE_REQUISITION_SUBMITTED`.
+ */
+export function buildMailRequisitionSubmitted(params: {
+  correlative: string;
+  requesterName: string;
+  description: string;
+  itemsCount: number;
+  priority: string;
+  appUrl: string;
+  contractName?: string;
+}): string {
+  const priorityColor: Record<string, string> = {
+    HIGH: '#f97316',
+    MEDIUM: '#eab308',
+    LOW: '#94a3b8',
+  };
+  const pColor = priorityColor[params.priority] ?? '#94a3b8';
+  const contractLine = params.contractName
+    ? `<p style="margin:0 0 8px 0;padding:10px 14px;border-radius:8px;background-color:#0f1419;border:1px solid #2a3441;font-size:13px;color:#94a3b8;"><strong style="color:#e4e4e7;">Contrato</strong> — ${escapeHtml(params.contractName)}</p>`
+    : '';
+  return buildTpmEmailHtml({
+    headline: `Requerimiento ${escapeHtml(params.correlative)} Emitido`,
+    subhead: 'Estado SUBMITTED — requiere gestión de compras.',
+    bodyHtml: `
+      <p style="margin:0 0 12px 0;">Se ha emitido formalmente un nuevo Requerimiento de Compra (SRC) que requiere tu atención.</p>
+      ${contractLine}
+      <p style="margin:0 0 8px 0;padding:10px 14px;border-radius:8px;background-color:#0f1419;border:1px solid #2a3441;font-size:13px;line-height:1.7;">
+        <strong style="color:#e4e4e7;display:block;margin-bottom:4px;">Resumen</strong>
+        <span style="color:#94a3b8;">Solicitado por:</span> <span style="color:#e4e4e7;">${escapeHtml(params.requesterName)}</span><br/>
+        <span style="color:#94a3b8;">Descripción:</span> <span style="color:#e4e4e7;">${escapeHtml(params.description)}</span><br/>
+        <span style="color:#94a3b8;">Ítems:</span> <span style="color:#e4e4e7;">${params.itemsCount}</span><br/>
+        <span style="color:#94a3b8;">Prioridad:</span> <span style="color:${pColor};font-weight:600;">${escapeHtml(params.priority)}</span>
+      </p>
+      <p style="margin:0;">Revisa y procesa el requerimiento desde el módulo de Compras.</p>
+    `,
+    cta: { href: `${params.appUrl}/app/compras/requerimientos`, label: 'Gestionar Requerimiento' },
+  });
+}
+
+/**
+ * Nuevo artículo dado de alta en el catálogo maestro.
+ * Evento: `INVENTORY_ITEM_CREATED`.
+ */
+export function buildMailInventoryItemCreated(params: {
+  inventoryCode: string;
+  name: string;
+  categoryName: string;
+  createdByName: string;
+  appUrl: string;
+  partNumber?: string | null;
+}): string {
+  const pnLine = params.partNumber
+    ? `<br/><span style="color:#94a3b8;">Part Number:</span> <span style="color:#e4e4e7;">${escapeHtml(params.partNumber)}</span>`
+    : '';
+  return buildTpmEmailHtml({
+    headline: 'Nuevo artículo en catálogo',
+    subhead: `${escapeHtml(params.inventoryCode)} — ${escapeHtml(params.categoryName)}`,
+    bodyHtml: `
+      <p style="margin:0 0 12px 0;">Se ha dado de alta un nuevo artículo en el catálogo maestro de inventario.</p>
+      <p style="margin:0 0 8px 0;padding:10px 14px;border-radius:8px;background-color:#0f1419;border:1px solid #2a3441;font-size:13px;line-height:1.7;">
+        <strong style="color:#e4e4e7;display:block;margin-bottom:4px;">Detalles del artículo</strong>
+        <span style="color:#94a3b8;">Código:</span> <span style="color:#00e5ff;font-family:monospace;font-weight:600;">${escapeHtml(params.inventoryCode)}</span><br/>
+        <span style="color:#94a3b8;">Nombre:</span> <span style="color:#e4e4e7;">${escapeHtml(params.name)}</span><br/>
+        <span style="color:#94a3b8;">Familia:</span> <span style="color:#e4e4e7;">${escapeHtml(params.categoryName)}</span>${pnLine}<br/>
+        <span style="color:#94a3b8;">Creado por:</span> <span style="color:#e4e4e7;">${escapeHtml(params.createdByName)}</span>
+      </p>
+      <p style="margin:0;">Puedes consultar el artículo completo, actualizar stock y asignarlo a bodegas desde el catálogo.</p>
+    `,
+    cta: { href: `${params.appUrl}/app/articulos`, label: 'Ir al Catálogo' },
+  });
+}
+
 /**
  * Segundo factor por correo (Super Admin, contexto inusual). Mismo layout que el resto:
  * `buildTpmEmailHtml` → kicker + tarjeta con acento + pie `getSystemEmailSignatureHtml()`.
