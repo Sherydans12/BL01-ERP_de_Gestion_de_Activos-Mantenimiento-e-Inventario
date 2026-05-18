@@ -78,6 +78,12 @@ export class InventoryItemFormComponent implements OnInit {
   /** Payload escaneable (backend: INV:<uuid>). */
   itemQrCode = signal<string | null>(null);
 
+  /**
+   * Clasificación del artículo: checkbox estilizado; ✓ en `::after` centrado.
+   */
+  readonly classificationCheckboxClass =
+    `appearance-none relative min-w-[20px] w-5 h-5 shrink-0 rounded border border-border bg-dark cursor-pointer transition-all checked:bg-primary checked:border-primary focus:ring-2 focus:ring-primary focus:ring-offset-2 after:pointer-events-none after:absolute after:left-1/2 after:top-1/2 after:z-[1] after:hidden checked:after:block after:-translate-x-1/2 after:-translate-y-1/2 after:content-['✓'] after:text-[11px] after:font-black after:leading-none after:text-gray-900`;
+
   /** Creación: mientras llega la vista previa del correlativo desde el API. */
   nextSkuLoading = signal(false);
 

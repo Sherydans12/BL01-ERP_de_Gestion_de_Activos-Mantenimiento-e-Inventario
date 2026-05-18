@@ -122,7 +122,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
               (input)="onSearchInput($any($event.target).value)"
               (focus)="onSearchFocus()"
               (blur)="onSearchBlur()"
-              class="min-w-0 col-start-2 max-w-full border-0 bg-transparent py-2.5 pl-0 pr-2 text-main placeholder:text-muted/50 focus:outline-none focus:ring-0 font-mono text-sm rounded-none shadow-none"
+              class="tpm-input-leading-icon min-w-0 col-start-2 max-w-full border-0 bg-transparent py-2.5 pl-0 pr-2 text-main placeholder:text-muted/50 focus:outline-none focus:ring-0 font-mono text-sm rounded-none shadow-none"
               placeholder="Nombre, email, RUT, cargo…"
             />
             <div class="col-start-3 flex h-full items-center justify-center pr-1.5">

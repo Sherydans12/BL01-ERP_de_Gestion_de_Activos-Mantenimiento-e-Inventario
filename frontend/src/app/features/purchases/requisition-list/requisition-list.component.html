@@ -21,14 +21,13 @@
         </span>
         <input
           type="text"
-          role="searchbox"
           inputmode="search"
           spellcheck="false"
           [ngModel]="searchQuery()"
           (ngModelChange)="onSearchChange($event)"
           (keydown.enter)="onSearchEnter($event)"
           placeholder="Correlativo, descripción, solicitante, contrato, equipo, OT, Nº parte o artículo en líneas…"
-          class="w-full bg-dark border border-border text-main rounded-lg pl-10 pr-10 py-2.5 text-sm outline-none focus:border-primary/50"
+          class="tpm-input-leading-icon w-full bg-dark border border-border text-main rounded-lg pl-10 pr-10 py-2.5 text-sm outline-none focus:border-primary/50"
           autocomplete="off"
           aria-describedby="req-search-hint"
         />

@@ -232,6 +232,15 @@
   }
 
   /**
+   * Texto con **lupa SVG** a la izquierda: Chromium/WebKit mete un contenedor interno
+   * `::-webkit-textfield-decoration-container` que vuelve a pintar una lupa / chip.
+   * Añadir la clase `tpm-input-leading-icon` al `<input>` (no al wrapper).
+   */
+  .tpm-input-leading-icon::-webkit-textfield-decoration-container {
+    display: none !important;
+  }
+
+  /**
    * Shell de <dialog> a pantalla completa: top layer del navegador por encima del header/sidebar.
    */
   dialog.dialog-native-shell {

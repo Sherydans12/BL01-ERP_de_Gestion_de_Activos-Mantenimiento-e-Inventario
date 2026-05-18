@@ -400,7 +400,6 @@
             <input
               id="stock-article-quick-search"
               type="text"
-              role="searchbox"
               inputmode="search"
               spellcheck="false"
               [value]="articleQuickSearch()"
@@ -408,7 +407,7 @@
               (keydown)="onArticleQuickSearchKeydown($event)"
               placeholder="Código, N° parte, nombre, QR, marca, compatibilidad… (varias palabras = todas)"
               autocomplete="off"
-              class="w-full bg-surface border border-border text-main rounded-lg pl-9 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm placeholder:text-muted/60"
+              class="tpm-input-leading-icon w-full bg-surface border border-border text-main rounded-lg pl-9 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 shadow-sm placeholder:text-muted/60"
             />
             @if (articleQuickSearch().trim()) {
               <button
