@@ -198,7 +198,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                 <th class="px-6 py-4 font-medium">Nombre</th>
                 <th class="px-6 py-4 font-medium">Email</th>
                 <th class="px-6 py-4 font-medium">Empresa / tenant</th>
-                <th class="px-6 py-4 font-medium">Rol</th>
+                <th class="px-6 py-4 font-medium whitespace-nowrap">Rol</th>
                 <th class="px-6 py-4 font-medium">RUT</th>
                 <th class="px-6 py-4 font-medium">Cargo</th>
                 <th class="px-6 py-4 font-medium text-center">Estado</th>
@@ -258,9 +258,13 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                       <span class="text-muted">—</span>
                     }
                   </td>
-                  <td class="px-6 py-4">
+                  <td class="px-6 py-4 whitespace-nowrap align-middle">
                     <span
-                      class="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border"
+                      class="inline-flex items-center px-2.5 py-1 text-[10px] font-mono rounded border"
+                      [class.uppercase]="!user.customRole"
+                      [class.tracking-wider]="!user.customRole"
+                      [class.text-xs]="!!user.customRole"
+                      [attr.title]="user.customRole?.name || null"
                       [ngClass]="{
                         'bg-primary/10 text-primary border-primary/20':
                           user.role === 'ADMIN',
