@@ -10,6 +10,8 @@ export interface DispatchPayload {
    * quienes tengan un registro explícito `enabled = true` en
    * `UserNotificationSetting` para el canal correspondiente (modelo opt-in).
    * Si no existe registro, la notificación está apagada por defecto.
+   * Puede ser `[]` cuando el evento usa solo `TenantNotificationSetting.ccEmails`
+   * (p. ej. `INVENTORY_ITEM_CREATED`).
    */
   userIds: string[];
   /** Asunto del correo (canal EMAIL). */
@@ -40,19 +42,25 @@ export class NotificationDispatcherService {
   /**
    * Despacha un evento de notificación con modelo **opt-in estricto**:
    *
-   * 1. **Interruptor de tenant** — Si `TenantNotificationSetting.enabled = false`,
-   *    aborta. También recupera `ccEmails` (destinatarios CC fijos del tenant).
+   * 1. **Interruptor de tenant** — Si existe `TenantNotificationSetting` y
+   *    `enabled = false`, aborta. Recupera `ccEmails` del registro (si existe).
    *
-   * 2. **Guard de userIds** — Si el array está vacío, aborta.
+   * 2. **Destinatarios** — Si `userIds` está vacío y hay `ccEmails`, modo **solo CC**
+   *    (p. ej. `INVENTORY_ITEM_CREATED`): envía un correo a esas direcciones si el
+   *    interruptor del tenant está activo (`enabled = true` en el registro).
+   *    Si no hay `userIds` ni `ccEmails`, aborta.
    *
-   * 3. **Opt-in estricto (única consulta)** — Lee `UserNotificationSetting` filtrando
-   *    `{ tenantId, eventKey, enabled: true, userId: { in: userIds } }` con
-   *    `include: { user: { select: { id, email, isActive } } }`.
-   *    Solo los usuarios con registro explícito `enabled = true` y `isActive = true`
-   *    pasan al pipeline de envío. Sin registro → silencio por defecto.
+   * 3. **Opt-in estricto (usuarios)** — Con `userIds` no vacío: consulta
+   *    `UserNotificationSetting` filtrando `{ tenantId, eventKey, enabled: true,
+   *    userId: { in: userIds } }`. Solo usuarios con registro explícito y activos.
+   *    Si nadie califica pero hay `ccEmails` e interruptor activo, **fallback**:
+   *    correo solo a CC (mismo criterio que el paso 2).
    *
-   * 4. **Agrupación por canal y envío paralelo** — EMAIL vía `EmailService.sendMail`
-   *    (con CC del tenant si aplica); WEB_PUSH vía `NotificationsService.sendNotification`.
+   * 4. **Envío** — EMAIL vía `EmailService.sendMail` (usuarios en `to`, `ccEmails`
+   *    del tenant en `cc` cuando aplica); WEB_PUSH si hay payload y suscriptores.
+   *    Si tras agrupar canales no queda ningún envío pero hay CC configurados,
+   *    se envía correo solo a CC (p. ej. suscriptores solo WEB_PUSH en un evento
+   *    sin `pushPayload`).
    */
   async dispatch(
     eventKey: string,
@@ -73,16 +81,43 @@ export class NotificationDispatcherService {
     }
 
     const tenantCcEmails: string[] = tenantSetting?.ccEmails ?? [];
+    const hasUserCandidates = payload.userIds.length > 0;
+    const hasCc = tenantCcEmails.length > 0;
 
-    // ── 2. Guard: lista de candidatos no vacía ────────────────────────────────
-    if (!payload.userIds.length) {
+    // ── 2. Sin usuarios ni CC → nada que enviar ───────────────────────────────
+    if (!hasUserCandidates && !hasCc) {
       this.logger.debug(
-        `[${eventKey}] userIds vacío; dispatch abortado (tenant ${tenantId}).`,
+        `[${eventKey}] Sin destinatarios (userIds vacío y sin ccEmails); abortado (tenant ${tenantId}).`,
       );
       return;
     }
 
-    // ── 3. Opt-in estricto: solo suscripciones explícitamente activas ─────────
+    // ── 3. Modo solo CC (ej. INVENTORY_ITEM_CREATED: userIds intencionalmente []) ─
+    if (!hasUserCandidates && hasCc) {
+      if (!tenantSetting || !tenantSetting.enabled) {
+        this.logger.debug(
+          `[${eventKey}] Solo CC requiere registro de tenant con enabled=true; abortado (tenant ${tenantId}).`,
+        );
+        return;
+      }
+      await this.emailService
+        .sendMail({
+          to: tenantCcEmails,
+          subject: payload.subject,
+          html: payload.html,
+        })
+        .catch((err: unknown) => {
+          this.logger.error(
+            `[${eventKey}] Error al enviar EMAIL (solo CC): ${String(err)}`,
+          );
+        });
+      this.logger.log(
+        `[${eventKey}] Despachado: correo solo a ${tenantCcEmails.length} CC (tenant ${tenantId}).`,
+      );
+      return;
+    }
+
+    // ── 4. Opt-in estricto: solo suscripciones explícitamente activas ─────────
     // Una única consulta resuelve preferencias + datos del usuario en paralelo.
     const activeSubscriptions =
       await this.prisma.userNotificationSetting.findMany({
@@ -103,13 +138,30 @@ export class NotificationDispatcherService {
     const validSubs = activeSubscriptions.filter((s) => s.user.isActive);
 
     if (!validSubs.length) {
+      if (hasCc && tenantSetting?.enabled) {
+        await this.emailService
+          .sendMail({
+            to: tenantCcEmails,
+            subject: payload.subject,
+            html: payload.html,
+          })
+          .catch((err: unknown) => {
+            this.logger.error(
+              `[${eventKey}] Error al enviar EMAIL (solo CC, sin opt-in en pool): ${String(err)}`,
+            );
+          });
+        this.logger.log(
+          `[${eventKey}] Despachado: correo solo a ${tenantCcEmails.length} CC — pool sin suscripciones activas (tenant ${tenantId}).`,
+        );
+        return;
+      }
       this.logger.debug(
         `[${eventKey}] Sin suscripciones opt-in activas (tenant ${tenantId}).`,
       );
       return;
     }
 
-    // ── 4. Agrupar por canal ──────────────────────────────────────────────────
+    // ── 5. Agrupar por canal ──────────────────────────────────────────────────
     const emailAddresses: string[] = [];
     const pushUserIds: string[] = [];
 
@@ -124,7 +176,7 @@ export class NotificationDispatcherService {
       }
     }
 
-    // ── 5. Envío en paralelo ─────────────────────────────────────────────────
+    // ── 6. Envío en paralelo ─────────────────────────────────────────────────
     const tasks: Promise<void>[] = [];
 
     if (emailAddresses.length) {
@@ -159,12 +211,32 @@ export class NotificationDispatcherService {
       }
     }
 
+    if (
+      tasks.length === 0 &&
+      hasCc &&
+      tenantSetting?.enabled
+    ) {
+      tasks.push(
+        this.emailService
+          .sendMail({
+            to: tenantCcEmails,
+            subject: payload.subject,
+            html: payload.html,
+          })
+          .catch((err: unknown) => {
+            this.logger.error(
+              `[${eventKey}] Error al enviar EMAIL (solo CC, sin tareas usuario/push): ${String(err)}`,
+            );
+          }),
+      );
+    }
+
     await Promise.all(tasks);
 
+    const pushDispatched =
+      pushUserIds.length && payload.pushPayload ? pushUserIds.length : 0;
     this.logger.log(
-      `[${eventKey}] Despachado: ${emailAddresses.length} emails` +
-        (tenantCcEmails.length ? ` (+${tenantCcEmails.length} CC)` : '') +
-        `, ${pushUserIds.length} push (tenant ${tenantId}).`,
+      `[${eventKey}] Completado (tenant ${tenantId}): emails a usuarios opt-in=${emailAddresses.length}, push=${pushDispatched}, tareas=${tasks.length}, CC en tenant=${tenantCcEmails.length}.`,
     );
   }
 }

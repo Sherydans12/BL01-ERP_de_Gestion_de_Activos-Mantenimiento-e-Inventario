@@ -96,11 +96,13 @@ Desde 2026-05-18 existe una capa de despacho unificada para envíos nuevos. Los 
 
 Flujo del dispatcher al recibir un `dispatch(eventKey, tenantId, payload)`:
 
-1. Busca `TenantNotificationSetting` para el evento: si `enabled = false` o no existe, aborta silenciosamente.
-2. Extrae `ccEmails` del registro de tenant (destinatarios externos; no requieren opt-in).
-3. Si `payload.userIds` está vacío, solo se envía a `ccEmails` (caso `INVENTORY_ITEM_CREATED`).
-4. Para cada `userId`, consulta `UserNotificationSetting` con `enabled: true` y verifica `User.isActive`. Descarta los demás.
-5. Despacha en paralelo por canal: `EmailService.sendMail` (con `cc: ccEmails`) para EMAIL; `NotificationsService.sendNotification` para WEB_PUSH.
+1. Busca `TenantNotificationSetting` para el evento. Si existe y `enabled = false`, aborta silenciosamente. Si no hay fila, continúa (sin `ccEmails` persistidos hasta que el admin guarde en gobernanza).
+2. Extrae `ccEmails` del registro de tenant (si existe).
+3. Si **no** hay `userIds` ni `ccEmails`, aborta.
+4. Si **no** hay `userIds` pero sí `ccEmails`, modo **solo CC**: exige registro de tenant con `enabled = true` y envía un correo con `to = ccEmails`.
+5. Con `userIds` no vacío: consulta `UserNotificationSetting` con `enabled: true` y verifica `User.isActive`. Si **nadie** califica pero hay `ccEmails` e interruptor activo, envío **solo a CC** (listas externas siguen enteradas).
+6. Con suscriptores: agrupa canales; `EmailService.sendMail` (`to` = usuarios opt-in EMAIL, `cc` = `ccEmails` si hay). Si no queda ningún envío a usuario (p. ej. solo WEB_PUSH en un evento sin `pushPayload`) pero hay CC configurados, **correo solo a CC**.
+7. `NotificationsService.sendNotification` para WEB_PUSH cuando aplique.
 
 ### `ccEmails` — listas de distribución externas
 
@@ -112,7 +114,9 @@ Flujo del dispatcher al recibir un `dispatch(eventKey, tenantId, payload)`:
 |-------------------------|---------------------|-------------------|-----------|
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | `purchase-requisitions.service` → `create` | ADMINs activos del tenant | EMAIL + ccEmails |
 | `PURCHASE_REQUISITION_SUBMITTED` | `purchase-requisitions.service` → `submit` | ADMINs activos del tenant | EMAIL + WEB_PUSH + ccEmails |
-| `INVENTORY_ITEM_CREATED` | `inventory-items.service` → `create`, `quickCreate` | `[]` vacío (solo correo externo) | EMAIL (solo ccEmails) |
+| `INVENTORY_ITEM_CREATED` | `inventory-items.service` → `create`, `quickCreate` | Opt-in **EMAIL** (IDs resueltos en el servicio) + `ccEmails` | EMAIL (+ CC tenant) o solo CC si no hay suscriptores EMAIL |
+
+La gobernanza en `/app/configuracion/notificaciones` muestra **más** `eventKey` (catálogo de producto / futuro). Solo los de la tabla anterior tienen **`NotificationDispatcherService.dispatch`** en el código actual; el resto puede persistir preferencias en BD pero aún **no** dispara este motor hasta que el flujo de negocio correspondiente llame a `dispatch` (o siga siendo envío **Directo** vía `EmailService`).
 
 ### Uso en nuevas funcionalidades
 
@@ -143,3 +147,5 @@ this.notificationDispatcher
 | 2026-05-18 | Opt-in estricto + RBAC delegado: el dispatcher consulta directamente `UserNotificationSetting`; admins pueden configurar notificaciones de otros usuarios. `ccEmails` en `TenantNotificationSetting`. |
 | 2026-05-18 | Sprint closure: 3 eventos nuevos (`PURCHASE_REQUISITION_DRAFT_CREATED`, `PURCHASE_REQUISITION_SUBMITTED`, `INVENTORY_ITEM_CREATED`), builders en `transactional-mail.builder.ts`, dispatch inyectado en `purchase-requisitions.service` y `inventory-items.service`. Sidebar acordeón en UI. |
 | 2026-05-18 | `INVENTORY_ITEM_CREATED`: mismo dispatch en `quickCreate` (paridad con `create`); UX vía `QuickAddItemModal` en `GlobalItemPicker` **solo** donde `allowQuickAdd` es true (SRC, OC, OT, stock `PURCHASE_IN`/`TRANSFER`; no W2W dedicada ni picker salida/reingreso/devolución OT). |
+| 2026-05-18 | **Fix dispatcher:** con `userIds` vacío y `ccEmails` del tenant, envío «solo CC» (antes abortaba siempre y `INVENTORY_ITEM_CREATED` nunca enviaba). |
+| 2026-05-18 | **Dispatcher:** si hay pool `userIds` pero nadie con opt-in efectivo (o solo WEB_PUSH sin tareas), **fallback** a correo solo a `ccEmails` cuando el evento está activo (SRC + listas externas). |

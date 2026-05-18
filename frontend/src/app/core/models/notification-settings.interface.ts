@@ -11,11 +11,14 @@ export type NotificationEventKey =
   | 'AUTH_FORGOT_PASSWORD'
   | 'AUTH_UNUSUAL_LOGIN'
   | 'PURCHASE_REQUISITION_CREATED'
+  | 'PURCHASE_REQUISITION_DRAFT_CREATED'
+  | 'PURCHASE_REQUISITION_SUBMITTED'
   | 'PURCHASE_PO_PENDING_SIGNATURE'
   | 'PURCHASE_PO_BATCH_SIGNATURE'
   | 'INVOICE_DISCREPANCY'
   | 'OT_WARRANTY_NOTIFY'
   | 'INVENTORY_STOCK_MIN'
+  | 'INVENTORY_ITEM_CREATED'
   | (string & {}); // Permite eventos futuros sin romper el tipado
 
 /** Configuración de un evento a nivel de tenant (interruptor maestro). */

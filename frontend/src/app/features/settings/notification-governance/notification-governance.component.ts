@@ -120,7 +120,8 @@ export const EVENT_GROUPS: EventGroup[] = [
       {
         key: 'INVENTORY_ITEM_CREATED',
         label: 'Nuevo artículo en catálogo',
-        description: 'Notifica cuando se da de alta un artículo en el catálogo maestro.',
+        description:
+          'Correo al dar de alta un artículo (maestro o quick-create). Requiere evento activado; destinatarios: suscriptores con canal EMAIL en la matriz y/o correos en «CC externos».',
       },
     ],
   },

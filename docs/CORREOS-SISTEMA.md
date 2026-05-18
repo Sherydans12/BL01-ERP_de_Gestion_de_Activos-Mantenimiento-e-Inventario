@@ -16,7 +16,7 @@ Documento **maestro** de todo lo que el backend puede enviar vía `EmailService.
 | `INVENTORY_STOCK_MIN` | `Alerta: stock mínimo alcanzado` | Stock de artículo ≤ mínimo definido | Bodeguero / admin | pendiente | pendiente | — | pendiente |
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | `Nuevo borrador de requerimiento: {correlativo}` | SRC guardado en estado DRAFT | ADMINs activos con opt-in + ccEmails del tenant | `purchase-requisitions.service` → `create` | `buildMailRequisitionDraftCreated` | — | **Dispatcher** |
 | `PURCHASE_REQUISITION_SUBMITTED` | `Requerimiento emitido: {correlativo}` | SRC pasa a SUBMITTED | ADMINs activos con opt-in + ccEmails del tenant | `purchase-requisitions.service` → `submit` | `buildMailRequisitionSubmitted` | — | **Dispatcher** |
-| `INVENTORY_ITEM_CREATED` | `Nuevo artículo en catálogo: {código} — {nombre}` | Alta en catálogo maestro: `POST /api/inventory-items` **o** `POST /api/inventory-items/quick-create` (modal rápido solo donde `GlobalItemPicker` expone quick-add: SRC, OC, OT, y en stock movimientos `PURCHASE_IN` / `TRANSFER`; **no** en transferencia W2W dedicada ni en picker de salida a terreno / reingreso / devolución OT) | ccEmails del tenant (solo correo externo; userIds vacío) | `inventory-items.service` → `create`, `quickCreate` | `buildMailInventoryItemCreated` | — | **Dispatcher** |
+| `INVENTORY_ITEM_CREATED` | `Nuevo artículo en catálogo: {código} — {nombre}` | Alta en catálogo maestro: `POST /api/inventory-items` **o** `POST /api/inventory-items/quick-create` (modal rápido solo donde `GlobalItemPicker` expone quick-add: SRC, OC, OT, y en stock movimientos `PURCHASE_IN` / `TRANSFER`; **no** en transferencia W2W dedicada ni en picker de salida a terreno / reingreso / devolución OT) | Usuarios con opt-in **EMAIL** en gobernanza + `ccEmails` del tenant (dispatcher) | `inventory-items.service` → `create`, `quickCreate` | `buildMailInventoryItemCreated` | — | **Dispatcher** |
 
 > **Columna "Motor":** `Directo` = llama a `EmailService.sendMail` directamente. `Dispatcher` = pasa por `NotificationDispatcherService` con opt-in estricto y ccEmails. La migración de los flujos "Directo" es opcional y gradual.
 
@@ -30,16 +30,21 @@ Los envíos marcados como **"Dispatcher"** no llaman a `EmailService` directamen
 
 > **Por defecto, ningún usuario recibe notificaciones** a menos que tenga un registro explícito `UserNotificationSetting { eventKey, channel, enabled: true }`.
 
-Pasos internos del dispatcher:
+Pasos internos del dispatcher (resumen):
 
-1. Consulta `TenantNotificationSetting` para el evento: si `enabled = false` o no existe, aborta silenciosamente.
-2. Recupera los `ccEmails` del tenant (listas externas → no requieren opt-in de usuario).
-3. Filtra los `userIds` del payload cruzando contra `UserNotificationSetting` (`enabled = true`) y verifica `isActive` del usuario.
-4. Despacha en paralelo: `EmailService.sendMail` (con `cc: ccEmails`) para canal EMAIL, `NotificationsService.sendNotification` para WEB_PUSH.
+1. Si existe `TenantNotificationSetting` y `enabled = false` → aborta.
+2. Lee `ccEmails` del registro (si no hay fila, lista vacía).
+3. Si no hay `userIds` en el payload **ni** `ccEmails` → aborta.
+4. Si no hay `userIds` pero sí `ccEmails` → correo solo a CC (exige registro de tenant con `enabled = true`).
+5. Si hay `userIds`: consulta opt-in por usuario/canal; si **nadie** del pool califica pero hay `ccEmails` e interruptor activo → correo solo a CC.
+6. Si hay destinatarios EMAIL o tareas WEB_PUSH, arma envíos (EMAIL con `cc` a externos cuando aplica). Si **no** queda ninguna tarea (p. ej. solo WEB_PUSH en evento sin `pushPayload`) pero hay `ccEmails` e interruptor activo → correo solo a CC.
+7. Ejecuta tareas en paralelo y registra resultado.
 
 ### `ccEmails` — correos externos (listas de distribución)
 
 El campo `TenantNotificationSetting.ccEmails` (`String[]`) permite agregar correos externos (p. ej. `bodega.ext@cliente.com`) como CC en los envíos del evento. Se configuran desde la UI de gobernanza (`/app/configuracion/notificaciones`) **sin requerir opt-in** de usuario, ya que son correos fuera del sistema (grupos de distribución del cliente final). Este mecanismo resuelve el caso de bodegas o departamentos que reciben avisos por correo grupal sin ser usuarios de la plataforma.
+
+> **`INVENTORY_ITEM_CREATED`:** el servicio de inventario arma `userIds` con quienes tienen opt-in **EMAIL** en gobernanza. Los **CC externos** van en copia en el mismo envío cuando hay al menos un destinatario en `to` (emails de usuario); si **solo** hay CC y ningún usuario con EMAIL, el correo se envía **solo** a la lista CC (como `to` en Resend). Hay que **activar el evento** en gobernanza; hace falta **al menos un** destinatario (usuario EMAIL opt-in y/o CC externos guardados).
 
 ### Resolución de `userIds` por servicio
 
@@ -47,7 +52,7 @@ El campo `TenantNotificationSetting.ccEmails` (`String[]`) permite agregar corre
 |--------|-------------------------------------------|-----------------------------------|
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | ADMINs activos del tenant (`role='ADMIN', isActive=true`) | `UserNotificationSetting` opt-in (canal EMAIL / WEB_PUSH) |
 | `PURCHASE_REQUISITION_SUBMITTED` | ADMINs activos del tenant | `UserNotificationSetting` opt-in + WEB_PUSH si hay `pushPayload` |
-| `INVENTORY_ITEM_CREATED` | `[]` vacío (no hay candidatos internos) | Solo los ccEmails del tenant reciben el correo |
+| `INVENTORY_ITEM_CREATED` | IDs resueltos en `inventory-items.service` desde `UserNotificationSetting` (canal **EMAIL**, `enabled`, usuario activo) | Opt-in EMAIL + `ccEmails` del tenant (si no hay usuarios con EMAIL pero sí CC, envío solo a CC) |
 
 ### API de gobernanza (ADMIN / SUPER_ADMIN)
 

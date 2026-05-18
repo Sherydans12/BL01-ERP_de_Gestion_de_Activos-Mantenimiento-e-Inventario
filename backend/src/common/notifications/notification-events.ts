@@ -9,6 +9,9 @@
  * Al agregar un evento nuevo, registrarlo también en:
  *   - `docs/CORREOS-SISTEMA.md` (si envía email)
  *   - `docs/agentes/notificaciones-sistema.md` (si envía Web Push)
+ *
+ * **Dispatcher hoy:** `PURCHASE_REQUISITION_DRAFT_CREATED`, `PURCHASE_REQUISITION_SUBMITTED`,
+ * `INVENTORY_ITEM_CREATED` (ver `NotificationDispatcherService.dispatch` en el repo).
  */
 export const NOTIFICATION_EVENTS = {
   // ── Usuarios / Auth ───────────────────────────────────────────────────────

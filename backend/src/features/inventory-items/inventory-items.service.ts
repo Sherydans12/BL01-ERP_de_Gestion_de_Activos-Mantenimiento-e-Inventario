@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { NotificationChannel, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
@@ -759,7 +759,26 @@ export class InventoryItemsService {
   }
 
   /**
-   * Evento `INVENTORY_ITEM_CREATED` (dispatcher + ccEmails). Fire-and-forget.
+   * Usuarios con opt-in EMAIL para `INVENTORY_ITEM_CREATED` (panel de gobernanza).
+   */
+  private async resolveInventoryItemCreatedEmailRecipientIds(
+    tenantId: string,
+  ): Promise<string[]> {
+    const rows = await this.prisma.userNotificationSetting.findMany({
+      where: {
+        tenantId,
+        eventKey: NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED,
+        channel: NotificationChannel.EMAIL,
+        enabled: true,
+        user: { isActive: true },
+      },
+      select: { userId: true },
+    });
+    return [...new Set(rows.map((r) => r.userId))];
+  }
+
+  /**
+   * Evento `INVENTORY_ITEM_CREATED` (dispatcher: opt-in EMAIL + ccEmails). Fire-and-forget.
    * Paridad entre alta maestro (`create`) y quick-create desde el picker.
    */
   private dispatchInventoryItemCreatedMail(
@@ -771,6 +790,7 @@ export class InventoryItemsService {
       itemCategory?: unknown;
     },
   ): void {
+    const tenantId = user.tenantId;
     const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
     const cat = createdItem.itemCategory as
       | {
@@ -788,21 +808,26 @@ export class InventoryItemsService {
       timeZone: 'America/Santiago',
     });
 
-    this.notificationDispatcher
-      .dispatch(NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED, user.tenantId, {
-        userIds: [],
-        subject: `Nuevo artículo en catálogo: ${createdItem.inventoryCode ?? ''} — ${createdItem.name}`,
-        html: buildMailInventoryItemCreated({
-          inventoryCode: createdItem.inventoryCode ?? '',
-          name: createdItem.name,
-          familyName,
-          subfamilyName: subfamilyName || familyName,
-          createdBy: user.name ?? user.email ?? 'Sistema',
-          createdAt: createdAtFormatted,
-          appUrl,
-          partNumber: createdItem.partNumber,
-        }),
-      })
+    const subject = `Nuevo artículo en catálogo: ${createdItem.inventoryCode ?? ''} — ${createdItem.name}`;
+    const html = buildMailInventoryItemCreated({
+      inventoryCode: createdItem.inventoryCode ?? '',
+      name: createdItem.name,
+      familyName,
+      subfamilyName: subfamilyName || familyName,
+      createdBy: user.name ?? user.email ?? 'Sistema',
+      createdAt: createdAtFormatted,
+      appUrl,
+      partNumber: createdItem.partNumber,
+    });
+
+    void this.resolveInventoryItemCreatedEmailRecipientIds(tenantId)
+      .then((userIds) =>
+        this.notificationDispatcher.dispatch(
+          NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED,
+          tenantId,
+          { userIds, subject, html },
+        ),
+      )
       .catch(() => {
         /* fallo en notificación no debe interrumpir la respuesta */
       });
