@@ -112,7 +112,7 @@ Flujo del dispatcher al recibir un `dispatch(eventKey, tenantId, payload)`:
 |-------------------------|---------------------|-------------------|-----------|
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | `purchase-requisitions.service` → `create` | ADMINs activos del tenant | EMAIL + ccEmails |
 | `PURCHASE_REQUISITION_SUBMITTED` | `purchase-requisitions.service` → `submit` | ADMINs activos del tenant | EMAIL + WEB_PUSH + ccEmails |
-| `INVENTORY_ITEM_CREATED` | `inventory-items.service` → `create` | `[]` vacío (solo correo externo) | EMAIL (solo ccEmails) |
+| `INVENTORY_ITEM_CREATED` | `inventory-items.service` → `create`, `quickCreate` | `[]` vacío (solo correo externo) | EMAIL (solo ccEmails) |
 
 ### Uso en nuevas funcionalidades
 
@@ -142,3 +142,4 @@ this.notificationDispatcher
 | 2026-05-18 | Motor Omnicanal: `NotificationDispatcherService`, catálogo `NOTIFICATION_EVENTS`, modelos `TenantNotificationSetting` / `UserNotificationSetting`, API REST de configuración, UI de gobernanza. |
 | 2026-05-18 | Opt-in estricto + RBAC delegado: el dispatcher consulta directamente `UserNotificationSetting`; admins pueden configurar notificaciones de otros usuarios. `ccEmails` en `TenantNotificationSetting`. |
 | 2026-05-18 | Sprint closure: 3 eventos nuevos (`PURCHASE_REQUISITION_DRAFT_CREATED`, `PURCHASE_REQUISITION_SUBMITTED`, `INVENTORY_ITEM_CREATED`), builders en `transactional-mail.builder.ts`, dispatch inyectado en `purchase-requisitions.service` y `inventory-items.service`. Sidebar acordeón en UI. |
+| 2026-05-18 | `INVENTORY_ITEM_CREATED`: mismo dispatch en `quickCreate` (paridad con `create`); UX vía `QuickAddItemModal` en `GlobalItemPicker` **solo** donde `allowQuickAdd` es true (SRC, OC, OT, stock `PURCHASE_IN`/`TRANSFER`; no W2W dedicada ni picker salida/reingreso/devolución OT). |

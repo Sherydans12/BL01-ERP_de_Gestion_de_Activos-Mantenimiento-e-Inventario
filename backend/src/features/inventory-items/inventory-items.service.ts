@@ -758,6 +758,56 @@ export class InventoryItemsService {
     };
   }
 
+  /**
+   * Evento `INVENTORY_ITEM_CREATED` (dispatcher + ccEmails). Fire-and-forget.
+   * Paridad entre alta maestro (`create`) y quick-create desde el picker.
+   */
+  private dispatchInventoryItemCreatedMail(
+    user: { tenantId: string; name?: string; email?: string },
+    createdItem: {
+      inventoryCode: string | null;
+      name: string;
+      partNumber: string | null;
+      itemCategory?: unknown;
+    },
+  ): void {
+    const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
+    const cat = createdItem.itemCategory as
+      | {
+          name?: string;
+          parentCategoryId?: string | null;
+          parentCategory?: { name?: string } | null;
+        }
+      | null
+      | undefined;
+    const familyName: string = cat?.parentCategory?.name ?? cat?.name ?? '';
+    const subfamilyName: string = cat?.parentCategoryId ? (cat?.name ?? '') : '';
+    const createdAtFormatted = new Date().toLocaleString('es-CL', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'America/Santiago',
+    });
+
+    this.notificationDispatcher
+      .dispatch(NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED, user.tenantId, {
+        userIds: [],
+        subject: `Nuevo artículo en catálogo: ${createdItem.inventoryCode ?? ''} — ${createdItem.name}`,
+        html: buildMailInventoryItemCreated({
+          inventoryCode: createdItem.inventoryCode ?? '',
+          name: createdItem.name,
+          familyName,
+          subfamilyName: subfamilyName || familyName,
+          createdBy: user.name ?? user.email ?? 'Sistema',
+          createdAt: createdAtFormatted,
+          appUrl,
+          partNumber: createdItem.partNumber,
+        }),
+      })
+      .catch(() => {
+        /* fallo en notificación no debe interrumpir la respuesta */
+      });
+  }
+
   async create(dto: CreateInventoryItemDto, user: any) {
     if (!dto.categoryId?.trim()) {
       throw new BadRequestException(
@@ -906,36 +956,8 @@ export class InventoryItemsService {
       },
     });
 
-    // ── Dispatch enriquecido (fire-and-forget) ────────────────────────────────
     // userIds vacío → solo llegarán correos a los ccEmails configurados en la UI.
-    const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
-    const cat = (createdItem as any).itemCategory;
-    const familyName: string = cat?.parentCategory?.name ?? cat?.name ?? '';
-    const subfamilyName: string = cat?.parentCategoryId ? (cat?.name ?? '') : '';
-    const createdAtFormatted = new Date().toLocaleString('es-CL', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-      timeZone: 'America/Santiago',
-    });
-
-    this.notificationDispatcher
-      .dispatch(NOTIFICATION_EVENTS.INVENTORY_ITEM_CREATED, user.tenantId, {
-        userIds: [],
-        subject: `Nuevo artículo en catálogo: ${createdItem.inventoryCode ?? ''} — ${createdItem.name}`,
-        html: buildMailInventoryItemCreated({
-          inventoryCode: createdItem.inventoryCode ?? '',
-          name: createdItem.name,
-          familyName,
-          subfamilyName: subfamilyName || familyName,
-          createdBy: user.name ?? user.email ?? 'Sistema',
-          createdAt: createdAtFormatted,
-          appUrl,
-          partNumber: createdItem.partNumber,
-        }),
-      })
-      .catch(() => {
-        /* fallo en notificación no debe interrumpir la respuesta */
-      });
+    this.dispatchInventoryItemCreatedMail(user, createdItem);
 
     return createdItem;
   }
@@ -1085,7 +1107,7 @@ export class InventoryItemsService {
     const isAsset = dto.isAsset ?? false;
     const isConsumable = dto.isConsumable ?? true;
 
-    return this.prisma.$transaction(
+    const createdItem = await this.prisma.$transaction(
       async (tx) => {
         await this.assertLeafCategoryWithTx(tx, dto.categoryId, user.tenantId);
         await this.assertUnitOfMeasureTx(
@@ -1197,6 +1219,10 @@ export class InventoryItemsService {
         timeout: 30_000,
       },
     );
+
+    this.dispatchInventoryItemCreatedMail(user, createdItem);
+
+    return createdItem;
   }
 
   private async assertLeafCategoryWithTx(

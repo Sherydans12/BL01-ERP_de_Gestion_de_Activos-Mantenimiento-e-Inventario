@@ -182,7 +182,7 @@ export function buildMailRequisitionSubmitted(params: {
 
 /**
  * Nuevo artículo dado de alta en el catálogo maestro.
- * Evento: `INVENTORY_ITEM_CREATED`.
+ * Evento: `INVENTORY_ITEM_CREATED` (disparado desde `InventoryItemsService.create` y `quickCreate`).
  */
 export function buildMailInventoryItemCreated(params: {
   inventoryCode: string;
