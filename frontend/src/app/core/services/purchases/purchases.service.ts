@@ -244,6 +244,26 @@ export interface PurchaseInvoice {
   };
 }
 
+/** Query de `GET /purchase-invoices` (listado paginado). */
+export interface PurchaseInvoiceListQuery {
+  status?: string;
+  contractId?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+  sort?: string;
+  dir?: string;
+}
+
+export interface PurchaseInvoiceListResponse {
+  data: PurchaseInvoice[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface PurchaseCreditNote {
   id: string;
   tenantId: string;
@@ -337,6 +357,22 @@ export interface PurchaseOrderApproval {
   approvedBy?: { id: string; name: string; email: string };
 }
 
+/** Query de `GET /warehouse-receipts` (listado paginado). */
+export interface WarehouseReceiptListQuery {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+  sort?: string;
+  dir?: string;
+}
+
+export interface WarehouseReceiptListResponse {
+  data: WarehouseReceipt[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface WarehouseReceipt {
   id: string;
   correlative: string;
@@ -346,7 +382,8 @@ export interface WarehouseReceipt {
   status: string;
   observations?: string;
   receivedAt?: string;
-  items: ReceiptItem[];
+  /** Presente en detalle GET; el listado puede omitir líneas. */
+  items?: ReceiptItem[];
   purchaseOrder?: {
     id: string;
     correlative: string;
@@ -733,8 +770,22 @@ export class PurchasesService {
   }
 
   // -- Receipts --
-  getReceipts(): Observable<WarehouseReceipt[]> {
-    return this.http.get<WarehouseReceipt[]>(`${this.base}/warehouse-receipts`);
+  listWarehouseReceipts(
+    params?: WarehouseReceiptListQuery,
+  ): Observable<WarehouseReceiptListResponse> {
+    const q: Record<string, string> = {};
+    const s = params?.search?.trim();
+    if (s) q['search'] = s;
+    if (params?.page != null && params.page > 0) q['page'] = String(params.page);
+    if (params?.pageSize != null && params.pageSize > 0) {
+      q['pageSize'] = String(params.pageSize);
+    }
+    if (params?.sort) q['sort'] = params.sort;
+    if (params?.dir) q['dir'] = params.dir;
+    return this.http.get<WarehouseReceiptListResponse>(
+      `${this.base}/warehouse-receipts`,
+      { params: Object.keys(q).length ? q : undefined },
+    );
   }
 
   getReceipt(id: string): Observable<WarehouseReceipt> {
@@ -836,27 +887,35 @@ export class PurchasesService {
     return this.http.delete<void>(`${this.base}/purchase-invoices/${id}`);
   }
 
-  /** Listado global: filtros opcionales `status`, `contractId`, `dueDateFrom`, `dueDateTo` (YYYY-MM-DD). */
-  listPurchaseInvoices(params: {
-    status?: string;
-    contractId?: string;
-    dueDateFrom?: string;
-    dueDateTo?: string;
-  }): Observable<PurchaseInvoice[]> {
+  /** Listado global: filtros opcionales y paginación (`GET /purchase-invoices` → `{ data, total, page, pageSize }`). */
+  listPurchaseInvoices(
+    params?: PurchaseInvoiceListQuery,
+  ): Observable<PurchaseInvoiceListResponse> {
     const q: Record<string, string> = {};
-    if (params.contractId?.trim()) q['contractId'] = params.contractId.trim();
-    if (params.status?.trim()) q['status'] = params.status.trim();
-    if (params.dueDateFrom?.trim()) q['dueDateFrom'] = params.dueDateFrom.trim();
-    if (params.dueDateTo?.trim()) q['dueDateTo'] = params.dueDateTo.trim();
+    if (params?.contractId?.trim()) q['contractId'] = params.contractId.trim();
+    if (params?.status?.trim()) q['status'] = params.status.trim();
+    if (params?.dueDateFrom?.trim()) q['dueDateFrom'] = params.dueDateFrom.trim();
+    if (params?.dueDateTo?.trim()) q['dueDateTo'] = params.dueDateTo.trim();
+    const s = params?.search?.trim();
+    if (s) q['search'] = s;
+    if (params?.page != null && params.page > 0) q['page'] = String(params.page);
+    if (params?.pageSize != null && params.pageSize > 0) {
+      q['pageSize'] = String(params.pageSize);
+    }
+    if (params?.sort) q['sort'] = params.sort;
+    if (params?.dir) q['dir'] = params.dir;
     return this.http
-      .get<PurchaseInvoice[]>(`${this.base}/purchase-invoices`, { params: q })
+      .get<PurchaseInvoiceListResponse>(`${this.base}/purchase-invoices`, {
+        params: Object.keys(q).length ? q : undefined,
+      })
       .pipe(
-        map((rows) =>
-          rows.map((invoice) => {
+        map((res) => ({
+          ...res,
+          data: res.data.map((invoice) => {
             this.normalizeInvoiceMedia(invoice);
             return invoice;
           }),
-        ),
+        })),
       );
   }
 

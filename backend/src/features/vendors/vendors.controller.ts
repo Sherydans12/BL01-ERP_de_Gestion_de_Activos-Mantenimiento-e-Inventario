@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -20,8 +21,30 @@ export class VendorsController {
   constructor(private readonly vendorsService: VendorsService) {}
 
   @Get()
-  findAll(@Req() req: any) {
-    return this.vendorsService.findAll(req.user.tenantId);
+  findAll(
+    @Req() req: any,
+    @Query('search') search?: string,
+    @Query('includeInactive') includeInactiveRaw?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+  ) {
+    const parseOptionalPositiveInt = (
+      raw: string | undefined,
+    ): number | undefined => {
+      if (raw === undefined || raw === '') return undefined;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    return this.vendorsService.findAll(req.user.tenantId, {
+      search,
+      includeInactive: includeInactiveRaw === 'true',
+      page: parseOptionalPositiveInt(pageRaw),
+      pageSize: parseOptionalPositiveInt(pageSizeRaw),
+      sort,
+      dir,
+    });
   }
 
   @Get(':id')

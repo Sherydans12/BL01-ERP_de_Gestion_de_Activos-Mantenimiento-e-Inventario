@@ -64,3 +64,15 @@ Cuando compras o el solicitante **crean** un artículo desde modales (p. ej. qui
 | SRC, OC, recepción, catálogo en líneas, botón único generar OC | Este archivo |
 | Motor 3-Way Match, multi-factura, notas de crédito, overrule granular | [PURCHASE-FINANCIAL-CONCILIATION.md](./PURCHASE-FINANCIAL-CONCILIATION.md) |
 | Inventario, stock, transferencias, kardex | [docs/agentes/inventario-stock-transferencias-kardex.md](./agentes/inventario-stock-transferencias-kardex.md) |
+
+---
+
+## 5. Listado global de facturas (`GET /purchase-invoices`)
+
+- **Respuesta:** `{ data, total, page, pageSize }` (antes era un arreglo plano).
+- **Query:** `status`, `contractId`, `dueDateFrom`, `dueDateTo` (YYYY-MM-DD), `search`, `page`, `pageSize` (máx. 500 en servidor), `sort`, `dir`.
+- **Búsqueda (insensible a mayúsculas):** número de factura, referencia de pago, código/nombre de proveedor, correlativo de OC, UUID de factura.
+- **Orden:** `invoiceNumber`, `status`, `emissionDate`, `dueDate`, `totalAmount`, `createdAt`, `updatedAt`, `paidAt`, `poCorrelative`, `vendorName`.
+- **Filtro por rango de vencimiento:** el vencimiento **efectivo** sigue usando regla de calendario (si `dueDate` es null → emisión + 30 días en UTC). Ese refinamiento se aplica **en memoria** sobre un tope de filas leídas de BD; el `total` devuelto corresponde a ese subconjunto ya refinado (no uses paginación profunda sobre solo-fecha sin acotar contrato si tenés decenas de miles de facturas).
+
+**Referencias:** `backend/.../purchase-invoices.service.ts` (`findAll`), `frontend/.../purchase-invoice-list/`, `purchases.service.ts` (`listPurchaseInvoices`).

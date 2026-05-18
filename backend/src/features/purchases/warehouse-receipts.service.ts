@@ -25,6 +25,87 @@ import {
   tryAutoCloseRequisitionIfFullyReconciled,
 } from './purchase-requisition-auto-close.util';
 
+const WR_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isReceiptListUuid(value: string | undefined | null): boolean {
+  return typeof value === 'string' && WR_UUID_RE.test(value);
+}
+
+const WR_LIST_SEARCH_MAX_LEN = 120;
+const WR_LIST_PAGE_SIZE_MAX = 100;
+
+const WR_LIST_SORT_FIELDS = [
+  'correlative',
+  'status',
+  'createdAt',
+  'updatedAt',
+  'receivedAt',
+  'poCorrelative',
+  'warehouseName',
+  'contractName',
+  'receivedByName',
+] as const;
+
+type WarehouseReceiptListSortField =
+  (typeof WR_LIST_SORT_FIELDS)[number];
+
+function isWarehouseReceiptListSortField(
+  v: string,
+): v is WarehouseReceiptListSortField {
+  return (WR_LIST_SORT_FIELDS as readonly string[]).includes(v);
+}
+
+function parseWarehouseReceiptListSort(
+  sort?: string,
+  dir?: string,
+): {
+  field: WarehouseReceiptListSortField;
+  order: 'asc' | 'desc';
+} {
+  const field: WarehouseReceiptListSortField =
+    sort && isWarehouseReceiptListSortField(sort) ? sort : 'createdAt';
+  if (dir === 'asc' || dir === 'desc') {
+    return { field, order: dir };
+  }
+  if (
+    field === 'createdAt' ||
+    field === 'updatedAt' ||
+    field === 'receivedAt'
+  ) {
+    return { field, order: 'desc' };
+  }
+  return { field, order: 'asc' };
+}
+
+function buildWarehouseReceiptListOrderBy(
+  field: WarehouseReceiptListSortField,
+  order: 'asc' | 'desc',
+): Prisma.WarehouseReceiptOrderByWithRelationInput {
+  switch (field) {
+    case 'poCorrelative':
+      return { purchaseOrder: { correlative: order } };
+    case 'warehouseName':
+      return { warehouse: { name: order } };
+    case 'contractName':
+      return { purchaseOrder: { contract: { name: order } } };
+    case 'receivedByName':
+      return { receivedBy: { name: order } };
+    case 'correlative':
+      return { correlative: order };
+    case 'status':
+      return { status: order };
+    case 'createdAt':
+      return { createdAt: order };
+    case 'updatedAt':
+      return { updatedAt: order };
+    case 'receivedAt':
+      return { receivedAt: order };
+    default:
+      return { createdAt: 'desc' };
+  }
+}
+
 function calculateCPP(
   currentQty: number,
   currentUnitCost: number,
@@ -109,16 +190,106 @@ export class WarehouseReceiptsService {
     return { contractId: { in: allowed } };
   }
 
+  private receiptListSearchOr(
+    term: string,
+  ): Prisma.WarehouseReceiptWhereInput[] {
+    const mode = 'insensitive' as const;
+    const contains = (s: string): Prisma.StringFilter => ({
+      contains: s,
+      mode,
+    });
+    const clauses: Prisma.WarehouseReceiptWhereInput[] = [
+      { correlative: contains(term) },
+      { observations: contains(term) },
+      {
+        warehouse: {
+          OR: [{ name: contains(term) }, { code: contains(term) }],
+        },
+      },
+      { receivedBy: { name: contains(term) } },
+      {
+        purchaseOrder: {
+          OR: [
+            { correlative: contains(term) },
+            {
+              contract: {
+                OR: [{ name: contains(term) }, { code: contains(term) }],
+              },
+            },
+            {
+              subcontract: {
+                OR: [{ name: contains(term) }, { code: contains(term) }],
+              },
+            },
+          ],
+        },
+      },
+    ];
+    if (isReceiptListUuid(term)) {
+      clauses.unshift({ id: term });
+    }
+    return clauses;
+  }
+
+  private buildReceiptListWhere(
+    tenantId: string,
+    user?: { role?: string; allowedContracts?: string[] },
+    search?: string,
+  ): Prisma.WarehouseReceiptWhereInput {
+    const poScope = this.buildContractScope(user);
+    const searchTerm =
+      typeof search === 'string'
+        ? search.trim().slice(0, WR_LIST_SEARCH_MAX_LEN)
+        : '';
+    const searchOr = searchTerm ? this.receiptListSearchOr(searchTerm) : [];
+
+    const and: Prisma.WarehouseReceiptWhereInput[] = [{ tenantId }];
+    if (Object.keys(poScope).length > 0) {
+      and.push({ purchaseOrder: poScope });
+    }
+    if (searchOr.length > 0) {
+      and.push({ OR: searchOr });
+    }
+    if (and.length === 1) {
+      return and[0] as Prisma.WarehouseReceiptWhereInput;
+    }
+    return { AND: and };
+  }
+
   async findAll(
     tenantId: string,
     user?: { role?: string; allowedContracts?: string[] },
+    opts?: {
+      search?: string;
+      page?: number;
+      pageSize?: number;
+      sort?: string;
+      dir?: string;
+    },
   ) {
-    const poScope = this.buildContractScope(user);
-    return this.prisma.warehouseReceipt.findMany({
-      where: {
-        tenantId,
-        ...(Object.keys(poScope).length ? { purchaseOrder: poScope } : {}),
-      },
+    const pageSize = Math.min(
+      WR_LIST_PAGE_SIZE_MAX,
+      Math.max(1, Math.floor(opts?.pageSize ?? 25)),
+    );
+    const requestedPage = Math.max(1, Math.floor(opts?.page ?? 1));
+    const { field: sortField, order: sortOrder } =
+      parseWarehouseReceiptListSort(opts?.sort, opts?.dir);
+
+    const where = this.buildReceiptListWhere(
+      tenantId,
+      user,
+      opts?.search,
+    );
+
+    const total = await this.prisma.warehouseReceipt.count({ where });
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, maxPage);
+    const skip = (page - 1) * pageSize;
+
+    const orderBy = buildWarehouseReceiptListOrderBy(sortField, sortOrder);
+
+    const data = await this.prisma.warehouseReceipt.findMany({
+      where,
       include: {
         purchaseOrder: {
           select: {
@@ -133,8 +304,12 @@ export class WarehouseReceiptsService {
         receivedBy: { select: { id: true, name: true } },
         _count: { select: { items: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy,
+      skip,
+      take: pageSize,
     });
+
+    return { data, total, page, pageSize };
   }
 
   async findById(id: string, tenantId: string) {

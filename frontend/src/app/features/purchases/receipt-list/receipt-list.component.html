@@ -17,6 +17,83 @@
     </a>
   </div>
 
+  <div class="bg-surface rounded-xl border border-border p-4 mb-4">
+    <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5">Buscar recepciones</label>
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div class="tpm-search-combobox relative flex flex-1 min-w-0 items-center rounded-lg border border-border bg-dark focus-within:border-primary/50">
+        <span class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+        </span>
+        <input
+          type="text"
+          inputmode="search"
+          spellcheck="false"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearchChange($event)"
+          (keydown.enter)="onSearchEnter($event)"
+          placeholder="Correlativo recepción, OC, contrato, bodega, recibido por, observaciones…"
+          class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0 pr-9 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted/60"
+          autocomplete="off"
+          aria-describedby="receipt-search-hint"
+        />
+        @if (hasActiveSearch()) {
+          <button
+            type="button"
+            (click)="clearSearch()"
+            class="absolute inset-y-0 right-0 flex items-center pr-2 text-muted hover:text-main rounded-md px-1.5"
+            aria-label="Limpiar búsqueda"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        }
+      </div>
+      @if (!isLoading() && hasActiveSearch()) {
+        <span class="text-xs text-muted whitespace-nowrap shrink-0">{{ total() }} coincidencia(s)</span>
+      }
+    </div>
+    <p id="receipt-search-hint" class="text-xs text-muted mt-2 leading-relaxed">
+      Búsqueda en servidor (insensible a mayúsculas). Incluye UUID del documento. El listado respeta el alcance contractual de su usuario.
+    </p>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6 flex flex-col gap-4">
+    <div class="flex flex-col sm:flex-row flex-wrap gap-4 sm:items-end">
+      <div class="min-w-[12rem]">
+        <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1">Ordenar por</label>
+        <select
+          [ngModel]="sortField()"
+          (ngModelChange)="onSortFieldChange($event)"
+          class="w-full px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+        >
+          <option value="createdAt">Fecha creación</option>
+          <option value="receivedAt">Fecha recepción</option>
+          <option value="correlative">Correlativo recepción</option>
+          <option value="poCorrelative">Correlativo OC</option>
+          <option value="contractName">Contrato</option>
+          <option value="warehouseName">Bodega</option>
+          <option value="receivedByName">Recibido por</option>
+          <option value="status">Estado</option>
+          <option value="updatedAt">Fecha actualización</option>
+        </select>
+      </div>
+      <div class="min-w-[10rem]">
+        <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1">Dirección</label>
+        <select
+          [ngModel]="sortDir()"
+          (ngModelChange)="onSortDirChange($event)"
+          class="w-full px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+        >
+          <option value="asc">Ascendente</option>
+          <option value="desc">Descendente</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   @if (isLoading()) {
     <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
   } @else {
@@ -71,18 +148,67 @@
           } @empty {
             <tr>
               <td colspan="7" class="px-4 py-12 text-center">
-                <p class="text-muted text-sm mb-3">Aún no hay recepciones registradas.</p>
-                <a
-                  routerLink="/app/compras/recepciones/nueva"
-                  class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:bg-primary/90"
-                >
-                  Crear primera recepción
-                </a>
+                @if (hasActiveSearch()) {
+                  <p class="text-muted text-sm mb-3">No hay recepciones que coincidan con la búsqueda.</p>
+                  <button
+                    type="button"
+                    (click)="clearSearch()"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-main text-sm font-medium hover:bg-dark/50"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                } @else {
+                  <p class="text-muted text-sm mb-3">Aún no hay recepciones registradas.</p>
+                  <a
+                    routerLink="/app/compras/recepciones/nueva"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:bg-primary/90"
+                  >
+                    Crear primera recepción
+                  </a>
+                }
               </td>
             </tr>
           }
         </tbody>
       </table>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-border bg-dark/30">
+        <p class="text-sm text-muted">
+          @if (total() === 0) {
+            Sin registros en esta vista
+          } @else {
+            Mostrando <span class="text-main font-medium">{{ rangeFrom() }}</span>–<span class="text-main font-medium">{{ rangeTo() }}</span>
+            de <span class="text-main font-medium">{{ total() }}</span>
+          }
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            (click)="prevPage()"
+            [disabled]="page() <= 1"
+            class="px-3 py-1.5 rounded-lg text-sm border border-border text-main hover:bg-dark disabled:opacity-40 disabled:pointer-events-none"
+          >
+            Anterior
+          </button>
+          <span class="text-sm text-main font-mono px-1">Pág. {{ page() }} / {{ totalPages() }}</span>
+          <button
+            type="button"
+            (click)="nextPage()"
+            [disabled]="page() >= totalPages()"
+            class="px-3 py-1.5 rounded-lg text-sm border border-border text-main hover:bg-dark disabled:opacity-40 disabled:pointer-events-none"
+          >
+            Siguiente
+          </button>
+          <select
+            [ngModel]="pageSize()"
+            (ngModelChange)="onPageSizeChange($event)"
+            class="ml-0 sm:ml-2 px-3 py-1.5 rounded-lg text-sm bg-dark border border-border text-main focus:border-primary focus:outline-none"
+          >
+            @for (n of pageSizeOptions; track n) {
+              <option [ngValue]="n">{{ n }} / página</option>
+            }
+          </select>
+        </div>
+      </div>
     </div>
   }
 </div>

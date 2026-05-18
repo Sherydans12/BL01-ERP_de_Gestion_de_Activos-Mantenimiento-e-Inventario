@@ -38,7 +38,9 @@ export class PurchaseInvoicesController {
   ) {}
 
   /**
-   * Listado global por tenant. Query opcionales: `status`, `contractId`.
+   * Listado global por tenant. Query opcionales: `status`, `contractId`,
+   * `dueDateFrom`, `dueDateTo`, `search`, `page`, `pageSize`, `sort`, `dir`.
+   * Respuesta: `{ data, total, page, pageSize }`.
    * Sin `status` se listan todos los estados; sin `contractId` el alcance depende del rol
    * (ADMIN/SUPER_ADMIN: todos los contratos; resto: contratos permitidos en el JWT).
    */
@@ -50,19 +52,35 @@ export class PurchaseInvoicesController {
     @Query('contractId') contractId?: string,
     @Query('dueDateFrom') dueDateFrom?: string,
     @Query('dueDateTo') dueDateTo?: string,
+    @Query('search') search?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
   ) {
     const st = status?.trim();
     const cid = contractId?.trim();
     if (cid) {
       assertUserHasContractAccess(req.user, cid);
     }
-    return this.service.findAll(
-      req.user,
-      st || undefined,
-      cid || undefined,
+    const parseOptionalPositiveInt = (
+      raw: string | undefined,
+    ): number | undefined => {
+      if (raw === undefined || raw === '') return undefined;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    return this.service.findAll(req.user, {
+      status: st || undefined,
+      contractId: cid || undefined,
       dueDateFrom,
       dueDateTo,
-    );
+      search,
+      page: parseOptionalPositiveInt(pageRaw),
+      pageSize: parseOptionalPositiveInt(pageSizeRaw),
+      sort,
+      dir,
+    });
   }
 
   /**

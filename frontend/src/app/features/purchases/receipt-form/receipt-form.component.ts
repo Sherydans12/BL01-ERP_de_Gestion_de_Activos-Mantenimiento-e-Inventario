@@ -99,7 +99,7 @@ export class ReceiptFormComponent implements OnInit {
       next: (data) => {
         this.receipt.set(data);
         this.editableItems.set(
-          data.items.map(item => ({
+          (data.items ?? []).map((item) => ({
             ...item,
             _quantityReceived: item.quantityReceived,
             _observations: item.observations || '',

@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { WarehouseReceiptsService } from './warehouse-receipts.service';
@@ -19,8 +20,28 @@ export class WarehouseReceiptsController {
   constructor(private readonly service: WarehouseReceiptsService) {}
 
   @Get()
-  findAll(@Req() req: any) {
-    return this.service.findAll(req.user.tenantId, req.user);
+  findAll(
+    @Req() req: any,
+    @Query('search') search?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+  ) {
+    const parseOptionalPositiveInt = (
+      raw: string | undefined,
+    ): number | undefined => {
+      if (raw === undefined || raw === '') return undefined;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    return this.service.findAll(req.user.tenantId, req.user, {
+      search,
+      page: parseOptionalPositiveInt(pageRaw),
+      pageSize: parseOptionalPositiveInt(pageSizeRaw),
+      sort,
+      dir,
+    });
   }
 
   @Get(':id')

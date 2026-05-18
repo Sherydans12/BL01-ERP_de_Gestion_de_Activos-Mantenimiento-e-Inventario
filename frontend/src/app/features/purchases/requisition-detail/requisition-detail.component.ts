@@ -774,8 +774,8 @@ export class RequisitionDetailComponent implements OnInit {
 
   /** Lista actualizada al abrir el formulario de cotización. */
   ensureVendorsLoaded() {
-    this.vendorsService.getAll().subscribe({
-      next: (list) => this.vendors.set(list.filter((v) => v.isActive)),
+    this.vendorsService.getActiveCatalog().subscribe({
+      next: (list) => this.vendors.set(list),
       error: () => this.notify.error('Error al cargar proveedores'),
     });
   }

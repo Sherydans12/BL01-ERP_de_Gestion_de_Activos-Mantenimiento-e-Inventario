@@ -25,7 +25,7 @@ import { Contract } from '../../../core/models/types';
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
 import { PurchasesConceptInfoComponent } from '../../../shared/components/purchases-concept-info/purchases-concept-info.component';
 import { HttpErrorResponse } from '@angular/common/http';
-import { finalize } from 'rxjs/operators';
+import { finalize, map } from 'rxjs/operators';
 import { forkJoin } from 'rxjs';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { AuthService } from '../../../core/services/auth/auth.service';
@@ -267,10 +267,14 @@ export class PurchasesDashboardComponent implements OnInit, OnDestroy {
         includeClosed: true,
         ...(cid ? { contractId: cid } : {}),
       }),
-      invoices: this.purchasesService.listPurchaseInvoices({
-        status: 'PENDING',
-        ...(cid ? { contractId: cid } : {}),
-      }),
+      invoices: this.purchasesService
+        .listPurchaseInvoices({
+          status: 'PENDING',
+          page: 1,
+          pageSize: 50,
+          ...(cid ? { contractId: cid } : {}),
+        })
+        .pipe(map((r) => r.data.slice(0, 8))),
     }).subscribe({
       next: ({ ordersPage, invoices }) => {
         let ords = [...ordersPage.data];

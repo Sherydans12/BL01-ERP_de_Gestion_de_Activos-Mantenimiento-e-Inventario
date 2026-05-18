@@ -5,7 +5,7 @@
     <div>
       <h1 class="text-2xl font-bold text-main">Facturas de compra</h1>
       <p class="text-sm text-muted mt-1">
-        Facturas registradas; filtros por contrato, vencimiento y discrepancias 3-way.
+        Facturas registradas; filtros por contrato, vencimiento y discrepancias 3-way. Búsqueda y orden en servidor.
       </p>
     </div>
     <nav class="flex flex-wrap gap-2 shrink-0" aria-label="Vista facturas">
@@ -22,7 +22,50 @@
     </nav>
   </div>
 
-  <div class="bg-surface rounded-xl border border-border p-4 mb-6">
+  <div class="bg-surface rounded-xl border border-border p-4 mb-4">
+    <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5">Buscar facturas</label>
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div class="tpm-search-combobox relative flex flex-1 min-w-0 items-center rounded-lg border border-border bg-dark focus-within:border-primary/50">
+        <span class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+        </span>
+        <input
+          type="text"
+          inputmode="search"
+          spellcheck="false"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearchChange($event)"
+          (keydown.enter)="onSearchEnter($event)"
+          placeholder="Nº factura, referencia pago, proveedor, correlativo OC, UUID…"
+          class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0 pr-9 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted/60"
+          autocomplete="off"
+          aria-describedby="invoice-search-hint"
+        />
+        @if (hasActiveSearch()) {
+          <button
+            type="button"
+            (click)="clearSearch()"
+            class="absolute inset-y-0 right-0 flex items-center pr-2 text-muted hover:text-main rounded-md px-1.5"
+            aria-label="Limpiar búsqueda"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        }
+      </div>
+      @if (!isLoading() && hasActiveSearch()) {
+        <span class="text-xs text-muted whitespace-nowrap shrink-0">{{ total() }} coincidencia(s)</span>
+      }
+    </div>
+    <p id="invoice-search-hint" class="text-xs text-muted mt-2 leading-relaxed">
+      La búsqueda respeta contrato y fechas de vencimiento cuando los aplicó con el botón inferior.
+    </p>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-4">
     <div class="flex flex-col xl:flex-row xl:flex-wrap gap-4 xl:items-end">
       <div class="min-w-[200px] flex-1">
         <label class="block text-xs font-medium text-muted mb-1">Contrato</label>
@@ -87,11 +130,46 @@
       </button>
       <button
         type="button"
-        (click)="load()"
-        class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 shrink-0"
+        (click)="applyFilters()"
+        class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 shrink-0"
       >
         Aplicar filtros
       </button>
+    </div>
+  </div>
+
+  <div class="bg-surface rounded-xl border border-border p-4 mb-6 flex flex-col gap-4">
+    <div class="flex flex-col sm:flex-row flex-wrap gap-4 sm:items-end">
+      <div class="min-w-[12rem]">
+        <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1">Ordenar por</label>
+        <select
+          [ngModel]="sortField()"
+          (ngModelChange)="onSortFieldChange($event)"
+          class="w-full px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+        >
+          <option value="emissionDate">Fecha emisión</option>
+          <option value="dueDate">Fecha vencimiento</option>
+          <option value="invoiceNumber">Nº factura</option>
+          <option value="poCorrelative">Correlativo OC</option>
+          <option value="vendorName">Proveedor</option>
+          <option value="totalAmount">Monto</option>
+          <option value="status">Estado</option>
+          <option value="paidAt">Fecha pago</option>
+          <option value="createdAt">Fecha creación</option>
+          <option value="updatedAt">Fecha actualización</option>
+        </select>
+      </div>
+      <div class="min-w-[10rem]">
+        <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1">Dirección</label>
+        <select
+          [ngModel]="sortDir()"
+          (ngModelChange)="onSortDirChange($event)"
+          class="w-full px-4 py-2 bg-dark border border-border rounded-lg text-main focus:border-primary focus:outline-none"
+        >
+          <option value="asc">Ascendente</option>
+          <option value="desc">Descendente</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -210,14 +288,63 @@
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <p class="text-sm text-muted">No hay facturas para los filtros seleccionados.</p>
-                  <p class="text-xs text-muted/70">Para registrar una factura, abra una Orden de Compra aprobada y seleccione la pestaña "Facturación".</p>
+                  @if (hasActiveSearch()) {
+                    <p class="text-sm text-muted">No hay facturas que coincidan con la búsqueda.</p>
+                    <button
+                      type="button"
+                      (click)="clearSearch()"
+                      class="text-sm text-primary hover:underline"
+                    >
+                      Limpiar búsqueda
+                    </button>
+                  } @else {
+                    <p class="text-sm text-muted">No hay facturas para los filtros seleccionados.</p>
+                    <p class="text-xs text-muted/70">Para registrar una factura, abra una Orden de Compra aprobada y seleccione la pestaña "Facturación".</p>
+                  }
                 </div>
               </td>
             </tr>
           }
         </tbody>
       </table>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-border bg-dark/30">
+        <p class="text-sm text-muted">
+          @if (total() === 0) {
+            Sin registros en esta vista
+          } @else {
+            Mostrando <span class="text-main font-medium">{{ rangeFrom() }}</span>–<span class="text-main font-medium">{{ rangeTo() }}</span>
+            de <span class="text-main font-medium">{{ total() }}</span>
+          }
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            (click)="prevPage()"
+            [disabled]="page() <= 1"
+            class="px-3 py-1.5 rounded-lg text-sm border border-border text-main hover:bg-dark disabled:opacity-40 disabled:pointer-events-none"
+          >
+            Anterior
+          </button>
+          <span class="text-sm text-main font-mono px-1">Pág. {{ page() }} / {{ totalPages() }}</span>
+          <button
+            type="button"
+            (click)="nextPage()"
+            [disabled]="page() >= totalPages()"
+            class="px-3 py-1.5 rounded-lg text-sm border border-border text-main hover:bg-dark disabled:opacity-40 disabled:pointer-events-none"
+          >
+            Siguiente
+          </button>
+          <select
+            [ngModel]="pageSize()"
+            (ngModelChange)="onPageSizeChange($event)"
+            class="ml-0 sm:ml-2 px-3 py-1.5 rounded-lg text-sm bg-dark border border-border text-main focus:border-primary focus:outline-none"
+          >
+            @for (n of pageSizeOptions; track n) {
+              <option [ngValue]="n">{{ n }} / página</option>
+            }
+          </select>
+        </div>
+      </div>
     </div>
   }
 
@@ -255,7 +382,7 @@
           <button
             type="button"
             (click)="submitPay()"
-            class="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50"
             [disabled]="paySubmitting()"
           >
             Confirmar

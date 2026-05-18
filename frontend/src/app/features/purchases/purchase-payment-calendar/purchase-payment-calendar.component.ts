@@ -15,6 +15,7 @@ import { PurchasesPushNoticeComponent } from '../../../shared/components/purchas
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { FinancialClpPipe } from '../../../shared/pipes/financial-clp.pipe';
+import { map } from 'rxjs/operators';
 
 @Component({
   selector: 'app-purchase-payment-calendar',
@@ -291,15 +292,21 @@ export class PurchasePaymentCalendarComponent implements OnInit {
         contractId: cid,
         dueDateFrom: dateKey,
         dueDateTo: dateKey,
+        page: 1,
+        pageSize: 500,
       })
-      .subscribe({
-        next: (list) => {
-          const filtered = list.filter(
+      .pipe(
+        map((res) =>
+          res.data.filter(
             (inv) =>
               ['PENDING', 'MATCHED', 'DISCREPANCY'].includes(inv.status) &&
               this.effectiveDueDateKey(inv) === dateKey,
-          );
-          this.dayInvoices.set(filtered);
+          ),
+        ),
+      )
+      .subscribe({
+        next: (list) => {
+          this.dayInvoices.set(list);
           this.dayInvoicesLoading.set(false);
         },
         error: () => {

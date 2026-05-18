@@ -33,6 +33,89 @@ const INVOICE_STATUS_LIST: PurchaseInvoiceStatus[] = [
   'PAID',
 ];
 
+const INV_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isInvoiceListUuid(value: string | undefined | null): boolean {
+  return typeof value === 'string' && INV_UUID_RE.test(value);
+}
+
+const INV_LIST_SEARCH_MAX_LEN = 120;
+const INV_LIST_PAGE_SIZE_MAX = 500;
+/** Tope de filas leídas de BD cuando hay filtro por vencimiento (luego se refina por vencimiento efectivo en memoria). */
+const INV_DUE_POST_FILTER_CAP = 5000;
+
+const INV_LIST_SORT_FIELDS = [
+  'invoiceNumber',
+  'status',
+  'emissionDate',
+  'dueDate',
+  'totalAmount',
+  'createdAt',
+  'updatedAt',
+  'paidAt',
+  'poCorrelative',
+  'vendorName',
+] as const;
+
+type InvoiceListSortField = (typeof INV_LIST_SORT_FIELDS)[number];
+
+function isInvoiceListSortField(v: string): v is InvoiceListSortField {
+  return (INV_LIST_SORT_FIELDS as readonly string[]).includes(v);
+}
+
+function parseInvoiceListSort(
+  sort?: string,
+  dir?: string,
+): { field: InvoiceListSortField; order: 'asc' | 'desc' } {
+  const field: InvoiceListSortField =
+    sort && isInvoiceListSortField(sort) ? sort : 'emissionDate';
+  if (dir === 'asc' || dir === 'desc') {
+    return { field, order: dir };
+  }
+  if (
+    field === 'emissionDate' ||
+    field === 'dueDate' ||
+    field === 'createdAt' ||
+    field === 'updatedAt' ||
+    field === 'paidAt' ||
+    field === 'totalAmount'
+  ) {
+    return { field, order: 'desc' };
+  }
+  return { field, order: 'asc' };
+}
+
+function buildPurchaseInvoiceListOrderBy(
+  field: InvoiceListSortField,
+  order: 'asc' | 'desc',
+): Prisma.PurchaseInvoiceOrderByWithRelationInput {
+  switch (field) {
+    case 'poCorrelative':
+      return { purchaseOrder: { correlative: order } };
+    case 'vendorName':
+      return { vendor: { name: order } };
+    case 'invoiceNumber':
+      return { invoiceNumber: order };
+    case 'status':
+      return { status: order };
+    case 'emissionDate':
+      return { emissionDate: order };
+    case 'dueDate':
+      return { dueDate: order };
+    case 'totalAmount':
+      return { totalAmount: order };
+    case 'createdAt':
+      return { createdAt: order };
+    case 'updatedAt':
+      return { updatedAt: order };
+    case 'paidAt':
+      return { paidAt: order };
+    default:
+      return { emissionDate: 'desc' };
+  }
+}
+
 /** Vencimiento por defecto: 30 días después de la fecha de emisión. */
 function defaultDueDateFromEmission(emission: Date): Date {
   const d = new Date(emission.getTime());
@@ -69,6 +152,68 @@ type InvoiceEntity = Prisma.PurchaseInvoiceGetPayload<{
     };
   };
 }>;
+
+function sortInvoicesInMemory(
+  rows: InvoiceEntity[],
+  field: InvoiceListSortField,
+  order: 'asc' | 'desc',
+): InvoiceEntity[] {
+  const dir = order === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    let c = 0;
+    switch (field) {
+      case 'invoiceNumber':
+        c = (a.invoiceNumber || '').localeCompare(b.invoiceNumber || '', undefined, {
+          sensitivity: 'base',
+        });
+        break;
+      case 'status':
+        c = String(a.status).localeCompare(String(b.status));
+        break;
+      case 'emissionDate':
+        c =
+          new Date(a.emissionDate).getTime() - new Date(b.emissionDate).getTime();
+        break;
+      case 'dueDate': {
+        const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+        const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+        c = ta - tb;
+        break;
+      }
+      case 'totalAmount':
+        c = Number(a.totalAmount) - Number(b.totalAmount);
+        break;
+      case 'createdAt':
+        c = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        break;
+      case 'updatedAt':
+        c = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+        break;
+      case 'paidAt': {
+        const pa = a.paidAt ? new Date(a.paidAt).getTime() : 0;
+        const pb = b.paidAt ? new Date(b.paidAt).getTime() : 0;
+        c = pa - pb;
+        break;
+      }
+      case 'poCorrelative':
+        c = (a.purchaseOrder.correlative || '').localeCompare(
+          b.purchaseOrder.correlative || '',
+          undefined,
+          { sensitivity: 'base' },
+        );
+        break;
+      case 'vendorName':
+        c = (a.vendor.name || '').localeCompare(b.vendor.name || '', undefined, {
+          sensitivity: 'base',
+        });
+        break;
+      default:
+        c = 0;
+    }
+    if (c !== 0) return c * dir;
+    return a.id.localeCompare(b.id) * dir;
+  });
+}
 
 export type PurchaseInvoiceApi = InvoiceEntity & {
   hasDiscrepancy: boolean;
@@ -391,16 +536,63 @@ export class PurchaseInvoicesService {
     return { contractId: { in: allowed } };
   }
 
+  private invoiceListSearchOr(term: string): Prisma.PurchaseInvoiceWhereInput[] {
+    const mode = 'insensitive' as const;
+    const contains = (s: string): Prisma.StringFilter => ({
+      contains: s,
+      mode,
+    });
+    const clauses: Prisma.PurchaseInvoiceWhereInput[] = [
+      { invoiceNumber: contains(term) },
+      { paymentReference: contains(term) },
+      {
+        vendor: {
+          OR: [{ name: contains(term) }, { code: contains(term) }],
+        },
+      },
+      {
+        purchaseOrder: {
+          correlative: contains(term),
+        },
+      },
+    ];
+    if (isInvoiceListUuid(term)) {
+      clauses.unshift({ id: term });
+    }
+    return clauses;
+  }
+
   /**
-   * Lista global de facturas (submódulo). Filtros opcionales: `status`, `contractId`, `dueDateFrom`, `dueDateTo`.
+   * Lista global de facturas (submódulo). Filtros: `status`, `contractId`, `dueDateFrom`, `dueDateTo`;
+   * búsqueda, orden y paginación: `search`, `page`, `pageSize`, `sort`, `dir`.
+   * Respuesta: `{ data, total, page, pageSize }`.
+   * Con rango de vencimiento, el refinamiento por fecha efectiva (due null → emisión+30d) se aplica en memoria
+   * sobre un tope de filas (`INV_DUE_POST_FILTER_CAP`); el total refleja ese subconjunto.
    */
   async findAll(
     user: { tenantId: string; role?: string; allowedContracts?: string[] },
-    status?: string,
-    contractId?: string,
-    dueDateFrom?: string,
-    dueDateTo?: string,
-  ): Promise<PurchaseInvoiceApi[]> {
+    opts: {
+      status?: string;
+      contractId?: string;
+      dueDateFrom?: string;
+      dueDateTo?: string;
+      search?: string;
+      page?: number;
+      pageSize?: number;
+      sort?: string;
+      dir?: string;
+    } = {},
+  ): Promise<{
+    data: PurchaseInvoiceApi[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    const status = opts.status;
+    const contractId = opts.contractId;
+    const dueDateFrom = opts.dueDateFrom;
+    const dueDateTo = opts.dueDateTo;
+
     if (
       status !== undefined &&
       status !== '' &&
@@ -423,8 +615,8 @@ export class PurchaseInvoicesService {
     }
     const rangeStart = df ? new Date(`${df}T00:00:00.000Z`) : undefined;
     const rangeEnd = dt ? new Date(`${dt}T23:59:59.999Z`) : undefined;
+    const hasDueRange = !!(df || dt);
 
-    /** Incluye facturas con dueDate null cuyo vencimiento efectivo puede caer en el rango (emisión ± margen). */
     const dueRangeWhere: Prisma.PurchaseInvoiceWhereInput | undefined =
       df || dt
         ? {
@@ -447,37 +639,98 @@ export class PurchaseInvoicesService {
           }
         : undefined;
 
+    const pageSize = Math.min(
+      INV_LIST_PAGE_SIZE_MAX,
+      Math.max(1, Math.floor(opts.pageSize ?? 25)),
+    );
+    const requestedPage = Math.max(1, Math.floor(opts.page ?? 1));
+    const { field: sortField, order: sortOrder } = parseInvoiceListSort(
+      opts.sort,
+      opts.dir,
+    );
+
+    const searchTerm =
+      typeof opts.search === 'string'
+        ? opts.search.trim().slice(0, INV_LIST_SEARCH_MAX_LEN)
+        : '';
+    const searchOr = searchTerm ? this.invoiceListSearchOr(searchTerm) : [];
+
     const poWhere = this.purchaseOrderScopeWhere(user, contractId);
+
+    const baseAnd: Prisma.PurchaseInvoiceWhereInput[] = [
+      { tenantId: user.tenantId },
+      ...(status ? [{ status: status as PurchaseInvoiceStatus }] : []),
+      { purchaseOrder: poWhere },
+    ];
+    if (dueRangeWhere) {
+      baseAnd.push(dueRangeWhere);
+    }
+    if (searchOr.length > 0) {
+      baseAnd.push({ OR: searchOr });
+    }
+    const where: Prisma.PurchaseInvoiceWhereInput = { AND: baseAnd };
+
+    if (!hasDueRange) {
+      const total = await this.prisma.purchaseInvoice.count({ where });
+      const maxPage = Math.max(1, Math.ceil(total / pageSize));
+      const page = Math.min(requestedPage, maxPage);
+      const skip = (page - 1) * pageSize;
+
+      const orderBy: Prisma.PurchaseInvoiceOrderByWithRelationInput[] = [
+        buildPurchaseInvoiceListOrderBy(sortField, sortOrder),
+        { id: 'asc' },
+      ];
+
+      const rowsRaw = await this.prisma.purchaseInvoice.findMany({
+        where,
+        include: this.invoiceInclude(),
+        orderBy,
+        skip,
+        take: pageSize,
+      });
+      const discIds = rowsRaw
+        .filter((r) => r.status === 'DISCREPANCY')
+        .map((r) => r.id);
+      const reasonMap = await this.fetchDiscrepancyReasonsMap(
+        user.tenantId,
+        discIds,
+      );
+      const data = await Promise.all(
+        rowsRaw.map((r) =>
+          this.attachInvoiceMeta(r, user.tenantId, reasonMap),
+        ),
+      );
+      return { data, total, page, pageSize };
+    }
+
     const rowsRaw = await this.prisma.purchaseInvoice.findMany({
-      where: {
-        tenantId: user.tenantId,
-        ...(status ? { status: status as PurchaseInvoiceStatus } : {}),
-        ...(dueRangeWhere ?? {}),
-        purchaseOrder: poWhere,
-      },
+      where,
       include: this.invoiceInclude(),
       orderBy: [{ emissionDate: 'desc' }, { createdAt: 'desc' }],
-      take: 1000,
+      take: INV_DUE_POST_FILTER_CAP,
     });
-    const rows =
-      df || dt
-        ? rowsRaw.filter((r) => {
-            const eff = effectiveDueForCalendar(r);
-            if (rangeStart && eff < rangeStart) return false;
-            if (rangeEnd && eff > rangeEnd) return false;
-            return true;
-          })
-        : rowsRaw;
-    const discIds = rows
+    const filtered = rowsRaw.filter((r) => {
+      const eff = effectiveDueForCalendar(r);
+      if (rangeStart && eff < rangeStart) return false;
+      if (rangeEnd && eff > rangeEnd) return false;
+      return true;
+    });
+    const sorted = sortInvoicesInMemory(filtered, sortField, sortOrder);
+    const total = sorted.length;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, maxPage);
+    const slice = sorted.slice((page - 1) * pageSize, page * pageSize);
+    const discIds = slice
       .filter((r) => r.status === 'DISCREPANCY')
       .map((r) => r.id);
     const reasonMap = await this.fetchDiscrepancyReasonsMap(
       user.tenantId,
       discIds,
     );
-    return Promise.all(
-      rows.map((r) => this.attachInvoiceMeta(r, user.tenantId, reasonMap)),
+    const data = await Promise.all(
+      slice.map((r) => this.attachInvoiceMeta(r, user.tenantId, reasonMap)),
     );
+    return { data, total, page, pageSize };
   }
 
   private async loadInvoiceEntity(
