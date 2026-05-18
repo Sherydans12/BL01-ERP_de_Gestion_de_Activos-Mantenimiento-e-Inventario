@@ -9,6 +9,9 @@ import { LocalStorageProvider } from './providers/local-storage.provider';
 import { R2StorageProvider } from './providers/r2-storage.provider';
 import { MAX_UPLOAD_FILE_BYTES } from './file-upload.constants';
 
+/** SigV4 (S3, Cloudflare R2): TTL máximo legal para URLs presignadas. */
+export const S3_COMPATIBLE_MAX_PRESIGN_TTL_SECONDS = 60 * 60 * 24 * 7;
+
 export type UploadedFileMeta = {
   storageKey: string;
   publicUrl: string;
@@ -108,7 +111,8 @@ export class StorageService {
 
   /**
    * URL usable por el navegador (local o firmada en R2/S3).
-   * `signedTtlSeconds` solo aplica a almacenamiento privado firmado (default 300s).
+   * `signedTtlSeconds` solo aplica a almacenamiento privado firmado (default 300s;
+   * en S3/R2 no puede superar {@link S3_COMPATIBLE_MAX_PRESIGN_TTL_SECONDS} por límite SigV4).
    */
   async getReadOnlyUrl(
     storageKey: string,
@@ -364,7 +368,12 @@ export class StorageService {
     storageKey: string,
     expiresInSeconds = 3600,
   ): Promise<string> {
-    return this.provider.getSignedUrl(storageKey, expiresInSeconds);
+    const requested = Math.floor(Number(expiresInSeconds));
+    const safe = Math.min(
+      Math.max(1, Number.isFinite(requested) ? requested : 3600),
+      S3_COMPATIBLE_MAX_PRESIGN_TTL_SECONDS,
+    );
+    return this.provider.getSignedUrl(storageKey, safe);
   }
 
   /** @deprecated usar getPublicUrl(storageKey) */

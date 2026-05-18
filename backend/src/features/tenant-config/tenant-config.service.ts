@@ -8,10 +8,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateTenantConfigDto } from './dto/update-tenant-config.dto';
 import { ensureDefaultTenantRolesForTenant } from '../tenant-roles/tenant-role-defaults';
 import { ensureDefaultUnitsOfMeasureForTenant } from '../inventory-items/unit-of-measure-defaults';
-import { StorageService } from '../../common/storage/storage.service';
+import {
+  StorageService,
+  S3_COMPATIBLE_MAX_PRESIGN_TTL_SECONDS,
+} from '../../common/storage/storage.service';
 
-/** URLs firmadas del logo (R2/S3): TTL largo para sesiones abiertas sin recargar layout. */
-const TENANT_LOGO_SIGNED_TTL_SECONDS = 60 * 60 * 24 * 60; // 60 días
+/** Logos en UI (R2/S3): máximo permitido por SigV4; sesiones más largas → recargar o re-fetch config. */
+const TENANT_LOGO_SIGNED_TTL_SECONDS = S3_COMPATIBLE_MAX_PRESIGN_TTL_SECONDS;
 
 function looksLikeExternalOrLocalUrl(raw: string): boolean {
   const s = raw.trim();
