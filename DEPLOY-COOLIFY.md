@@ -97,6 +97,14 @@ El `frontend/Dockerfile` usa **`nginxinc/nginx-unprivileged:stable-alpine`**, qu
 
 Guía detallada: [`docs/agentes/remediacion-docker-trivy-coolify.md`](remediacion-docker-trivy-coolify.md).
 
+### Cloudflare **522** y URL con **`:8080`** en el navegador
+
+Si en la barra de direcciones o en DevTools aparece algo como `http://app.tudominio.cl:8080/app/...`, al **recargar** el navegador repite esa URL: la petición va a Cloudflare **en el puerto 8080**, donde no hay origen válido → **Error 522** (timeout hacia el origen). El **8080** es solo el puerto **dentro** del contenedor nginx; **no** debe formar parte de la URL pública.
+
+**Qué hacer en infra:** revisá Coolify / Traefik / reglas de Cloudflare para que el dominio público sea `https://…` o `http://…` **sin** `:8080`, y que el mapeo al contenedor use 8080 solo en el upstream interno.
+
+**Mitigación en el repo:** en `frontend/src/index.html` hay un script al inicio de `<head>` que, si detecta `location.port === '8080'` (y no es localhost), hace `location.replace` al mismo host y protocolo **sin** ese puerto. En `frontend/nginx.conf` está `port_in_redirect off` para que redirecciones emitidas por nginx no añadan el puerto interno.
+
 ## Scripts útiles (solo desarrollo / operaciones manuales)
 
 En el repo, desde `backend/`:

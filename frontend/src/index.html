@@ -2,6 +2,27 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <!--
+      El frontend Docker escucha en 8080 solo *dentro* del contenedor. Si esa URL llega al
+      navegador (proxy/Coolify mal configurado), Cloudflare intenta :8080 y devuelve 522.
+      Normalizamos de inmediato al mismo host/protocolo sin puerto explícito.
+    -->
+    <script>
+      (function () {
+        if (typeof location === 'undefined') return;
+        if (location.port !== '8080') return;
+        var host = location.hostname;
+        if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return;
+        var target =
+          location.protocol +
+          '//' +
+          host +
+          location.pathname +
+          location.search +
+          location.hash;
+        location.replace(target);
+      })();
+    </script>
     <title>BaseLogic — EAM / ERP industrial</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
