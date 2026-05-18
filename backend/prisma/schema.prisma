@@ -601,6 +601,8 @@ model Tenant {
   ocPdfLegalNotice       String?               @map("oc_pdf_legal_notice") @db.Text
 
   logoUrl               String?               @map("logo_url") @db.VarChar(255)
+  /** Variante del logo del menú para tema claro (barra lateral). Si es null, se usa `logoUrl`. */
+  logoLightUrl          String?               @map("logo_light_url") @db.VarChar(255)
   /** Logo horizontal para PDFs de compras (OC, SRC, reporte ejecutivo). Independiente del logo del menú (`logoUrl`). */
   pdfLogoUrl            String?               @map("pdf_logo_url") @db.VarChar(255)
   primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)

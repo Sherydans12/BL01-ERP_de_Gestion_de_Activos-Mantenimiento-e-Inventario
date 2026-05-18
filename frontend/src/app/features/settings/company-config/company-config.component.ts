@@ -91,6 +91,7 @@ export class CompanyConfigComponent implements OnInit {
   isSaving = signal(false);
   isSavingPurchasesModal = signal(false);
   isUploadingLogo = signal(false);
+  isUploadingLogoLight = signal(false);
   isUploadingPdfLogo = signal(false);
   readonly palette = BRAND_PALETTE;
 
@@ -110,6 +111,7 @@ export class CompanyConfigComponent implements OnInit {
         [Validators.required, Validators.pattern(/^#[0-9a-fA-F]{6}$/i)],
       ],
       logoUrl: [''],
+      logoLightUrl: [''],
       laborRatePerHour: [0, [Validators.min(0)]],
     });
   }
@@ -136,6 +138,7 @@ export class CompanyConfigComponent implements OnInit {
 
   private patchForm(t: Tenant) {
     const rawLogo = (t.logoUrl || '').trim();
+    const rawLogoLight = (t.logoLightUrl || '').trim();
     this.configForm.patchValue({
       rut: t.rut || '',
       address: t.address || '',
@@ -145,6 +148,7 @@ export class CompanyConfigComponent implements OnInit {
       ocPdfLegalNotice: t.ocPdfLegalNotice || '',
       primaryColor: t.primaryColor || '#00E5FF',
       logoUrl: isHttpLogoUrl(rawLogo) ? rawLogo : '',
+      logoLightUrl: isHttpLogoUrl(rawLogoLight) ? rawLogoLight : '',
       laborRatePerHour: t.laborRatePerHour ?? 0,
     });
   }
@@ -154,6 +158,14 @@ export class CompanyConfigComponent implements OnInit {
     const pub = (t.logoPublicUrl || '').trim();
     if (pub) return pub;
     const raw = (t.logoUrl || '').trim();
+    return isHttpLogoUrl(raw) ? raw : null;
+  }
+
+  logoLightPreviewSrc(t: Tenant | null): string | null {
+    if (!t) return null;
+    const pub = (t.logoLightPublicUrl || '').trim();
+    if (pub) return pub;
+    const raw = (t.logoLightUrl || '').trim();
     return isHttpLogoUrl(raw) ? raw : null;
   }
 
@@ -182,6 +194,42 @@ export class CompanyConfigComponent implements OnInit {
       error: () => {
         this.notification.error('No se pudo subir el logo (máx. 2 MB, PNG/JPEG/WebP).');
         this.isUploadingLogo.set(false);
+      },
+    });
+  }
+
+  onLogoLightFileSelected(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.isUploadingLogoLight.set(true);
+    this.tenantService.uploadTenantLogoLight(file).subscribe({
+      next: (config) => {
+        this.tenantService.setTenant(config);
+        this.patchForm(config);
+        this.notification.success('Logo para modo claro actualizado');
+        this.isUploadingLogoLight.set(false);
+      },
+      error: () => {
+        this.notification.error('No se pudo subir el logo modo claro (máx. 2 MB, PNG/JPEG/WebP).');
+        this.isUploadingLogoLight.set(false);
+      },
+    });
+  }
+
+  clearMenuLogoLight(): void {
+    this.isUploadingLogoLight.set(true);
+    this.tenantService.updateTenantConfig({ logoLightUrl: '' }).subscribe({
+      next: (config) => {
+        this.tenantService.setTenant(config);
+        this.patchForm(config);
+        this.notification.success('Logo modo claro eliminado');
+        this.isUploadingLogoLight.set(false);
+      },
+      error: () => {
+        this.notification.error('No se pudo quitar el logo modo claro');
+        this.isUploadingLogoLight.set(false);
       },
     });
   }
@@ -330,6 +378,9 @@ export class CompanyConfigComponent implements OnInit {
     const raw = { ...this.configForm.value } as Record<string, unknown>;
     if (!(raw['logoUrl'] as string)?.toString().trim()) {
       delete raw['logoUrl'];
+    }
+    if (!(raw['logoLightUrl'] as string)?.toString().trim()) {
+      delete raw['logoLightUrl'];
     }
     const data = raw as Partial<Tenant>;
 

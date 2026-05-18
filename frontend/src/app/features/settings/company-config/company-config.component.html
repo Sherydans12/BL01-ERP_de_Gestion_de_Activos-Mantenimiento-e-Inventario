@@ -183,11 +183,17 @@
           Identidad Visual
         </h3>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          <div class="space-y-3 md:col-span-2">
-            <label class="block text-sm font-medium text-muted">Logo del menú (barra lateral)</label>
+        <p class="text-xs text-muted/80">
+          El <strong class="text-main/90">menú lateral</strong> elige automáticamente la variante según el tema (claro u oscuro) desde la barra superior.
+          Si no configurás logo para modo claro, se usa el mismo que en oscuro.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <!-- Logo tema oscuro -->
+          <div class="space-y-3 rounded-xl border border-border bg-dark/30 p-4">
+            <label class="block text-sm font-medium text-main">Logo — tema oscuro</label>
             <p class="text-xs text-muted/80">
-              Solo navegación y cabecera de la app. Recomendado: horizontal
+              Recomendado: horizontal
               <span class="font-mono text-main">320×96 px a 480×120 px</span> (ratio ~4:1), PNG o WebP, máx. 2 MB.
               No se usa en PDFs de compras.
             </p>
@@ -209,24 +215,77 @@
                 }
               </label>
               @if (logoPreviewSrc(tenantService.currentTenant()); as src) {
-                <div class="flex items-center gap-3 rounded-lg border border-border bg-dark/50 px-3 py-2">
-                  <img [src]="src" alt="Vista previa logo menú" class="max-h-12 max-w-[200px] object-contain" />
+                <div class="flex items-center gap-3 rounded-lg border border-border bg-[#0f1419] px-3 py-2">
+                  <img [src]="src" alt="Vista previa logo menú oscuro" class="max-h-12 max-w-[200px] object-contain" />
                 </div>
               }
             </div>
+            <div class="space-y-2 pt-1">
+              <label class="block text-sm font-medium text-muted">URL pública (opcional)</label>
+              <input
+                type="text"
+                formControlName="logoUrl"
+                class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                placeholder="https://…/logo-oscuro.png"
+              />
+              <p class="text-xs text-muted/80">
+                Si completás una URL HTTP(S), se usará al <strong class="text-main/90">guardar cambios</strong> (sustituye al archivo subido para esta variante).
+              </p>
+            </div>
           </div>
 
-          <div class="space-y-2 md:col-span-2">
-            <label class="block text-sm font-medium text-muted">O URL pública del logo (opcional)</label>
-            <input
-              type="text"
-              formControlName="logoUrl"
-              class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-              placeholder="https://…/logo.png"
-            />
+          <!-- Logo tema claro -->
+          <div class="space-y-3 rounded-xl border border-border bg-dark/20 p-4">
+            <label class="block text-sm font-medium text-main">Logo — tema claro</label>
             <p class="text-xs text-muted/80">
-              Si completás una URL HTTP(S), se usará en el <strong class="text-main/90">menú lateral</strong> al guardar cambios (sustituye al archivo subido). No afecta los PDFs de compras.
+              Variante para fondo claro del sidebar (p. ej. trazos oscuros o versión invertida de la marca).
+              Mismas dimensiones y límites que el logo de tema oscuro.
             </p>
+            <div class="flex flex-wrap items-center gap-4">
+              <label
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-dark text-sm font-medium text-main cursor-pointer hover:border-primary/60 transition-colors"
+              >
+                <input
+                  type="file"
+                  class="sr-only"
+                  accept="image/png,image/jpeg,image/webp"
+                  [disabled]="isUploadingLogoLight()"
+                  (change)="onLogoLightFileSelected($event)"
+                />
+                @if (isUploadingLogoLight()) {
+                  <span class="text-muted">Subiendo…</span>
+                } @else {
+                  Subir archivo…
+                }
+              </label>
+              @if (logoLightPreviewSrc(tenantService.currentTenant()); as srcLight) {
+                <div class="flex items-center gap-3 rounded-lg border border-border bg-white px-3 py-2">
+                  <img [src]="srcLight" alt="Vista previa logo menú claro" class="max-h-12 max-w-[200px] object-contain" />
+                </div>
+              }
+              @if (logoLightPreviewSrc(tenantService.currentTenant())) {
+                <button
+                  type="button"
+                  class="text-sm text-muted hover:text-main underline disabled:opacity-50"
+                  [disabled]="isUploadingLogoLight()"
+                  (click)="clearMenuLogoLight()"
+                >
+                  Quitar logo modo claro
+                </button>
+              }
+            </div>
+            <div class="space-y-2 pt-1">
+              <label class="block text-sm font-medium text-muted">URL pública modo claro (opcional)</label>
+              <input
+                type="text"
+                formControlName="logoLightUrl"
+                class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                placeholder="https://…/logo-claro.png"
+              />
+              <p class="text-xs text-muted/80">
+                Opcional: misma regla que arriba — al guardar, reemplaza el archivo subido para la variante clara.
+              </p>
+            </div>
           </div>
         </div>
 

@@ -45,6 +45,11 @@ export class UpdateTenantConfigDto {
   @IsOptional()
   logoUrl?: string;
 
+  /** Variante menú lateral tema claro; vacío → quitar (PATCH). */
+  @IsString()
+  @IsOptional()
+  logoLightUrl?: string | null;
+
   /** Clave storage del logo solo para PDFs de compras; vacío → quitar (PATCH). */
   @IsString()
   @IsOptional()

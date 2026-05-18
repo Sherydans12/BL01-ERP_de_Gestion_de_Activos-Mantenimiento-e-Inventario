@@ -128,6 +128,23 @@ export class LayoutComponent implements OnInit {
     );
   });
 
+  /** Logo del sidebar: en tema claro usa `logoLight*` si está configurado; si no, el logo principal. */
+  sidebarMenuLogoSrc = computed(() => {
+    const t = this.currentTenant();
+    if (!t) return null;
+    if (!this.themeService.isDark()) {
+      const lightPub = (t.logoLightPublicUrl || '').trim();
+      if (lightPub) return lightPub;
+      const lightRaw = (t.logoLightUrl || '').trim();
+      if (lightRaw && /^https?:\/\//i.test(lightRaw)) return lightRaw;
+    }
+    const pub = (t.logoPublicUrl || '').trim();
+    if (pub) return pub;
+    const raw = (t.logoUrl || '').trim();
+    if (raw && /^https?:\/\//i.test(raw)) return raw;
+    return null;
+  });
+
   logout() {
     this.profileMenuOpen.set(false);
     this.authService.logout();

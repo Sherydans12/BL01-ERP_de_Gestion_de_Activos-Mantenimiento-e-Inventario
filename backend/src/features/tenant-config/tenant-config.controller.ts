@@ -50,6 +50,20 @@ export class TenantConfigController {
     return this.tenantConfigService.uploadTenantLogo(req.user.tenantId, file);
   }
 
+  @Post('logo-light')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseInterceptors(
+    FileInterceptor('file', tenantLogoUploadLimits),
+    new FileValidationInterceptor(tenantLogoUploadPolicy),
+  )
+  uploadTenantLogoLight(
+    @Req() req: any,
+    @UploadedFile()
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+  ) {
+    return this.tenantConfigService.uploadTenantLogoLight(req.user.tenantId, file);
+  }
+
   @Post('pdf-logo')
   @Roles('ADMIN', 'SUPER_ADMIN')
   @UseInterceptors(

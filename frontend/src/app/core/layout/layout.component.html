@@ -18,9 +18,9 @@
 
     <!-- Logo area -->
     <div class="h-14 lg:h-16 flex items-center gap-3 px-5 border-b border-border shrink-0">
-      @if (currentTenant()?.logoPublicUrl || currentTenant()?.logoUrl) {
+      @if (sidebarMenuLogoSrc(); as logoSrc) {
         <img
-          [src]="currentTenant()?.logoPublicUrl || currentTenant()?.logoUrl"
+          [src]="logoSrc"
           alt="Logo"
           class="max-h-9 max-w-[140px] object-contain"
         />

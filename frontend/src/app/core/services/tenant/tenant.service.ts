@@ -17,6 +17,9 @@ export interface Tenant {
   logoUrl?: string | null;
   /** URL lista para `<img src>` (p. ej. firmada en R2). Menú lateral. */
   logoPublicUrl?: string | null;
+  /** Variante del logo del menú para tema claro (misma semántica que `logoUrl`). */
+  logoLightUrl?: string | null;
+  logoLightPublicUrl?: string | null;
   /** Logo ancho para PDFs de compras (OC, SRC, reporte ejecutivo). Independiente del menú. */
   pdfLogoUrl?: string | null;
   pdfLogoPublicUrl?: string | null;
@@ -85,6 +88,16 @@ export class TenantService {
     fd.append('file', file);
     return this.http.post<Tenant>(
       `${environment.apiUrl}/tenant-config/logo`,
+      fd,
+    );
+  }
+
+  /** Variante del logo del menú para tema claro (misma validación que el logo principal). */
+  uploadTenantLogoLight(file: File): Observable<Tenant> {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<Tenant>(
+      `${environment.apiUrl}/tenant-config/logo-light`,
       fd,
     );
   }
