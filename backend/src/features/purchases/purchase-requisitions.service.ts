@@ -1713,7 +1713,13 @@ export class PurchaseRequisitionsService {
       where: { id, tenantId },
       include: {
         tenant: {
-          select: { name: true, rut: true, logoUrl: true, primaryColor: true },
+          select: {
+            name: true,
+            rut: true,
+            logoUrl: true,
+            pdfLogoUrl: true,
+            primaryColor: true,
+          },
         },
         requestedBy: { select: { name: true, email: true } },
         contract: { select: { code: true, name: true } },
@@ -1761,7 +1767,7 @@ export class PurchaseRequisitionsService {
     }
 
     const tenantLogoDataUri = await this.tryFetchTenantLogoDataUri(
-      requisition.tenant.logoUrl,
+      requisition.tenant.pdfLogoUrl,
     );
     const buffer = await generatePurchaseRequisitionPdfBuffer(requisition, {
       tenantLogoDataUri,

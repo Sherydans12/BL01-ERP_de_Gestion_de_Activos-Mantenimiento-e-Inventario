@@ -735,6 +735,7 @@ export class PurchaseOrdersService {
             invoiceLegalName: true,
             ocPdfLegalNotice: true,
             logoUrl: true,
+            pdfLogoUrl: true,
             primaryColor: true,
           },
         },
@@ -792,7 +793,7 @@ export class PurchaseOrdersService {
     };
 
     const tenantLogoDataUri = await this.tryFetchTenantLogoDataUri(
-      order.tenant.logoUrl,
+      order.tenant.pdfLogoUrl,
     );
     const buffer = await generatePurchaseOrderPdfBuffer(orderForPdf, {
       tenantLogoDataUri,

@@ -21,7 +21,8 @@
         Empresa
       </h1>
       <p class="text-muted mt-1 font-mono text-sm">
-        Datos fiscales, tarifa de mantenimiento, logo y color de marca. Compras y PDF de OC se editan en una ventana aparte.
+        Datos fiscales, tarifa de mantenimiento, color de marca y <strong class="text-main/90">logo del menú lateral</strong>.
+        El logo amplio para PDFs de compras (OC, SRC, reporte ejecutivo) se configura en la ventana «Compras y PDF de orden de compra».
       </p>
     </div>
   </div>
@@ -125,9 +126,9 @@
           <div class="min-w-0">
             <h3 class="text-sm font-semibold text-main">Compras y PDF de orden de compra</h3>
             <p class="text-xs text-muted mt-1 leading-relaxed">
-              Razón social en OC y texto del aviso legal del PDF. Podés guardarlos desde la ventana con
-              <span class="font-mono text-main/90">Guardar en servidor</span> o con
-              <span class="font-mono text-main/90">Guardar cambios</span> al pie de la página.
+              Razón social en OC, aviso legal del PDF, y <strong class="text-main/90">logo ancho para PDFs</strong> (independiente del menú).
+              Podés guardar textos con <span class="font-mono text-main/90">Guardar en servidor</span> o con
+              <span class="font-mono text-main/90">Guardar cambios</span> al pie de la página. El logo PDF se sube desde la misma ventana.
             </p>
           </div>
         </div>
@@ -184,9 +185,11 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           <div class="space-y-3 md:col-span-2">
-            <label class="block text-sm font-medium text-muted">Logo de empresa</label>
+            <label class="block text-sm font-medium text-muted">Logo del menú (barra lateral)</label>
             <p class="text-xs text-muted/80">
-              Recomendado: imagen horizontal <span class="font-mono text-main">aprox. 320×96 px a 480×120 px</span>, fondo transparente o sólido, formato PNG o WebP. Peso máximo 2 MB. El mismo logo se usa en el menú lateral y en el PDF de OC.
+              Solo navegación y cabecera de la app. Recomendado: horizontal
+              <span class="font-mono text-main">320×96 px a 480×120 px</span> (ratio ~4:1), PNG o WebP, máx. 2 MB.
+              No se usa en PDFs de compras.
             </p>
             <div class="flex flex-wrap items-center gap-4">
               <label
@@ -207,7 +210,7 @@
               </label>
               @if (logoPreviewSrc(tenantService.currentTenant()); as src) {
                 <div class="flex items-center gap-3 rounded-lg border border-border bg-dark/50 px-3 py-2">
-                  <img [src]="src" alt="Vista previa logo" class="max-h-10 max-w-[160px] object-contain" />
+                  <img [src]="src" alt="Vista previa logo menú" class="max-h-12 max-w-[200px] object-contain" />
                 </div>
               }
             </div>
@@ -222,7 +225,7 @@
               placeholder="https://…/logo.png"
             />
             <p class="text-xs text-muted/80">
-              Si completás una URL HTTP(S), se usará en lugar del archivo subido al guardar cambios.
+              Si completás una URL HTTP(S), se usará en el <strong class="text-main/90">menú lateral</strong> al guardar cambios (sustituye al archivo subido). No afecta los PDFs de compras.
             </p>
           </div>
         </div>
@@ -411,8 +414,9 @@
 
               <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
                 <p class="text-xs text-muted leading-relaxed">
-                  Usá <span class="font-mono text-main/90">Guardar en servidor</span> para persistir el aviso y la razón social
-                  (así el PDF de OC los toma al instante). <span class="font-mono text-main/90">Cerrar</span> solo cierra la ventana.
+                  Usá <span class="font-mono text-main/90">Guardar en servidor</span> para persistir razón social y aviso legal
+                  (así el PDF de OC los toma al instante). El <strong class="text-main/90">logo de PDFs</strong> se guarda al subir o al quitar.
+                  <span class="font-mono text-main/90">Cerrar</span> solo cierra la ventana.
                 </p>
 
                 <div class="space-y-2">
@@ -426,6 +430,47 @@
                   <p class="text-xs text-muted/80">
                     Nombre legal en «Emitir factura a nombre de» en el PDF de OC (prioritario sobre el nombre en aplicación si ambos existen).
                   </p>
+                </div>
+
+                <div class="space-y-3 rounded-lg border border-border bg-dark/30 px-4 py-3">
+                  <label class="block text-sm font-medium text-muted">Logo para PDFs de compras</label>
+                  <p class="text-xs text-muted/80 leading-relaxed">
+                    Archivo distinto al del menú: se incrusta en <strong class="text-main/90">orden de compra</strong>,
+                    <strong class="text-main/90">resumen SRC</strong> y <strong class="text-main/90">reporte ejecutivo de compras</strong>.
+                    Sugerido de origen: <span class="font-mono text-main">480×120 px</span> (u horizontal similar, ratio ~4:1); en el PDF se escala más grande que en pantalla.
+                    PNG o WebP, máx. 2 MB.
+                  </p>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <label
+                      class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-dark text-xs font-semibold text-main cursor-pointer hover:border-primary/60 transition-colors"
+                    >
+                      <input
+                        type="file"
+                        class="sr-only"
+                        accept="image/png,image/jpeg,image/webp"
+                        [disabled]="isUploadingPdfLogo()"
+                        (change)="onPurchasesPdfLogoFileSelected($event)"
+                      />
+                      @if (isUploadingPdfLogo()) {
+                        <span class="text-muted">Procesando…</span>
+                      } @else {
+                        Subir logo PDF…
+                      }
+                    </label>
+                    @if (pdfLogoPreviewSrc(tenantService.currentTenant()); as pdfSrc) {
+                      <div class="flex items-center gap-2 rounded-lg border border-border bg-dark/50 px-2 py-1.5">
+                        <img [src]="pdfSrc" alt="Vista previa logo PDF" class="max-h-14 max-w-[220px] object-contain" />
+                      </div>
+                      <button
+                        type="button"
+                        (click)="clearPurchasesPdfLogo()"
+                        [disabled]="isUploadingPdfLogo()"
+                        class="text-xs font-semibold text-red-300 hover:text-red-200 border border-red-500/40 rounded-lg px-3 py-2 disabled:opacity-50"
+                      >
+                        Quitar logo PDF
+                      </button>
+                    }
+                  </div>
                 </div>
 
                 <div class="space-y-2">

@@ -9,7 +9,7 @@ Este documento fija el **patrón oficial** para PDFs generados en el backend: **
 | Plantilla OC + helpers | `backend/src/features/purchases/purchase-order-pdf.generator.ts` |
 | Plantilla SRC (resumen) | `backend/src/features/purchases/purchase-requisition-pdf.generator.ts` |
 | Plantilla reporte ejecutivo compras | `backend/src/features/purchases/purchases-analytics-report-pdf.generator.ts` |
-| Stream PDF OC (include Prisma + logo; merge aviso/razón social desde `tenants`) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
+| Stream PDF OC (include Prisma + `pdfLogoUrl`; merge aviso/razón social desde `tenants`) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
 | Stream PDF SRC | `backend/src/features/purchases/purchase-requisitions.service.ts` → `getRequisitionPdfStream` |
 | PDF OC HTTP (`Cache-Control: no-store`) | `backend/src/features/purchases/purchase-orders.controller.ts` → `GET :id/pdf` |
 | PDF SRC HTTP | `backend/src/features/purchases/purchase-requisitions.controller.ts` → `GET :id/pdf` |
@@ -44,7 +44,7 @@ Orden conceptual reutilizable; **omití** bloques que el documento no necesite.
 
 ## Configuración del aviso legal (PDF OC)
 
-El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPdfLegalNotice`** (`oc_pdf_legal_notice`, multilínea). Se edita en **Configuración → Empresa** (ventana **Compras y PDF de orden de compra**): **Guardar en servidor** persiste solo razón social + aviso; el **Guardar cambios** del pie aplica todo el formulario. Si el aviso queda vacío, `purchase-order-pdf.generator.ts` usa el arreglo por defecto `DEFAULT_OC_PDF_LEGAL_NOTICE_LINES` (cada línea se escapa con `escapeHtml` y se une con `<br/>`).
+El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPdfLegalNotice`** (`oc_pdf_legal_notice`, multilínea). Se edita en **Configuración → Empresa** (ventana **Compras y PDF de orden de compra**): **Guardar en servidor** persiste razón social + aviso; el **logo ancho de PDFs** se sube o quita en esa misma ventana (campo **`Tenant.pdfLogoUrl`**). El **Guardar cambios** del pie aplica todo el formulario de empresa. Si el aviso queda vacío, `purchase-order-pdf.generator.ts` usa el arreglo por defecto `DEFAULT_OC_PDF_LEGAL_NOTICE_LINES` (cada línea se escapa con `escapeHtml` y se une con `<br/>`).
 
 ## Estilo y legibilidad
 
@@ -66,7 +66,7 @@ Para un **nuevo** documento: creá un generador dedicado (p. ej. `*-pdf.generato
 ## Seguridad y datos
 
 - Tratar el HTML como **salida**: siempre escapar textos variables.
-- No incrustar URLs arbitrarias sin control (logo: preferir `data:image/...` resuelto en servidor).
+- No incrustar URLs arbitrarias sin control (logo en PDF: preferir `data:image/...` resuelto en servidor desde **`Tenant.pdfLogoUrl`** vía storage; el logo del **menú lateral** usa solo **`Tenant.logoUrl`** en Configuración → Empresa → Identidad visual).
 - No loguear HTML completo en producción (ruido y fuga de datos).
 
 ## Pruebas locales

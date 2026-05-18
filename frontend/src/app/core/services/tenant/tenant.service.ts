@@ -13,10 +13,13 @@ export interface Tenant {
   invoiceLegalName?: string | null;
   /** Aviso legal del recuadro en el PDF de OC (multilínea). Vacío = texto por defecto en el generador. */
   ocPdfLegalNotice?: string | null;
-  /** Clave de storage o URL externa (persistido). */
+  /** Clave de storage o URL externa (persistido). Solo menú lateral / layout. */
   logoUrl?: string | null;
-  /** URL lista para `<img src>` (p. ej. firmada en R2). */
+  /** URL lista para `<img src>` (p. ej. firmada en R2). Menú lateral. */
   logoPublicUrl?: string | null;
+  /** Logo ancho para PDFs de compras (OC, SRC, reporte ejecutivo). Independiente del menú. */
+  pdfLogoUrl?: string | null;
+  pdfLogoPublicUrl?: string | null;
   primaryColor?: string;
   laborRatePerHour?: number | null;
   backgroundPreference?: 'DARK' | 'LIGHT';
@@ -82,6 +85,16 @@ export class TenantService {
     fd.append('file', file);
     return this.http.post<Tenant>(
       `${environment.apiUrl}/tenant-config/logo`,
+      fd,
+    );
+  }
+
+  /** Logo dedicado a PDFs de compras (misma validación que el logo del menú: máx. 2 MB, PNG/JPEG/WebP). */
+  uploadTenantPdfLogo(file: File): Observable<Tenant> {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<Tenant>(
+      `${environment.apiUrl}/tenant-config/pdf-logo`,
       fd,
     );
   }

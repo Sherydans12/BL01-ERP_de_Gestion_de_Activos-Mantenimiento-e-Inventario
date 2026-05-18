@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../../common/storage/storage.service';
 import {
   generatePurchasesAnalyticsReportPdfBuffer,
   type PurchasesAnalyticsDashboardPdfData,
@@ -23,7 +24,10 @@ const CRITICAL_AMOUNT = new Prisma.Decimal(5_000_000);
 
 @Injectable()
 export class PurchasesAnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   async getDashboard(
     tenantId: string,
@@ -631,6 +635,31 @@ export class PurchasesAnalyticsService {
     }));
   }
 
+  /** Logo tenant embebido en HTML del PDF (misma política que OC). */
+  private async tryFetchPdfLogoDataUri(
+    storageKey: string | null | undefined,
+  ): Promise<string | null> {
+    const raw = storageKey?.trim();
+    if (!raw) return null;
+    try {
+      const url = (await this.storage.getReadOnlyUrl(raw)).trim();
+      if (!url) return null;
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 12_000);
+      const res = await fetch(url, { signal: ac.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const ct =
+        res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+      if (!ct.startsWith('image/')) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 2_500_000) return null;
+      return `data:${ct};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * PDF ejecutivo de compras (KPIs, imputación, proveedores, lead times, notas de control).
    */
@@ -645,33 +674,12 @@ export class PurchasesAnalyticsService {
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { name: true, logoUrl: true, primaryColor: true },
+      select: { name: true, pdfLogoUrl: true, primaryColor: true },
     });
 
-    let tenantLogoDataUri: string | null = null;
-    const logoUrl = tenant?.logoUrl?.trim();
-    if (
-      logoUrl &&
-      (logoUrl.startsWith('http://') || logoUrl.startsWith('https://'))
-    ) {
-      try {
-        const res = await fetch(logoUrl);
-        if (res.ok) {
-          const ab = await res.arrayBuffer();
-          const buf = Buffer.from(ab);
-          if (buf.length <= 2_500_000) {
-            const ct =
-              res.headers.get('content-type')?.split(';')[0]?.trim() ||
-              'image/png';
-            if (ct.startsWith('image/')) {
-              tenantLogoDataUri = `data:${ct};base64,${buf.toString('base64')}`;
-            }
-          }
-        }
-      } catch {
-        tenantLogoDataUri = null;
-      }
-    }
+    const tenantLogoDataUri = await this.tryFetchPdfLogoDataUri(
+      tenant?.pdfLogoUrl,
+    );
 
     const toDate = query.to ? new Date(query.to) : new Date();
     const fromDate = query.from

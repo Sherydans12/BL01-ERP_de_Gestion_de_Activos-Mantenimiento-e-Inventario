@@ -91,6 +91,7 @@ export class CompanyConfigComponent implements OnInit {
   isSaving = signal(false);
   isSavingPurchasesModal = signal(false);
   isUploadingLogo = signal(false);
+  isUploadingPdfLogo = signal(false);
   readonly palette = BRAND_PALETTE;
 
   purchasesConfigModalOpen = signal(false);
@@ -156,6 +157,15 @@ export class CompanyConfigComponent implements OnInit {
     return isHttpLogoUrl(raw) ? raw : null;
   }
 
+  /** Vista previa del logo solo para PDFs de compras. */
+  pdfLogoPreviewSrc(t: Tenant | null): string | null {
+    if (!t) return null;
+    const pub = (t.pdfLogoPublicUrl || '').trim();
+    if (pub) return pub;
+    const raw = (t.pdfLogoUrl || '').trim();
+    return isHttpLogoUrl(raw) ? raw : null;
+  }
+
   onLogoFileSelected(ev: Event) {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -172,6 +182,42 @@ export class CompanyConfigComponent implements OnInit {
       error: () => {
         this.notification.error('No se pudo subir el logo (máx. 2 MB, PNG/JPEG/WebP).');
         this.isUploadingLogo.set(false);
+      },
+    });
+  }
+
+  onPurchasesPdfLogoFileSelected(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.isUploadingPdfLogo.set(true);
+    this.tenantService.uploadTenantPdfLogo(file).subscribe({
+      next: (config) => {
+        this.tenantService.setTenant(config);
+        this.patchForm(config);
+        this.notification.success('Logo para PDFs actualizado');
+        this.isUploadingPdfLogo.set(false);
+      },
+      error: () => {
+        this.notification.error('No se pudo subir el logo PDF (máx. 2 MB, PNG/JPEG/WebP).');
+        this.isUploadingPdfLogo.set(false);
+      },
+    });
+  }
+
+  clearPurchasesPdfLogo(): void {
+    this.isUploadingPdfLogo.set(true);
+    this.tenantService.updateTenantConfig({ pdfLogoUrl: '' }).subscribe({
+      next: (config) => {
+        this.tenantService.setTenant(config);
+        this.patchForm(config);
+        this.notification.success('Logo de PDFs eliminado');
+        this.isUploadingPdfLogo.set(false);
+      },
+      error: () => {
+        this.notification.error('No se pudo quitar el logo de PDFs');
+        this.isUploadingPdfLogo.set(false);
       },
     });
   }

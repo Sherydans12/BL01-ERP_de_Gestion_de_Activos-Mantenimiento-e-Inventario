@@ -301,13 +301,13 @@ function buildPurchaseRequisitionHtml(
       padding-left: 8px;
     }
     .logo-cell { flex: 1; text-align: center; }
-    .logo { max-height: 44px; max-width: 200px; object-fit: contain; }
+    .logo { max-height: 76px; max-width: 300px; width: auto; height: auto; object-fit: contain; }
     .logo-ph {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 40px;
-      min-width: 120px;
+      min-height: 52px;
+      min-width: 140px;
       border: 1px dashed #94a3b8;
       color: #64748b;
       font-weight: 700;
