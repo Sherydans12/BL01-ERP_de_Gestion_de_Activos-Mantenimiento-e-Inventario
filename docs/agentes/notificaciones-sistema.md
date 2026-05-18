@@ -149,3 +149,4 @@ this.notificationDispatcher
 | 2026-05-18 | `INVENTORY_ITEM_CREATED`: mismo dispatch en `quickCreate` (paridad con `create`); UX vía `QuickAddItemModal` en `GlobalItemPicker` **solo** donde `allowQuickAdd` es true (SRC, OC, OT, stock `PURCHASE_IN`/`TRANSFER`; no W2W dedicada ni picker salida/reingreso/devolución OT). |
 | 2026-05-18 | **Fix dispatcher:** con `userIds` vacío y `ccEmails` del tenant, envío «solo CC» (antes abortaba siempre y `INVENTORY_ITEM_CREATED` nunca enviaba). |
 | 2026-05-18 | **Dispatcher:** si hay pool `userIds` pero nadie con opt-in efectivo (o solo WEB_PUSH sin tareas), **fallback** a correo solo a `ccEmails` cuando el evento está activo (SRC + listas externas). |
+| 2026-05-18 | Correo `INVENTORY_ITEM_CREATED`: el botón «Ver artículo» usa la URL de ficha con **UUID** del registro (`/app/articulos/:id`), no el código `IN####` (evita error Prisma / redirección). |

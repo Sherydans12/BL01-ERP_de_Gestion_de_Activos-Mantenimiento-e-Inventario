@@ -6,6 +6,7 @@ import {
   buildMailForgotPassword,
   buildMailUnusualLogin,
   buildMailSuperAdminStepUp,
+  buildMailInventoryItemCreated,
 } from './transactional-mail.builder';
 
 const SAMPLE_BASE = 'https://tpm.ejemplo.cl';
@@ -61,6 +62,22 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
         name: 'Operador de plataforma',
         code: '482917',
         validMinutes: 10,
+      }),
+  },
+  {
+    file: '06-nuevo-articulo-catalogo.html',
+    title: 'Nuevo artículo en catálogo (INVENTORY_ITEM_CREATED)',
+    build: () =>
+      buildMailInventoryItemCreated({
+        itemId: 'a1b2c3d4-e5f6-4789-a012-3456789abcde',
+        inventoryCode: 'IN0252',
+        name: 'motor BMW N74B681',
+        familyName: 'INSUMOS DE MANTENCIÓN',
+        subfamilyName: 'Repuesto critico',
+        createdBy: 'Nicolás Admin',
+        createdAt: '18-05-26, 10:14 a. m.',
+        appUrl: SAMPLE_BASE,
+        partNumber: 'N74B681',
       }),
   },
 ];

@@ -10,7 +10,7 @@ Cualquier **nueva** implementación que llame a `EmailService.sendMail` debe **r
 ## Dónde está el código
 
 - Plantilla base y firma: `backend/src/common/email/email-templates.ts` (`buildTpmEmailHtml`, `escapeHtml`, `getSystemEmailSignatureHtml`).
-- Cuerpos por flujo: `backend/src/common/email/transactional-mail.builder.ts` (invitación, reenvío, recuperación, acceso inusual, código Super Admin).
+- Cuerpos por flujo: `backend/src/common/email/transactional-mail.builder.ts` (invitación, reenvío, recuperación, acceso inusual, código Super Admin, SRC borrador/emitido, alta de artículo en catálogo).
 - Generador de galería local: `backend/src/common/email/preview-renderer.ts`.
 
 ## Formato base (obligatorio para correos nuevos)

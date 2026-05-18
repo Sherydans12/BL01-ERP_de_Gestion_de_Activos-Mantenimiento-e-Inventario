@@ -784,6 +784,7 @@ export class InventoryItemsService {
   private dispatchInventoryItemCreatedMail(
     user: { tenantId: string; name?: string; email?: string },
     createdItem: {
+      id: string;
       inventoryCode: string | null;
       name: string;
       partNumber: string | null;
@@ -810,6 +811,7 @@ export class InventoryItemsService {
 
     const subject = `Nuevo artículo en catálogo: ${createdItem.inventoryCode ?? ''} — ${createdItem.name}`;
     const html = buildMailInventoryItemCreated({
+      itemId: createdItem.id,
       inventoryCode: createdItem.inventoryCode ?? '',
       name: createdItem.name,
       familyName,

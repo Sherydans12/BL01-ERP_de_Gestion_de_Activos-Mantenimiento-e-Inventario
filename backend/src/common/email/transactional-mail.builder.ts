@@ -185,6 +185,8 @@ export function buildMailRequisitionSubmitted(params: {
  * Evento: `INVENTORY_ITEM_CREATED` (disparado desde `InventoryItemsService.create` y `quickCreate`).
  */
 export function buildMailInventoryItemCreated(params: {
+  /** UUID del registro (`InventoryItem.id`); la SPA enruta `/app/articulos/:id` solo con este valor, no con `inventoryCode`. */
+  itemId: string;
   inventoryCode: string;
   name: string;
   /** Nombre del nodo padre de la categoría (Familia). */
@@ -224,7 +226,10 @@ export function buildMailInventoryItemCreated(params: {
       </table>
       <p style="margin:12px 0 0 0;font-size:12.5px;color:#94a3b8;">Este artículo ya está disponible para asignación de stock, solicitudes de compra y órdenes de trabajo.</p>
     `,
-    cta: { href: `${params.appUrl}/app/articulos/${params.inventoryCode}`, label: 'Ver artículo' },
+    cta: {
+      href: `${params.appUrl}/app/articulos/${params.itemId}`,
+      label: 'Ver artículo',
+    },
   });
 }
 
