@@ -1,13 +1,15 @@
 import {
   Component,
+  DestroyRef,
+  OnInit,
   computed,
-  effect,
   inject,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { forkJoin } from 'rxjs';
+import { Subject, forkJoin, switchMap } from 'rxjs';
 import { NotificationSettingsService } from '../../../core/services/notification-settings/notification-settings.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { UsersService, UserSearchSuggestion } from '../../../core/services/users/users.service';
@@ -132,10 +134,11 @@ export const EVENT_GROUPS: EventGroup[] = [
   imports: [CommonModule, FormsModule],
   templateUrl: './notification-governance.component.html',
 })
-export class NotificationGovernanceComponent {
+export class NotificationGovernanceComponent implements OnInit {
   private readonly notifSettingsService = inject(NotificationSettingsService);
   private readonly notifToast = inject(NotificationService);
   private readonly usersService = inject(UsersService);
+  private readonly destroyRef = inject(DestroyRef);
 
   // ── Estado ──────────────────────────────────────────────────────────────
   readonly eventGroups = EVENT_GROUPS;
@@ -149,6 +152,9 @@ export class NotificationGovernanceComponent {
   readonly subscribers = signal<UserNotificationSettingWithUser[]>([]);
   readonly loading = signal(false);
   readonly saving = signal(false);
+
+  // Subject que cancela peticiones anteriores (switchMap) al cambiar de evento
+  private readonly loadTrigger$ = new Subject<NotificationEventKey>();
 
   // Búsqueda de usuario para agregar
   readonly userSearchQuery = signal('');
@@ -185,7 +191,10 @@ export class NotificationGovernanceComponent {
       ) ?? null,
   );
 
-  /** Matriz de usuarios: una fila por userId con estado de cada canal. */
+  /**
+   * Matriz de usuarios: una fila por userId con estado de cada canal.
+   * Solo incluye usuarios con al menos un canal activo (opt-in estricto).
+   */
   readonly subscriberMatrix = computed<UserSubscriptionRow[]>(() => {
     const subs = this.subscribers();
     const byUser = new Map<string, UserSubscriptionRow>();
@@ -208,42 +217,52 @@ export class NotificationGovernanceComponent {
       if (sub.channel === 'WEB_PUSH') row.pushEnabled = sub.enabled;
     }
 
-    return Array.from(byUser.values()).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+    // Filtra usuarios que no tienen ningún canal activo (eliminados localmente
+    // o retornados por el backend con enabled=false)
+    return Array.from(byUser.values())
+      .filter((r) => r.emailEnabled || r.pushEnabled)
+      .sort((a, b) => a.name.localeCompare(b.name));
   });
 
-  // ── Efecto: recarga al cambiar evento ────────────────────────────────────
+  // ── Init: pipe switchMap que cancela peticiones obsoletas ────────────────
 
-  constructor() {
-    effect(() => {
-      const eventKey = this.selectedEventKey();
-      this.loadEventData(eventKey);
-    });
+  ngOnInit() {
+    this.loadTrigger$
+      .pipe(
+        switchMap((eventKey) => {
+          this.loading.set(true);
+          return forkJoin({
+            tenantSettings: this.notifSettingsService.getTenantSettings(),
+            subscribers: this.notifSettingsService.getEventSubscribers(eventKey),
+          });
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: ({ tenantSettings, subscribers }) => {
+          this.tenantSettings.set(tenantSettings);
+          this.subscribers.set(subscribers);
+          this.loading.set(false);
+        },
+        error: () => {
+          this.notifToast.error('Error al cargar la configuración del evento.');
+          this.loading.set(false);
+        },
+      });
+
+    // Carga inicial
+    this.loadTrigger$.next(this.selectedEventKey());
   }
 
   // ── Métodos ──────────────────────────────────────────────────────────────
 
   selectEvent(key: NotificationEventKey) {
     this.selectedEventKey.set(key);
+    this.loadTrigger$.next(key);
   }
 
-  private loadEventData(eventKey: NotificationEventKey) {
-    this.loading.set(true);
-    forkJoin({
-      tenantSettings: this.notifSettingsService.getTenantSettings(),
-      subscribers: this.notifSettingsService.getEventSubscribers(eventKey),
-    }).subscribe({
-      next: ({ tenantSettings, subscribers }) => {
-        this.tenantSettings.set(tenantSettings);
-        this.subscribers.set(subscribers);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.notifToast.error('Error al cargar la configuración del evento.');
-        this.loading.set(false);
-      },
-    });
+  private reloadCurrentEvent() {
+    this.loadTrigger$.next(this.selectedEventKey());
   }
 
   // ── Interruptor maestro del tenant ────────────────────────────────────────
@@ -354,14 +373,31 @@ export class NotificationGovernanceComponent {
     currentEnabled: boolean,
   ) {
     const newEnabled = !currentEnabled;
-    // Optimistic UI
-    this.subscribers.update((prev) =>
-      prev.map((s) =>
-        s.userId === userId && s.channel === channel
-          ? { ...s, enabled: newEnabled }
-          : s,
-      ),
+
+    // Actualización optimista: actualiza si el registro existe en el signal.
+    // Si no existe aún (canal nunca habilitado), lo añade sintéticamente para
+    // que el toggle se refleje de inmediato; la recarga post-éxito lo normaliza.
+    const existing = this.subscribers().find(
+      (s) => s.userId === userId && s.channel === channel,
     );
+    if (existing) {
+      this.subscribers.update((prev) =>
+        prev.map((s) =>
+          s.userId === userId && s.channel === channel
+            ? { ...s, enabled: newEnabled }
+            : s,
+        ),
+      );
+    } else {
+      // Registro nuevo: clonar la data del otro canal del mismo usuario
+      const peer = this.subscribers().find((s) => s.userId === userId);
+      if (peer) {
+        this.subscribers.update((prev) => [
+          ...prev,
+          { ...peer, id: `tmp-${channel}`, channel: channel as 'EMAIL' | 'WEB_PUSH', enabled: newEnabled },
+        ]);
+      }
+    }
 
     this.notifSettingsService
       .upsertUserSetting({
@@ -372,18 +408,13 @@ export class NotificationGovernanceComponent {
       })
       .subscribe({
         next: () => {
-          /* actualización ya aplicada de forma optimista */
+          // Recarga desde el servidor para normalizar IDs y estado real
+          this.reloadCurrentEvent();
         },
         error: () => {
-          // Revertir en caso de error
-          this.subscribers.update((prev) =>
-            prev.map((s) =>
-              s.userId === userId && s.channel === channel
-                ? { ...s, enabled: currentEnabled }
-                : s,
-            ),
-          );
           this.notifToast.error('No se pudo actualizar el canal del usuario.');
+          // Revertir y recargar estado real
+          this.reloadCurrentEvent();
         },
       });
   }
@@ -442,7 +473,7 @@ export class NotificationGovernanceComponent {
           this.notifToast.success(
             `${suggestion.name} suscrito al canal ${channel === 'EMAIL' ? 'Email' : 'Web Push'}.`,
           );
-          this.loadEventData(this.selectedEventKey());
+          this.reloadCurrentEvent();
         },
         error: () => {
           this.notifToast.error('No se pudo agregar al usuario.');
@@ -465,17 +496,21 @@ export class NotificationGovernanceComponent {
 
     if (!calls.length) return;
 
+    // Optimistic: quita al usuario de la matriz de inmediato
+    this.subscribers.update((prev) =>
+      prev.filter((s) => s.userId !== userId),
+    );
+
     forkJoin(calls).subscribe({
       next: () => {
         this.notifToast.success(`${userName} eliminado del evento.`);
-        this.subscribers.update((prev) =>
-          prev.map((s) =>
-            s.userId === userId ? { ...s, enabled: false } : s,
-          ),
-        );
+        // Recarga para confirmar estado real del servidor
+        this.reloadCurrentEvent();
       },
       error: () => {
         this.notifToast.error('No se pudo eliminar al usuario.');
+        // Revertir: recargar estado real
+        this.reloadCurrentEvent();
       },
     });
   }

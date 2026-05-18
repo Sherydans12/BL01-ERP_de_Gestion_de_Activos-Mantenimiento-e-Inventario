@@ -47,7 +47,7 @@ export class NotificationSettingsService {
    */
   findEventSubscribers(tenantId: string, eventKey: string) {
     return this.prisma.userNotificationSetting.findMany({
-      where: { tenantId, eventKey },
+      where: { tenantId, eventKey, enabled: true },
       orderBy: [{ channel: 'asc' }],
       select: {
         id: true,
