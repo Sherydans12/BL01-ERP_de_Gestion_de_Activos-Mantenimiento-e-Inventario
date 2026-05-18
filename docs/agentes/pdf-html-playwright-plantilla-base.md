@@ -40,7 +40,7 @@ Orden conceptual reutilizable; **omití** bloques que el documento no necesite.
 
 ## Configuración del aviso legal (PDF OC)
 
-El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPdfLegalNotice`** (`oc_pdf_legal_notice`, multilínea). Se edita en **Configuración → Empresa → Compras y PDF de orden de compra**. Si queda vacío, `purchase-order-pdf.generator.ts` usa el arreglo por defecto `DEFAULT_OC_PDF_LEGAL_NOTICE_LINES` (cada línea se escapa con `escapeHtml` y se une con `<br/>`).
+El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPdfLegalNotice`** (`oc_pdf_legal_notice`, multilínea). Se edita en **Configuración → Empresa** (ventana **Compras y PDF de orden de compra**): **Guardar en servidor** persiste solo razón social + aviso; el **Guardar cambios** del pie aplica todo el formulario. Si el aviso queda vacío, `purchase-order-pdf.generator.ts` usa el arreglo por defecto `DEFAULT_OC_PDF_LEGAL_NOTICE_LINES` (cada línea se escapa con `escapeHtml` y se une con `<br/>`).
 
 ## Estilo y legibilidad
 
@@ -55,6 +55,7 @@ El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPd
 - Bloque **proveedor** (razón social, RUT, dirección, condición de pago, etc.).
 - Tabla de **ítems** con cantidades y montos.
 - Mapeo **`PurchaseOrderStatus` → español** (`purchaseOrderStatusLabelEs` o equivalente por enum).
+- **Pie (tabla bajo ítems)**: trazabilidad SRC en una sola fila centrada (`.foot-req-ref`): «Según requerimiento Nº **&lt;correlativo&gt;** del sistema EAM BaseLogic» (correlativo con `escapeHtml`).
 
 Para un **nuevo** documento: creá un generador dedicado (p. ej. `*-pdf.generator.ts`), tipá el DTO mínimo y copiá solo la **estructura HTML/CSS** y el **pipeline Playwright**; sustituí bloques por los campos del dominio.
 
