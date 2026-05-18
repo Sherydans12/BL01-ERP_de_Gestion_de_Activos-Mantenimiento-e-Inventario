@@ -138,6 +138,29 @@ function purchaseOrderStatusLabelEs(status: string | undefined | null): string {
   return map[s] || s || '—';
 }
 
+/**
+ * Modificador de estilo para el badge de estado en cabecera PDF (`.doc-status--*`).
+ * Colores alineados a severidad / etapa del flujo de compra.
+ */
+function purchaseOrderStatusBadgeMod(status: string | undefined | null): string {
+  const s = (status || '').trim().toUpperCase();
+  const map: Record<string, string> = {
+    DRAFT: 'doc-status--neutral',
+    PENDING_APPROVAL: 'doc-status--pending',
+    PARTIALLY_APPROVED: 'doc-status--warning',
+    APPROVED: 'doc-status--success',
+    REJECTED: 'doc-status--danger',
+    SENT: 'doc-status--progress',
+    ORDERED: 'doc-status--progress',
+    SENT_TO_SUPPLIER: 'doc-status--progress',
+    PARTIALLY_RECEIVED: 'doc-status--warning',
+    RECEIVED: 'doc-status--done',
+    CLOSED: 'doc-status--closed',
+    CANCELLED: 'doc-status--danger',
+  };
+  return map[s] ?? 'doc-status--neutral';
+}
+
 /** Filas de la tabla meta: contrato y, si aplica, subcontrato (etiquetas explícitas). */
 function buildMetaContractRows(order: PoPdfOrder): string {
   const cLine = order.contract
@@ -231,6 +254,7 @@ function buildPurchaseOrderHtml(
     tenant?.invoiceLegalName?.trim() || tenant?.name?.trim() || '—';
 
   const statusLabelEs = escapeHtml(purchaseOrderStatusLabelEs(order.status));
+  const statusBadgeMod = purchaseOrderStatusBadgeMod(order.status);
   const metaContractRowsHtml = buildMetaContractRows(order);
 
   const destBlock = (() => {
@@ -266,7 +290,7 @@ function buildPurchaseOrderHtml(
   const warnNoticeHtml = ocPdfLegalNoticeHtml(tenant);
 
   const logoBlock = options.tenantLogoDataUri
-    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="Logo" />`
+    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="" />`
     : `<div class="logo-ph">${escapeHtml(tenant?.name?.slice(0, 3).toUpperCase() || 'OC')}</div>`;
 
   const accent =
@@ -298,10 +322,21 @@ function buildPurchaseOrderHtml(
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 6px;
+      gap: 10px;
       margin-bottom: 5px;
     }
-    .title-block { width: 22%; padding-top: 4px; }
+    .top-doc {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: 56%;
+    }
+    .doc-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .title-block { width: 100%; min-width: 0; padding-top: 6px; }
     .title-block h1 {
       margin: 0;
       font-size: 13px;
@@ -311,21 +346,104 @@ function buildPurchaseOrderHtml(
       border-left: 4px solid var(--accent);
       padding-left: 8px;
     }
-    .logo-cell { flex: 1; text-align: center; }
-    .logo { max-height: 76px; max-width: 300px; width: auto; height: auto; object-fit: contain; }
-    .logo-ph {
+    .doc-status {
+      margin: 10px 0 0;
+      display: inline-block;
+      max-width: 100%;
+      padding: 5px 10px 6px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1.4;
+      letter-spacing: 0.01em;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .doc-status-k {
+      font-weight: 800;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 6px;
+      opacity: 0.9;
+    }
+    .doc-status--neutral {
+      background: #f1f5f9;
+      color: #0f172a;
+      border-color: #94a3b8;
+    }
+    .doc-status--pending {
+      background: #fffbeb;
+      color: #92400e;
+      border-color: #fbbf24;
+    }
+    .doc-status--warning {
+      background: #fff7ed;
+      color: #9a3412;
+      border-color: #fb923c;
+    }
+    .doc-status--success {
+      background: #ecfdf5;
+      color: #065f46;
+      border-color: #34d399;
+    }
+    .doc-status--progress {
+      background: #f0f9ff;
+      color: #0c4a6e;
+      border-color: #38bdf8;
+    }
+    .doc-status--done {
+      background: #ecfdf5;
+      color: #14532d;
+      border-color: #22c55e;
+    }
+    .doc-status--closed {
+      background: #f8fafc;
+      color: #334155;
+      border-color: #94a3b8;
+    }
+    .doc-status--danger {
+      background: #fef2f2;
+      color: #991b1b;
+      border-color: #f87171;
+    }
+    .doc-status--caption {
+      background: #f0f9ff;
+      color: #0c4a6e;
+      border-color: #7dd3fc;
+      font-weight: 600;
+      font-size: 10px;
+    }
+    .doc-status--caption .doc-status-k {
+      color: #075985;
+    }
+    .logo-corner {
+      flex: 0 0 auto;
+      text-align: left;
+    }
+    .logo-corner .logo {
+      max-height: 50px;
+      max-width: 172px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+    .logo-corner .logo-ph {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 52px;
-      min-width: 140px;
+      min-height: 36px;
+      min-width: 60px;
+      max-width: 145px;
       border: 1px dashed #94a3b8;
       color: #64748b;
       font-weight: 700;
-      font-size: 11px;
+      font-size: 10px;
       border-radius: 4px;
     }
-    .meta { width: 42%; }
+    .meta { flex: 0 0 42%; width: 42%; min-width: 0; max-width: 42%; }
     table.meta-t { width: 100%; border-collapse: collapse; }
     table.meta-t td, table.meta-t th {
       border: 1px solid #0f172a;
@@ -459,11 +577,15 @@ function buildPurchaseOrderHtml(
 <body>
   <div class="wrap">
     <div class="top">
-      <div class="title-block">
-        <h1>ORDEN DE COMPRA</h1>
-        <p class="muted" style="margin:4px 0 0;">Estado: ${statusLabelEs}</p>
+      <div class="top-doc">
+        <div class="doc-brand">
+          <div class="logo-corner">${logoBlock}</div>
+          <div class="title-block">
+            <h1>ORDEN DE COMPRA</h1>
+            <p class="doc-status ${statusBadgeMod}"><span class="doc-status-k">Estado:</span> ${statusLabelEs}</p>
+          </div>
+        </div>
       </div>
-      <div class="logo-cell">${logoBlock}</div>
       <div class="meta">
         <table class="meta-t">
           <tr>

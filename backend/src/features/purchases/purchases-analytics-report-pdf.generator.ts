@@ -111,7 +111,7 @@ function buildPurchasesAnalyticsHtml(
       : '#0891b2';
 
   const logoBlock = options.tenantLogoDataUri
-    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="Logo" />`
+    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="" />`
     : `<div class="logo-ph">${escapeHtml(tenantName.slice(0, 3).toUpperCase() || 'BL')}</div>`;
 
   const leadAvg = weightedAvgLeadTimeDays(data.topVendors);
@@ -232,10 +232,21 @@ function buildPurchasesAnalyticsHtml(
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 6px;
+      gap: 10px;
       margin-bottom: 8px;
     }
-    .title-block { width: 34%; padding-top: 4px; }
+    .top-doc {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: 54%;
+    }
+    .doc-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .title-block { width: 100%; min-width: 0; padding-top: 6px; }
     .title-block h1 {
       margin: 0;
       font-size: 13px;
@@ -245,21 +256,64 @@ function buildPurchasesAnalyticsHtml(
       border-left: 4px solid var(--accent);
       padding-left: 8px;
     }
-    .logo-cell { flex: 1; text-align: center; }
-    .logo { max-height: 76px; max-width: 300px; width: auto; height: auto; object-fit: contain; }
-    .logo-ph {
+    .doc-status {
+      margin: 10px 0 0;
+      display: inline-block;
+      max-width: 100%;
+      padding: 5px 10px 6px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1.4;
+      letter-spacing: 0.01em;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .doc-status-k {
+      font-weight: 800;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 6px;
+      opacity: 0.9;
+    }
+    .doc-status--caption {
+      background: #f0f9ff;
+      color: #0c4a6e;
+      border-color: #7dd3fc;
+      font-weight: 600;
+      font-size: 10px;
+    }
+    .doc-status--caption .doc-status-k {
+      color: #075985;
+    }
+    .logo-corner {
+      flex: 0 0 auto;
+      text-align: left;
+    }
+    .logo-corner .logo {
+      max-height: 50px;
+      max-width: 172px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+    .logo-corner .logo-ph {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 52px;
-      min-width: 140px;
+      min-height: 36px;
+      min-width: 60px;
+      max-width: 145px;
       border: 1px dashed #94a3b8;
       color: #64748b;
       font-weight: 700;
-      font-size: 11px;
+      font-size: 10px;
       border-radius: 4px;
     }
-    .meta { width: 36%; }
+    .meta { flex: 0 0 36%; width: 36%; min-width: 0; max-width: 36%; }
     table.meta-t { width: 100%; border-collapse: collapse; }
     table.meta-t td {
       border: 1px solid #0f172a;
@@ -384,11 +438,15 @@ function buildPurchasesAnalyticsHtml(
 <body>
   <div class="wrap">
     <div class="top">
-      <div class="title-block">
-        <h1>REPORTE EJECUTIVO DE GESTIÓN DE COMPRAS</h1>
-        <p class="muted" style="margin:4px 0 0;">Analítica consolidada del período</p>
+      <div class="top-doc">
+        <div class="doc-brand">
+          <div class="logo-corner">${logoBlock}</div>
+          <div class="title-block">
+            <h1>REPORTE EJECUTIVO DE GESTIÓN DE COMPRAS</h1>
+            <p class="doc-status doc-status--caption"><span class="doc-status-k">Vista:</span> ${escapeHtml('Analítica consolidada del período')}</p>
+          </div>
+        </div>
       </div>
-      <div class="logo-cell">${logoBlock}</div>
       <div class="meta">
         <table class="meta-t">
           <tr>

@@ -29,10 +29,12 @@ Este documento fija el **patrón oficial** para PDFs generados en el backend: **
 Orden conceptual reutilizable; **omití** bloques que el documento no necesite.
 
 1. **`<div class="wrap">`** — ancho máximo coherente con A4 (~190mm útil).
-2. **Cabecera (`div.top`)** — tres columnas flexibles:
-   - **Título** del documento + estado (texto amigable, p. ej. enum → español).
-   - **Logo** centrado (imagen `data:` o placeholder con iniciales).
-   - **Meta** (`table.meta-t`): filas chicas etiqueta/valor; primera columna en **negrita** vía `table.meta-t td:first-child` (Rut, correlativo, contrato/subcontrato, etc.).
+2. **Cabecera (`div.top`)** — dos columnas principales (`flex`, `space-between`):
+   - **Izquierda (`div.top-doc` → `div.doc-brand`)**: columna vertical alineada al inicio:
+     - **Logo** arriba (`div.logo-corner`): imagen `data:` o placeholder con iniciales; tamaño acotado con `max-height` / `max-width` (no usar el asset 480×120 a tamaño real).
+     - **Título** (`h1` en `div.title-block`) debajo del logo con el espaciado definido (`gap` + `padding-top` en `.title-block`).
+     - **Estado o subtítulo** (`p.doc-status`): badge legible (aprox. **10–10,5 px**, negrita), **no** mezclado con la clase `.muted` del cuerpo. Para OC y SRC, mapear el enum de Prisma a español (`*StatusLabelEs`) y a un modificador de color (`doc-status--pending`, `doc-status--warning`, `doc-status--success`, `doc-status--danger`, `doc-status--progress`, `doc-status--done`, `doc-status--closed`, `doc-status--neutral`). Incluir `print-color-adjust: exact` en el badge para que el fondo se imprima en Chromium.
+   - **Derecha (`div.meta`)**: `table.meta-t` con filas etiqueta/valor; primera columna en **negrita** vía `table.meta-t td:first-child` (Rut, correlativo, contrato/subcontrato, etc.).
 3. **Bloque contextual** opcional (en OC: “Destino / imputación”; en otros: resumen, período, faena).
 4. **Tablas de datos** (`table.grid2`):
    - Primera columna de etiquetas con clase **`lbl`** (`font-weight: 700`, color oscuro).
@@ -51,6 +53,7 @@ El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPd
 - **Tipografía**: `system-ui`, tamaño ~9–10px cuerpo; bordes `#0f172a` para tablas tipo formulario.
 - **Acento**: variable CSS `--accent` desde color de marca del tenant cuando aplique.
 - **Etiquetas**: clase **`.lbl`** en `grid2`; meta con **`td:first-child`**; totales con **`.totals tr > td:first-child`**.
+- **Estado en cabecera**: patrón **`.doc-status`** + **`.doc-status-k`** (etiqueta corta en mayúsculas, p. ej. `Estado:`) + texto ya escapado con `escapeHtml`. Los modificadores `--*` deben derivarse solo de valores de enum conocidos (nunca de texto libre de usuario). Informes sin “estado de workflow” pueden usar **`doc-status--caption`** (misma jerarquía visual, tono informativo).
 - **Impresión**: `@page { size: A4; margin: … }` alineado con `page.pdf({ margin })`.
 - **Paginación**: evitar decenas de filas vacías de relleno; si se usa relleno estético, acotar por reglas de negocio (ej. OC: N filas extra solo si pocas líneas ocupadas).
 
@@ -58,8 +61,12 @@ El recuadro destacado bajo RUT/contrato en la OC toma el texto de **`Tenant.ocPd
 
 - Bloque **proveedor** (razón social, RUT, dirección, condición de pago, etc.).
 - Tabla de **ítems** con cantidades y montos.
-- Mapeo **`PurchaseOrderStatus` → español** (`purchaseOrderStatusLabelEs` o equivalente por enum).
+- Mapeo **`PurchaseOrderStatus` → español** (`purchaseOrderStatusLabelEs` o equivalente por enum) y **badge de cabecera** (`purchaseOrderStatusBadgeMod` → clases `doc-status--*`).
 - **Pie (tabla bajo ítems)**: trazabilidad SRC en una sola fila centrada (`.foot-req-ref`): «Según requerimiento Nº **&lt;correlativo&gt;** del sistema EAM BaseLogic» (correlativo con `escapeHtml`).
+
+**SRC (resumen PDF):** mismo patrón de badge en cabecera: `requisitionStatusLabelEs` + `requisitionStatusBadgeMod` (estados del requerimiento).
+
+**Reporte ejecutivo de compras:** línea bajo el título con `doc-status doc-status--caption` (contexto del informe, no enum de workflow).
 
 Para un **nuevo** documento: creá un generador dedicado (p. ej. `*-pdf.generator.ts`), tipá el DTO mínimo y copiá solo la **estructura HTML/CSS** y el **pipeline Playwright**; sustituí bloques por los campos del dominio.
 

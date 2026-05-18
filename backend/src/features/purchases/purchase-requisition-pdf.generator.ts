@@ -105,6 +105,23 @@ function requisitionStatusLabelEs(status: string | undefined | null): string {
   return map[s] || escapeHtml(s || '—');
 }
 
+/** Modificador de estilo para badge de estado SRC en cabecera PDF. */
+function requisitionStatusBadgeMod(status: string | undefined | null): string {
+  const s = (status || '').trim().toUpperCase();
+  const map: Record<string, string> = {
+    DRAFT: 'doc-status--neutral',
+    SUBMITTED: 'doc-status--progress',
+    QUOTING: 'doc-status--progress',
+    PENDING_APPROVAL: 'doc-status--pending',
+    PARTIALLY_PURCHASED: 'doc-status--warning',
+    APPROVED: 'doc-status--success',
+    REJECTED: 'doc-status--danger',
+    CANCELLED: 'doc-status--danger',
+    CLOSED: 'doc-status--closed',
+  };
+  return map[s] ?? 'doc-status--neutral';
+}
+
 function equipmentLine(
   eq: NonNullable<SrcPdfRequisition['equipment']>,
 ): string {
@@ -176,7 +193,7 @@ function buildPurchaseRequisitionHtml(
       : '#0891b2';
 
   const logoBlock = options.tenantLogoDataUri
-    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="Logo" />`
+    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="" />`
     : `<div class="logo-ph">${escapeHtml(tenant?.name?.slice(0, 3).toUpperCase() || 'SRC')}</div>`;
 
   const cLine = req.contract
@@ -211,6 +228,8 @@ function buildPurchaseRequisitionHtml(
   const requesterLine = [req.requestedBy?.name?.trim(), req.requestedBy?.email?.trim()]
     .filter(Boolean)
     .join(' · ');
+
+  const statusReqBadgeMod = requisitionStatusBadgeMod(req.status);
 
   const activePos = (req.purchaseOrders ?? []).filter(
     (po) => po.status && !PO_INACTIVE.has(String(po.status)),
@@ -287,10 +306,21 @@ function buildPurchaseRequisitionHtml(
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 6px;
+      gap: 10px;
       margin-bottom: 6px;
     }
-    .title-block { width: 26%; padding-top: 4px; }
+    .top-doc {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: 56%;
+    }
+    .doc-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .title-block { width: 100%; min-width: 0; padding-top: 6px; }
     .title-block h1 {
       margin: 0;
       font-size: 12px;
@@ -300,21 +330,89 @@ function buildPurchaseRequisitionHtml(
       border-left: 4px solid var(--accent);
       padding-left: 8px;
     }
-    .logo-cell { flex: 1; text-align: center; }
-    .logo { max-height: 76px; max-width: 300px; width: auto; height: auto; object-fit: contain; }
-    .logo-ph {
+    .doc-status {
+      margin: 10px 0 0;
+      display: inline-block;
+      max-width: 100%;
+      padding: 5px 10px 6px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1.4;
+      letter-spacing: 0.01em;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .doc-status-k {
+      font-weight: 800;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 6px;
+      opacity: 0.9;
+    }
+    .doc-status--neutral {
+      background: #f1f5f9;
+      color: #0f172a;
+      border-color: #94a3b8;
+    }
+    .doc-status--pending {
+      background: #fffbeb;
+      color: #92400e;
+      border-color: #fbbf24;
+    }
+    .doc-status--warning {
+      background: #fff7ed;
+      color: #9a3412;
+      border-color: #fb923c;
+    }
+    .doc-status--success {
+      background: #ecfdf5;
+      color: #065f46;
+      border-color: #34d399;
+    }
+    .doc-status--progress {
+      background: #f0f9ff;
+      color: #0c4a6e;
+      border-color: #38bdf8;
+    }
+    .doc-status--closed {
+      background: #f8fafc;
+      color: #334155;
+      border-color: #94a3b8;
+    }
+    .doc-status--danger {
+      background: #fef2f2;
+      color: #991b1b;
+      border-color: #f87171;
+    }
+    .logo-corner {
+      flex: 0 0 auto;
+      text-align: left;
+    }
+    .logo-corner .logo {
+      max-height: 50px;
+      max-width: 172px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+    .logo-corner .logo-ph {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 52px;
-      min-width: 140px;
+      min-height: 36px;
+      min-width: 60px;
+      max-width: 145px;
       border: 1px dashed #94a3b8;
       color: #64748b;
       font-weight: 700;
-      font-size: 11px;
+      font-size: 10px;
       border-radius: 4px;
     }
-    .meta { width: 40%; }
+    .meta { flex: 0 0 40%; width: 40%; min-width: 0; max-width: 40%; }
     table.meta-t { width: 100%; border-collapse: collapse; }
     table.meta-t td {
       border: 1px solid #0f172a;
@@ -390,11 +488,15 @@ function buildPurchaseRequisitionHtml(
 <body>
   <div class="wrap">
     <div class="top">
-      <div class="title-block">
-        <h1>REQUERIMIENTO DE COMPRA (SRC)</h1>
-        <p class="muted" style="margin:4px 0 0;">Estado: ${requisitionStatusLabelEs(req.status)}</p>
+      <div class="top-doc">
+        <div class="doc-brand">
+          <div class="logo-corner">${logoBlock}</div>
+          <div class="title-block">
+            <h1>REQUERIMIENTO DE COMPRA (SRC)</h1>
+            <p class="doc-status ${statusReqBadgeMod}"><span class="doc-status-k">Estado:</span> ${requisitionStatusLabelEs(req.status)}</p>
+          </div>
+        </div>
       </div>
-      <div class="logo-cell">${logoBlock}</div>
       <div class="meta">
         <table class="meta-t">
           <tr>
