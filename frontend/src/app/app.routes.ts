@@ -3,6 +3,7 @@ import { authGuard } from './core/services/auth/auth.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { P, REQUISITION_EDIT_ANY } from './core/constants/purchases-permissions';
 import { I } from './core/constants/inventory-permissions';
+import { O } from './core/constants/operations-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 
 export const routes: Routes = [
@@ -81,9 +82,11 @@ export const routes: Routes = [
           ),
       },
       // Futura ruta: { path: 'flota', component: FleetMasterComponent }
-      // ── Operaciones ────────────────────────────────────────────────────────
+      // ── Operaciones — PBAC en permissionGuard ─────────────────────────────
       {
         path: 'flota',
+        canActivate: [permissionGuard],
+        data: { permissions: O.EQUIPMENT_READ, pageTitle: 'Maestro de Flota' },
         loadComponent: () =>
           import('./features/fleet/fleet-master/fleet-master.component').then(
             (m) => m.FleetMasterComponent,
@@ -91,10 +94,10 @@ export const routes: Routes = [
       },
       {
         path: 'flota/registro-horas',
-        canActivate: [authGuard],
+        canActivate: [permissionGuard],
         canDeactivate: [registroHorasCanDeactivate],
         data: {
-          roles: ['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'],
+          permissions: O.METER_READING_READ,
           pageTitle: 'Registro de horómetros',
         },
         loadComponent: () =>
@@ -104,6 +107,8 @@ export const routes: Routes = [
       },
       {
         path: 'ots',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_READ, pageTitle: 'Órdenes de Trabajo' },
         loadComponent: () =>
           import('./features/work-orders/work-order-list/work-order-list.component').then(
             (m) => m.WorkOrderListComponent,
@@ -111,6 +116,8 @@ export const routes: Routes = [
       },
       {
         path: 'ots/nueva',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_CREATE, pageTitle: 'Nueva orden de trabajo' },
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
@@ -118,6 +125,8 @@ export const routes: Routes = [
       },
       {
         path: 'ots/backlog',
+        canActivate: [permissionGuard],
+        data: { permissions: O.BACKLOG_READ, pageTitle: 'Backlog OT' },
         loadComponent: () =>
           import('./features/work-orders/work-order-backlog-list/work-order-backlog-list.component').then(
             (m) => m.WorkOrderBacklogListComponent,
@@ -125,6 +134,8 @@ export const routes: Routes = [
       },
       {
         path: 'ots/analytics',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_READ, pageTitle: 'Confiabilidad OT' },
         loadComponent: () =>
           import('./features/work-orders/work-order-analytics-dashboard/work-order-analytics-dashboard.component').then(
             (m) => m.WorkOrderAnalyticsDashboardComponent,
@@ -132,6 +143,8 @@ export const routes: Routes = [
       },
       {
         path: 'ots/:id',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_READ, pageTitle: 'Orden de trabajo' },
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
@@ -140,16 +153,18 @@ export const routes: Routes = [
       /** Alias para deep links desde Kardex / documentación. */
       {
         path: 'mantenimiento/ot/:id',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_READ, pageTitle: 'Orden de trabajo' },
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
           ),
       },
-      // ── Mantenimiento ──────────────────────────────────────────────────────
+      // ── Mantenimiento (pautas PM) ─────────────────────────────────────────
       {
         path: 'kits',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR'] },
+        canActivate: [permissionGuard],
+        data: { permissions: O.MAINTENANCE_READ, pageTitle: 'Kits de mantenimiento' },
         loadComponent: () =>
           import('./features/maintenance-kits/kit-list/kit-list.component').then(
             (m) => m.KitListComponent,
@@ -157,8 +172,8 @@ export const routes: Routes = [
       },
       {
         path: 'kits/nuevo',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR'] },
+        canActivate: [permissionGuard],
+        data: { permissions: O.MAINTENANCE_MANAGE, pageTitle: 'Nuevo kit PM' },
         loadComponent: () =>
           import('./features/maintenance-kits/kit-form/kit-form.component').then(
             (m) => m.KitFormComponent,
@@ -166,8 +181,8 @@ export const routes: Routes = [
       },
       {
         path: 'kits/:id',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR'] },
+        canActivate: [permissionGuard],
+        data: { permissions: O.MAINTENANCE_READ, pageTitle: 'Kit de mantenimiento' },
         loadComponent: () =>
           import('./features/maintenance-kits/kit-form/kit-form.component').then(
             (m) => m.KitFormComponent,

@@ -10,6 +10,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { O } from '../../../core/constants/operations-permissions';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -43,6 +45,7 @@ import { Equipment, MeterType, Contract } from '../../../core/models/types';
     FormsModule,
     ConfirmModalComponent,
     EquipmentDetailModalComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './fleet-master.component.html',
   styles: [
@@ -59,6 +62,8 @@ import { Equipment, MeterType, Contract } from '../../../core/models/types';
   ],
 })
 export class FleetMasterComponent implements OnInit {
+  protected readonly o = O;
+
   private injector = inject(Injector);
   private fb = inject(FormBuilder);
   private catalogService = inject(CatalogService);
@@ -69,6 +74,13 @@ export class FleetMasterComponent implements OnInit {
   private pdfService = inject(PdfService);
   private workOrdersService = inject(WorkOrdersService);
   authService = inject(AuthService);
+
+  readonly isEquipmentFormReadOnly = computed(() => {
+    if (this.isEditMode) {
+      return !this.authService.hasPermission(O.EQUIPMENT_UPDATE);
+    }
+    return !this.authService.hasPermission(O.EQUIPMENT_CREATE);
+  });
 
   // Catálogos
   equipmentTypes = this.catalogService.equipmentTypes;
@@ -171,6 +183,17 @@ export class FleetMasterComponent implements OnInit {
   });
 
   constructor() {
+    effect(() => {
+      if (this.isEquipmentFormReadOnly()) {
+        this.equipmentForm.disable({ emitEvent: false });
+      } else {
+        this.equipmentForm.enable({ emitEvent: false });
+        if (this.authService.currentContractId() !== 'ALL') {
+          this.equipmentForm.get('contractId')?.disable({ emitEvent: false });
+        }
+      }
+    });
+
     this.searchSubject
       .pipe(debounceTime(300), distinctUntilChanged())
       .subscribe((query) => {
@@ -443,6 +466,7 @@ export class FleetMasterComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.isEquipmentFormReadOnly()) return;
     this.hasDuplicateError.set(false);
     if (this.equipmentForm.invalid) return;
 

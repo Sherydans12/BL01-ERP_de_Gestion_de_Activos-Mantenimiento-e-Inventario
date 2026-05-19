@@ -91,6 +91,7 @@
     </button>
 
     <button
+      *appHasPermission="o.EQUIPMENT_CREATE"
       (click)="openModal()"
       class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
     >
@@ -313,12 +314,14 @@
                   HOJA DE VIDA
                 </button>
                 <button
+                  *appHasPermission="o.EQUIPMENT_UPDATE"
                   (click)="editEquipment(eq)"
                   class="text-muted hover:text-primary transition-colors font-mono text-xs"
                 >
                   EDITAR
                 </button>
                 <button
+                  *appHasPermission="o.EQUIPMENT_DELETE"
                   (click)="deleteEquipment(eq.id)"
                   class="text-muted hover:text-error transition-colors font-mono text-xs inline-flex items-center gap-1"
                 >
@@ -436,6 +439,15 @@
           id="eqForm"
           class="space-y-8"
         >
+          @if (isEquipmentFormReadOnly()) {
+            <p class="text-sm text-muted font-mono border border-border rounded-lg px-3 py-2 bg-dark/60">
+              Solo lectura: no tiene permiso para modificar este activo.
+            </p>
+          }
+          <fieldset
+            [disabled]="isEquipmentFormReadOnly()"
+            class="space-y-8 border-0 p-0 m-0 min-w-0"
+          >
           <div>
             <h4
               class="text-sm font-mono text-muted uppercase tracking-wider mb-4 border-b border-border pb-2"
@@ -940,6 +952,7 @@
               </div>
             </div>
           </div>
+          </fieldset>
         </form>
       </div>
 
@@ -953,14 +966,16 @@
         >
           Cancelar
         </button>
-        <button
-          type="submit"
-          form="eqForm"
-          [disabled]="equipmentForm.invalid"
-          class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
-        >
-          {{ isEditMode ? "Guardar Cambios" : "Registrar Activo" }}
-        </button>
+        @if (!isEquipmentFormReadOnly()) {
+          <button
+            type="submit"
+            form="eqForm"
+            [disabled]="equipmentForm.invalid"
+            class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+          >
+            {{ isEditMode ? "Guardar Cambios" : "Registrar Activo" }}
+          </button>
+        }
       </div>
     </div>
     </div>

@@ -7,14 +7,18 @@ import {
   BacklogItemDto,
 } from '../../../core/services/work-orders/work-orders.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { O } from '../../../core/constants/operations-permissions';
 
 @Component({
   selector: 'app-work-order-backlog-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule],
+  imports: [CommonModule, RouterLink, FormsModule, HasPermissionDirective],
   templateUrl: './work-order-backlog-list.component.html',
 })
 export class WorkOrderBacklogListComponent implements OnInit {
+  protected readonly o = O;
+
   private workOrdersService = inject(WorkOrdersService);
   private notification = inject(NotificationService);
 

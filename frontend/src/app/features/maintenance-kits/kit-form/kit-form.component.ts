@@ -22,6 +22,7 @@ import { MaintenanceKitsService } from '../../../core/services/maintenance-kits/
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { O } from '../../../core/constants/operations-permissions';
 
 @Component({
   selector: 'app-kit-form',
@@ -30,10 +31,17 @@ import { AuthService } from '../../../core/services/auth/auth.service';
   templateUrl: './kit-form.component.html',
 })
 export class KitFormComponent implements OnInit {
+  protected readonly o = O;
+
   private fb = inject(FormBuilder);
   private maintenanceKitsService = inject(MaintenanceKitsService);
   private fleetService = inject(FleetService);
   public authService = inject(AuthService);
+
+  readonly isFormReadOnly = computed(() =>
+    !this.authService.hasPermission(O.MAINTENANCE_MANAGE),
+  );
+
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private notificationService = inject(NotificationService);
@@ -138,6 +146,17 @@ export class KitFormComponent implements OnInit {
       },
       { allowSignalWrites: true },
     );
+
+    effect(() => {
+      if (this.isFormReadOnly()) {
+        this.kitForm.disable({ emitEvent: false });
+      } else {
+        this.kitForm.enable({ emitEvent: false });
+        if (this.authService.currentContractId() !== 'ALL') {
+          this.kitForm.get('contractId')?.disable({ emitEvent: false });
+        }
+      }
+    });
   }
 
   get partsArray(): FormArray {
@@ -222,6 +241,7 @@ export class KitFormComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.isFormReadOnly()) return;
     if (this.kitForm.invalid) {
       this.kitForm.markAllAsTouched();
       return;

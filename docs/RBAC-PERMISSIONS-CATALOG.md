@@ -267,11 +267,95 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 
 ---
 
-## Próximos módulos (plantilla)
+## Módulo: Operaciones (`operations`)
 
-| Módulo | Prefijo | Recursos previstos |
-|--------|---------|-------------------|
-| Operaciones / EAM | `operations:` | `equipment`, `work-order`, `pm-kit`, … |
+### Flota y equipos (`equipment`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:equipment:read` | `GET /api/equipments`<br>`GET /api/equipments/:id`<br>`GET /api/equipments/:id/analytics` | Listar flota, consultar ficha y analytics del activo. |
+| ✅ | `operations:equipment:create` | `POST /api/equipments` | Alta de equipo en el maestro de flota. |
+| ✅ | `operations:equipment:update` | `PUT /api/equipments/:id` | Editar datos operativos, documentación y atributos del activo. |
+| ✅ | `operations:equipment:delete` | `DELETE /api/equipments/:id` | Desactivar o dar de baja un equipo (según reglas del servicio). |
+
+---
+
+### Órdenes de trabajo (`work-order`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:work-order:read` | `GET /api/work-orders`<br>`GET /api/work-orders/stats`<br>`GET /api/work-orders/:id`<br>`GET /api/work-order-analytics/dashboard`<br>`GET /api/work-order-analytics/projected-services` | Ver listados, detalle, KPIs y analítica operativa de OTs. |
+| ✅ | `operations:work-order:create` | `POST /api/work-orders` | Crear una nueva orden de trabajo. |
+| ✅ | `operations:work-order:update` | `PATCH /api/work-orders/:id` (cabecera/planificación)<br>`GET /api/work-order-analytics/report/monthly/pdf` | Editar planificación, clasificación y reportes de gestión. |
+| ✅ | `operations:work-order:assign` | `PATCH /api/work-orders/:id` (`participantUserIds`, `shiftSupervisorUserId`, …) | Asignar personal y responsables en la OT (ABAC en servicio). |
+| ✅ | `operations:work-order:execute` | `PATCH /api/work-orders/:id` (consumos, tareas, horas)<br>`PATCH /api/work-orders/:id/status` (transiciones ≠ `CLOSED`) | Ejecutar la OT: repuestos, fluidos, horómetros y cambios de estado operativo. |
+| ✅ | `operations:work-order:close` | `PATCH /api/work-orders/:id/status` (`status: CLOSED`) | Cierre técnico/documental con validación de detención y movimiento de stock. |
+
+> El endpoint `PATCH /api/work-orders/:id` admite **UPDATE**, **ASSIGN** o **EXECUTE** (OR en guard). El servicio mantiene ABAC (mecánico asignado, contrato, estado del documento).
+
+---
+
+### Horómetros (`meter-reading`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:meter-reading:read` | `GET /api/equipments/meter-capture-board`<br>`GET /api/equipments/:id/meter-snapshot`<br>`GET /api/meter-adjustments?equipmentId=` | Consultar tablero de captura, snapshot e historial de ajustes/lecturas. |
+| ✅ | `operations:meter-reading:create` | `POST /api/equipments/meter-readings/bulk-sync`<br>`POST /api/meter-adjustments` | Registro masivo de lecturas y ajustes justificados de horómetro. |
+
+---
+
+### Pautas de mantenimiento (`maintenance`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:maintenance:read` | `GET /api/maintenance-kits`<br>`GET /api/maintenance-kits/:id` | Consultar kits / pautas PM por marca/modelo. |
+| ✅ | `operations:maintenance:manage` | `POST /api/maintenance-kits`<br>`PUT /api/maintenance-kits/:id`<br>`DELETE /api/maintenance-kits/:id` | Crear, editar y eliminar pautas de mantenimiento. |
+
+---
+
+### Backlog de OT (`backlog`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:backlog:read` | `GET /api/work-orders/backlog` | Listar ítems de backlog por contrato/estado. |
+| ✅ | `operations:backlog:manage` | `POST /api/work-orders/:id/backlog`<br>`PATCH /api/work-orders/:id/backlog/:itemId`<br>`POST /api/work-orders/:id/backlog/:itemId/promote` | Agregar, marcar hecho y promover ítems de backlog. |
+
+---
+
+## Matriz resumida — Operaciones (checklist sprint)
+
+### Equipos
+
+- [x] Ver → `operations:equipment:read`
+- [x] Crear → `operations:equipment:create`
+- [x] Editar → `operations:equipment:update`
+- [x] Desactivar → `operations:equipment:delete`
+
+### Órdenes de trabajo
+
+- [x] Ver → `operations:work-order:read`
+- [x] Crear → `operations:work-order:create`
+- [x] Editar planificación → `operations:work-order:update`
+- [x] Asignar personal → `operations:work-order:assign`
+- [x] Ejecutar → `operations:work-order:execute`
+- [x] Cerrar → `operations:work-order:close`
+
+### Horómetros
+
+- [x] Ver → `operations:meter-reading:read`
+- [x] Registrar → `operations:meter-reading:create`
+
+### Pautas PM
+
+- [x] Ver → `operations:maintenance:read`
+- [x] Gestionar → `operations:maintenance:manage`
+
+### Backlog
+
+- [x] Ver → `operations:backlog:read`
+- [x] Gestionar → `operations:backlog:manage`
+
+> **Cobertura frontend:** ✅ (2026-05-19) — `operations-permissions.ts`, `nav.config.ts`, `app.routes.ts`, `*appHasPermission` en flota, OT, horómetros, backlog y kits.
 
 ---
 

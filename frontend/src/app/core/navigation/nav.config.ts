@@ -1,5 +1,6 @@
 import { P } from '../constants/purchases-permissions';
 import { I } from '../constants/inventory-permissions';
+import { O } from '../constants/operations-permissions';
 
 /** Roles disponibles en el sistema (deben coincidir con Prisma UserRole). */
 export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC' | 'USER';
@@ -142,23 +143,35 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Operaciones',
     items: [
-      { label: 'Maestro de Flota', route: '/app/flota', icon: ICONS.truck },
+      {
+        label: 'Maestro de Flota',
+        route: '/app/flota',
+        icon: ICONS.truck,
+        permissions: O.EQUIPMENT_READ,
+      },
       {
         label: 'Registro de horómetros',
         route: '/app/flota/registro-horas',
         icon: ICONS.clock,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: O.METER_READING_READ,
       },
-      { label: 'Órdenes de Trabajo', route: '/app/ots', icon: ICONS.clipboard },
+      {
+        label: 'Órdenes de Trabajo',
+        route: '/app/ots',
+        icon: ICONS.clipboard,
+        permissions: O.WORK_ORDER_READ,
+      },
       {
         label: 'Backlog OT',
         route: '/app/ots/backlog',
         icon: ICONS.collection,
+        permissions: O.BACKLOG_READ,
       },
       {
         label: 'Confiabilidad OT',
         route: '/app/ots/analytics',
         icon: ICONS.chartBar,
+        permissions: O.WORK_ORDER_READ,
       },
     ],
   },
@@ -169,7 +182,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Config. Pautas (PM)',
         route: '/app/kits',
         icon: ICONS.cog,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: O.MAINTENANCE_READ,
       },
     ],
   },

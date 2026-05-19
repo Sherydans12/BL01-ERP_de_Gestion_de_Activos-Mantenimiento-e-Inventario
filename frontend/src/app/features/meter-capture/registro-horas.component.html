@@ -105,6 +105,7 @@
       {{ conflictOnlyMode() ? 'Mostrar todos los equipos' : 'Actualizar lista' }}
     </button>
     <button
+      *appHasPermission="o.METER_READING_CREATE"
       type="button"
       class="meter-cap-btn"
       [class.meter-cap-btn--save-local]="!isOnline() && !syncing()"

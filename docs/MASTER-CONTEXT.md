@@ -434,6 +434,12 @@ Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arqui
 - Frontend: [`inventory-permissions.ts`](../frontend/src/app/core/constants/inventory-permissions.ts), `permissionGuard` en rutas `/app/articulos/*` y `/app/inventario/*`, formularios en solo lectura sin permiso de mutación, `GlobalItemPicker` quick-add solo con `inventory:item:create`.
 - Pendiente PBAC: `inventory-suppliers`, `inventory-analytics` (siguen `@Roles`).
 
+#### PBAC Operaciones (2026-05-19)
+
+- **16 llaves** `operations:*` (equipo, OT, horómetro, pautas PM, backlog) en [`permissions.enum.ts`](../backend/src/features/auth/constants/permissions.enum.ts).
+- Backend migrado: `equipments`, `work-orders`, `maintenance-kits`, `meter-adjustments`, `work-order-analytics` — `PermissionsGuard` + `@RequirePermissions` / `@RequireAnyPermissions`; ABAC en servicios sin cambios.
+- Frontend: pendiente (siguiente sprint).
+
 #### Flags ABAC adicionales
 
 | Flag | Uso |

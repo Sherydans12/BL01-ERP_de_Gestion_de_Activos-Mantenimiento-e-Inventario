@@ -125,3 +125,16 @@ Cobertura aplicada en:
 - `GlobalItemPicker`: botón «+ Nuevo artículo» con `*appHasPermission="I.ITEM_CREATE"` y `allowQuickAdd`; guard defensivo en `openQuickAdd()`.
 
 Pendiente PBAC: `inventory-suppliers`, `inventory-analytics` (siguen roles legacy).
+
+## Módulo Operaciones (referencia rápida)
+
+Constantes: [`frontend/src/app/core/constants/operations-permissions.ts`](../frontend/src/app/core/constants/operations-permissions.ts) (`O`).
+
+Cobertura aplicada en:
+
+- Nav: sección Operaciones + Config. Pautas (`nav.config.ts` con `permissions: O.*`).
+- Rutas: `permissionGuard` en `/app/flota/*`, `/app/ots/*`, `/app/kits/*` y alias OT.
+- Vistas: flota, registro horómetros, listado/detalle OT, backlog global, kits PM, analytics OT.
+- Formularios: `fieldset [disabled]` + `isFormReadOnly` en equipo (modal), OT y kit PM.
+
+> Fuera de alcance en UI: reporte de fallas y disponibilidad de flota (sprint futuro).

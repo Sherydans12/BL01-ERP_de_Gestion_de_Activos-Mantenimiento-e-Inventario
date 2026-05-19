@@ -51,6 +51,7 @@
       </button>
 
       <a
+        *appHasPermission="o.WORK_ORDER_CREATE"
         routerLink="/app/ots/nueva"
         class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
       >
@@ -413,6 +414,7 @@
 
                 @if (ot.status === "OPEN") {
                   <button
+                    *appHasPermission="o.WORK_ORDER_EXECUTE"
                     (click)="changeStatus(ot.id, 'IN_PROGRESS')"
                     class="text-[#00E5FF] hover:text-main transition-colors font-mono text-xs font-bold bg-[#00E5FF]/10 px-2 py-1 rounded border border-[#00E5FF]/30 hover:bg-[#00E5FF]/20"
                   >
@@ -420,12 +422,14 @@
                   </button>
                 } @else if (ot.status === "IN_PROGRESS") {
                   <button
+                    *appHasPermission="o.WORK_ORDER_EXECUTE"
                     (click)="changeStatus(ot.id, 'ON_HOLD')"
                     class="text-warning hover:text-main transition-colors font-mono text-xs font-bold bg-warning/10 px-2 py-1 rounded border border-warning/30 hover:bg-warning/20"
                   >
                     PAUSAR
                   </button>
                   <button
+                    *appHasPermission="o.WORK_ORDER_CLOSE"
                     (click)="confirmCloseOt(ot.id)"
                     class="text-success hover:text-main transition-colors font-mono text-xs font-bold bg-success/10 px-2 py-1 rounded border border-success/30 hover:bg-success/20 ml-2"
                   >
@@ -433,6 +437,7 @@
                   </button>
                 } @else if (ot.status === "ON_HOLD") {
                   <button
+                    *appHasPermission="o.WORK_ORDER_EXECUTE"
                     (click)="changeStatus(ot.id, 'IN_PROGRESS')"
                     class="text-[#00E5FF] hover:text-main transition-colors font-mono text-xs font-bold bg-[#00E5FF]/10 px-2 py-1 rounded border border-[#00E5FF]/30 hover:bg-[#00E5FF]/20"
                   >

@@ -3,16 +3,20 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { MaintenanceKitsService } from '../../../core/services/maintenance-kits/maintenance-kits.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { O } from '../../../core/constants/operations-permissions';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 
 @Component({
   selector: 'app-kit-list',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, HasPermissionDirective],
   templateUrl: './kit-list.component.html',
 })
 export class KitListComponent implements OnInit {
+  protected readonly o = O;
+
   private maintenanceKitsService = inject(MaintenanceKitsService);
   private notificationService = inject(NotificationService);
   private authService = inject(AuthService);

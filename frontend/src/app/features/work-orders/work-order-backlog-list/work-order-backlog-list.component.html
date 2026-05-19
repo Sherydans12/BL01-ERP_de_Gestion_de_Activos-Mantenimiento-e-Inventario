@@ -109,6 +109,7 @@
               <td class="px-4 py-3 text-main">{{ item.description }}</td>
               <td class="px-4 py-3 text-right">
                 <button
+                  *appHasPermission="o.BACKLOG_MANAGE"
                   type="button"
                   (click)="toggle(item)"
                   class="text-xs font-mono text-primary hover:underline"

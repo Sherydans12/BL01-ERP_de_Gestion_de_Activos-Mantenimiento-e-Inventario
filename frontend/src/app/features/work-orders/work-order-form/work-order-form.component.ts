@@ -6,6 +6,7 @@ import {
   computed,
   viewChild,
   ElementRef,
+  effect,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -63,6 +64,14 @@ import {
   FLUID_COMPARTMENTS_ORDER,
   FLUID_COMPARTMENT_LABELS,
 } from './work-order-form.constants';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import {
+  O,
+  WORK_ORDER_FORM_EDIT_ANY,
+} from '../../../core/constants/operations-permissions';
 
 function isoToDatetimeLocalValue(iso: string): string {
   const d = new Date(iso);
@@ -80,11 +89,16 @@ function isoToDatetimeLocalValue(iso: string): string {
     FormsModule,
     RouterLink,
     GlobalItemPickerComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
   ],
   templateUrl: './work-order-form.component.html',
   styleUrl: './work-order-form.component.scss',
 })
 export class WorkOrderFormComponent implements OnInit {
+  protected readonly o = O;
+  protected readonly workOrderFormEditAny = WORK_ORDER_FORM_EDIT_ANY;
+
   private fb = inject(FormBuilder);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -164,6 +178,35 @@ export class WorkOrderFormComponent implements OnInit {
     const raw = this.otForm.get('detentionStartedAt')?.value;
     return typeof raw === 'string' && raw.trim().length > 0;
   });
+
+  readonly isFormReadOnly = computed(() => {
+    if (this.mode === 'CREATING') {
+      return !this.authService.hasPermission(O.WORK_ORDER_CREATE);
+    }
+    if (this.mode === 'READONLY' || this.currentStatus === 'CLOSED') {
+      return true;
+    }
+    return !this.authService.hasPermissionAny([...WORK_ORDER_FORM_EDIT_ANY]);
+  });
+
+  readonly canEditForm = computed(
+    () => this.mode !== 'READONLY' && !this.isFormReadOnly(),
+  );
+
+  readonly canCloseOt = computed(
+    () =>
+      this.mode === 'EDITING' &&
+      this.authService.hasPermission(O.WORK_ORDER_CLOSE) &&
+      this.closeAllowed(),
+  );
+
+  readonly canManageBacklog = computed(() =>
+    this.authService.hasPermission(O.BACKLOG_MANAGE),
+  );
+
+  readonly canAssignPersonnel = computed(() =>
+    this.authService.hasPermission(O.WORK_ORDER_ASSIGN),
+  );
 
   /** Mecánico no puede editar OT en curso o en pausa (solo supervisor/admin). */
   formLockedForMechanic = computed(
@@ -273,6 +316,14 @@ export class WorkOrderFormComponent implements OnInit {
 
       compartmentRows,
       parts: this.fb.array([] as FormGroup[]),
+    });
+
+    effect(() => {
+      if (this.isFormReadOnly() || this.formLockedForMechanic()) {
+        this.otForm.disable({ emitEvent: false });
+      } else {
+        this.otForm.enable({ emitEvent: false });
+      }
     });
   }
 
@@ -582,12 +633,10 @@ export class WorkOrderFormComponent implements OnInit {
           })),
         );
 
-        if (this.mode === 'READONLY') this.otForm.disable();
-        else if (
+        if (
           this.authService.currentUser()?.role === 'MECHANIC' &&
           (ot.status === 'IN_PROGRESS' || ot.status === 'ON_HOLD')
         ) {
-          this.otForm.disable();
           this.notificationService.warning(
             'OT en curso o en pausa: solo un supervisor puede modificar el formulario.',
           );
@@ -795,7 +844,7 @@ export class WorkOrderFormComponent implements OnInit {
       this.notificationService.error(fluidErr);
       return;
     }
-    if (this.otForm.invalid || this.mode === 'READONLY') {
+    if (this.otForm.invalid || this.isFormReadOnly()) {
       this.otForm.markAllAsTouched();
       return;
     }
@@ -884,7 +933,7 @@ export class WorkOrderFormComponent implements OnInit {
       );
       return;
     }
-    if (!this.otId || this.mode === 'READONLY') return;
+    if (!this.otId || this.isFormReadOnly()) return;
     this.closeOtDialog()?.nativeElement.showModal();
   }
 

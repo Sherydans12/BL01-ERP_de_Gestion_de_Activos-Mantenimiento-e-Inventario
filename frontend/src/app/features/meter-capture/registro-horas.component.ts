@@ -16,6 +16,8 @@ import { FleetService } from '../../core/services/fleet/fleet.service';
 import { CatalogService } from '../../core/services/catalog/catalog.service';
 import { ContractsService } from '../../core/services/contracts/contracts.service';
 import { AuthService } from '../../core/services/auth/auth.service';
+import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
+import { O } from '../../core/constants/operations-permissions';
 import { NotificationService } from '../../core/services/notification/notification.service';
 import type {
   Contract,
@@ -35,11 +37,17 @@ interface MeterDraftPayload {
 @Component({
   selector: 'app-registro-horas',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HasPermissionDirective],
   templateUrl: './registro-horas.component.html',
   styleUrl: './registro-horas.component.scss',
 })
 export class RegistroHorasComponent implements OnInit, OnDestroy {
+  protected readonly o = O;
+
+  readonly canRegisterMeters = computed(() =>
+    this.auth.hasPermission(O.METER_READING_CREATE),
+  );
+
   private readonly fleet = inject(FleetService);
   private readonly catalogs = inject(CatalogService);
   private readonly contractsApi = inject(ContractsService);

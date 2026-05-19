@@ -13,6 +13,11 @@ import { ExportService } from '../../../core/services/export/export.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { Router } from '@angular/router';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { O } from '../../../core/constants/operations-permissions';
 
 @Component({
   selector: 'app-work-order-list',
@@ -25,10 +30,14 @@ import { EntityLinkComponent } from '../../../shared/components/entity-link/enti
     EquipmentDetailModalComponent,
     WorkOrderDetailModalComponent,
     EntityLinkComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
   ],
   templateUrl: './work-order-list.component.html',
 })
 export class WorkOrderListComponent implements OnInit {
+  protected readonly o = O;
+
   private workOrdersService = inject(WorkOrdersService);
   private reportService = inject(ReportService);
   private fleetService = inject(FleetService);

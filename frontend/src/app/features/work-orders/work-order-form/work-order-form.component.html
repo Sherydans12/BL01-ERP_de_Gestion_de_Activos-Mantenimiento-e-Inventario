@@ -80,6 +80,12 @@
 
   @if (tab() === "datos") {
     <form [formGroup]="otForm" (ngSubmit)="savePrimary()" class="space-y-6">
+      @if (isFormReadOnly()) {
+        <p class="text-sm text-muted font-mono border border-border rounded-lg px-3 py-2 bg-dark/60">
+          Solo lectura: no tiene permiso para modificar esta orden de trabajo.
+        </p>
+      }
+      <fieldset [disabled]="isFormReadOnly()" class="space-y-6 border-0 p-0 m-0 min-w-0">
       <!-- Identificación -->
       <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
         <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
@@ -418,8 +424,13 @@
               <span class="text-xs text-muted">Ninguno seleccionado.</span>
             }
           </div>
-          @if (mode !== "READONLY") {
-            <button type="button" (click)="openParticipantsModal()" class="mt-2 text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10">
+          @if (canEditForm()) {
+            <button
+              type="button"
+              *appHasPermission="o.WORK_ORDER_ASSIGN"
+              (click)="openParticipantsModal()"
+              class="mt-2 text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10"
+            >
               Elegir participantes…
             </button>
           }
@@ -440,8 +451,13 @@
             } @else {
               <p class="text-xs text-muted mb-2">Ninguno seleccionado.</p>
             }
-            @if (mode !== "READONLY") {
-              <button type="button" (click)="openSupervisorModal()" class="text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10">
+            @if (canEditForm()) {
+              <button
+                type="button"
+                *appHasPermission="o.WORK_ORDER_ASSIGN"
+                (click)="openSupervisorModal()"
+                class="text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10"
+              >
                 Elegir supervisor…
               </button>
             }
@@ -471,7 +487,7 @@
             @for (s of pickedSystems(); track s.id) {
               <span class="inline-flex items-center gap-1 rounded-lg border border-border bg-dark/40 px-2 py-1 text-xs text-main font-mono">
                 {{ s.label }}
-                @if (mode !== "READONLY") {
+                @if (canEditForm()) {
                   <button type="button" class="text-muted hover:text-error p-0.5" (click)="removePickedSystem(s.id)" aria-label="Quitar sistema">×</button>
                 }
               </span>
@@ -479,7 +495,7 @@
               <span class="text-xs text-muted">Ninguno seleccionado.</span>
             }
           </div>
-          @if (mode !== "READONLY") {
+          @if (canEditForm()) {
             <button type="button" (click)="openSystemPicker()" class="text-xs font-mono rounded-lg border border-primary/50 px-3 py-2 text-primary hover:bg-primary/10">
               + Agregar desde catálogo
             </button>
@@ -565,7 +581,7 @@
                       </select>
                     </div>
                   </div>
-                  @if (mode !== "READONLY") {
+                  @if (canEditForm()) {
                     <button
                       type="button"
                       (click)="removeFluidCompartmentRow(i)"
@@ -596,7 +612,7 @@
                         Sin ítem seleccionado. Use el botón para abrir el catálogo.
                       </div>
                     }
-                    @if (mode !== "READONLY") {
+                    @if (canEditForm()) {
                       <button
                         type="button"
                         (click)="openFluidPicker(i)"
@@ -634,7 +650,7 @@
               </div>
             }
           </div>
-          @if (mode !== "READONLY") {
+          @if (canEditForm()) {
             <button type="button" (click)="addFluidCompartmentRow()" class="ot-btn-outline ot-btn--compact w-full sm:w-auto mt-1">
               + Compartimiento
             </button>
@@ -646,16 +662,15 @@
         class="flex flex-wrap justify-end items-center gap-3 pt-5 mt-2 border-t border-border"
       >
         <a routerLink="/app/ots" class="ot-btn-ghost">Volver</a>
-        @if (mode !== "READONLY") {
+        @if (canEditForm()) {
           <button type="submit" [disabled]="otForm.invalid" class="ot-btn-primary">
             {{ mode === "CREATING" ? "Registrar OT" : "Guardar cambios" }}
           </button>
-          @if (mode === "EDITING" && otId) {
+          @if (canCloseOt() && otId) {
             <button
               type="button"
               (click)="openCloseOperationalDialog()"
               class="ot-btn-outline"
-              [disabled]="!closeAllowed()"
               [attr.title]="!closeAllowed() ? 'Registre el inicio de detención antes de cerrar' : null"
             >
               Firmar y cerrar OT
@@ -663,6 +678,7 @@
           }
         }
       </div>
+      </fieldset>
     </form>
   }
 
@@ -674,6 +690,7 @@
       @if (!otId) {
         <p class="text-sm text-muted">Guarde la OT en «Datos OT» para poder registrar ítems de backlog.</p>
       } @else {
+        @if (canManageBacklog()) {
         <div class="flex flex-col sm:flex-row gap-2">
           <textarea
             [ngModel]="newBacklogText()"
@@ -692,10 +709,12 @@
             Agregar
           </button>
         </div>
+        }
         <div class="rounded-lg border border-border divide-y divide-border overflow-hidden">
           @for (b of backlogItems(); track b.id) {
             <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
               <p class="text-main flex-1 min-w-0">{{ b.description }}</p>
+              @if (canManageBacklog()) {
               <div class="flex flex-wrap items-center gap-2 justify-end">
                 @if (b.status === "PENDING") {
                   <button
@@ -726,6 +745,7 @@
                   {{ b.status === "DONE" ? "Realizado" : "Pendiente" }}
                 </button>
               </div>
+              }
             </div>
           } @empty {
             <p class="px-3 py-6 text-center text-muted text-sm">Sin backlog registrado.</p>
@@ -809,7 +829,7 @@
                       Sin vínculo — use «Buscar catálogo».
                     </div>
                   }
-                  @if (mode !== "READONLY") {
+                  @if (canEditForm()) {
                     <button
                       type="button"
                       (click)="openPartPicker(pi)"
@@ -835,7 +855,7 @@
                 </div>
               </div>
               <div class="md:col-span-12 flex justify-end border-t border-border/40 pt-2">
-                @if (mode !== "READONLY") {
+                @if (canEditForm()) {
                   <button type="button" (click)="removePartRow(pi)" class="text-[10px] font-mono text-muted hover:text-error">
                     Quitar línea
                   </button>
