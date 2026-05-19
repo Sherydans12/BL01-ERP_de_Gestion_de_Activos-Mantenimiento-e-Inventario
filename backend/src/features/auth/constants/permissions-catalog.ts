@@ -376,6 +376,133 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
   },
 ];
 
+/** Catálogo data-driven para UI de gobernanza de roles (módulo Operaciones). */
+export const OPERATIONS_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
+  {
+    module: 'Operaciones',
+    groups: [
+      {
+        name: 'Flota y equipos',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_EQUIPMENT_READ,
+            label: 'Ver equipos',
+            description:
+              'Listar flota, ficha, analytics de equipo y tablero de captura de horómetro.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_EQUIPMENT_CREATE,
+            label: 'Crear equipos',
+            description: 'Alta de activos en el maestro de flota.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_EQUIPMENT_UPDATE,
+            label: 'Editar equipos',
+            description: 'Modificar ficha, datos operativos y documentación del activo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_EQUIPMENT_DELETE,
+            label: 'Desactivar equipos',
+            description: 'Desactivar o dar de baja equipos del maestro (según reglas del servicio).',
+          },
+        ],
+      },
+      {
+        name: 'Órdenes de trabajo',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_WORK_ORDER_READ,
+            label: 'Ver OTs',
+            description:
+              'Listar órdenes de trabajo, detalle, estadísticas y analítica operativa de OTs.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_WORK_ORDER_CREATE,
+            label: 'Crear OT',
+            description: 'Abrir una nueva orden de trabajo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE,
+            label: 'Editar OT (planificación)',
+            description:
+              'Modificar cabecera, planificación, clasificación y datos generales de la OT.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN,
+            label: 'Asignar personal',
+            description:
+              'Asignar mecánicos participantes, supervisor de turno y responsables en la OT.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+            label: 'Ejecutar OT',
+            description:
+              'Registrar consumos, tareas, horas, fluidos, repuestos y cambios de estado operativo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_WORK_ORDER_CLOSE,
+            label: 'Cerrar OT',
+            description:
+              'Cierre técnico y documental: validación de detención, consumo de stock y cierre formal.',
+          },
+        ],
+      },
+      {
+        name: 'Horómetros',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_METER_READING_READ,
+            label: 'Ver lecturas',
+            description:
+              'Consultar historial de lecturas, snapshot de medidor y tablero de captura.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_METER_READING_CREATE,
+            label: 'Registrar lecturas',
+            description:
+              'Captura individual, masiva (bulk-sync) y ajustes justificados de horómetro.',
+          },
+        ],
+      },
+      {
+        name: 'Pautas de mantenimiento (kits PM)',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_MAINTENANCE_READ,
+            label: 'Ver pautas',
+            description: 'Consultar kits / pautas de mantenimiento preventivo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_MAINTENANCE_MANAGE,
+            label: 'Gestionar pautas',
+            description: 'Crear, editar y eliminar kits de mantenimiento.',
+          },
+        ],
+      },
+      {
+        name: 'Backlog de OT',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_BACKLOG_READ,
+            label: 'Ver backlog',
+            description: 'Listar ítems de backlog asociados a órdenes de trabajo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_BACKLOG_MANAGE,
+            label: 'Gestionar backlog',
+            description:
+              'Agregar, actualizar, promover ítems de backlog y convertirlos en tareas u OT.',
+          },
+        ],
+      },
+    ],
+  },
+];
+
 export function getPermissionsCatalog(): PermissionCatalogModule[] {
-  return [...PURCHASES_PERMISSIONS_CATALOG, ...INVENTORY_PERMISSIONS_CATALOG];
+  return [
+    ...PURCHASES_PERMISSIONS_CATALOG,
+    ...INVENTORY_PERMISSIONS_CATALOG,
+    ...OPERATIONS_PERMISSIONS_CATALOG,
+  ];
 }

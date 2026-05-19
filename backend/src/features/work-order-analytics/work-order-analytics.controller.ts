@@ -9,8 +9,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { WorkOrderAnalyticsService } from './work-order-analytics.service';
 import { assertUserHasContractAccess } from '../purchases/purchase-contract-access.util';
 
@@ -23,12 +24,12 @@ type WoAnalyticsRequest = {
 };
 
 @Controller('work-order-analytics')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class WorkOrderAnalyticsController {
   constructor(private readonly analytics: WorkOrderAnalyticsService) {}
 
   @Get('dashboard')
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'MECHANIC')
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_READ)
   dashboard(
     @Req() req: WoAnalyticsRequest,
     @Query('from') from?: string,
@@ -57,7 +58,7 @@ export class WorkOrderAnalyticsController {
   }
 
   @Get('projected-services')
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'MECHANIC')
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_READ)
   projectedServices(
     @Req() req: WoAnalyticsRequest,
     @Query('limit') limit?: string,
@@ -82,7 +83,7 @@ export class WorkOrderAnalyticsController {
   }
 
   @Get('report/monthly/pdf')
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE)
   monthlyManagementPdf(
     @Req() req: WoAnalyticsRequest,
     @Query('year') yearStr?: string,

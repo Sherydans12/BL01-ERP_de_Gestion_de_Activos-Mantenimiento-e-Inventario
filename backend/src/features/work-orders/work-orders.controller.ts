@@ -14,13 +14,20 @@ import {
 import { WorkOrdersService } from './work-orders.service';
 import type { UpdateWorkOrderDto } from './work-orders.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import {
+  RequireAnyPermissions,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('work-orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class WorkOrdersController {
   constructor(private readonly workOrdersService: WorkOrdersService) {}
 
   @Post()
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_CREATE)
   create(
     @Body() createWorkOrderDto: any,
     @Req() req: any,
@@ -30,11 +37,13 @@ export class WorkOrdersController {
   }
 
   @Get('stats')
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_READ)
   getStats(@Req() req: any, @Headers('x-site-id') siteId?: string) {
     return this.workOrdersService.getStats(req.user, siteId);
   }
 
   @Get()
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_READ)
   findAll(
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
@@ -60,6 +69,7 @@ export class WorkOrdersController {
   }
 
   @Get('backlog')
+  @RequirePermissions(SystemPermissions.OPERATIONS_BACKLOG_READ)
   listBacklog(
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,
@@ -79,6 +89,7 @@ export class WorkOrdersController {
   }
 
   @Get(':id')
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_READ)
   findOne(
     @Param('id') id: string,
     @Req() req: any,
@@ -88,6 +99,10 @@ export class WorkOrdersController {
   }
 
   @Patch(':id/status')
+  @RequireAnyPermissions(
+    SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+    SystemPermissions.OPERATIONS_WORK_ORDER_CLOSE,
+  )
   updateStatus(
     @Param('id') id: string,
     @Body()
@@ -103,6 +118,7 @@ export class WorkOrdersController {
   }
 
   @Patch(':id/backlog/:itemId')
+  @RequirePermissions(SystemPermissions.OPERATIONS_BACKLOG_MANAGE)
   patchBacklogItem(
     @Param('id') id: string,
     @Param('itemId') itemId: string,
@@ -120,6 +136,11 @@ export class WorkOrdersController {
   }
 
   @Patch(':id')
+  @RequireAnyPermissions(
+    SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE,
+    SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN,
+    SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+  )
   updateWorkOrder(
     @Param('id') id: string,
     @Body() dto: UpdateWorkOrderDto,
@@ -130,6 +151,7 @@ export class WorkOrdersController {
   }
 
   @Post(':id/backlog')
+  @RequirePermissions(SystemPermissions.OPERATIONS_BACKLOG_MANAGE)
   addBacklogItem(
     @Param('id') id: string,
     @Body() body: { description: string },
@@ -145,6 +167,7 @@ export class WorkOrdersController {
   }
 
   @Post(':id/backlog/:itemId/promote')
+  @RequirePermissions(SystemPermissions.OPERATIONS_BACKLOG_MANAGE)
   promoteBacklogItem(
     @Param('id') id: string,
     @Param('itemId') itemId: string,

@@ -81,4 +81,30 @@ export enum SystemPermissions {
   // —— Inventario: stock y ajustes ——
   INVENTORY_STOCK_READ = 'inventory:stock:read',
   INVENTORY_STOCK_ADJUST = 'inventory:stock:adjust',
+
+  // —— Operaciones: flota / equipos ——
+  OPERATIONS_EQUIPMENT_READ = 'operations:equipment:read',
+  OPERATIONS_EQUIPMENT_CREATE = 'operations:equipment:create',
+  OPERATIONS_EQUIPMENT_UPDATE = 'operations:equipment:update',
+  OPERATIONS_EQUIPMENT_DELETE = 'operations:equipment:delete',
+
+  // —— Operaciones: órdenes de trabajo ——
+  OPERATIONS_WORK_ORDER_READ = 'operations:work-order:read',
+  OPERATIONS_WORK_ORDER_CREATE = 'operations:work-order:create',
+  OPERATIONS_WORK_ORDER_UPDATE = 'operations:work-order:update',
+  OPERATIONS_WORK_ORDER_ASSIGN = 'operations:work-order:assign',
+  OPERATIONS_WORK_ORDER_EXECUTE = 'operations:work-order:execute',
+  OPERATIONS_WORK_ORDER_CLOSE = 'operations:work-order:close',
+
+  // —— Operaciones: horómetros ——
+  OPERATIONS_METER_READING_READ = 'operations:meter-reading:read',
+  OPERATIONS_METER_READING_CREATE = 'operations:meter-reading:create',
+
+  // —— Operaciones: pautas PM (kits) ——
+  OPERATIONS_MAINTENANCE_READ = 'operations:maintenance:read',
+  OPERATIONS_MAINTENANCE_MANAGE = 'operations:maintenance:manage',
+
+  // —— Operaciones: backlog de OT ——
+  OPERATIONS_BACKLOG_READ = 'operations:backlog:read',
+  OPERATIONS_BACKLOG_MANAGE = 'operations:backlog:manage',
 }
