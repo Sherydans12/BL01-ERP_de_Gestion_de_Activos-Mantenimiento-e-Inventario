@@ -10,8 +10,9 @@ Este repositorio es el **TPM / BL01**: EAM, flota, mantenimiento e inventario (C
 ## Antes de cambios amplios o de dominio
 
 1. Leé **[AGENTS.md](../../AGENTS.md)** en la raíz del repo (índice y rutas clave).
-2. Revisá **[docs/agentes/README.md](../../docs/agentes/README.md)** por decisiones recientes y guías de herramientas (skills, equivalencias a claude-mem en Cursor).
-3. Para datos y reglas de negocio, contrastá con **[README.md](../../README.md)** y `backend/prisma/schema.prisma`.
+2. Para arquitectura de dominio (datos, módulos, flujos críticos), contrastá **[docs/MASTER-CONTEXT.md](../../docs/MASTER-CONTEXT.md)** con el código; si cambiás schema, APIs o reglas de negocio listadas allí, actualizá ese doc y su fecha de modificación.
+3. Revisá **[docs/agentes/README.md](../../docs/agentes/README.md)** por decisiones recientes y guías de herramientas (skills, equivalencias a claude-mem en Cursor).
+4. Para datos y reglas de negocio, contrastá con **[README.md](../../README.md)** y `backend/prisma/schema.prisma`.
 
 ## Reglas de producto (obligatorio)
 

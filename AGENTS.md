@@ -29,6 +29,7 @@ Fase actual descrita en el README raíz: **D — Hardening y lógica EAM**.
 - **Despliegue:** [DEPLOY-COOLIFY.md](DEPLOY-COOLIFY.md) — Coolify / producción.
 - **Backend:** `backend/src/features/` — módulos por dominio (auth, equipments, inventory-items, etc.).
 - **Esquema DB:** `backend/prisma/schema.prisma`. Cliente Prisma: se regenera con `npm install` / `npm run build` en `backend/` (`postinstall` + `prebuild`); migraciones en local/prod: ver [docs/agentes/prisma-client-y-migraciones.md](docs/agentes/prisma-client-y-migraciones.md).
+- **Master Context (arquitectura + dominio):** [docs/MASTER-CONTEXT.md](docs/MASTER-CONTEXT.md) — modelo de datos, módulos Nest, rutas Angular, seguridad/PBAC; actualizar al cambiar schema, APIs o flujos críticos (véase tabla de sincronización en ese doc).
 - **Frontend:** `frontend/src/app/` — rutas y componentes de la aplicación.
 
 ## Reglas de dominio (resumen)

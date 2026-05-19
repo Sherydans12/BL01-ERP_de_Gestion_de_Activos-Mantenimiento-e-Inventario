@@ -2,6 +2,8 @@
 
 Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben usar además de `AGENTS.md` en la raíz. Cuanto más mantengáis estos archivos, más estables serán los chats nuevos.
 
+**Arquitectura y dominio (documento maestro):** [../MASTER-CONTEXT.md](../MASTER-CONTEXT.md) — entidades Prisma, módulos NestJS, rutas Angular, PBAC y flujos transaccionales (OT, kardex, compras 3-way). Incluye tabla de **fuentes canónicas** a revisar cuando cambie el código; actualizar la fecha del doc al sincronizar.
+
 **Mapa de repos externos** (claude-mem, ui-ux, n8n-mcp, LightRAG, everything-claude-code): [repos-externos.md](repos-externos.md).
 
 ## Equivalente a claude-mem en Cursor
