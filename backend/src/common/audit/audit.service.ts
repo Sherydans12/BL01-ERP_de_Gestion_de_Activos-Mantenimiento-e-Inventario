@@ -12,7 +12,8 @@ export type AuditEntityType =
   | 'PURCHASE_INVOICE'
   | 'PURCHASE_DOCUMENT'
   | 'WORK_ORDER'
-  | 'INVENTORY_ITEM';
+  | 'INVENTORY_ITEM'
+  | 'WAREHOUSE_RECEIPT';
 
 /** Devuelve solo las claves cuyo valor serializado difiere entre `before` y `after`. */
 export function pickChanged(

@@ -405,6 +405,20 @@ export class WarehouseReceiptsService {
         );
       }
 
+      const existingPending = await tx.warehouseReceipt.findFirst({
+        where: {
+          purchaseOrderId: data.purchaseOrderId,
+          tenantId,
+          status: 'PENDING',
+        },
+        select: { correlative: true },
+      });
+      if (existingPending) {
+        throw new BadRequestException(
+          `Esta OC ya tiene una recepción en borrador abierta (${existingPending.correlative}). Confirme o descarte esa recepción antes de crear una nueva.`,
+        );
+      }
+
       assertUserHasContractAccess(
         user,
         order.contractId,
@@ -487,6 +501,20 @@ export class WarehouseReceiptsService {
     await this.audit.log({
       userId: user.id,
       tenantId,
+      entityType: 'WAREHOUSE_RECEIPT',
+      entityId: receipt.id,
+      action: 'CREATE',
+      newValue: {
+        event: 'warehouse_receipt_created',
+        correlative: receipt.correlative,
+        warehouseName: receipt.warehouse.name,
+        purchaseOrderId: data.purchaseOrderId,
+      },
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      tenantId,
       entityType: 'PURCHASE_ORDER',
       entityId: data.purchaseOrderId,
       action: 'UPDATE',
@@ -513,21 +541,18 @@ export class WarehouseReceiptsService {
   ) {
     const receipt = await this.findById(receiptId, user.tenantId);
 
-    if (receipt.status !== 'PENDING') {
-      throw new BadRequestException(
-        receipt.status === 'COMPLETED'
-          ? 'Esta recepción ya fue confirmada.'
-          : 'Esta recepción ya fue procesada; no se pueden modificar las cantidades.',
-      );
+    if (receipt.status === 'COMPLETED') {
+      throw new BadRequestException('Esta recepción ya fue completamente confirmada y no puede modificarse.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const targetIds = items.map((i) => i.id);
       const receiptLines = await tx.receiptItem.findMany({
         where: { receiptId, id: { in: targetIds } },
         select: {
           id: true,
           orderItemId: true,
+          quantityConfirmed: true,
           orderItem: { select: { quantity: true } },
         },
       });
@@ -545,6 +570,12 @@ export class WarehouseReceiptsService {
         if (incoming < 0) {
           throw new BadRequestException(
             'La cantidad recibida no puede ser negativa.',
+          );
+        }
+        const alreadyConfirmed = Number(line.quantityConfirmed ?? 0);
+        if (incoming < alreadyConfirmed - 1e-9) {
+          throw new BadRequestException(
+            `No se puede reducir la cantidad por debajo de lo ya confirmado (${alreadyConfirmed}). Las cantidades ya confirmadas son irreversibles.`,
           );
         }
         incomingByOrderItem.set(
@@ -597,6 +628,24 @@ export class WarehouseReceiptsService {
       }
       return Promise.all(updates);
     });
+
+    const itemsWithQty = items.filter((i) => (i.quantityReceived ?? 0) > 0);
+    const totalQty = items.reduce((s, i) => s + (i.quantityReceived ?? 0), 0);
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'WAREHOUSE_RECEIPT',
+      entityId: receiptId,
+      action: 'UPDATE',
+      newValue: {
+        event: 'receipt_progress_saved',
+        itemsWithQty: itemsWithQty.length,
+        totalItems: items.length,
+        totalQuantity: totalQty,
+      },
+    });
+
+    return result;
   }
 
   async confirm(receiptId: string, user: any) {
@@ -608,21 +657,24 @@ export class WarehouseReceiptsService {
       'No tiene acceso al contrato de esta recepción',
     );
 
-    if (receipt.status !== 'PENDING') {
-      throw new BadRequestException(
-        receipt.status === 'COMPLETED'
-          ? 'Esta recepción ya fue confirmada.'
-          : 'Esta recepción ya fue procesada; no se puede volver a confirmar.',
-      );
+    if (receipt.status === 'COMPLETED') {
+      throw new BadRequestException('Esta recepción ya fue completamente confirmada.');
     }
 
-    const totalReceived = receipt.items.reduce(
-      (sum, i) => sum + Number(i.quantityReceived),
+    /**
+     * Delta = lo que hay en quantityReceived MENOS lo que ya fue confirmado
+     * (movido a stock) en confirmaciones anteriores de esta misma guía.
+     * Solo el delta se mueve a stock; esto permite confirmar en varias pasadas.
+     */
+    const totalDelta = receipt.items.reduce(
+      (sum, i) =>
+        sum +
+        Math.max(0, Number(i.quantityReceived) - Number((i as any).quantityConfirmed ?? 0)),
       0,
     );
-    if (totalReceived <= 0) {
+    if (totalDelta <= 0) {
       throw new BadRequestException(
-        'No se puede confirmar una recepción sin materiales. Si no recibirá nada, utilice el Cierre Administrativo.',
+        'No hay cantidades nuevas para confirmar. Ingrese o incremente cantidades antes de continuar.',
       );
     }
 
@@ -631,6 +683,7 @@ export class WarehouseReceiptsService {
     let trackedCount = 0;
     let skippedNoLink = 0;
     let skippedDirectExpense = 0;
+    let totalDeltaMoved = 0;
 
     await this.prisma.$transaction(
       async (tx) => {
@@ -646,8 +699,6 @@ export class WarehouseReceiptsService {
             'La bodega de recepción no existe, no pertenece a su empresa o está inactiva. No se puede confirmar.',
           );
         }
-
-        let allComplete = true;
 
         const orderItemIds = receipt.items.map((i) => i.orderItemId);
         const receivedInOtherReceipts = await tx.receiptItem.groupBy({
@@ -678,22 +729,31 @@ export class WarehouseReceiptsService {
             throw new BadRequestException(this.overReceiptMessage);
           }
 
-          if (item.quantityReceived <= 0) continue;
+          /**
+           * Delta = nuevo a mover a stock en esta pasada de confirmación.
+           * quantityConfirmed registra lo ya movido en pasadas previas de esta guía.
+           */
+          const alreadyConfirmed = Number((item as any).quantityConfirmed ?? 0);
+          const delta = Number(item.quantityReceived) - alreadyConfirmed;
+
+          // Actualizar quantityConfirmed = quantityReceived (siempre, para reflejar el estado actual)
+          await tx.receiptItem.update({
+            where: { id: item.id },
+            data: { quantityConfirmed: item.quantityReceived },
+          });
+
+          if (delta <= 1e-9) continue; // ya confirmado en pasada anterior, nada nuevo
 
           const inventoryItemId = item.orderItem.inventoryItemId;
           const inventoryItem = item.orderItem.inventoryItem;
 
           if (!inventoryItemId) {
             skippedNoLink++;
-            if (item.quantityReceived < item.quantityExpected)
-              allComplete = false;
             continue;
           }
 
           if (!inventoryItem?.isInventory) {
             skippedDirectExpense++;
-            if (item.quantityReceived < item.quantityExpected)
-              allComplete = false;
             continue;
           }
 
@@ -707,13 +767,13 @@ export class WarehouseReceiptsService {
           });
 
           const previousStock = existingStock?.quantity ?? 0;
-          const newStock = previousStock + item.quantityReceived;
+          const newStock = previousStock + delta;
           const incomingCost = Number(item.orderItem.unitCost);
 
           const newUnitCost = calculateCPP(
             previousStock,
             Number(existingStock?.unitCost ?? 0),
-            item.quantityReceived,
+            delta,
             incomingCost,
           );
 
@@ -736,13 +796,13 @@ export class WarehouseReceiptsService {
             create: {
               warehouseId: receipt.warehouseId,
               itemId: inventoryItemId,
-              quantity: item.quantityReceived,
+              quantity: delta,
               unitCost: incomingCost,
               minStock: policyDefaults.minStock,
               maxStock: policyDefaults.maxStock,
             },
             update: {
-              quantity: { increment: item.quantityReceived },
+              quantity: { increment: delta },
               unitCost: parseFloat(newUnitCost),
             },
           });
@@ -760,7 +820,7 @@ export class WarehouseReceiptsService {
               itemId: inventoryItemId,
               userId: user.id,
               type: 'PURCHASE_RECEIPT',
-              quantity: item.quantityReceived,
+              quantity: delta,
               previousStock,
               newStock,
               referenceId: receipt.id,
@@ -779,11 +839,24 @@ export class WarehouseReceiptsService {
           );
 
           trackedCount++;
-
-          if (item.quantityReceived < item.quantityExpected) {
-            allComplete = false;
-          }
         }
+
+        /**
+         * Determina si la OC quedó completamente recibida usando datos real-time:
+         * suma(otras recepciones) + esta recepción >= cantidad ordenada, para cada línea.
+         * Esto evita falsos positivos cuando items tienen quantityReceived=0
+         * (eran ignorados por `continue` antes de este check) y falsos negativos
+         * cuando el snapshot `quantityExpected` quedó desactualizado por recepciones
+         * concurrentes confirmadas entre la creación y la confirmación de esta guía.
+         */
+        const allComplete = receipt.items.every((item) => {
+          const alreadyInOther =
+            receivedByOrderItem.get(item.orderItemId) ?? 0;
+          return (
+            alreadyInOther + Number(item.quantityReceived) >=
+            Number(item.orderItem.quantity) - 1e-9
+          );
+        });
 
         const equipmentId = receipt.purchaseOrder.equipmentId;
         if (equipmentId) {
@@ -825,6 +898,9 @@ export class WarehouseReceiptsService {
           where: { id: receipt.purchaseOrderId },
           data: { status: poStatus },
         });
+
+        // Guardar el totalDelta para el log post-transacción
+        totalDeltaMoved = totalDelta;
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -834,6 +910,26 @@ export class WarehouseReceiptsService {
     );
 
     const refreshed = await this.findById(receiptId, user.tenantId);
+
+    const isComplete = refreshed.status === 'COMPLETED';
+    await this.audit.log({
+      userId: user.id,
+      tenantId: user.tenantId,
+      entityType: 'WAREHOUSE_RECEIPT',
+      entityId: receiptId,
+      action: 'STATUS_CHANGE',
+      newValue: {
+        event: isComplete
+          ? 'warehouse_receipt_completed'
+          : 'warehouse_receipt_partial',
+        status: refreshed.status,
+        stockTrackedArticles: trackedCount,
+        totalQuantityMoved: totalDeltaMoved,
+        skippedItems: skippedNoLink + skippedDirectExpense,
+        directExpenseItems: skippedDirectExpense,
+      },
+    });
+
     await this.audit.log({
       userId: user.id,
       tenantId: user.tenantId,
@@ -896,5 +992,26 @@ export class WarehouseReceiptsService {
         message: messages.length > 0 ? messages.join(' ') : null,
       },
     };
+  }
+
+  /** Historial de auditoría de la guía: creación, guardados de avance y confirmación. */
+  async findLogs(receiptId: string, tenantId: string) {
+    const receipt = await this.prisma.warehouseReceipt.findFirst({
+      where: { id: receiptId, tenantId },
+      select: { id: true },
+    });
+    if (!receipt) throw new NotFoundException('Recepción no encontrada');
+
+    return this.prisma.activityLog.findMany({
+      where: {
+        tenantId,
+        entityType: 'WAREHOUSE_RECEIPT',
+        entityId: receiptId,
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
   }
 }

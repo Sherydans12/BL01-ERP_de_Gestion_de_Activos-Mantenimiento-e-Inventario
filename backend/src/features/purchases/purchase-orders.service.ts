@@ -311,6 +311,12 @@ export class PurchaseOrdersService {
       where: {
         tenantId,
         status: { in: [...PO_STATUSES_ALLOW_WAREHOUSE_RECEIPT] },
+        /**
+         * Excluir OCs con una guía de recepción en borrador (PENDING).
+         * Mientras exista una recepción sin confirmar no se puede abrir otra:
+         * confirmar o descartar la existente primero.
+         */
+        receipts: { none: { status: 'PENDING' } },
         ...contractFilter,
       },
       include: {
@@ -1896,9 +1902,25 @@ export class PurchaseOrdersService {
     }
 
     const prevStatus = order.status;
-    const updated = await this.prisma.purchaseOrder.update({
-      where: { id: orderId },
-      data: { status: 'CLOSED', notes: reason },
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.purchaseOrder.update({
+        where: { id: orderId },
+        data: { status: 'CLOSED', notes: reason },
+      });
+
+      // Cierra administrativamente cualquier guía de recepción pendiente o parcial
+      // para que no queden "abiertas" cuando la OC está cerrada.
+      await tx.warehouseReceipt.updateMany({
+        where: {
+          purchaseOrderId: orderId,
+          tenantId: user.tenantId,
+          status: { in: ['PENDING', 'PARTIAL'] },
+        },
+        data: { status: 'COMPLETED' },
+      });
+
+      return result;
     });
 
     await this.audit.log({
@@ -1908,7 +1930,7 @@ export class PurchaseOrdersService {
       entityId: orderId,
       action: 'STATUS_CHANGE',
       oldValue: { status: prevStatus },
-      newValue: { status: updated.status, reason },
+      newValue: { status: updated.status, reason, closedOpenReceipts: true },
     });
 
     return updated;

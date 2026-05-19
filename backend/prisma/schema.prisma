@@ -1441,15 +1441,19 @@ model WarehouseReceipt {
 }
 
 model ReceiptItem {
-  id               String            @id @default(uuid()) @db.Uuid
-  receiptId        String            @map("receipt_id") @db.Uuid
-  orderItemId      String            @map("order_item_id") @db.Uuid
-  quantityExpected Float             @map("quantity_expected")
-  quantityReceived Float             @map("quantity_received")
-  observations     String?           @db.Text
+  id                String            @id @default(uuid()) @db.Uuid
+  receiptId         String            @map("receipt_id") @db.Uuid
+  orderItemId       String            @map("order_item_id") @db.Uuid
+  quantityExpected  Float             @map("quantity_expected")
+  quantityReceived  Float             @map("quantity_received")
+  /// Cantidad ya confirmada y movida a stock. El delta (quantityReceived - quantityConfirmed)
+  /// es lo que se mueve en la próxima confirmación. Permite confirmaciones parciales sucesivas
+  /// sobre la misma guía sin duplicar movimientos de inventario.
+  quantityConfirmed Float             @default(0) @map("quantity_confirmed")
+  observations      String?           @db.Text
 
-  receipt          WarehouseReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  orderItem        PurchaseOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  receipt           WarehouseReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItem         PurchaseOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
 
   @@map("receipt_items")
 }

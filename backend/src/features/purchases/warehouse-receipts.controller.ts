@@ -49,6 +49,11 @@ export class WarehouseReceiptsController {
     return this.service.findById(id, req.user.tenantId);
   }
 
+  @Get(':id/logs')
+  findLogs(@Param('id') id: string, @Req() req: any) {
+    return this.service.findLogs(id, req.user.tenantId);
+  }
+
   @Post()
   @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
   create(

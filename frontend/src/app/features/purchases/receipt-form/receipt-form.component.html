@@ -1,161 +1,487 @@
-<div class="p-4 sm:p-6">
+<div class="p-4 sm:p-6 max-w-6xl mx-auto">
   <app-purchases-push-notice />
 
   @if (isLoading()) {
-    <div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+    <div class="flex justify-center py-16">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
   } @else if (receipt()) {
-    <div class="rounded-xl border border-primary/35 bg-gradient-to-r from-primary/10 to-transparent px-4 py-3 mb-6">
-      <p class="text-[11px] uppercase tracking-wider text-primary/90 font-medium mb-0.5">Contrato de la orden</p>
-      <p class="text-lg font-bold text-main">{{ receipt()!.purchaseOrder?.contract?.name || '—' }}</p>
-      @if (receipt()!.purchaseOrder?.subcontract) {
-        <p class="text-sm text-muted mt-1">
-          {{ receipt()!.purchaseOrder!.subcontract!.code }} — {{ receipt()!.purchaseOrder!.subcontract!.name }}
-        </p>
-      }
-    </div>
 
-    <div class="rounded-xl border border-emerald-500/35 bg-emerald-500/5 px-4 py-3 mb-4">
-      <p class="text-[11px] uppercase tracking-wider text-emerald-400/90 font-medium mb-1">Bodega de ingreso (stock)</p>
-      <p class="text-lg font-bold text-main font-mono">{{ receipt()!.warehouse?.code }} — {{ receipt()!.warehouse?.name }}</p>
-      @if (receipt()!.warehouse?.location) {
-        <p class="text-sm text-muted mt-1">{{ receipt()!.warehouse!.location }}</p>
-      }
-      <p class="text-xs text-muted mt-2">Los ítems inventariables suman saldo y CPP en <strong class="text-main">esta bodega</strong> al confirmar.</p>
-    </div>
-
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <!-- ── Encabezado principal ────────────────────────────────── -->
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-main">{{ receipt()!.correlative }}</h1>
-        <p class="text-sm text-muted mt-1">OC: {{ receipt()!.purchaseOrder?.correlative }}</p>
+        <div class="flex items-center gap-3 flex-wrap mb-1">
+          <h1 class="text-2xl font-bold text-main font-mono">{{ receipt()!.correlative }}</h1>
+
+          <!-- Badge de estado -->
+          @if (receipt()!.status === 'COMPLETED') {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-500/15 text-green-400 border border-green-500/25">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>Completada
+            </span>
+          } @else if (receipt()!.status === 'PARTIAL') {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/25">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>Parcial — continuar recepción
+            </span>
+          } @else {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/25">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary inline-block"></span>Borrador
+            </span>
+          }
+        </div>
+
+        <!-- Meta info: OC, bodega, fecha -->
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted mt-1">
+          <span>OC: <span class="text-main font-mono font-semibold">{{ receipt()!.purchaseOrder?.correlative }}</span></span>
+          <span class="hidden sm:inline text-border">|</span>
+          <span>Bodega: <span class="text-main font-semibold">{{ receipt()!.warehouse?.code }}</span> — {{ receipt()!.warehouse?.name }}</span>
+          @if (receipt()!.receivedAt) {
+            <span class="hidden sm:inline text-border">|</span>
+            <span>Recibido: <span class="text-main">{{ receipt()!.receivedAt | date:'dd/MM/yyyy HH:mm' }}</span></span>
+          }
+        </div>
+
+        <!-- Contrato / subcontrato -->
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span class="uppercase tracking-wider">Contrato:</span>
+          <span class="font-semibold text-main">{{ receipt()!.purchaseOrder?.contract?.name || '—' }}</span>
+          @if (receipt()!.purchaseOrder?.subcontract) {
+            <span class="text-border">·</span>
+            <span class="font-mono text-primary">{{ receipt()!.purchaseOrder!.subcontract!.code }}</span>
+            <span>{{ receipt()!.purchaseOrder!.subcontract!.name }}</span>
+          }
+        </div>
       </div>
-      <div class="flex gap-2">
-        @if (!isReadonly()) {
-          <button (click)="saveItems()" [disabled]="isSaving()"
-                  class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main transition-colors disabled:opacity-50">
-            Guardar Cantidades
-          </button>
+
+      <!-- Botón confirmar -->
+      @if (!isReadonly()) {
+        <div class="shrink-0">
           <button type="button" (click)="requestConfirmReceipt()"
-                  class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
-            Confirmar Recepción
+                  [disabled]="isSaving() || totalReceivedDraft() <= 0"
+                  class="px-5 py-2.5 font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center gap-2"
+                  [class]="isFullReceipt()
+                    ? 'bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-900/20'
+                    : 'bg-amber-600 text-white hover:bg-amber-700 shadow-lg shadow-amber-900/20'">
+            @if (isSaving()) {
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            } @else {
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+            }
+            {{ isFullReceipt() ? 'Confirmar Recepción Completa' : 'Confirmar Recepción Parcial' }}
           </button>
-        }
-      </div>
+          <p class="text-[11px] text-muted text-right mt-1.5">
+            @if (totalReceivedDraft() <= 0) { Ingrese cantidades para habilitar }
+            @else if (isFullReceipt()) { Todos los artículos al máximo — recepción completa }
+            @else { {{ itemsWithQtyCount() }} de {{ totalItemsCount() }} artículos con cantidad }
+          </p>
+        </div>
+      }
     </div>
 
-    @if (hasDiscrepancies() && !isReadonly()) {
-      <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6">
-        <p class="text-sm text-yellow-400 font-medium">La cantidad recibida no iguala el pendiente máximo permitido para esta línea (OC menos otras recepciones). Ajuste o registre observaciones.</p>
-      </div>
-    }
-
-    @if (!isReadonly() && hasUnlinkedItems()) {
-      <div class="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 mb-6 flex gap-3">
-        <svg class="w-5 h-5 text-orange-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <!-- ── Banner recepción parcial activa ────────────────────── -->
+    @if (isPartialWithHistory()) {
+      <div class="rounded-xl border border-amber-500/35 bg-amber-500/8 px-4 py-3.5 mb-5 flex gap-3">
+        <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
         <div>
-          <p class="text-sm font-semibold text-orange-400">Ítems sin vínculo al catálogo</p>
+          <p class="text-sm font-semibold text-amber-400">Recepción parcial — pendiente de completar</p>
           <p class="text-xs text-muted mt-1">
-            Los ítems marcados con <span class="text-orange-400 font-medium">Sin vínculo</span> fueron ingresados
-            como descripción libre en la OC y <strong>no generarán movimiento de inventario</strong> al confirmar.
-            Si necesita control de stock, edite la OC y vincule el ítem al catálogo antes de continuar.
+            Esta guía tiene cantidades ya confirmadas en el kardex (columna <strong class="text-amber-400">Confirmado</strong>).
+            Ingrese en la columna <strong class="text-main">Agregar ahora</strong> las unidades adicionales que está recibiendo hoy
+            y presione <strong class="text-white">Confirmar Recepción</strong>. Solo el nuevo delta se moverá a stock.
           </p>
         </div>
       </div>
     }
 
+    <!-- ── Advertencias de tipos de artículo ──────────────────── -->
+    @if (!isReadonly() && hasUnlinkedItems()) {
+      <div class="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3.5 mb-3 flex gap-3">
+        <svg class="w-4 h-4 text-orange-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <p class="text-xs text-muted">
+          <span class="text-orange-400 font-semibold">Sin vínculo al catálogo</span> — estos artículos
+          <strong class="text-main">no generarán movimiento de inventario</strong> al confirmar.
+          Vincúlalos en el catálogo maestro para trazabilidad completa.
+        </p>
+      </div>
+    }
     @if (!isReadonly() && hasDirectExpenseItems()) {
-      <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6 flex gap-3">
-        <svg class="w-5 h-5 text-blue-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3.5 mb-3 flex gap-3">
+        <svg class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
-        <div>
-          <p class="text-sm font-semibold text-blue-400">Ítems de Gasto Directo</p>
-          <p class="text-xs text-muted mt-1">
-            Los ítems marcados como <span class="text-blue-400 font-medium">Gasto Directo</span> están vinculados al catálogo
-            pero configurados como no inventariables (isInventory = false). Se registran como gasto trazable pero <strong>no ocupan espacio físico ni mueven stock</strong>.
-          </p>
-        </div>
+        <p class="text-xs text-muted">
+          <span class="text-blue-400 font-semibold">Gasto Directo</span> — trazables en kardex
+          pero <strong class="text-main">no ocupan stock físico</strong>.
+        </p>
       </div>
     }
 
-    <div class="bg-surface rounded-xl border border-border overflow-hidden">
+    <!-- ── Tabla de artículos ──────────────────────────────────── -->
+    <div class="bg-surface rounded-xl border border-border overflow-hidden mb-6">
+      <!-- Leyenda de columna "Recibido en otras guías" cuando aplica -->
+      @if (!isPartialWithHistory() && !isReadonly()) {
+        <div class="px-4 py-2 border-b border-border/50 bg-dark/30 flex items-center gap-1.5 text-[11px] text-muted">
+          <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>Haga clic en el nombre de un artículo para ver su ficha del catálogo.</span>
+        </div>
+      }
+
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
-            <tr class="border-b border-border">
-              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Artículo</th>
-              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">P/N</th>
-              <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Pedido OC</th>
-              @if (isReadonly()) {
-                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Esperado (doc.)</th>
+            <tr class="border-b border-border bg-dark/20">
+              <!-- Col 1: Artículo -->
+              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Artículo</th>
+              <!-- Col 2: P/N (oculto < md) -->
+              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden md:table-cell">P/N</th>
+              <!-- Col 3: Pedido OC -->
+              <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide whitespace-nowrap">Pedido OC</th>
+              <!-- Col 4: Contexto (oculto < lg) — cambia según modo -->
+              @if (isPartialWithHistory()) {
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden lg:table-cell whitespace-nowrap"
+                    title="Cantidad ya confirmada y registrada en el kardex de bodega en pasadas anteriores de esta guía">
+                  Confirmado en guía
+                </th>
               } @else {
-                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Pendiente</th>
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden lg:table-cell whitespace-nowrap"
+                    title="Suma recibida en otras guías de recepción de esta misma OC, no incluye esta guía">
+                  Recibido en otras guías
+                </th>
               }
-              <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Recibido</th>
-              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Observaciones</th>
+              <!-- Col 5: Referencia de límite -->
+              @if (isPartialWithHistory()) {
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide whitespace-nowrap"
+                    title="Unidades que aún faltan por confirmar = pedido OC − confirmado en esta guía">
+                  Pendiente
+                </th>
+              } @else if (isReadonly()) {
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide whitespace-nowrap">Esperado (doc.)</th>
+              } @else {
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide whitespace-nowrap"
+                    title="Máximo que puede recibir en esta guía = pedido OC − recibido en otras guías">
+                  Máx. a recibir
+                </th>
+              }
+              <!-- Col 6: Cantidad (input editable o valor readonly) -->
+              @if (isReadonly()) {
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Recibido</th>
+              } @else {
+                <th class="text-center px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide whitespace-nowrap">
+                  {{ isPartialWithHistory() ? 'Agregar ahora' : 'Cant. a recibir' }}
+                </th>
+                <!-- Col 7: Estado del ítem (solo edit) -->
+                <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Estado</th>
+              }
+              <!-- Última col: Observaciones -->
+              <th class="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Observaciones</th>
             </tr>
           </thead>
           <tbody>
             @for (item of editableItems(); track item.id; let i = $index) {
-              <tr class="border-b border-border/50"
-                  [ngClass]="{'bg-yellow-500/5': qtyRowHighlight(item)}">
-                <td class="px-4 py-3 text-sm text-main">
-                  <span>{{ item.orderItem?.inventoryItem?.name || item.orderItem?.description || '—' }}</span>
-                  @if (isItemUnlinked(item)) {
-                    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/25">
-                      Sin vínculo
+              <tr class="border-b border-border/40 hover:bg-white/3 transition-colors"
+                  [ngClass]="rowHighlightClass(item)">
+
+                <!-- Col 1: Artículo (clickeable) -->
+                <td class="px-4 py-3">
+                  <button type="button" (click)="openItemModal(item)" class="text-left group w-full">
+                    <span class="text-sm text-main group-hover:text-primary transition-colors font-medium block leading-snug">
+                      {{ item.orderItem?.inventoryItem?.name || item.orderItem?.description || '—' }}
                     </span>
-                  } @else if (isItemDirectExpense(item)) {
-                    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25">
-                      Gasto Directo
+                    <span class="text-[10px] text-muted group-hover:text-primary/60 transition-colors block mt-0.5 uppercase tracking-wide">
+                      ver ficha →
                     </span>
-                  } @else {
-                    <span class="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                      Stock
-                    </span>
-                  }
+                  </button>
+                  <div class="mt-1.5 flex flex-wrap gap-1">
+                    @if (isItemUnlinked(item)) {
+                      <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20">Sin vínculo</span>
+                    } @else if (isItemDirectExpense(item)) {
+                      <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20">Gasto Directo</span>
+                    } @else {
+                      <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">↑ Stock</span>
+                    }
+                  </div>
                 </td>
-                <td class="px-4 py-3 text-sm font-mono text-muted">
-                  {{ item.orderItem?.inventoryItem?.partNumber || '—' }}
+
+                <!-- Col 2: P/N -->
+                <td class="px-4 py-3 hidden md:table-cell">
+                  <span class="text-xs font-mono text-muted">{{ item.orderItem?.inventoryItem?.partNumber || '—' }}</span>
                 </td>
-                <td class="px-4 py-3 text-center text-sm text-main font-mono">{{ orderedQty(item) }}</td>
-                <td class="px-4 py-3 text-center text-sm text-main font-mono">{{ capQty(item) }}</td>
+
+                <!-- Col 3: Pedido OC -->
                 <td class="px-4 py-3 text-center">
-                  @if (isReadonly()) {
-                    <span class="text-sm font-mono text-main">{{ item._quantityReceived }}</span>
-                  } @else {
-                    <input type="number" min="0" [max]="capQty(item)"
-                           [ngModel]="item._quantityReceived" (ngModelChange)="updateItemQty(i, $event)"
-                           class="w-20 px-2 py-1.5 bg-dark border border-border rounded-lg text-main text-sm text-center font-mono focus:border-primary focus:outline-none">
-                  }
+                  <span class="text-sm font-mono text-main font-semibold">{{ orderedQty(item) }}</span>
+                  <span class="block text-[10px] text-muted mt-0.5">{{ item.orderItem?.inventoryItem?.unitOfMeasure?.abbreviation || 'u.' }}</span>
                 </td>
+
+                <!-- Col 4: Contexto (oculto < lg) -->
+                @if (isPartialWithHistory()) {
+                  <td class="px-4 py-3 text-center hidden lg:table-cell">
+                    @if ((item.quantityConfirmed ?? 0) > 0) {
+                      <span class="text-sm font-mono font-bold text-amber-400">{{ item.quantityConfirmed }}</span>
+                      <span class="block text-[10px] text-amber-400/60 mt-0.5">en kardex</span>
+                    } @else {
+                      <span class="text-xs text-muted font-mono">—</span>
+                    }
+                  </td>
+                } @else {
+                  <td class="px-4 py-3 text-center hidden lg:table-cell">
+                    @if (previouslyReceivedQty(item) > 0) {
+                      <span class="text-sm font-mono font-semibold text-primary">{{ previouslyReceivedQty(item) }}</span>
+                    } @else {
+                      <span class="text-xs text-muted font-mono">—</span>
+                    }
+                  </td>
+                }
+
+                <!-- Col 5: Límite de referencia -->
+                <td class="px-4 py-3 text-center">
+                  <span class="text-sm font-mono text-main">{{ capQty(item) }}</span>
+                </td>
+
+                <!-- Col 6 + 7: Cantidad (edit) o Recibido (readonly) -->
+                @if (isReadonly()) {
+                  <td class="px-4 py-3 text-center">
+                    <span class="text-sm font-mono font-semibold text-main">
+                      {{ (item.quantityConfirmed ?? 0) > 0 ? item.quantityConfirmed : item.quantityReceived }}
+                    </span>
+                    <span class="block text-[10px] text-muted mt-0.5">{{ item.orderItem?.inventoryItem?.unitOfMeasure?.abbreviation || 'u.' }}</span>
+                  </td>
+                } @else {
+                  <!-- Col 6: Input -->
+                  <td class="px-4 py-3 text-center">
+                    @if (capQty(item) <= 0 && isPartialWithHistory()) {
+                      <span class="inline-flex items-center gap-1 text-xs text-green-400 font-medium">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                        </svg>Completo
+                      </span>
+                    } @else {
+                      <input type="number" min="0" [max]="capQty(item)"
+                             [ngModel]="item._quantityReceived" (ngModelChange)="updateItemQty(i, $event)"
+                             class="w-20 px-2 py-1.5 bg-dark border rounded-lg text-main text-sm text-center font-mono focus:outline-none transition-colors"
+                             [class]="item._quantityReceived > 0
+                               ? (item._quantityReceived >= capQty(item) ? 'border-green-600 focus:border-green-500' : 'border-amber-600 focus:border-amber-500')
+                               : 'border-border focus:border-primary'">
+                    }
+                  </td>
+                  <!-- Col 7: Indicador de estado -->
+                  <td class="px-4 py-3">
+                    @if (capQty(item) > 0 || !isPartialWithHistory()) {
+                      <span class="inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-medium whitespace-nowrap"
+                            [ngClass]="qtyStatus(item).classes">
+                        {{ qtyStatus(item).label }}
+                      </span>
+                    }
+                  </td>
+                }
+
+                <!-- Última col: Observaciones -->
                 <td class="px-4 py-3">
                   @if (isReadonly()) {
                     <span class="text-sm text-muted">{{ item._observations || '—' }}</span>
                   } @else {
-                    <textarea rows="1" placeholder="Observación..."
+                    <textarea rows="1" placeholder="Ej: embalaje dañado..."
                               [ngModel]="item._observations" (ngModelChange)="updateItemObs(i, $event)"
-                              class="w-full px-2 py-1.5 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none"></textarea>
+                              class="w-full min-w-[120px] px-2 py-1.5 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none resize-none transition-colors"></textarea>
                   }
                 </td>
+
               </tr>
             }
           </tbody>
         </table>
       </div>
     </div>
+
+    <!-- ── Panel historial ─────────────────────────────────────── -->
+    <div class="bg-surface rounded-xl border border-border p-5">
+      <h2 class="text-sm font-semibold text-main mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Historial de esta guía
+      </h2>
+
+      @if (isLoadingLogs()) {
+        <div class="flex justify-center py-6">
+          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+        </div>
+      } @else if (logs().length === 0) {
+        <p class="text-sm text-muted text-center py-4">Sin registros de actividad.</p>
+      } @else {
+        <ol class="relative border-l border-border/50 ml-2 space-y-5">
+          @for (log of logs(); track log.id) {
+            <li class="ml-5">
+              <span class="absolute -left-[9px] flex h-[18px] w-[18px] items-center justify-center rounded-full border border-border bg-surface">
+                <span class="h-2 w-2 rounded-full"
+                      [class]="logEventColor(log).includes('green') ? 'bg-green-400' : logEventColor(log).includes('amber') ? 'bg-amber-400' : 'bg-primary'">
+                </span>
+              </span>
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
+                <div>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-semibold uppercase tracking-wide mr-2"
+                        [class]="logEventColor(log)">
+                    {{ logEventLabel(log) }}
+                  </span>
+                  <span class="text-sm text-main">{{ log.user?.name || '—' }}</span>
+                  @if (logSummary(log)) {
+                    <p class="text-xs text-muted mt-0.5">{{ logSummary(log) }}</p>
+                  }
+                </div>
+                <time class="text-xs text-muted shrink-0 mt-0.5 sm:mt-0">
+                  {{ log.createdAt | date:'dd/MM/yyyy HH:mm' }}
+                </time>
+              </div>
+            </li>
+          }
+        </ol>
+      }
+    </div>
+
   }
 </div>
 
+<!-- ── Modal confirmación ──────────────────────────────────────── -->
 <app-confirm-modal
   [isOpen]="showConfirmReceiptModal()"
-  title="Confirmar recepción en bodega"
-  message="Esta acción es irreversible: se actualizará el inventario de bodega, se imputarán costos al activo si aplica y se cambiará el estado de la orden de compra. Afecta stock y trazabilidad presupuestaria. Revise cantidades y observaciones. ¿Desea continuar?"
-  confirmText="Sí, confirmar recepción"
+  [title]="confirmModalTitle()"
+  [message]="confirmModalMessage()"
+  [confirmText]="confirmModalConfirmText()"
   cancelText="Volver a revisar"
-  [isDanger]="true"
+  [isDanger]="false"
   (confirm)="confirmReceiptFinal()"
   (cancel)="cancelConfirmReceipt()"
 />
+
+<!-- ── Modal detalle de artículo ───────────────────────────────── -->
+@if (selectedItem()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
+       (click)="closeItemModal()">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+
+    <!-- Panel -->
+    <div class="relative bg-[var(--bg-surface)] border border-border rounded-2xl shadow-2xl w-full max-w-md"
+         (click)="$event.stopPropagation()">
+
+      <!-- Cabecera modal -->
+      <div class="flex items-start justify-between px-5 py-4 border-b border-border">
+        <div class="flex-1 pr-4">
+          <p class="text-[11px] uppercase tracking-wider text-muted mb-1">Ficha del artículo</p>
+          <h3 class="text-base font-bold text-main leading-snug">
+            {{ selectedItem()!.orderItem?.inventoryItem?.name || selectedItem()!.orderItem?.description || 'Sin nombre' }}
+          </h3>
+        </div>
+        <button type="button" (click)="closeItemModal()"
+                class="text-muted hover:text-main transition-colors p-1 rounded-lg hover:bg-white/5">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Cuerpo modal -->
+      <div class="px-5 py-4 space-y-4">
+
+        <!-- Identificadores -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <p class="text-[10px] uppercase tracking-wider text-muted mb-1">Part Number (P/N)</p>
+            <p class="text-sm font-mono font-semibold text-main">
+              {{ selectedItem()!.orderItem?.inventoryItem?.partNumber || '—' }}
+            </p>
+          </div>
+          <div>
+            <p class="text-[10px] uppercase tracking-wider text-muted mb-1">Unidad de medida</p>
+            <p class="text-sm text-main">
+              {{ selectedItem()!.orderItem?.inventoryItem?.unitOfMeasure?.name || '—' }}
+              @if (selectedItem()!.orderItem?.inventoryItem?.unitOfMeasure?.abbreviation) {
+                <span class="text-muted font-mono ml-1">({{ selectedItem()!.orderItem!.inventoryItem!.unitOfMeasure!.abbreviation }})</span>
+              }
+            </p>
+          </div>
+        </div>
+
+        <!-- Tipo de artículo -->
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-muted mb-2">Tipo en inventario</p>
+          @if (isItemUnlinked(selectedItem()!)) {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/25">
+              Sin vínculo al catálogo — no genera movimiento de stock
+            </span>
+          } @else if (isItemDirectExpense(selectedItem()!)) {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20">
+              Gasto Directo — trazable sin stock físico
+            </span>
+          } @else {
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+              Inventariable — incrementa stock y CPP en bodega
+            </span>
+          }
+        </div>
+
+        <!-- Cantidades en contexto de esta guía -->
+        <div class="border border-border rounded-xl p-3.5">
+          <p class="text-[10px] uppercase tracking-wider text-muted mb-3">Cantidades en esta recepción</p>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-muted">Pedido en OC</span>
+              <span class="text-sm font-mono font-semibold text-main">{{ orderedQty(selectedItem()!) }}</span>
+            </div>
+
+            @if (previouslyReceivedQty(selectedItem()!) > 0) {
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-muted">Recibido en otras guías</span>
+                <span class="text-sm font-mono text-primary">{{ previouslyReceivedQty(selectedItem()!) }}</span>
+              </div>
+            }
+
+            @if ((selectedItem()!.quantityConfirmed ?? 0) > 0) {
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-muted">Confirmado en esta guía</span>
+                <span class="text-sm font-mono text-amber-400 font-semibold">{{ selectedItem()!.quantityConfirmed }}</span>
+              </div>
+            }
+
+            @if (!isReadonly()) {
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-muted">{{ isPartialWithHistory() ? 'Ingresando ahora (adicional)' : 'Ingresando ahora' }}</span>
+                <span class="text-sm font-mono font-semibold"
+                      [class]="selectedItem()!._quantityReceived > 0 ? 'text-green-400' : 'text-muted'">
+                  {{ selectedItem()!._quantityReceived }}
+                </span>
+              </div>
+            }
+
+            <div class="border-t border-border/50 pt-2 flex items-center justify-between">
+              <span class="text-xs font-semibold text-muted">Pendiente de recibir</span>
+              <span class="text-sm font-mono font-bold"
+                    [class]="capQty(selectedItem()!) > 0 ? 'text-main' : 'text-green-400'">
+                {{ isReadonly() ? '—' : capQty(selectedItem()!) > 0 ? capQty(selectedItem()!) : '✓ Completo' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Pie modal -->
+      <div class="px-5 py-3 border-t border-border flex justify-end">
+        <button type="button" (click)="closeItemModal()"
+                class="px-4 py-2 text-sm rounded-lg border border-border text-muted hover:text-main hover:border-primary/50 transition-colors">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+}

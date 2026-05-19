@@ -405,6 +405,9 @@ export interface ReceiptItem {
   orderItemId: string;
   quantityExpected: number;
   quantityReceived: number;
+  /** Cantidad ya movida a stock en confirmaciones previas de esta guía.
+   *  Delta = quantityReceived − quantityConfirmed es lo que mueve el próximo confirm(). */
+  quantityConfirmed: number;
   observations?: string;
   /** OC − suma recibida en otras recepciones (mismo `orderItemId`); solo detalle GET. */
   quantityPendingOnPurchase?: number;
@@ -413,6 +416,7 @@ export interface ReceiptItem {
       id: string;
       partNumber: string;
       name: string;
+      isInventory: boolean;
       unitOfMeasure: { id: string; name: string; abbreviation: string };
     };
   };
@@ -808,6 +812,10 @@ export class PurchasesService {
 
   confirmReceipt(id: string): Observable<WarehouseReceipt> {
     return this.http.post<WarehouseReceipt>(`${this.base}/warehouse-receipts/${id}/confirm`, {});
+  }
+
+  getReceiptLogs(id: string): Observable<ActivityLogEntry[]> {
+    return this.http.get<ActivityLogEntry[]>(`${this.base}/warehouse-receipts/${id}/logs`);
   }
 
   // -- Purchase invoices (3-way match) --

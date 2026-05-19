@@ -36,7 +36,8 @@
         </select>
         @if (orders().length === 0) {
           <p class="text-xs text-amber-400/90 mt-2">
-            No hay órdenes elegibles (aprobada, enviada al proveedor o parcialmente recibida) en sus contratos.
+            No hay órdenes elegibles. Posibles motivos: la OC no está enviada al proveedor, ya fue completamente
+            recibida, o tiene una recepción en borrador abierta (debe confirmarla antes de crear una nueva).
             Verifique el estado de la OC o sus permisos de contrato.
           </p>
         }
