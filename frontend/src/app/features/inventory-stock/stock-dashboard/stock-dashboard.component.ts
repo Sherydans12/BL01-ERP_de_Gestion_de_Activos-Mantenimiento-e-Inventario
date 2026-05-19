@@ -46,6 +46,10 @@ import { EntityLinkComponent } from '../../../shared/components/entity-link/enti
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 import {
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { I } from '../../../core/constants/inventory-permissions';
+import {
   CatalogItemDetailModalComponent,
   CatalogItemDetailRow,
 } from '../../inventory-items/catalog-item-detail-modal/catalog-item-detail-modal.component';
@@ -72,10 +76,17 @@ import {
     EntityLinkComponent,
     ConfirmModalComponent,
     CatalogItemDetailModalComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './stock-dashboard.component.html',
 })
 export class StockDashboardComponent implements OnInit {
+  protected readonly i = I;
+
+  readonly canAdjustStock = computed(() =>
+    this.authService.hasPermission(I.STOCK_ADJUST),
+  );
+
   private injector = inject(Injector);
   private destroyRef = inject(DestroyRef);
   private stockService = inject(InventoryStockService);
@@ -571,10 +582,6 @@ export class StockDashboardComponent implements OnInit {
     });
   }
 
-  canAdjustStock(): boolean {
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR']);
-  }
-
   canSeeStockCosts(): boolean {
     return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
   }
@@ -637,6 +644,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   openAdjustModal(row: any) {
+    if (!this.canAdjustStock()) return;
     if (!this.selectedWarehouseId()) return;
     this.adjustStockRow.set(row);
     this.receiptsForAdjust.set([]);
@@ -693,6 +701,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   openPolicyLevelsModal(row: any) {
+    if (!this.canAdjustStock()) return;
     if (!this.selectedWarehouseId()) return;
     this.policyLevelsRow.set(row);
     this.policyLevelsForm.reset({
@@ -1083,6 +1092,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   saveEditLocation(s: { id: string; item: { id: string } }) {
+    if (!this.canAdjustStock()) return;
     const wh = this.selectedWarehouseId();
     if (!wh) return;
     const v = this.locationDraft().trim();
@@ -1128,6 +1138,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   openTransactionModal() {
+    if (!this.canAdjustStock()) return;
     if (!this.selectedWarehouseId()) {
       this.notificationService.info('Selecciona una bodega primero.');
       return;
@@ -1203,6 +1214,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   submitTransaction() {
+    if (!this.canAdjustStock()) return;
     const wh = this.selectedWarehouseId();
     if (!wh) return;
 

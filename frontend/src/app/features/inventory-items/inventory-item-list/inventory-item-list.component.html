@@ -15,6 +15,7 @@
         </p>
       </div>
       <a
+        *appHasPermission="i.ITEM_CREATE"
         routerLink="/app/articulos/nuevo"
         class="shrink-0 inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-lg transition-colors"
       >
@@ -207,11 +208,19 @@
                 (click)="$event.stopPropagation()"
               >
                 <a
+                  *appHasPermission="i.ITEM_UPDATE"
                   [routerLink]="['/app/articulos', item.id]"
                   class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs px-2 py-1"
                   >EDITAR</a
                 >
+                <a
+                  *appHasPermission="i.ITEM_READ"
+                  [routerLink]="['/app/articulos', item.id]"
+                  class="text-muted hover:text-main transition-colors font-mono text-xs px-2 py-1"
+                  >VER</a
+                >
                 <button
+                  *appHasPermission="i.ITEM_DELETE"
                   (click)="deleteItem(item.id, item.inventoryCode, item.partNumber)"
                   class="text-error hover:text-red-400 transition-colors font-mono text-xs px-2 py-1"
                 >

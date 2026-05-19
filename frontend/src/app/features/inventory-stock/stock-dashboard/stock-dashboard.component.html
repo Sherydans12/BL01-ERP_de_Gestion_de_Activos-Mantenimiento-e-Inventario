@@ -66,6 +66,7 @@
             Hoja de conteo físico
           </button>
           <button
+            *appHasPermission="i.STOCK_ADJUST"
             type="button"
             (click)="openTransactionModal()"
             class="inline-flex items-center justify-center bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-lg transition-colors"

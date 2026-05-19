@@ -20,6 +20,7 @@
         @if (allowQuickAdd) {
           <button
             type="button"
+            *appHasPermission="i.ITEM_CREATE"
             (click)="openQuickAdd()"
             class="rounded-lg border border-primary/50 px-3 py-1.5 font-mono text-xs text-primary transition-colors hover:bg-primary/10"
           >
@@ -292,7 +293,7 @@
   </div>
 
   <!-- Fuera del panel con overflow/max-height: el “crear artículo” usa overlay fixed a viewport. -->
-  @if (allowQuickAdd) {
+  @if (showQuickAddEntry()) {
     <app-quick-add-item-modal
       [open]="quickAddOpen()"
       [overlayInsideDialog]="false"

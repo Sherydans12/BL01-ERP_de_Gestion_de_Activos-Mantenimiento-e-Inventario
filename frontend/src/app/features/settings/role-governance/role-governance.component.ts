@@ -16,12 +16,15 @@ import {
   CreateTenantRolePayload,
 } from '../../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { NAV_SECTIONS } from '../../../core/navigation/nav.config';
 import type {
   PermissionCatalogGroup,
   PermissionCatalogModule,
 } from '../../../core/models/permissions-catalog.interface';
 
 const SYSTEM_MIRROR_PREFIX = 'Sistema ·';
+
+type DetailTab = 'menu' | 'pbac';
 
 function normalizePermissions(role: TenantRole | null): string[] {
   if (!role?.permissions) return [];
@@ -41,8 +44,11 @@ export class RoleGovernanceComponent implements OnInit {
   private readonly notif = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
 
+  readonly navSections = NAV_SECTIONS;
+
   readonly loading = signal(true);
   readonly saving = signal(false);
+  readonly savingRoutes = signal(false);
   readonly creating = signal(false);
   readonly showCreateModal = signal(false);
 
@@ -50,13 +56,34 @@ export class RoleGovernanceComponent implements OnInit {
   readonly catalog = signal<PermissionCatalogModule[]>([]);
   readonly selectedRole = signal<TenantRole | null>(null);
   readonly draftPermissions = signal<Set<string>>(new Set());
+  readonly draftRoutes = signal<Set<string>>(new Set());
   readonly expandedModules = signal<Set<string>>(new Set());
+  readonly detailTab = signal<DetailTab>('menu');
 
   readonly customRoles = computed(() =>
     this.roles().filter((r) => !r.name.startsWith(SYSTEM_MIRROR_PREFIX)),
   );
 
-  readonly selectedCount = computed(() => this.draftPermissions().size);
+  readonly isAdminBaseBypass = computed(
+    () => this.selectedRole()?.baseRole === 'ADMIN',
+  );
+
+  readonly selectedCount = computed(() => {
+    if (this.isAdminBaseBypass()) {
+      return this.totalCatalogPermissions();
+    }
+    return this.draftPermissions().size;
+  });
+
+  readonly routesSelectedCount = computed(() => this.draftRoutes().size);
+
+  readonly totalNavRoutes = computed(() => {
+    let n = 0;
+    for (const section of this.navSections) {
+      n += section.items.length;
+    }
+    return n;
+  });
 
   readonly totalCatalogPermissions = computed(() => {
     let n = 0;
@@ -71,7 +98,7 @@ export class RoleGovernanceComponent implements OnInit {
   createForm = {
     name: '',
     description: '',
-    baseRole: 'SUPERVISOR' as CreateTenantRolePayload['baseRole'],
+    baseRole: 'USER' as CreateTenantRolePayload['baseRole'],
   };
 
   ngOnInit(): void {
@@ -104,6 +131,7 @@ export class RoleGovernanceComponent implements OnInit {
             } else {
               this.selectedRole.set(null);
               this.draftPermissions.set(new Set());
+              this.draftRoutes.set(new Set());
             }
           }
           this.loading.set(false);
@@ -118,6 +146,112 @@ export class RoleGovernanceComponent implements OnInit {
   selectRole(role: TenantRole): void {
     this.selectedRole.set(role);
     this.draftPermissions.set(new Set(normalizePermissions(role)));
+    this.draftRoutes.set(new Set(role.routes ?? []));
+  }
+
+  setDetailTab(tab: DetailTab): void {
+    this.detailTab.set(tab);
+  }
+
+  detailTabClasses(tab: DetailTab): string {
+    return this.detailTab() === tab
+      ? 'border-primary text-primary'
+      : 'border-transparent text-muted hover:text-main';
+  }
+
+  isRouteEnabled(route: string): boolean {
+    return this.draftRoutes().has(route);
+  }
+
+  toggleRoute(route: string): void {
+    this.draftRoutes.update((set) => {
+      const next = new Set(set);
+      if (next.has(route)) {
+        next.delete(route);
+      } else {
+        next.add(route);
+      }
+      return next;
+    });
+  }
+
+  selectAllRoutes(): void {
+    const all = new Set<string>();
+    for (const section of this.navSections) {
+      for (const item of section.items) {
+        all.add(item.route);
+      }
+    }
+    this.draftRoutes.set(all);
+  }
+
+  clearAllRoutes(): void {
+    this.draftRoutes.set(new Set());
+  }
+
+  sectionRoutesSelectedCount(sectionLabel: string): number {
+    const section = this.navSections.find((s) => s.label === sectionLabel);
+    if (!section) return 0;
+    const draft = this.draftRoutes();
+    return section.items.filter((i) => draft.has(i.route)).length;
+  }
+
+  selectAllRoutesInSection(sectionLabel: string): void {
+    const section = this.navSections.find((s) => s.label === sectionLabel);
+    if (!section) return;
+    this.draftRoutes.update((set) => {
+      const next = new Set(set);
+      for (const item of section.items) {
+        next.add(item.route);
+      }
+      return next;
+    });
+  }
+
+  clearRoutesInSection(sectionLabel: string): void {
+    const section = this.navSections.find((s) => s.label === sectionLabel);
+    if (!section) return;
+    this.draftRoutes.update((set) => {
+      const next = new Set(set);
+      for (const item of section.items) {
+        next.delete(item.route);
+      }
+      return next;
+    });
+  }
+
+  saveRoutes(): void {
+    const role = this.selectedRole();
+    if (!role || this.savingRoutes()) return;
+
+    this.savingRoutes.set(true);
+    const routes = Array.from(this.draftRoutes()).sort();
+
+    this.tenantRoles
+      .update(role.id, { routes })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => {
+          const merged = {
+            ...updated,
+            permissions: normalizePermissions(updated),
+          };
+          this.roles.update((list) =>
+            list.map((r) => (r.id === merged.id ? merged : r)),
+          );
+          this.selectedRole.set(merged);
+          this.draftRoutes.set(new Set(merged.routes ?? []));
+          this.savingRoutes.set(false);
+          this.notif.success(
+            'Accesos de menú guardados. El usuario debe iniciar sesión de nuevo para ver el menú actualizado.',
+          );
+        },
+        error: (err) => {
+          this.savingRoutes.set(false);
+          const msg = err?.error?.message ?? 'Error al guardar accesos de menú.';
+          this.notif.error(Array.isArray(msg) ? msg.join(', ') : msg);
+        },
+      });
   }
 
   isModuleExpanded(module: string): boolean {
@@ -137,10 +271,16 @@ export class RoleGovernanceComponent implements OnInit {
   }
 
   isPermissionEnabled(key: string): boolean {
+    if (this.isAdminBaseBypass()) return true;
     return this.draftPermissions().has(key);
   }
 
+  isPermissionDisabled(): boolean {
+    return this.isAdminBaseBypass();
+  }
+
   togglePermission(key: string): void {
+    if (this.isAdminBaseBypass()) return;
     this.draftPermissions.update((set) => {
       const next = new Set(set);
       if (next.has(key)) {
@@ -153,6 +293,7 @@ export class RoleGovernanceComponent implements OnInit {
   }
 
   enableAllInGroup(group: PermissionCatalogGroup): void {
+    if (this.isAdminBaseBypass()) return;
     this.draftPermissions.update((set) => {
       const next = new Set(set);
       for (const p of group.permissions) {
@@ -163,6 +304,9 @@ export class RoleGovernanceComponent implements OnInit {
   }
 
   groupEnabledCount(group: PermissionCatalogGroup): number {
+    if (this.isAdminBaseBypass()) {
+      return group.permissions.length;
+    }
     const draft = this.draftPermissions();
     return group.permissions.filter((p) => draft.has(p.key)).length;
   }
@@ -181,7 +325,7 @@ export class RoleGovernanceComponent implements OnInit {
 
   savePermissions(): void {
     const role = this.selectedRole();
-    if (!role || this.saving()) return;
+    if (!role || this.saving() || this.isAdminBaseBypass()) return;
 
     this.saving.set(true);
     const permissions = Array.from(this.draftPermissions()).sort();
@@ -217,7 +361,7 @@ export class RoleGovernanceComponent implements OnInit {
     this.createForm = {
       name: '',
       description: '',
-      baseRole: 'SUPERVISOR',
+      baseRole: 'USER',
     };
     this.showCreateModal.set(true);
   }
@@ -252,7 +396,10 @@ export class RoleGovernanceComponent implements OnInit {
           this.creating.set(false);
           this.showCreateModal.set(false);
           this.selectRole(withPerms);
-          this.notif.success('Rol creado. Asigna permisos de API en el panel derecho.');
+          this.detailTab.set('menu');
+          this.notif.success(
+            'Rol creado. Configura accesos de menú y permisos PBAC en el panel derecho.',
+          );
         },
         error: (err) => {
           this.creating.set(false);

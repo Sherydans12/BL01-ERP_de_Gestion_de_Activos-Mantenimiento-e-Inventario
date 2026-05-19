@@ -2,7 +2,7 @@
 
 Documento de referencia para definir capacidades granulares en `TenantRole.permissions`, el enum `SystemPermissions` (`backend/src/features/auth/constants/permissions.enum.ts`) y los decoradores `@RequirePermissions` en controladores NestJS.
 
-> **Estado del motor:** JWT + `PermissionsGuard` implementados. Este catálogo describe el **objetivo** del próximo sprint; la columna *Estado* indica si la llave ya existe en código.
+> **Estado del motor:** JWT + `PermissionsGuard` implementados. La columna *Estado* indica si la llave ya existe en `permissions.enum.ts` y está aplicada en controladores.
 
 ---
 
@@ -183,14 +183,115 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 
 ---
 
-## Próximos módulos (plantilla)
+## Módulo: Inventario (`inventory`)
 
-Al extender el catálogo, duplicar la misma estructura de tablas con prefijos:
+### Artículos — catálogo maestro (`item`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `inventory:item:read` | `GET /api/inventory-items`<br>`GET /api/inventory-items/search`<br>`GET /api/inventory-items/picker`<br>`GET /api/inventory-items/next-inventory-code`<br>`GET /api/inventory-items/:id`<br>`GET /api/inventory-items/:id/ledger`<br>`GET /api/inventory-items/:id/label`<br>`GET /api/inventory-items/:id/attachments` | Consultar catálogo, buscar, picker global, ficha, kardex por ítem, etiqueta PDF y listado de adjuntos. |
+| ✅ | `inventory:item:create` | `POST /api/inventory-items`<br>`POST /api/inventory-items/quick-create` | Alta de artículo (formulario completo o creación rápida desde picker/OT). |
+| ✅ | `inventory:item:update` | `PUT /api/inventory-items/:id`<br>`POST /api/inventory-items/:id/attachments`<br>`DELETE /api/inventory-items/:id/attachments/:attachmentId` | Editar ficha del artículo y gestionar adjuntos. |
+| ✅ | `inventory:item:delete` | `DELETE /api/inventory-items/:id` | Desactivar o eliminar artículo del catálogo (según reglas del servicio). |
+
+---
+
+### Bodegas (`warehouse`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `inventory:warehouse:read` | `GET /api/warehouses`<br>`GET /api/warehouses/:id`<br>`GET /api/warehouses/:warehouseId/bins`<br>`GET /api/warehouses/:warehouseId/bins/:binId` | Listar bodegas, detalle y ubicaciones (bins) por almacén. |
+| ✅ | `inventory:warehouse:manage` | `POST /api/warehouses`<br>`PUT /api/warehouses/:id`<br>`DELETE /api/warehouses/:id`<br>`POST /api/warehouses/:warehouseId/bins`<br>`PUT /api/warehouses/:warehouseId/bins/:binId`<br>`DELETE /api/warehouses/:warehouseId/bins/:binId` | Crear, editar y desactivar bodegas y sus ubicaciones internas. |
+
+---
+
+### Categorías / familias (`category`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `inventory:category:read` | `GET /api/item-categories`<br>`GET /api/item-categories/families`<br>`GET /api/item-categories/children/:parentId`<br>`GET /api/item-categories/:id` | Consultar jerarquía de familias, subfamilias y categorías. |
+| ✅ | `inventory:category:manage` | `POST /api/item-categories`<br>`PUT /api/item-categories/:id`<br>`DELETE /api/item-categories/:id` | Crear, editar y eliminar nodos de la taxonomía de ítems. |
+
+---
+
+### Transferencias W2W (`transfer`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `inventory:transfer:read` | `GET /api/inventory-transfers`<br>`GET /api/inventory-transfers/:id` | Ver listado y detalle de traslados entre bodegas. |
+| ✅ | `inventory:transfer:create` | `POST /api/inventory-transfers` | Solicitar y despachar traslado W2W desde bodega origen. |
+| ✅ | `inventory:transfer:approve` | `POST /api/inventory-transfers/:id/receive` | Confirmar recepción en bodega destino (movimiento `TRANSFER_IN` al kardex). |
+
+---
+
+### Stock y ajustes (`stock`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `inventory:stock:read` | `GET /api/inventory-stock/supply-alerts`<br>`GET /api/inventory-stock/inventory-record-accuracy`<br>`GET /api/inventory-stock/pending`<br>`GET /api/inventory-stock/pending/count`<br>`GET /api/inventory-stock/warehouse/:warehouseId`<br>`GET /api/inventory-stock/warehouse/:warehouseId/transactions`<br>`GET /api/inventory-stock/warehouse/:warehouseId/item/:itemId/stock-position`<br>`GET /api/inventory-stock/warehouse/:warehouseId/item/:itemId/reservations`<br>`GET /api/inventory-stock/warehouse/:warehouseId/pending-regularization`<br>`GET /api/inventory-stock/warehouse/:warehouseId/physical-count-sheet/pdf` | Consultar saldos, kardex por bodega, alertas de abastecimiento, reservas OT y reportes operativos de stock. |
+| ✅ | `inventory:stock:adjust` | `POST /api/inventory-stock/transaction`<br>`POST /api/inventory-stock/return`<br>`PUT /api/inventory-stock/warehouse/:warehouseId/item/:itemId/levels`<br>`POST /api/inventory-adjustments` | Movimientos manuales de stock, devoluciones vinculadas a OT, políticas min/max por bodega y ajustes de inventario físico (kardex). |
+
+> **Pendiente PBAC (inventario):** `inventory-suppliers`, `inventory-analytics` siguen en `@Roles` legacy hasta un sprint de extensión.
+
+---
+
+## Matriz resumida — Inventario (checklist sprint)
+
+### Artículos
+
+- [x] Ver → `inventory:item:read`
+- [x] Crear → `inventory:item:create`
+- [x] Editar → `inventory:item:update`
+- [x] Desactivar → `inventory:item:delete`
+
+### Bodegas
+
+- [x] Ver → `inventory:warehouse:read`
+- [x] Gestionar → `inventory:warehouse:manage`
+
+### Categorías
+
+- [x] Ver → `inventory:category:read`
+- [x] Gestionar → `inventory:category:manage`
+
+### Transferencias W2W
+
+- [x] Ver → `inventory:transfer:read`
+- [x] Crear → `inventory:transfer:create`
+- [x] Confirmar recepción → `inventory:transfer:approve`
+
+### Stock / ajustes
+
+- [x] Ver → `inventory:stock:read`
+- [x] Ajustar → `inventory:stock:adjust`
+
+---
+
+## Próximos módulos (plantilla)
 
 | Módulo | Prefijo | Recursos previstos |
 |--------|---------|-------------------|
-| Inventario | `inventory:` | `item`, `stock`, `transfer`, `adjustment`, … |
 | Operaciones / EAM | `operations:` | `equipment`, `work-order`, `pm-kit`, … |
+
+---
+
+## Cobertura frontend (Inventario)
+
+Desde el cierre PBAC Inventario (2026-05-19), **15 llaves** con paridad backend + UI:
+
+| Área | Backend | Frontend |
+|------|:-------:|:--------:|
+| Artículos (`item`) | ✅ `inventory-items.controller.ts` | ✅ listado, ficha (`isFormReadOnly`), rutas `articulos/*` |
+| Bodegas (`warehouse`) | ✅ `warehouses.controller.ts`, `warehouse-bins` | ✅ listado, formulario |
+| Categorías (`category`) | ✅ `item-categories.controller.ts` | ✅ `inventory-settings` |
+| Transferencias W2W (`transfer`) | ✅ `inventory-transfer.controller.ts` | ✅ listado, despacho, confirmar recepción |
+| Stock / ajustes (`stock`) | ✅ `inventory-stock`, `inventory-adjustment` | ✅ `stock-dashboard`, movimientos |
+
+Patrones UI: `nav.config.ts` (`permissions: I.*`), `permissionGuard` en `app.routes.ts`, `*appHasPermission` en CTAs y acciones de fila (links inline, sin menú de tres puntos), `GlobalItemPicker` quick-add condicionado a `inventory:item:create` + `allowQuickAdd`.
+
+Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](../frontend/src/app/core/constants/inventory-permissions.ts). Detalle: [`docs/FRONTEND-SECURITY.md`](FRONTEND-SECURITY.md) § Inventario.
+
+> **Fuera de alcance:** `inventory-suppliers`, `inventory-analytics` — siguen `@Roles` legacy.
 
 ---
 

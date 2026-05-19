@@ -9,8 +9,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import type {
   CreateInventoryTransferDto,
   ListInventoryTransfersQuery,
@@ -18,29 +19,32 @@ import type {
 import { InventoryTransferService } from './inventory-transfer.service';
 
 @Controller('inventory-transfers')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class InventoryTransferController {
   constructor(
     private readonly inventoryTransferService: InventoryTransferService,
   ) {}
 
   @Get()
+  @RequirePermissions(SystemPermissions.INVENTORY_TRANSFER_READ)
   list(@Req() req: any, @Query() query: ListInventoryTransfersQuery) {
     return this.inventoryTransferService.listTransfers(req.user, query);
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.INVENTORY_TRANSFER_CREATE)
   execute(@Body() dto: CreateInventoryTransferDto, @Req() req: any) {
     return this.inventoryTransferService.executeTransfer(dto, req.user);
   }
 
   @Get(':id')
+  @RequirePermissions(SystemPermissions.INVENTORY_TRANSFER_READ)
   getOne(@Param('id') id: string, @Req() req: any) {
     return this.inventoryTransferService.getTransferById(id, req.user);
   }
 
   @Post(':id/receive')
+  @RequirePermissions(SystemPermissions.INVENTORY_TRANSFER_APPROVE)
   confirmReception(@Param('id') id: string, @Req() req: any) {
     return this.inventoryTransferService.confirmReception(id, req.user);
   }

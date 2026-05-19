@@ -9,6 +9,7 @@ Guía para extender el motor de permisos del TPM en Angular 18. Complementa el c
 | Llaves de permiso (enum) | `backend/src/features/auth/constants/permissions.enum.ts` |
 | Catálogo UI gobernanza | `backend/src/features/auth/constants/permissions-catalog.ts` |
 | Constantes FE Compras | `frontend/src/app/core/constants/purchases-permissions.ts` (`P`, `REQUISITION_EDIT_ANY`) |
+| Constantes FE Inventario | `frontend/src/app/core/constants/inventory-permissions.ts` (`I`) |
 | JWT | Campo `permissions: string[]` en el payload; se lee en `AuthService` |
 
 Tras cambiar permisos de un `TenantRole`, el usuario debe **volver a iniciar sesión** para que el JWT refleje los cambios.
@@ -112,3 +113,15 @@ Cobertura aplicada en:
 - Adjuntos: `PurchaseDocumentsPanelComponent` usa `purchases:document:manage`.
 
 Ver inventario detallado de llaves en [`RBAC-PERMISSIONS-CATALOG.md`](RBAC-PERMISSIONS-CATALOG.md).
+
+## Módulo Inventario (referencia rápida)
+
+Cobertura aplicada en:
+
+- Rutas: bloque inventario en `app.routes.ts` (`articulos`, `inventario/*`).
+- Nav: sección Inventario en `nav.config.ts` con `permissions: I.*`.
+- Vistas: catálogo, ficha artículo, bodegas, categorías, transferencias W2W, control de stock / abastecimiento.
+- Formularios: `fieldset [disabled]` + `isFormReadOnly` en artículos y bodegas; CTAs con `*appHasPermission`.
+- `GlobalItemPicker`: botón «+ Nuevo artículo» con `*appHasPermission="I.ITEM_CREATE"` y `allowQuickAdd`; guard defensivo en `openQuickAdd()`.
+
+Pendiente PBAC: `inventory-suppliers`, `inventory-analytics` (siguen roles legacy).

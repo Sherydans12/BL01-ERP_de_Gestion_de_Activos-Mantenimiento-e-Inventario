@@ -17,20 +17,25 @@ import type {
   UpdateStockLevelsDto,
 } from './inventory-stock.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('inventory-stock')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class InventoryStockController {
   constructor(private readonly inventoryStockService: InventoryStockService) {}
 
   /** Alertas de abastecimiento: stock ≤ mínimo (todas las bodegas del tenant). */
   @Get('supply-alerts')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getSupplyAlerts(@Req() req: any) {
     return this.inventoryStockService.getSupplyAlerts(req.user);
   }
 
   /** IRA: exactitud de inventario (ajustes por conteo vs stock, últimos 30 días). */
   @Get('inventory-record-accuracy')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getInventoryRecordAccuracy(
     @Req() req: any,
     @Query('warehouseId') warehouseId?: string,
@@ -42,6 +47,7 @@ export class InventoryStockController {
 
   /** Auditoría: saldos negativos o con marca de regularización pendiente (paginado). */
   @Get('warehouse/:warehouseId/pending-regularization')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getPendingRegularizationPage(
     @Param('warehouseId') warehouseId: string,
     @Req() req: any,
@@ -60,6 +66,7 @@ export class InventoryStockController {
 
   /** Ubicación y saldo actual para un ítem en bodega (movimientos manuales). */
   @Get('warehouse/:warehouseId/item/:itemId/stock-position')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getStockPosition(
     @Param('warehouseId') warehouseId: string,
     @Param('itemId') itemId: string,
@@ -74,6 +81,7 @@ export class InventoryStockController {
 
   /** Desglose de reservas de stock (OT) para un ítem en bodega. */
   @Get('warehouse/:warehouseId/item/:itemId/reservations')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   listStockReservations(
     @Param('warehouseId') warehouseId: string,
     @Param('itemId') itemId: string,
@@ -86,8 +94,8 @@ export class InventoryStockController {
     );
   }
 
-  // Obtener todo el stock de una bodega específica
   @Get('warehouse/:warehouseId')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getStock(
     @Param('warehouseId') warehouseId: string,
     @Req() req: any,
@@ -102,6 +110,7 @@ export class InventoryStockController {
 
   /** Hoja de conteo físico (PDF ciego: sin stock sistema). */
   @Get('warehouse/:warehouseId/physical-count-sheet/pdf')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   async physicalCountSheetPdf(
     @Param('warehouseId') warehouseId: string,
     @Req() req: any,
@@ -117,8 +126,8 @@ export class InventoryStockController {
     });
   }
 
-  // Obtener el historial (Kárdex) de una bodega (opcional: filtrar por ítem)
   @Get('warehouse/:warehouseId/transactions')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getTransactions(
     @Param('warehouseId') warehouseId: string,
     @Req() req: any,
@@ -141,32 +150,32 @@ export class InventoryStockController {
     );
   }
 
-  // Transacciones pendientes de regularización (stock negativo)
   @Get('pending')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getPending(@Req() req: any) {
     return this.inventoryStockService.getPendingRegularizations(req.user);
   }
 
-  // Conteo de transacciones pendientes
   @Get('pending/count')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_READ)
   getPendingCount(@Req() req: any) {
     return this.inventoryStockService.getPendingCount(req.user);
   }
 
-  // Ingresar un movimiento de stock (Ingreso, Salida, Ajuste)
   @Post('transaction')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_ADJUST)
   performTransaction(@Body() dto: PerformTransactionDto, @Req() req: any) {
     return this.inventoryStockService.performTransaction(dto, req.user);
   }
 
-  // Devolución atómica vinculada a una OT
   @Post('return')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_ADJUST)
   performReturn(@Body() dto: PerformReturnDto, @Req() req: any) {
     return this.inventoryStockService.performReturn(dto, req.user);
   }
 
-  // Actualizar stock mínimo/máximo por bodega + artículo
   @Put('warehouse/:warehouseId/item/:itemId/levels')
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_ADJUST)
   updateStockLevels(
     @Param('warehouseId') warehouseId: string,
     @Param('itemId') itemId: string,

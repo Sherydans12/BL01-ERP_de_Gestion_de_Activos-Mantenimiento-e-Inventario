@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/services/auth/auth.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { P, REQUISITION_EDIT_ANY } from './core/constants/purchases-permissions';
+import { I } from './core/constants/inventory-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 
 export const routes: Routes = [
@@ -172,11 +173,11 @@ export const routes: Routes = [
             (m) => m.KitFormComponent,
           ),
       },
-      // ── Inventario ─────────────────────────────────────────────────────────
+      // ── Inventario — PBAC en permissionGuard ─────────────────────────────────
       {
         path: 'articulos',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR'], pageTitle: 'Catálogo Maestro de Artículos' },
+        canActivate: [permissionGuard],
+        data: { permissions: I.ITEM_READ, pageTitle: 'Catálogo Maestro de Artículos' },
         loadComponent: () =>
           import('./features/inventory-items/inventory-item-list/inventory-item-list.component').then(
             (m) => m.InventoryItemListComponent,
@@ -184,8 +185,8 @@ export const routes: Routes = [
       },
       {
         path: 'articulos/nuevo',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR'], pageTitle: 'Catálogo Maestro de Artículos' },
+        canActivate: [permissionGuard],
+        data: { permissions: I.ITEM_CREATE, pageTitle: 'Catálogo Maestro de Artículos' },
         loadComponent: () =>
           import('./features/inventory-items/inventory-item-form/inventory-item-form.component').then(
             (m) => m.InventoryItemFormComponent,
@@ -193,8 +194,8 @@ export const routes: Routes = [
       },
       {
         path: 'articulos/:id',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR'], pageTitle: 'Catálogo Maestro de Artículos' },
+        canActivate: [permissionGuard],
+        data: { permissions: I.ITEM_READ, pageTitle: 'Catálogo Maestro de Artículos' },
         loadComponent: () =>
           import('./features/inventory-items/inventory-item-form/inventory-item-form.component').then(
             (m) => m.InventoryItemFormComponent,
@@ -202,11 +203,8 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/configuracion',
-        canActivate: [authGuard],
-        data: {
-          roles: ['ADMIN', 'SUPERVISOR'],
-          pageTitle: 'Ajustes de inventario',
-        },
+        canActivate: [permissionGuard],
+        data: { permissions: I.CATEGORY_READ, pageTitle: 'Ajustes de inventario' },
         loadComponent: () =>
           import('./features/inventory-settings/inventory-settings.component').then(
             (m) => m.InventorySettingsComponent,
@@ -214,11 +212,8 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/bodegas',
-        canActivate: [authGuard],
-        data: {
-          roles: ['ADMIN', 'SUPERVISOR'],
-          pageTitle: 'Gestión de Bodegas',
-        },
+        canActivate: [permissionGuard],
+        data: { permissions: I.WAREHOUSE_READ, pageTitle: 'Gestión de Bodegas' },
         loadComponent: () =>
           import('./features/warehouses/warehouse-list/warehouse-list.component').then(
             (m) => m.WarehouseListComponent,
@@ -226,11 +221,8 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/bodegas/nueva',
-        canActivate: [authGuard],
-        data: {
-          roles: ['ADMIN', 'SUPERVISOR'],
-          pageTitle: 'Gestión de Bodegas',
-        },
+        canActivate: [permissionGuard],
+        data: { permissions: I.WAREHOUSE_MANAGE, pageTitle: 'Gestión de Bodegas' },
         loadComponent: () =>
           import('./features/warehouses/warehouse-form/warehouse-form.component').then(
             (m) => m.WarehouseFormComponent,
@@ -238,11 +230,8 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/bodegas/:id',
-        canActivate: [authGuard],
-        data: {
-          roles: ['ADMIN', 'SUPERVISOR'],
-          pageTitle: 'Gestión de Bodegas',
-        },
+        canActivate: [permissionGuard],
+        data: { permissions: I.WAREHOUSE_READ, pageTitle: 'Gestión de Bodegas' },
         loadComponent: () =>
           import('./features/warehouses/warehouse-form/warehouse-form.component').then(
             (m) => m.WarehouseFormComponent,
@@ -250,11 +239,8 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/transferencias',
-        canActivate: [authGuard],
-        data: {
-          roles: ['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'],
-          pageTitle: 'Transferencias entre Bodegas',
-        },
+        canActivate: [permissionGuard],
+        data: { permissions: I.TRANSFER_READ, pageTitle: 'Transferencias entre Bodegas' },
         loadComponent: () =>
           import('./features/inventory-transfer/inventory-transfer.component').then(
             (m) => m.InventoryTransferComponent,
@@ -273,11 +259,12 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/stock',
+        canActivate: [permissionGuard],
+        data: { permissions: I.STOCK_READ, pageTitle: 'Control de Stock' },
         loadComponent: () =>
           import('./features/inventory-stock/stock-dashboard/stock-dashboard.component').then(
             (m) => m.StockDashboardComponent,
           ),
-        data: { pageTitle: 'Control de Stock' },
       },
       {
         path: 'stock',
@@ -286,11 +273,8 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/valorizacion',
-        canActivate: [authGuard],
-        data: {
-          roles: ['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'],
-          pageTitle: 'Valorización de inventario',
-        },
+        canActivate: [permissionGuard],
+        data: { permissions: I.STOCK_READ, pageTitle: 'Valorización de inventario' },
         loadComponent: () =>
           import('./features/inventory-stock/stock-dashboard/stock-dashboard.component').then(
             (m) => m.StockDashboardComponent,
@@ -298,11 +282,12 @@ export const routes: Routes = [
       },
       {
         path: 'inventario/abastecimiento',
+        canActivate: [permissionGuard],
+        data: { permissions: I.STOCK_READ, pageTitle: 'Abastecimiento' },
         loadComponent: () =>
           import('./features/inventory-stock/supply-alerts/supply-alerts.component').then(
             (m) => m.SupplyAlertsComponent,
           ),
-        data: { pageTitle: 'Abastecimiento' },
       },
       {
         path: 'inventario/registro-horas',
@@ -503,7 +488,7 @@ export const routes: Routes = [
       {
         path: 'configuracion/gobernanza-roles',
         canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPER_ADMIN'], pageTitle: 'Gobernanza de roles (PBAC)' },
+        data: { roles: ['ADMIN', 'SUPER_ADMIN'], pageTitle: 'Roles y Seguridad' },
         loadComponent: () =>
           import('./features/settings/role-governance/role-governance.component').then(
             (m) => m.RoleGovernanceComponent,
@@ -521,12 +506,8 @@ export const routes: Routes = [
       },
       {
         path: 'roles',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN'] },
-        loadComponent: () =>
-          import('./features/roles/roles.component').then(
-            (m) => m.RolesComponent,
-          ),
+        redirectTo: 'configuracion/gobernanza-roles',
+        pathMatch: 'full',
       },
     ],
   },

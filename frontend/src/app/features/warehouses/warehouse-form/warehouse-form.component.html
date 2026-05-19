@@ -39,11 +39,21 @@
     </div>
   </div>
 
+  @if (isFormReadOnly()) {
+    <div
+      class="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-main mb-4"
+      role="status"
+    >
+      Solo lectura: no tiene permiso para gestionar bodegas.
+    </div>
+  }
+
   <form
     [formGroup]="warehouseForm"
     (ngSubmit)="onSubmit()"
     class="bg-surface border border-border rounded-xl shadow-lg p-6 space-y-6"
   >
+    <fieldset [disabled]="isFormReadOnly()" class="space-y-6 border-0 p-0 m-0 min-w-0">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div>
         <label class="block text-sm font-medium text-muted mb-1"
@@ -140,19 +150,23 @@
       </div>
     </div>
 
+    </fieldset>
+
     <div class="flex justify-end gap-4 pt-4">
       <a
         routerLink="/app/inventario/bodegas"
         class="px-6 py-2 font-medium text-muted hover:text-main transition-colors"
         >Cancelar</a
       >
-      <button
-        type="submit"
-        [disabled]="warehouseForm.invalid"
-        class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-2 px-8 rounded shadow-lg disabled:opacity-50"
-      >
-        GUARDAR BODEGA
-      </button>
+      @if (!isFormReadOnly()) {
+        <button
+          type="submit"
+          [disabled]="warehouseForm.invalid"
+          class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono py-2 px-8 rounded shadow-lg disabled:opacity-50"
+        >
+          GUARDAR BODEGA
+        </button>
+      }
     </div>
   </form>
 </div>

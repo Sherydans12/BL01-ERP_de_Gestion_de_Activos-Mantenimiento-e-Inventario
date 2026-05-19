@@ -16,6 +16,10 @@ import { WarehousesService } from '../../core/services/warehouses/warehouses.ser
 import { ItemPickerRow } from '../../core/services/inventory-items/inventory-items.service';
 import { ConfirmModalComponent } from '../../shared/components/confirm-modal/confirm-modal.component';
 import { GlobalItemPickerComponent } from '../../shared/components/global-item-picker/global-item-picker.component';
+import {
+  HasPermissionDirective,
+} from '../../shared/directives/has-permission.directive';
+import { I } from '../../core/constants/inventory-permissions';
 
 type DraftLine = {
   itemId: string;
@@ -48,10 +52,13 @@ type ListSortKey = 'createdAt' | 'origin' | 'dest' | 'status';
     RouterLink,
     ConfirmModalComponent,
     GlobalItemPickerComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './inventory-transfer.component.html',
 })
 export class InventoryTransferComponent implements OnInit {
+  protected readonly i = I;
+
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
   private transferService = inject(InventoryTransferService);
@@ -393,6 +400,7 @@ export class InventoryTransferComponent implements OnInit {
    * puede tener destino en otro contrato y el ADMIN igual debe poder confirmar.
    */
   canConfirmReception(transfer: InventoryTransferRow): boolean {
+    if (!this.authService.hasPermission(I.TRANSFER_APPROVE)) return false;
     if (!this.isReceivable(transfer)) return false;
     const destContractId = transfer.destinationWarehouse?.contractId;
     if (!destContractId) return false;

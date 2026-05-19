@@ -25,6 +25,8 @@ import {
 import { QuickAddItemModalComponent } from '../quick-add-item-modal/quick-add-item-modal.component';
 import { SkeletonRowComponent } from '../skeleton-row/skeleton-row.component';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { I } from '../../../core/constants/inventory-permissions';
+import { HasPermissionDirective } from '../../directives/has-permission.directive';
 
 /**
  * Selector modal de artículos usando `<dialog>.showModal()` para quedar por
@@ -38,6 +40,7 @@ import { AuthService } from '../../../core/services/auth/auth.service';
     FormsModule,
     QuickAddItemModalComponent,
     SkeletonRowComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './global-item-picker.component.html',
   styles: [
@@ -59,6 +62,8 @@ import { AuthService } from '../../../core/services/auth/auth.service';
 export class GlobalItemPickerComponent
   implements OnInit, OnChanges, AfterViewInit, OnDestroy
 {
+  protected readonly i = I;
+
   private itemsService = inject(InventoryItemsService);
   private authService = inject(AuthService);
 
@@ -342,7 +347,15 @@ export class GlobalItemPickerComponent
     this.pickerDialog?.nativeElement?.close();
   }
 
+  /** Quick-add solo si el padre lo habilita y el usuario puede crear en catálogo. */
+  showQuickAddEntry(): boolean {
+    return (
+      this.allowQuickAdd && this.authService.hasPermission(I.ITEM_CREATE)
+    );
+  }
+
   openQuickAdd() {
+    if (!this.showQuickAddEntry()) return;
     this.quickAddOpen.set(true);
   }
 

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -22,6 +22,10 @@ import {
   UnitOfMeasureRow,
 } from '../../../core/services/units-of-measure/units-of-measure.service';
 import { ItemLedgerTableComponent } from '../../../shared/components/item-ledger-table/item-ledger-table.component';
+import {
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { I } from '../../../core/constants/inventory-permissions';
 
 @Component({
   selector: 'app-inventory-item-form',
@@ -31,10 +35,13 @@ import { ItemLedgerTableComponent } from '../../../shared/components/item-ledger
     ReactiveFormsModule,
     RouterLink,
     ItemLedgerTableComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './inventory-item-form.component.html',
 })
 export class InventoryItemFormComponent implements OnInit {
+  protected readonly i = I;
+
   private fb = inject(FormBuilder);
   private inventoryItemsService = inject(InventoryItemsService);
   private warehousesService = inject(WarehousesService);
@@ -72,8 +79,16 @@ export class InventoryItemFormComponent implements OnInit {
   /** Creación: mientras llega la vista previa del correlativo desde el API. */
   nextSkuLoading = signal(false);
 
-  canManageAttachments = () =>
-    this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+  readonly isFormReadOnly = computed(() => {
+    if (this.mode === 'CREATING') {
+      return !this.authService.hasPermission(I.ITEM_CREATE);
+    }
+    return !this.authService.hasPermission(I.ITEM_UPDATE);
+  });
+
+  readonly canManageAttachments = computed(() =>
+    this.authService.hasPermission(I.ITEM_UPDATE),
+  );
 
   constructor() {
     this.itemForm = this.fb.group({
@@ -93,6 +108,15 @@ export class InventoryItemFormComponent implements OnInit {
       initialWarehouseId: [''],
       initialMinStock: [''],
       initialMaxStock: [''],
+    });
+
+    effect(() => {
+      if (this.isFormReadOnly()) {
+        this.itemForm.disable({ emitEvent: false });
+      } else {
+        this.itemForm.enable({ emitEvent: false });
+        this.itemForm.get('inventoryCode')?.disable({ emitEvent: false });
+      }
     });
   }
 
@@ -362,6 +386,7 @@ export class InventoryItemFormComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.isFormReadOnly()) return;
     if (this.itemForm.invalid) {
       this.itemForm.markAllAsTouched();
       return;

@@ -675,6 +675,7 @@ enum UserRole {
   ADMIN
   SUPERVISOR
   MECHANIC
+  USER
 }
 
 enum BackgroundPreference {

@@ -6,7 +6,10 @@
     </div>
   </div>
 
-  <section class="rounded-xl border border-border bg-surface p-4 space-y-4">
+  <section
+    *appHasPermission="i.TRANSFER_CREATE"
+    class="rounded-xl border border-border bg-surface p-4 space-y-4"
+  >
     <h3 class="text-xs font-mono font-bold text-primary uppercase tracking-wider">
       Nueva Transferencia
     </h3>
@@ -288,6 +291,7 @@
                     </button>
                     @if (canConfirmReception(t)) {
                       <button
+                        *appHasPermission="i.TRANSFER_APPROVE"
                         type="button"
                         (click)="requestConfirmReception(t)"
                         class="rounded border border-amber-500/40 px-2 py-1 text-[11px] font-mono uppercase text-amber-300 hover:bg-amber-500/10"
@@ -465,6 +469,7 @@
           <div class="border-t border-border bg-dark/40 px-4 py-3 flex flex-wrap justify-end gap-2 shrink-0">
             @if (canConfirmReception(d)) {
               <button
+                *appHasPermission="i.TRANSFER_APPROVE"
                 type="button"
                 (click)="requestConfirmReception(d)"
                 class="rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs font-mono uppercase text-amber-300 hover:bg-amber-500/10"

@@ -17,6 +17,15 @@
     </a>
   </div>
 
+  @if (!canManageCategories()) {
+    <div
+      class="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-main"
+      role="status"
+    >
+      Solo lectura: puede consultar categorías pero no modificarlas sin el permiso de gestión.
+    </div>
+  }
+
   <div class="flex flex-wrap gap-2 border-b border-border pb-1">
     <button
       type="button"
@@ -50,6 +59,7 @@
       selectores de compras y órdenes de trabajo.
     </p>
     <button
+      *appHasPermission="i.CATEGORY_MANAGE"
       type="button"
       (click)="openNewFamily()"
       class="inline-flex items-center rounded-lg bg-primary px-4 py-2 font-mono text-sm font-bold text-dark shadow transition-colors hover:bg-primary/90"
@@ -110,6 +120,7 @@
           <div class="border-t border-border/60 bg-dark/20 px-4 py-4">
             <div class="mb-4 flex flex-wrap gap-2">
               <button
+                *appHasPermission="i.CATEGORY_MANAGE"
                 type="button"
                 (click)="openNewSub(fam.id)"
                 class="rounded-lg border border-primary/40 px-3 py-1.5 font-mono text-xs text-primary hover:bg-primary/10"
@@ -117,6 +128,7 @@
                 + Subcategoría
               </button>
               <button
+                *appHasPermission="i.CATEGORY_MANAGE"
                 type="button"
                 (click)="editFamily(fam)"
                 class="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-muted hover:text-main"
@@ -124,6 +136,7 @@
                 Editar familia
               </button>
               <button
+                *appHasPermission="i.CATEGORY_MANAGE"
                 type="button"
                 (click)="deleteFamily(fam)"
                 class="rounded-lg border border-error/30 px-3 py-1.5 font-mono text-xs text-error hover:bg-error/10"
@@ -157,6 +170,7 @@
                     </div>
                     <div class="flex gap-2">
                       <button
+                        *appHasPermission="i.CATEGORY_MANAGE"
                         type="button"
                         (click)="editSub(sub)"
                         class="text-xs text-primary hover:underline"
@@ -164,6 +178,7 @@
                         Editar
                       </button>
                       <button
+                        *appHasPermission="i.CATEGORY_MANAGE"
                         type="button"
                         (click)="deleteSub(sub, fam.id)"
                         class="text-xs text-error hover:underline"
@@ -196,6 +211,7 @@
       defecto UN, KG, LT y MT.
     </p>
     <button
+      *appHasPermission="i.CATEGORY_MANAGE"
       type="button"
       (click)="openNewUom()"
       class="inline-flex items-center rounded-lg bg-primary px-4 py-2 font-mono text-sm font-bold text-dark shadow transition-colors hover:bg-primary/90"

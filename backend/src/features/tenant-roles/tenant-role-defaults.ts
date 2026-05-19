@@ -10,6 +10,7 @@ export const SYSTEM_MIRROR_ROLE_NAME: Record<UserRole, string> = {
   ADMIN: 'Sistema · ADMIN',
   SUPERVISOR: 'Sistema · SUPERVISOR',
   MECHANIC: 'Sistema · MECHANIC',
+  USER: 'Sistema · USER',
 };
 
 const DESCRIPTIONS: Record<UserRole, string> = {
@@ -21,6 +22,8 @@ const DESCRIPTIONS: Record<UserRole, string> = {
     'Rol base (espejo). Asignable en matriz de firmas; equivale a SUPERVISOR del usuario.',
   MECHANIC:
     'Rol base (espejo). Asignable en matriz de firmas; equivale a MECHANIC del usuario.',
+  USER:
+    'Rol base (espejo). Sin privilegios por defecto; pizarra en blanco para permisos y menú.',
 };
 
 const ALL_ROLES: UserRole[] = [
@@ -28,10 +31,11 @@ const ALL_ROLES: UserRole[] = [
   UserRole.ADMIN,
   UserRole.SUPERVISOR,
   UserRole.MECHANIC,
+  UserRole.USER,
 ];
 
 /**
- * Crea en tenant_roles los cuatro roles espejo si faltan (idempotente).
+ * Crea en tenant_roles los roles espejo del enum si faltan (idempotente).
  */
 export async function ensureDefaultTenantRolesForTenant(
   db: Pick<PrismaClient, 'tenantRole'>,

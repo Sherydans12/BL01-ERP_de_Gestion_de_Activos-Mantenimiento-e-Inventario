@@ -16,6 +16,7 @@
         Configuración de categorías
       </a>
       <a
+        *appHasPermission="i.WAREHOUSE_MANAGE"
         routerLink="/app/inventario/bodegas/nueva"
         class="bg-primary hover:bg-primary/90 text-dark font-bold font-mono text-sm py-2 px-4 rounded shadow-lg transition-colors flex items-center gap-2"
       >
@@ -89,11 +90,19 @@
             </td>
             <td class="py-4 px-6 text-right space-x-2">
               <a
+                *appHasPermission="i.WAREHOUSE_MANAGE"
                 [routerLink]="['/app/inventario/bodegas', warehouse.id]"
                 class="text-[#00E5FF] hover:text-white transition-colors font-mono text-xs px-2 py-1"
                 >EDITAR</a
               >
+              <a
+                *appHasPermission="i.WAREHOUSE_READ"
+                [routerLink]="['/app/inventario/bodegas', warehouse.id]"
+                class="text-muted hover:text-main transition-colors font-mono text-xs px-2 py-1"
+                >VER</a
+              >
               <button
+                *appHasPermission="i.WAREHOUSE_MANAGE"
                 (click)="deleteWarehouse(warehouse.id, warehouse.code)"
                 class="text-error hover:text-red-400 transition-colors font-mono text-xs px-2 py-1"
               >

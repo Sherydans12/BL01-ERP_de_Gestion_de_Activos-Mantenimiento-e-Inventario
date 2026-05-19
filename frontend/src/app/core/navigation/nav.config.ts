@@ -1,7 +1,8 @@
 import { P } from '../constants/purchases-permissions';
+import { I } from '../constants/inventory-permissions';
 
 /** Roles disponibles en el sistema (deben coincidir con Prisma UserRole). */
-export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC' | 'USER';
 
 /** Descripción de cada rol para mostrar en la interfaz. */
 export const ROLE_LABELS: Record<AppRole, string> = {
@@ -9,6 +10,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   ADMIN: 'Administrador',
   SUPERVISOR: 'Supervisor',
   MECHANIC: 'Mecánico',
+  USER: 'Usuario base',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
@@ -16,6 +18,7 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   ADMIN: 'Control total sobre el tenant. Gestiona usuarios, contratos y configuración de la empresa.',
   SUPERVISOR: 'Supervisa operaciones: órdenes de trabajo, flota, inventario y pautas de mantenimiento.',
   MECHANIC: 'Opera en terreno: ejecuta órdenes de trabajo asignadas y consulta flota y stock.',
+  USER: 'Sin privilegios por defecto. Configure menú y permisos PBAC según el perfil.',
 };
 
 /** Filtra ítems de menú según PBAC (tras rutas/roles legacy). */
@@ -177,36 +180,37 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Catálogo Maestro de Artículos',
         route: '/app/articulos',
         icon: ICONS.cube,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: I.ITEM_READ,
       },
       {
         label: 'Gestión de Bodegas',
         route: '/app/inventario/bodegas',
         icon: ICONS.archive,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: I.WAREHOUSE_READ,
       },
       {
         label: 'Transferencias entre Bodegas',
         route: '/app/inventario/transferencias',
         icon: ICONS.collection,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: I.TRANSFER_READ,
       },
       {
         label: 'Configuración de categorías',
         route: '/app/inventario/configuracion',
         icon: ICONS.adjustments,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: I.CATEGORY_READ,
       },
       {
         label: 'Control de Stock',
         route: '/app/inventario/stock',
         icon: ICONS.chartBar,
+        permissions: I.STOCK_READ,
       },
       {
         label: 'Abastecimiento',
         route: '/app/inventario/abastecimiento',
         icon: ICONS.clipboard,
-        roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
+        permissions: I.STOCK_READ,
       },
     ],
   },
@@ -292,12 +296,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ICONS.shieldCheck,
         roles: ['SUPER_ADMIN', 'ADMIN'],
       },
-      {
-        label: 'Roles y permisos API',
-        route: '/app/configuracion/gobernanza-roles',
-        icon: ICONS.shieldCheck,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
-      },
     ],
   },
   {
@@ -305,7 +303,11 @@ export const NAV_SECTIONS: NavSection[] = [
     roles: ['SUPER_ADMIN', 'ADMIN'],
     items: [
       { label: 'Gestión de Usuarios', route: '/app/usuarios', icon: ICONS.users },
-      { label: 'Roles y Permisos', route: '/app/roles', icon: ICONS.shieldCheck },
+      {
+        label: 'Roles y Seguridad',
+        route: '/app/configuracion/gobernanza-roles',
+        icon: ICONS.shieldCheck,
+      },
     ],
   },
 ];

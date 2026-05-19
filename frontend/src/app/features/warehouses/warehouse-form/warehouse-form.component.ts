@@ -20,6 +20,7 @@ import { environment } from '../../../../environments/environment';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { I } from '../../../core/constants/inventory-permissions';
 
 @Component({
   selector: 'app-warehouse-form',
@@ -28,6 +29,8 @@ import { AuthService } from '../../../core/services/auth/auth.service';
   templateUrl: './warehouse-form.component.html',
 })
 export class WarehouseFormComponent implements OnInit {
+  protected readonly i = I;
+
   private fb = inject(FormBuilder);
   private warehousesService = inject(WarehousesService);
   public authService = inject(AuthService);
@@ -50,6 +53,13 @@ export class WarehouseFormComponent implements OnInit {
     return contract?.subcontracts || [];
   });
 
+  readonly isFormReadOnly = computed(() => {
+    if (this.mode === 'CREATING') {
+      return !this.authService.hasPermission(I.WAREHOUSE_MANAGE);
+    }
+    return !this.authService.hasPermission(I.WAREHOUSE_MANAGE);
+  });
+
   constructor() {
     this.warehouseForm = this.fb.group({
       code: ['', Validators.required],
@@ -67,12 +77,19 @@ export class WarehouseFormComponent implements OnInit {
 
     effect(
       () => {
+        const readOnly = this.isFormReadOnly();
+        if (readOnly) {
+          this.warehouseForm.disable({ emitEvent: false });
+          return;
+        }
+        this.warehouseForm.enable({ emitEvent: false });
         const currentContract = this.authService.currentContractId();
         if (currentContract !== 'ALL') {
-          this.warehouseForm.patchValue({ contractId: currentContract });
-          this.warehouseForm.get('contractId')?.disable();
-        } else {
-          this.warehouseForm.get('contractId')?.enable();
+          this.warehouseForm.patchValue(
+            { contractId: currentContract },
+            { emitEvent: false },
+          );
+          this.warehouseForm.get('contractId')?.disable({ emitEvent: false });
         }
       },
       { allowSignalWrites: true },
@@ -118,6 +135,7 @@ export class WarehouseFormComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.isFormReadOnly()) return;
     if (this.warehouseForm.invalid) {
       this.warehouseForm.markAllAsTouched();
       return;

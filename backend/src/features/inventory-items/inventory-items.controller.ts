@@ -20,34 +20,39 @@ import type { QuickCreateItemDto } from './dto/quick-create-item.dto';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
 
 const attachmentFileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
 @Controller('inventory-items')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class InventoryItemsController {
   constructor(private readonly inventoryItemsService: InventoryItemsService) {}
 
   @Post()
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_CREATE)
   create(@Body() dto: CreateInventoryItemDto, @Req() req: any) {
     return this.inventoryItemsService.create(dto, req.user);
   }
 
   @Post('quick-create')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_CREATE)
   quickCreate(@Body() dto: QuickCreateItemDto, @Req() req: any) {
     return this.inventoryItemsService.quickCreate(dto, req.user);
   }
 
   @Get('search')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   search(@Query('q') q: string, @Req() req: any) {
     return this.inventoryItemsService.search(req.user, q);
   }
 
   /** Debe declararse antes de `:id` para no capturarse como UUID. */
   @Get('picker')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   findPicker(
     @Req() req: any,
     @Query('search') search?: string,
@@ -86,11 +91,13 @@ export class InventoryItemsController {
 
   /** Vista previa del próximo `IN####` (no reserva correlativo). */
   @Get('next-inventory-code')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   peekNextInventorySku(@Req() req: any) {
     return this.inventoryItemsService.peekNextInventorySku(req.user);
   }
 
   @Get()
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   findCatalog(
     @Req() req: any,
     @Query('page') page?: string,
@@ -112,13 +119,13 @@ export class InventoryItemsController {
 
   /** Debe declararse antes de `:id` para no capturarse como UUID. */
   @Get(':id/attachments')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   listAttachments(@Param('id') id: string, @Req() req: any) {
     return this.inventoryItemsService.listAttachments(id, req.user);
   }
 
   @Post(':id/attachments')
-  @UseGuards(RolesGuard)
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_UPDATE)
   @UseInterceptors(FileInterceptor('file', attachmentFileLimits))
   uploadAttachment(
     @Param('id') id: string,
@@ -132,8 +139,7 @@ export class InventoryItemsController {
   }
 
   @Delete(':id/attachments/:attachmentId')
-  @UseGuards(RolesGuard)
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_UPDATE)
   removeAttachment(
     @Param('id') id: string,
     @Param('attachmentId') attachmentId: string,
@@ -147,6 +153,7 @@ export class InventoryItemsController {
   }
 
   @Get(':id/ledger')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   getLedger(
     @Param('id') id: string,
     @Req() req: any,
@@ -171,6 +178,7 @@ export class InventoryItemsController {
    * @param size `100x50` (mm, defecto) o `50x25`.
    */
   @Get(':id/label')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   async getItemLabel(
     @Param('id') id: string,
     @Req() req: any,
@@ -189,11 +197,13 @@ export class InventoryItemsController {
   }
 
   @Get(':id')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
   findOne(@Param('id') id: string, @Req() req: any) {
     return this.inventoryItemsService.findOne(id, req.user);
   }
 
   @Put(':id')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_UPDATE)
   update(
     @Param('id') id: string,
     @Body() dto: UpdateInventoryItemDto,
@@ -203,6 +213,7 @@ export class InventoryItemsController {
   }
 
   @Delete(':id')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_DELETE)
   remove(@Param('id') id: string, @Req() req: any) {
     return this.inventoryItemsService.remove(id, req.user);
   }

@@ -58,4 +58,27 @@ export enum SystemPermissions {
   PURCHASES_DOCUMENT_READ = 'purchases:document:read',
   PURCHASES_DOCUMENT_MANAGE = 'purchases:document:manage',
   PURCHASES_ANALYTICS_READ = 'purchases:analytics:read',
+
+  // —— Inventario: artículos ——
+  INVENTORY_ITEM_READ = 'inventory:item:read',
+  INVENTORY_ITEM_CREATE = 'inventory:item:create',
+  INVENTORY_ITEM_UPDATE = 'inventory:item:update',
+  INVENTORY_ITEM_DELETE = 'inventory:item:delete',
+
+  // —— Inventario: bodegas ——
+  INVENTORY_WAREHOUSE_READ = 'inventory:warehouse:read',
+  INVENTORY_WAREHOUSE_MANAGE = 'inventory:warehouse:manage',
+
+  // —— Inventario: categorías / familias ——
+  INVENTORY_CATEGORY_READ = 'inventory:category:read',
+  INVENTORY_CATEGORY_MANAGE = 'inventory:category:manage',
+
+  // —— Inventario: transferencias W2W ——
+  INVENTORY_TRANSFER_READ = 'inventory:transfer:read',
+  INVENTORY_TRANSFER_CREATE = 'inventory:transfer:create',
+  INVENTORY_TRANSFER_APPROVE = 'inventory:transfer:approve',
+
+  // —— Inventario: stock y ajustes ——
+  INVENTORY_STOCK_READ = 'inventory:stock:read',
+  INVENTORY_STOCK_ADJUST = 'inventory:stock:adjust',
 }

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -11,14 +11,24 @@ import {
   UnitsOfMeasureService,
   UnitOfMeasureRow,
 } from '../../core/services/units-of-measure/units-of-measure.service';
+import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
+import { AuthService } from '../../core/services/auth/auth.service';
+import { I } from '../../core/constants/inventory-permissions';
 
 @Component({
   selector: 'app-inventory-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, HasPermissionDirective],
   templateUrl: './inventory-settings.component.html',
 })
 export class InventorySettingsComponent implements OnInit {
+  protected readonly i = I;
+
+  private auth = inject(AuthService);
+  readonly canManageCategories = computed(() =>
+    this.auth.hasPermission(I.CATEGORY_MANAGE),
+  );
+
   private items = inject(InventoryItemsService);
   private notify = inject(NotificationService);
   private uomApi = inject(UnitsOfMeasureService);
@@ -193,7 +203,14 @@ export class InventorySettingsComponent implements OnInit {
     this.ensureChildrenLoaded(familyId);
   }
 
+  private requireCategoryManage(): boolean {
+    if (this.canManageCategories()) return true;
+    this.notify.error('No tiene permiso para gestionar categorías.');
+    return false;
+  }
+
   openNewFamily() {
+    if (!this.requireCategoryManage()) return;
     this.editingFamilyId.set(null);
     this.familyName = '';
     this.familyDescription = '';
@@ -212,6 +229,7 @@ export class InventorySettingsComponent implements OnInit {
   }
 
   saveFamily() {
+    if (!this.requireCategoryManage()) return;
     const name = this.familyName.trim();
     if (!name) {
       this.notify.error('El nombre de la familia es obligatorio');

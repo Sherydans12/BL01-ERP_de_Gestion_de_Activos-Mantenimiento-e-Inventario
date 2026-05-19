@@ -5,14 +5,18 @@ import { WarehousesService } from '../../../core/services/warehouses/warehouses.
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { SkeletonRowComponent } from '../../../shared/components/skeleton-row/skeleton-row.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { I } from '../../../core/constants/inventory-permissions';
 
 @Component({
   selector: 'app-warehouse-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, SkeletonRowComponent],
+  imports: [CommonModule, RouterLink, SkeletonRowComponent, HasPermissionDirective],
   templateUrl: './warehouse-list.component.html',
 })
 export class WarehouseListComponent implements OnInit {
+  protected readonly i = I;
+
   private warehousesService = inject(WarehousesService);
   private notificationService = inject(NotificationService);
   private authService = inject(AuthService);

@@ -274,6 +274,108 @@ export const PURCHASES_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
   },
 ];
 
+/** Catálogo data-driven para UI de gobernanza de roles (módulo Inventario). */
+export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
+  {
+    module: 'Inventario',
+    groups: [
+      {
+        name: 'Artículos (catálogo maestro)',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_ITEM_READ,
+            label: 'Ver artículos',
+            description:
+              'Listar catálogo, buscar, picker, ficha, kardex por ítem, adjuntos y etiqueta PDF.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_ITEM_CREATE,
+            label: 'Crear artículos',
+            description: 'Alta completa o rápida (quick-create) en el catálogo.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_ITEM_UPDATE,
+            label: 'Editar artículos',
+            description: 'Modificar ficha del ítem y gestionar adjuntos.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_ITEM_DELETE,
+            label: 'Desactivar artículos',
+            description: 'Desactivar o eliminar artículos del catálogo (según reglas del servicio).',
+          },
+        ],
+      },
+      {
+        name: 'Bodegas',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_WAREHOUSE_READ,
+            label: 'Ver bodegas',
+            description: 'Listar bodegas, detalle y ubicaciones (bins) por almacén.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_WAREHOUSE_MANAGE,
+            label: 'Gestionar bodegas',
+            description: 'Crear, editar y desactivar bodegas y sus ubicaciones internas.',
+          },
+        ],
+      },
+      {
+        name: 'Categorías y familias',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_CATEGORY_READ,
+            label: 'Ver categorías',
+            description: 'Consultar familias, subfamilias y jerarquía de categorías.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_CATEGORY_MANAGE,
+            label: 'Gestionar categorías',
+            description: 'Crear, editar y eliminar familias / categorías de ítems.',
+          },
+        ],
+      },
+      {
+        name: 'Transferencias entre bodegas (W2W)',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_TRANSFER_READ,
+            label: 'Ver transferencias',
+            description: 'Listar y consultar detalle de traslados W2W.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_TRANSFER_CREATE,
+            label: 'Solicitar traslado',
+            description: 'Crear y despachar transferencia desde bodega origen.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_TRANSFER_APPROVE,
+            label: 'Confirmar recepción',
+            description: 'Confirmar ingreso en bodega destino (movimiento a stock).',
+          },
+        ],
+      },
+      {
+        name: 'Stock y ajustes',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_STOCK_READ,
+            label: 'Ver stock',
+            description:
+              'Saldos por bodega, kardex, alertas de abastecimiento, reservas y reportes operativos de stock.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_STOCK_ADJUST,
+            label: 'Ajustar stock',
+            description:
+              'Movimientos manuales, devoluciones, niveles min/max y ajustes de inventario físico (kardex).',
+          },
+        ],
+      },
+    ],
+  },
+];
+
 export function getPermissionsCatalog(): PermissionCatalogModule[] {
-  return PURCHASES_PERMISSIONS_CATALOG;
+  return [...PURCHASES_PERMISSIONS_CATALOG, ...INVENTORY_PERMISSIONS_CATALOG];
 }

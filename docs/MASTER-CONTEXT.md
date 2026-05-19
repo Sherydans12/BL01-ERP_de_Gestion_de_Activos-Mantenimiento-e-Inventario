@@ -361,7 +361,7 @@ Fuente: [`frontend/src/app/app.routes.ts`](../frontend/src/app/app.routes.ts).
 | `/app/usuarios`, `/app/roles` | IAM tenant |
 | `/app/admin/*` | Super admin |
 
-Navegación: [`nav.config.ts`](../frontend/src/app/core/navigation/nav.config.ts) + PBAC [`purchases-permissions.ts`](../frontend/src/app/core/constants/purchases-permissions.ts).
+Navegación: [`nav.config.ts`](../frontend/src/app/core/navigation/nav.config.ts) + PBAC [`purchases-permissions.ts`](../frontend/src/app/core/constants/purchases-permissions.ts) y [`inventory-permissions.ts`](../frontend/src/app/core/constants/inventory-permissions.ts) (`I.*` en menú, guards y `*appHasPermission`).
 
 ### 3.2 Servicios HTTP → API crítica
 
@@ -423,10 +423,16 @@ Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arqui
 
 #### PBAC Compras
 
-- **41 llaves** en [`permissions.enum.ts`](../backend/src/features/auth/constants/permissions.enum.ts).
+- **41 llaves** `purchases:*` en [`permissions.enum.ts`](../backend/src/features/auth/constants/permissions.enum.ts).
 - Catálogo humano: [RBAC-PERMISSIONS-CATALOG.md](RBAC-PERMISSIONS-CATALOG.md).
 - Frontend espejo: [`purchases-permissions.ts`](../frontend/src/app/core/constants/purchases-permissions.ts).
 - Guard: [`permissions.guard.ts`](../backend/src/features/auth/guards/permissions.guard.ts) — AND; bypass ADMIN/SUPER_ADMIN.
+
+#### PBAC Inventario (2026-05-19)
+
+- **15 llaves** `inventory:*` (artículo, bodega, categoría, transferencia W2W, stock/ajuste) — controladores en `inventory-items`, `warehouses`, `item-categories`, `inventory-transfer`, `inventory-stock`, `inventory-adjustment`.
+- Frontend: [`inventory-permissions.ts`](../frontend/src/app/core/constants/inventory-permissions.ts), `permissionGuard` en rutas `/app/articulos/*` y `/app/inventario/*`, formularios en solo lectura sin permiso de mutación, `GlobalItemPicker` quick-add solo con `inventory:item:create`.
+- Pendiente PBAC: `inventory-suppliers`, `inventory-analytics` (siguen `@Roles`).
 
 #### Flags ABAC adicionales
 
@@ -461,7 +467,7 @@ Inventario completo: [notificaciones-sistema.md](agentes/notificaciones-sistema.
 |-----------|-----------|
 | [AGENTS.md](../AGENTS.md) | Índice agentes |
 | [README.md](../README.md) | Visión e instalación |
-| [RBAC-PERMISSIONS-CATALOG.md](RBAC-PERMISSIONS-CATALOG.md) | PBAC compras |
+| [RBAC-PERMISSIONS-CATALOG.md](RBAC-PERMISSIONS-CATALOG.md) | PBAC compras + inventario |
 | [PURCHASE-FLOWS.md](PURCHASE-FLOWS.md) | Flujo P2P |
 | [PURCHASE-GOVERNANCE.md](PURCHASE-GOVERNANCE.md) | Firmas ACL |
 | [decisiones.md](agentes/decisiones.md) | Decisiones recientes |

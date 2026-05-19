@@ -20,6 +20,8 @@ import {
   CatalogItemDetailModalComponent,
   CatalogItemDetailRow,
 } from '../catalog-item-detail-modal/catalog-item-detail-modal.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { I } from '../../../core/constants/inventory-permissions';
 import {
   Subject,
   Subscription,
@@ -37,10 +39,13 @@ import {
     SkeletonRowComponent,
     ConfirmModalComponent,
     CatalogItemDetailModalComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './inventory-item-list.component.html',
 })
 export class InventoryItemListComponent implements OnInit, OnDestroy {
+  protected readonly i = I;
+
   private inventoryItemsService = inject(InventoryItemsService);
   private notificationService = inject(NotificationService);
 
