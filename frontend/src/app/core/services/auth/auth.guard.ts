@@ -2,6 +2,7 @@ import { inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { Router, CanActivateFn } from '@angular/router';
 import { AuthService } from './auth.service';
+import { resolveAccessDeniedRedirect } from '../../navigation/app-navigation.util';
 
 export const authGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
@@ -24,7 +25,9 @@ export const authGuard: CanActivateFn = (route, state) => {
   if (expectedRoles?.length) {
     // hasRole ya incluye bypass para SUPER_ADMIN
     if (!authService.hasRole(expectedRoles)) {
-      router.navigate(['/app/dashboard']);
+      void router.navigateByUrl(
+        resolveAccessDeniedRedirect(authService, state.url),
+      );
       return false;
     }
   }

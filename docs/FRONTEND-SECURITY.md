@@ -85,7 +85,8 @@ import { P, REQUISITION_EDIT_ANY } from './core/constants/purchases-permissions'
 
 - `data.permissions` → AND (alineado al backend `@RequirePermissions`).
 - `data.permissionsAny` → OR (p. ej. edición de SRC con varios permisos de update).
-- Sin permiso: redirección a `/app/dashboard`.
+- Sin permiso: **no** redirige ciegamente al dashboard (evita bucle si falta `core:dashboard:read`). Usa `resolveAccessDeniedRedirect` en `app-navigation.util.ts`: dashboard si hay permiso → primer ítem del menú accesible → `/app/configuracion` (Mi cuenta).
+- Post-login y `/app` vacío: `resolvePostLoginUrl` + `appDefaultLandingGuard` validan `returnUrl` y el destino por defecto.
 - El layout `app` ya usa `authGuard`; `permissionGuard` es adicional por ruta.
 
 ## Menú lateral (nav)

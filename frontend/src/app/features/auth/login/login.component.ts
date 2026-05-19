@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { resolvePostLoginUrl } from '../../../core/navigation/app-navigation.util';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 
 /** Ventajas reales del producto (panel hero). */
@@ -103,13 +104,18 @@ export class LoginComponent implements OnInit {
 
   ngOnInit() {
     if (this.authService.hasValidSession()) {
-      this.router.navigateByUrl('/app/dashboard');
+      this.router.navigateByUrl(this.resolveReturnUrl());
       return;
     }
 
     const raw = this.route.snapshot.queryParamMap.get('returnUrl') ?? '';
     this.returnUrl = raw.startsWith('/') ? raw : '/app/dashboard';
     this.refreshCaptcha();
+  }
+
+  /** Evita enviar al dashboard si el JWT no incluye `core:dashboard:read`. */
+  private resolveReturnUrl(): string {
+    return resolvePostLoginUrl(this.authService, this.returnUrl);
   }
 
   refreshCaptcha(): void {
@@ -183,7 +189,7 @@ export class LoginComponent implements OnInit {
               this.stepUpForm.reset({ code: '' });
               return;
             }
-            this.router.navigateByUrl(this.returnUrl);
+            this.router.navigateByUrl(this.resolveReturnUrl());
           },
           error: () => {
             this.isLoading.set(false);
@@ -209,7 +215,7 @@ export class LoginComponent implements OnInit {
       .subscribe({
         next: () => {
           this.isLoading.set(false);
-          this.router.navigateByUrl(this.returnUrl);
+          this.router.navigateByUrl(this.resolveReturnUrl());
         },
         error: () => {
           this.isLoading.set(false);
@@ -241,7 +247,7 @@ export class LoginComponent implements OnInit {
             this.stepUpForm.reset({ code: '' });
             return;
           }
-          this.router.navigateByUrl(this.returnUrl);
+          this.router.navigateByUrl(this.resolveReturnUrl());
         },
         error: () => {
           this.isLoading.set(false);
