@@ -32,6 +32,7 @@
     class="bg-surface border border-border rounded-xl p-6 shadow-xl backdrop-blur-md"
   >
     <form [formGroup]="configForm" (ngSubmit)="onSubmit()" class="space-y-8">
+      <fieldset [disabled]="isFormReadOnly()" class="space-y-8 border-0 p-0 m-0 min-w-0">
 
       <!-- Datos fiscales y contacto -->
       <div class="space-y-4">
@@ -598,32 +599,35 @@
         </dialog>
       }
 
-      <!-- Footer Buttons -->
-      <div class="flex justify-end pt-4 border-t border-border">
-        <button
-          type="submit"
-          [disabled]="configForm.invalid || isSaving()"
-          class="bg-primary text-zinc-950 font-bold px-8 py-2.5 rounded-lg transition-all duration-200
-                 hover:bg-opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
-                 shadow-primary/20 shadow-lg flex items-center justify-center min-w-[150px]"
-        >
-          @if (isSaving()) {
-            <svg
-              class="animate-spin h-5 w-5 text-zinc-950"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-          } @else {
-            GUARDAR CAMBIOS
-          }
-        </button>
-      </div>
+      </fieldset>
+
+      @if (!isFormReadOnly()) {
+        <div class="flex justify-end pt-4 border-t border-border">
+          <button
+            type="submit"
+            [disabled]="configForm.invalid || isSaving()"
+            class="bg-primary text-zinc-950 font-bold px-8 py-2.5 rounded-lg transition-all duration-200
+                   hover:bg-opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+                   shadow-primary/20 shadow-lg flex items-center justify-center min-w-[150px]"
+          >
+            @if (isSaving()) {
+              <svg
+                class="animate-spin h-5 w-5 text-zinc-950"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            } @else {
+              GUARDAR CAMBIOS
+            }
+          </button>
+        </div>
+      }
     </form>
   </div>
 </div>

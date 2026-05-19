@@ -9,31 +9,39 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { NotificationSettingsService } from './notification-settings.service';
 import { UpsertTenantNotificationSettingDto } from './dto/upsert-tenant-notification-setting.dto';
 import { UpsertUserNotificationSettingDto } from './dto/upsert-user-notification-setting.dto';
 
-const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'] as const;
+function canManageOthersNotifications(user: {
+  role?: string;
+  permissions?: string[];
+}): boolean {
+  if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') {
+    return true;
+  }
+  const perms = user.permissions ?? [];
+  return perms.includes(SystemPermissions.ADMIN_NOTIFICATION_MANAGE_SETTINGS);
+}
 
 @Controller('notification-settings')
 @UseGuards(JwtAuthGuard)
 export class NotificationSettingsController {
   constructor(private readonly service: NotificationSettingsService) {}
 
-  // ── Tenant-level (solo ADMIN / SUPER_ADMIN) ────────────────────────────────
-
   @Get('tenant')
-  @UseGuards(RolesGuard)
-  @Roles(...ADMIN_ROLES)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_NOTIFICATION_READ)
   getTenantSettings(@Req() req: any) {
     return this.service.findTenantSettings(req.user.tenantId);
   }
 
   @Put('tenant')
-  @UseGuards(RolesGuard)
-  @Roles(...ADMIN_ROLES)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_NOTIFICATION_MANAGE_SETTINGS)
   upsertTenantSetting(
     @Req() req: any,
     @Body() dto: UpsertTenantNotificationSettingDto,
@@ -41,14 +49,9 @@ export class NotificationSettingsController {
     return this.service.upsertTenantSetting(req.user.tenantId, dto);
   }
 
-  // ── User-level ─────────────────────────────────────────────────────────────
-  // GET: solo ADMIN puede consultar preferencias de otros usuarios.
-  // PUT: cualquier usuario autenticado puede gestionar sus propias preferencias;
-  //      gestionar las de otros requiere ADMIN o SUPER_ADMIN.
-
   @Get('user')
-  @UseGuards(RolesGuard)
-  @Roles(...ADMIN_ROLES)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_NOTIFICATION_READ)
   getUserSettings(@Req() req: any, @Query('userId') userId?: string) {
     return this.service.findUserSettings(
       req.user.tenantId,
@@ -56,13 +59,9 @@ export class NotificationSettingsController {
     );
   }
 
-  /**
-   * Lista todas las suscripciones (con datos del usuario) para un evento específico.
-   * Usado por el panel de gobernanza.
-   */
   @Get('event')
-  @UseGuards(RolesGuard)
-  @Roles(...ADMIN_ROLES)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_NOTIFICATION_READ)
   getEventSubscribers(
     @Req() req: any,
     @Query('eventKey') eventKey: string,
@@ -76,14 +75,9 @@ export class NotificationSettingsController {
     @Body() dto: UpsertUserNotificationSettingDto,
   ) {
     const callerId: string = req.user.id;
-    const callerRole: string = req.user.role;
     const targetUserId = dto.targetUserId ?? callerId;
 
-    // Gestión delegada: un usuario no-admin no puede modificar preferencias ajenas
-    if (
-      targetUserId !== callerId &&
-      !ADMIN_ROLES.includes(callerRole as (typeof ADMIN_ROLES)[number])
-    ) {
+    if (targetUserId !== callerId && !canManageOthersNotifications(req.user)) {
       throw new ForbiddenException(
         'No tienes permisos para modificar las preferencias de notificación de otros usuarios.',
       );

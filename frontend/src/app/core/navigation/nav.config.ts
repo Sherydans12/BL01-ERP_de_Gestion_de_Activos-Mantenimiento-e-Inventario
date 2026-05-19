@@ -1,6 +1,7 @@
 import { P } from '../constants/purchases-permissions';
 import { I } from '../constants/inventory-permissions';
 import { O } from '../constants/operations-permissions';
+import { A } from '../constants/admin-permissions';
 
 /** Roles disponibles en el sistema (deben coincidir con Prisma UserRole). */
 export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC' | 'USER';
@@ -120,6 +121,7 @@ export const NAV_SECTIONS: NavSection[] = [
         route: '/app/dashboard',
         icon: ICONS.home,
         exact: true,
+        permissions: A.DASHBOARD_READ,
       },
       {
         label: 'Mi cuenta',
@@ -285,41 +287,48 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'Configuración',
-    roles: ['SUPER_ADMIN', 'ADMIN'],
     items: [
       {
         label: 'Catálogos Maestros',
         route: '/app/catalogos',
         icon: ICONS.collection,
+        roles: ['SUPER_ADMIN', 'ADMIN'],
       },
       {
         label: 'Maestro de Contratos',
         route: '/app/configuracion/contratos',
         icon: ICONS.documentText,
         exact: true,
+        permissions: A.CONTRACT_READ,
       },
       {
         label: 'Empresa',
         route: '/app/configuracion/empresa',
         icon: ICONS.adjustments,
+        permissions: A.TENANT_CONFIG_READ,
       },
       {
         label: 'Notificaciones',
         route: '/app/configuracion/notificaciones',
         icon: ICONS.shieldCheck,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
+        permissions: A.NOTIFICATION_READ,
       },
     ],
   },
   {
     label: 'Administración',
-    roles: ['SUPER_ADMIN', 'ADMIN'],
     items: [
-      { label: 'Gestión de Usuarios', route: '/app/usuarios', icon: ICONS.users },
+      {
+        label: 'Gestión de Usuarios',
+        route: '/app/usuarios',
+        icon: ICONS.users,
+        permissions: A.USER_READ,
+      },
       {
         label: 'Roles y Seguridad',
         route: '/app/configuracion/gobernanza-roles',
         icon: ICONS.shieldCheck,
+        permissions: A.USER_MANAGE_ROLES,
       },
     ],
   },

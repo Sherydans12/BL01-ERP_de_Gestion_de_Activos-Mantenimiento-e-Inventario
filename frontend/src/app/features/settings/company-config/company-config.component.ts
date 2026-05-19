@@ -4,6 +4,7 @@ import {
   Injector,
   OnInit,
   afterNextRender,
+  computed,
   inject,
   signal,
   viewChild,
@@ -20,6 +21,9 @@ import {
   Tenant,
 } from '../../../core/services/tenant/tenant.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { A } from '../../../core/constants/admin-permissions';
 
 /** Minimum contrast ratio for WCAG AA on normal text (4.5:1) */
 const WCAG_AA = 4.5;
@@ -78,7 +82,7 @@ function isHttpLogoUrl(v: string | null | undefined): boolean {
 @Component({
   selector: 'app-company-config',
   standalone: true,
-  imports: [CommonModule, NgStyle, ReactiveFormsModule],
+  imports: [CommonModule, NgStyle, ReactiveFormsModule, HasPermissionDirective],
   templateUrl: './company-config.component.html',
 })
 export class CompanyConfigComponent implements OnInit {
@@ -86,6 +90,12 @@ export class CompanyConfigComponent implements OnInit {
   private injector = inject(Injector);
   tenantService = inject(TenantService);
   private notification = inject(NotificationService);
+  private authService = inject(AuthService);
+
+  readonly a = A;
+  readonly isFormReadOnly = computed(
+    () => !this.authService.hasPermission(A.TENANT_CONFIG_UPDATE),
+  );
 
   configForm: FormGroup;
   isSaving = signal(false);

@@ -9,6 +9,7 @@
       </p>
     </div>
     <button
+      *appHasPermission="a.CONTRACT_MANAGE"
       (click)="openContractModal()"
       class="flex items-center gap-2 px-5 py-2.5 bg-primary text-dark font-bold font-mono text-sm rounded-lg hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 uppercase"
     >
@@ -55,6 +56,7 @@
           </div>
           <div class="flex items-center gap-3">
             <button
+              *appHasPermission="a.CONTRACT_MANAGE"
               (click)="openSubcontractModal(contract.id)"
               class="text-xs font-mono font-bold bg-dark border border-border hover:border-primary text-main px-3 py-1.5 rounded transition-all flex items-center gap-2"
             >
@@ -75,12 +77,14 @@
             </button>
             <div class="w-px h-6 bg-border mx-1"></div>
             <button
+              *appHasPermission="a.CONTRACT_MANAGE"
               (click)="openContractModal(contract)"
               class="text-muted hover:text-primary transition-colors text-xs font-mono uppercase"
             >
               Editar
             </button>
             <button
+              *appHasPermission="a.CONTRACT_MANAGE"
               (click)="deleteContract(contract.id, contract.name)"
               class="text-muted hover:text-error transition-colors text-xs font-mono uppercase"
             >
@@ -110,12 +114,14 @@
                     <td class="px-4 py-3">{{ sub.name }}</td>
                     <td class="px-4 py-3 text-right">
                       <button
+                        *appHasPermission="a.CONTRACT_MANAGE"
                         (click)="openSubcontractModal(contract.id, sub)"
                         class="text-muted hover:text-main transition-colors mr-3 uppercase font-mono text-[10px]"
                       >
                         Editar
                       </button>
                       <button
+                        *appHasPermission="a.CONTRACT_MANAGE"
                         (click)="deleteSubcontract(sub.id, sub.name)"
                         class="text-muted hover:text-error transition-colors uppercase font-mono text-[10px]"
                       >
@@ -160,7 +166,7 @@
             editingContract() ? "Editar Contrato" : "Nuevo Contrato Principal"
           }}
         </h3>
-        <div class="space-y-5">
+        <fieldset [disabled]="!canManage()" class="space-y-5 border-0 p-0 m-0 min-w-0">
           <div>
             <label
               class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
@@ -185,7 +191,7 @@
               placeholder="Ej: CTR-CAS"
             />
           </div>
-        </div>
+        </fieldset>
         <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-border">
           <button
             (click)="closeContractModal()"
@@ -193,12 +199,14 @@
           >
             Cancelar
           </button>
-          <button
-            (click)="saveContract()"
-            class="px-5 py-2 bg-primary text-dark font-bold font-mono text-sm rounded hover:bg-primary/90 transition-all uppercase"
-          >
-            Guardar
-          </button>
+          @if (canManage()) {
+            <button
+              (click)="saveContract()"
+              class="px-5 py-2 bg-primary text-dark font-bold font-mono text-sm rounded hover:bg-primary/90 transition-all uppercase"
+            >
+              Guardar
+            </button>
+          }
         </div>
       </div>
       </div>
@@ -227,7 +235,7 @@
             editingSubcontract() ? "Editar Subcontrato" : "Nuevo Subcontrato"
           }}
         </h3>
-        <div class="space-y-5">
+        <fieldset [disabled]="!canManage()" class="space-y-5 border-0 p-0 m-0 min-w-0">
           <div>
             <label
               class="block text-xs font-mono text-muted mb-1.5 uppercase tracking-wider"
@@ -252,7 +260,7 @@
               placeholder="Ej: 448-16"
             />
           </div>
-        </div>
+        </fieldset>
         <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-border">
           <button
             (click)="closeSubcontractModal()"
@@ -260,12 +268,14 @@
           >
             Cancelar
           </button>
-          <button
-            (click)="saveSubcontract()"
-            class="px-5 py-2 bg-primary text-dark font-bold font-mono text-sm rounded hover:bg-primary/90 transition-all uppercase"
-          >
-            Guardar
-          </button>
+          @if (canManage()) {
+            <button
+              (click)="saveSubcontract()"
+              class="px-5 py-2 bg-primary text-dark font-bold font-mono text-sm rounded hover:bg-primary/90 transition-all uppercase"
+            >
+              Guardar
+            </button>
+          }
         </div>
       </div>
       </div>

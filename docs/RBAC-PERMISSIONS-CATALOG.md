@@ -379,6 +379,65 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 
 ---
 
+## Módulo: Administración (`admin`)
+
+### Usuarios (`user`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `admin:user:read` | `GET /api/users`<br>`GET /api/users/search-suggestions` | Listar y buscar usuarios del tenant. |
+| ✅ | `admin:user:create` | `POST /api/users` | Invitar / crear usuarios. |
+| ✅ | `admin:user:update` | `PATCH /api/users/:id`<br>`POST /api/users/:id/resend-activation`<br>`POST /api/users/:id/set-password` | Editar datos, reenviar invitación y restablecer contraseña. |
+| ✅ | `admin:user:delete` | `DELETE /api/users/:id` | Eliminar usuarios del tenant. |
+| ✅ | `admin:user:manage-roles` | `GET/POST/PATCH/DELETE /api/tenant-roles/*`<br>`GET /api/tenant-roles/permissions-catalog` | Gobernanza de roles PBAC y asignación de roles personalizados. |
+
+> **Autogestión:** rutas `GET/PUT /api/users/me`, `profile`, `change-password`, TOTP y avatar no exigen permisos `admin:*` (solo JWT).
+
+> **Operativo:** `GET /api/users/assignable-for-ot` permanece con JWT (participantes en OT).
+
+### Configuración tenant / empresa (`tenant-config`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `admin:tenant-config:read` | Ruta FE `/app/configuracion/empresa` | Acceder a la pantalla de configuración de empresa (lectura). |
+| ✅ | `admin:tenant-config:update` | `PATCH /api/tenant-config`<br>`POST /api/tenant-config/logo*`, `pdf-logo` | Modificar datos y logos. |
+
+> **Shell:** `GET /api/tenant-config` queda con **solo JWT** (branding en layout para todos los autenticados).
+
+### Contratos (`contract`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `admin:contract:read` | Ruta FE `/app/configuracion/contratos` | Maestro de contratos (lectura). |
+| ✅ | `admin:contract:manage` | `POST/PUT/DELETE /api/contracts/*`<br>`POST/PUT/DELETE /api/subcontracts/*` | Crear, editar y eliminar contratos y subcontratos. |
+
+> **Shell:** `GET /api/contracts` queda con **solo JWT** (selector de contrato en header; filtrado por `allowedContracts` en cliente).
+
+### Notificaciones (`notification`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `admin:notification:read` | `GET /api/notification-settings/tenant`<br>`GET /api/notification-settings/user`<br>`GET /api/notification-settings/event` | Consultar matriz y suscriptores. |
+| ✅ | `admin:notification:manage-settings` | `PUT /api/notification-settings/tenant`<br>`PUT /api/notification-settings/user` (otros usuarios) | Configurar opt-in/CC global y preferencias delegadas. |
+
+> **Autogestión:** `PUT /api/notification-settings/user` sin `targetUserId` (propias preferencias) no exige `manage-settings`.
+
+---
+
+## Módulo: Principal (`core`)
+
+### Dashboard (`dashboard`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `core:dashboard:read` | Ruta FE `/app/dashboard` | Acceder a la vista principal del ERP. |
+
+> **Cobertura frontend:** ✅ (2026-05-19) — `admin-permissions.ts`, `nav.config.ts`, `app.routes.ts`, `*appHasPermission` en usuarios, empresa, contratos, notificaciones y gobernanza de roles.
+
+Constantes espejo: [`frontend/src/app/core/constants/admin-permissions.ts`](../frontend/src/app/core/constants/admin-permissions.ts).
+
+---
+
 ## Cobertura frontend (Compras)
 
 Desde la auditoría PBAC UI (2026-05-19), el módulo Compras aplica:

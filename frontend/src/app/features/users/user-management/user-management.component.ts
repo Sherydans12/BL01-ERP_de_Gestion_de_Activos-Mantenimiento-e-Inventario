@@ -26,6 +26,8 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { Contract } from '../../../core/models/types'; // Uso del modelo tipado
 import { AvatarComponent } from '../../../shared/components/avatar/avatar.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { A } from '../../../core/constants/admin-permissions';
 
 @Component({
   selector: 'app-user-management',
@@ -35,6 +37,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
     ReactiveFormsModule,
     ConfirmModalComponent,
     AvatarComponent,
+    HasPermissionDirective,
   ],
   template: `
     <div class="space-y-6 animate-fade-in pb-10">
@@ -65,6 +68,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
           </p>
         </div>
         <button
+          *appHasPermission="a.USER_CREATE"
           (click)="openInviteModal()"
           class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2.5 px-5 rounded-lg shadow-sm transition-all flex items-center gap-2"
         >
@@ -302,6 +306,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                         {{ user.isActive ? 'Activo' : 'Inactivo' }}
                       </span>
                       <button
+                        *appHasPermission="a.USER_UPDATE"
                         type="button"
                         (click)="toggleUserStatus(user)"
                         [disabled]="
@@ -357,6 +362,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                     <div class="flex justify-end items-center gap-2">
                       @if (!user.isActive) {
                         <button
+                          *appHasPermission="a.USER_UPDATE"
                           type="button"
                           (click)="resendInvitation(user)"
                           class="text-primary hover:text-primary/80 font-mono text-xs transition-colors p-1"
@@ -379,6 +385,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                       }
                       @if (!isSessionUser(user)) {
                         <button
+                          *appHasPermission="a.USER_UPDATE"
                           type="button"
                           (click)="openPasswordModal(user)"
                           class="text-muted hover:text-primary transition-colors font-mono text-xs p-1"
@@ -388,6 +395,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                         </button>
                       }
                       <button
+                        *appHasPermission="a.USER_UPDATE"
                         type="button"
                         (click)="openEditModal(user)"
                         class="text-muted hover:text-primary transition-colors font-mono text-xs p-1"
@@ -395,6 +403,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                         EDITAR
                       </button>
                       <button
+                        *appHasPermission="a.USER_DELETE"
                         type="button"
                         (click)="confirmDelete(user)"
                         class="text-muted hover:text-error transition-colors font-mono text-xs p-1"
@@ -547,6 +556,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                 </button>
               </h3>
               <form [formGroup]="userForm" class="space-y-4">
+                <fieldset [disabled]="isFormReadOnly()" class="space-y-4 border-0 p-0 m-0 min-w-0">
                 <div>
                   <label
                     for="invite-name"
@@ -670,7 +680,8 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                   <select
                     id="invite-tenant-role"
                     formControlName="tenantRoleId"
-                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary"
+                    [disabled]="!canManageRoles()"
+                    class="w-full bg-dark border border-border rounded-lg px-4 py-2 text-main focus:outline-none focus:border-primary disabled:opacity-50"
                   >
                     @for (r of availableRoles(); track r.id) {
                       <option [value]="r.id">{{ r.name }}</option>
@@ -727,6 +738,7 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                     </div>
                   </div>
                 }
+                </fieldset>
               </form>
             </div>
             <div
@@ -738,8 +750,9 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
               >
                 Cancelar
               </button>
-              <button
-                (click)="submitForm()"
+              @if (!isFormReadOnly()) {
+                <button
+                  (click)="submitForm()"
                 [disabled]="userForm.invalid || isSubmitting()"
                 class="bg-primary hover:bg-primary/90 text-white font-bold font-mono text-sm py-2 px-6 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase"
               >
@@ -750,7 +763,8 @@ import { AvatarComponent } from '../../../shared/components/avatar/avatar.compon
                       ? 'Guardar'
                       : 'Invitar'
                 }}
-              </button>
+                </button>
+              }
             </div>
           </div>
           </div>
@@ -1157,6 +1171,17 @@ export class UserManagementComponent implements OnInit {
   private fb = inject(FormBuilder);
   private notification = inject(NotificationService);
   private authService = inject(AuthService);
+
+  readonly a = A;
+  readonly isFormReadOnly = computed(() => {
+    if (this.isEditing()) {
+      return !this.authService.hasPermission(A.USER_UPDATE);
+    }
+    return !this.authService.hasPermission(A.USER_CREATE);
+  });
+  readonly canManageRoles = computed(() =>
+    this.authService.hasPermission(A.USER_MANAGE_ROLES),
+  );
 
   userFormDialog = viewChild<ElementRef<HTMLDialogElement>>('userFormDialog');
   userDeleteDialog =

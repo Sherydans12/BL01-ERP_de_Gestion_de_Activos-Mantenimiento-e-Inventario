@@ -99,6 +99,10 @@
           <span class="text-sm text-muted">Cargando configuración…</span>
         </div>
       } @else {
+        <fieldset
+          [disabled]="!canManageSettings()"
+          class="flex flex-col gap-5 border-0 p-0 m-0 min-w-0"
+        >
 
         <!-- ─── CARD 1: Configuración de empresa ─────────────────────── -->
         <div class="rounded-xl border border-border bg-surface">
@@ -367,6 +371,8 @@
             </div>
           }
         </div>
+
+        </fieldset>
 
       }<!-- /else loading -->
     </section>

@@ -13,6 +13,8 @@ import { Subject, forkJoin, switchMap } from 'rxjs';
 import { NotificationSettingsService } from '../../../core/services/notification-settings/notification-settings.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { UsersService, UserSearchSuggestion } from '../../../core/services/users/users.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { A } from '../../../core/constants/admin-permissions';
 import type {
   TenantNotificationSetting,
   UserSubscriptionRow,
@@ -140,6 +142,11 @@ export class NotificationGovernanceComponent implements OnInit {
   private readonly notifToast = inject(NotificationService);
   private readonly usersService = inject(UsersService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly authService = inject(AuthService);
+
+  readonly canManageSettings = computed(() =>
+    this.authService.hasPermission(A.NOTIFICATION_MANAGE_SETTINGS),
+  );
 
   // ── Estado ──────────────────────────────────────────────────────────────
   readonly eventGroups = EVENT_GROUPS;

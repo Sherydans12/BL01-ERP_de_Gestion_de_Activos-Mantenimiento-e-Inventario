@@ -14,8 +14,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TenantConfigService } from './tenant-config.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { UpdateTenantConfigDto } from './dto/update-tenant-config.dto';
 import {
   tenantLogoUploadPolicy,
@@ -27,17 +28,19 @@ const tenantLogoUploadLimits = {
 };
 
 @Controller('tenant-config')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard)
 export class TenantConfigController {
   constructor(private readonly tenantConfigService: TenantConfigService) {}
 
+  /** Branding y datos de tenant para layout (todos los autenticados). */
   @Get()
   getTenantConfig(@Req() req: any) {
     return this.tenantConfigService.getTenantConfig(req.user.tenantId);
   }
 
   @Post('logo')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_TENANT_CONFIG_UPDATE)
   @UseInterceptors(
     FileInterceptor('file', tenantLogoUploadLimits),
     new FileValidationInterceptor(tenantLogoUploadPolicy),
@@ -51,7 +54,8 @@ export class TenantConfigController {
   }
 
   @Post('logo-light')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_TENANT_CONFIG_UPDATE)
   @UseInterceptors(
     FileInterceptor('file', tenantLogoUploadLimits),
     new FileValidationInterceptor(tenantLogoUploadPolicy),
@@ -65,7 +69,8 @@ export class TenantConfigController {
   }
 
   @Post('pdf-logo')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_TENANT_CONFIG_UPDATE)
   @UseInterceptors(
     FileInterceptor('file', tenantLogoUploadLimits),
     new FileValidationInterceptor(tenantLogoUploadPolicy),
@@ -79,7 +84,8 @@ export class TenantConfigController {
   }
 
   @Patch()
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_TENANT_CONFIG_UPDATE)
   @UsePipes(
     new ValidationPipe({
       whitelist: true,

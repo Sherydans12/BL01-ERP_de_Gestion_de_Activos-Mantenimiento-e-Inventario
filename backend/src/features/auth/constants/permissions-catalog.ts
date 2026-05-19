@@ -499,10 +499,124 @@ export const OPERATIONS_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
   },
 ];
 
+/** Catálogo PBAC — Administración y configuración transversal. */
+export const ADMIN_CONFIG_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
+  {
+    module: 'Administración',
+    groups: [
+      {
+        name: 'Usuarios',
+        permissions: [
+          {
+            key: SystemPermissions.ADMIN_USER_READ,
+            label: 'Ver usuarios',
+            description:
+              'Listar usuarios del tenant, búsqueda y detalle administrativo.',
+          },
+          {
+            key: SystemPermissions.ADMIN_USER_CREATE,
+            label: 'Invitar usuarios',
+            description: 'Crear usuarios e invitaciones al tenant.',
+          },
+          {
+            key: SystemPermissions.ADMIN_USER_UPDATE,
+            label: 'Editar usuarios',
+            description:
+              'Actualizar datos, activar/desactivar, reenviar invitación y restablecer contraseña.',
+          },
+          {
+            key: SystemPermissions.ADMIN_USER_DELETE,
+            label: 'Eliminar usuarios',
+            description: 'Eliminar usuarios del tenant.',
+          },
+          {
+            key: SystemPermissions.ADMIN_USER_MANAGE_ROLES,
+            label: 'Gestionar roles de usuario',
+            description:
+              'Asignar roles personalizados, editar matriz PBAC y gobernanza de roles del tenant.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    module: 'Configuración',
+    groups: [
+      {
+        name: 'Empresa',
+        permissions: [
+          {
+            key: SystemPermissions.ADMIN_TENANT_CONFIG_READ,
+            label: 'Ver configuración de empresa',
+            description:
+              'Acceder a la pantalla de datos fiscales, marca y logos (lectura).',
+          },
+          {
+            key: SystemPermissions.ADMIN_TENANT_CONFIG_UPDATE,
+            label: 'Editar configuración de empresa',
+            description:
+              'Modificar datos de empresa y subir logos (menú, claro, PDF).',
+          },
+        ],
+      },
+      {
+        name: 'Contratos',
+        permissions: [
+          {
+            key: SystemPermissions.ADMIN_CONTRACT_READ,
+            label: 'Ver contratos',
+            description:
+              'Listar contratos y subcontratos (incluye selector del header).',
+          },
+          {
+            key: SystemPermissions.ADMIN_CONTRACT_MANAGE,
+            label: 'Gestionar contratos',
+            description:
+              'Crear, editar y eliminar contratos y subcontratos.',
+          },
+        ],
+      },
+      {
+        name: 'Notificaciones',
+        permissions: [
+          {
+            key: SystemPermissions.ADMIN_NOTIFICATION_READ,
+            label: 'Ver gobernanza de notificaciones',
+            description:
+              'Consultar matriz de eventos, suscriptores y preferencias de otros usuarios.',
+          },
+          {
+            key: SystemPermissions.ADMIN_NOTIFICATION_MANAGE_SETTINGS,
+            label: 'Configurar notificaciones',
+            description:
+              'Editar opt-in global, CC por evento y preferencias delegadas de otros usuarios.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    module: 'Principal',
+    groups: [
+      {
+        name: 'Dashboard',
+        permissions: [
+          {
+            key: SystemPermissions.CORE_DASHBOARD_READ,
+            label: 'Ver dashboard',
+            description: 'Acceder a la vista principal del ERP.',
+          },
+        ],
+      },
+    ],
+  },
+];
+
 export function getPermissionsCatalog(): PermissionCatalogModule[] {
   return [
     ...PURCHASES_PERMISSIONS_CATALOG,
     ...INVENTORY_PERMISSIONS_CATALOG,
     ...OPERATIONS_PERMISSIONS_CATALOG,
+    ...ADMIN_CONFIG_PERMISSIONS_CATALOG,
   ];
 }

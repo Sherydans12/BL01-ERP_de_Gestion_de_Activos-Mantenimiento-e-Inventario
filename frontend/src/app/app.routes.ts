@@ -4,6 +4,7 @@ import { permissionGuard } from './core/guards/permission.guard';
 import { P, REQUISITION_EDIT_ANY } from './core/constants/purchases-permissions';
 import { I } from './core/constants/inventory-permissions';
 import { O } from './core/constants/operations-permissions';
+import { A } from './core/constants/admin-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 
 export const routes: Routes = [
@@ -44,6 +45,8 @@ export const routes: Routes = [
     children: [
       {
         path: 'dashboard',
+        canActivate: [permissionGuard],
+        data: { permissions: A.DASHBOARD_READ, pageTitle: 'Dashboard' },
         loadComponent: () =>
           import('./features/dashboard/dashboard.component').then(
             (m) => m.DashboardComponent,
@@ -475,8 +478,11 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion/contratos',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN'] },
+        canActivate: [permissionGuard],
+        data: {
+          permissions: A.CONTRACT_READ,
+          pageTitle: 'Maestro de Contratos',
+        },
         loadComponent: () =>
           import('./features/settings/contract-master/contract-master.component').then(
             (m) => m.ContractMasterComponent,
@@ -484,8 +490,11 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion/empresa',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN'], pageTitle: 'Empresa' },
+        canActivate: [permissionGuard],
+        data: {
+          permissions: A.TENANT_CONFIG_READ,
+          pageTitle: 'Empresa',
+        },
         loadComponent: () =>
           import('./features/settings/company-config/company-config.component').then(
             (m) => m.CompanyConfigComponent,
@@ -493,8 +502,11 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion/notificaciones',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPER_ADMIN'], pageTitle: 'Gobernanza de Notificaciones' },
+        canActivate: [permissionGuard],
+        data: {
+          permissions: A.NOTIFICATION_READ,
+          pageTitle: 'Gobernanza de Notificaciones',
+        },
         loadComponent: () =>
           import('./features/settings/notification-governance/notification-governance.component').then(
             (m) => m.NotificationGovernanceComponent,
@@ -502,18 +514,21 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion/gobernanza-roles',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPER_ADMIN'], pageTitle: 'Roles y Seguridad' },
+        canActivate: [permissionGuard],
+        data: {
+          permissions: A.USER_MANAGE_ROLES,
+          pageTitle: 'Roles y Seguridad',
+        },
         loadComponent: () =>
           import('./features/settings/role-governance/role-governance.component').then(
             (m) => m.RoleGovernanceComponent,
           ),
       },
-      // ── Administración (ADMIN) ─────────────────────────────────────────────
+      // ── Administración — PBAC ──────────────────────────────────────────────
       {
         path: 'usuarios',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN'] },
+        canActivate: [permissionGuard],
+        data: { permissions: A.USER_READ, pageTitle: 'Gestión de Usuarios' },
         loadComponent: () =>
           import('./features/users/user-management/user-management.component').then(
             (m) => m.UserManagementComponent,

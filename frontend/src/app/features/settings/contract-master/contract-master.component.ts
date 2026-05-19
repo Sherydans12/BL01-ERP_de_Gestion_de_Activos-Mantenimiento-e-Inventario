@@ -4,6 +4,7 @@ import {
   Injector,
   OnInit,
   afterNextRender,
+  computed,
   inject,
   signal,
   viewChild,
@@ -16,16 +17,25 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { A } from '../../../core/constants/admin-permissions';
 
 @Component({
   selector: 'app-contract-master',
   standalone: true,
-  imports: [CommonModule, FormsModule, ConfirmModalComponent],
+  imports: [CommonModule, FormsModule, ConfirmModalComponent, HasPermissionDirective],
   templateUrl: './contract-master.component.html',
   styleUrls: ['./contract-master.component.scss'],
 })
 export class ContractMasterComponent implements OnInit {
   private injector = inject(Injector);
+  private authService = inject(AuthService);
+
+  readonly a = A;
+  readonly canManage = computed(() =>
+    this.authService.hasPermission(A.CONTRACT_MANAGE),
+  );
   contractDialog = viewChild<ElementRef<HTMLDialogElement>>('contractDialog');
   subcontractDialog =
     viewChild<ElementRef<HTMLDialogElement>>('subcontractDialog');

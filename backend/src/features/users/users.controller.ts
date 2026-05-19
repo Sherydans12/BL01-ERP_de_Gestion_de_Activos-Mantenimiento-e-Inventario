@@ -20,9 +20,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { extractLoginMeta } from '../auth/auth-request.util';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AdminSetPasswordDto } from './dto/admin-set-password.dto';
@@ -37,7 +38,7 @@ import {
 const avatarUploadLimits = { limits: { fileSize: MAX_USER_AVATAR_BYTES } };
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard) // Aplicamos RolesGuard a nivel de controlador
+@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -134,16 +135,16 @@ export class UsersController {
     return this.usersService.toggleEmail2fa(req.user.id, false);
   }
 
-  /** Lista compacta para participantes / supervisores en OT (mecánicos y supervisores activos). */
+  /** Lista compacta para participantes / supervisores en OT (operativo; sin PBAC admin). */
   @Get('assignable-for-ot')
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'MECHANIC')
   findAssignableForOt(@Req() req: any) {
     return this.usersService.findAssignableForOt(req.user.tenantId);
   }
 
   /** Sugerencias de búsqueda (nombre, email, rol) para el listado admin. */
   @Get('search-suggestions')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_READ)
   searchSuggestions(
     @Req() req: any,
     @Query('q') q?: string,
@@ -159,14 +160,16 @@ export class UsersController {
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_CREATE)
   create(@Body() body: any, @Req() req: any) {
     const requesterTenantId = req.user.tenantId;
     return this.usersService.create(body, requesterTenantId);
   }
 
   @Get()
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_READ)
   findAll(
     @Req() req: any,
     @Query('page', new ParseIntPipe({ optional: true })) page: number = 1,
@@ -178,7 +181,8 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_UPDATE)
   update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     const requesterTenantId = req.user.tenantId;
     const requesterRole = req.user.role;
@@ -192,7 +196,8 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_DELETE)
   remove(@Param('id') id: string, @Req() req: any) {
     const requesterTenantId = req.user.tenantId;
     const requesterRole = req.user.role;
@@ -200,7 +205,8 @@ export class UsersController {
   }
 
   @Post(':id/resend-activation')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_UPDATE)
   async resendActivation(@Param('id') id: string, @Request() req: any) {
     return this.usersService.resendActivation(
       id,
@@ -211,7 +217,8 @@ export class UsersController {
 
   /** Contraseña nueva sin pedir la actual (solo otro usuario del tenant). */
   @Post(':id/set-password')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_USER_UPDATE)
   @UsePipes(
     new ValidationPipe({
       whitelist: true,

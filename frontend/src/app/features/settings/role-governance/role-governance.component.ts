@@ -17,6 +17,9 @@ import {
 } from '../../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { NAV_SECTIONS } from '../../../core/navigation/nav.config';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { A } from '../../../core/constants/admin-permissions';
 import type {
   PermissionCatalogGroup,
   PermissionCatalogModule,
@@ -36,13 +39,19 @@ function normalizePermissions(role: TenantRole | null): string[] {
 @Component({
   selector: 'app-role-governance',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgClass],
+  imports: [CommonModule, FormsModule, NgClass, HasPermissionDirective],
   templateUrl: './role-governance.component.html',
 })
 export class RoleGovernanceComponent implements OnInit {
   private readonly tenantRoles = inject(TenantRolesService);
   private readonly notif = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly authService = inject(AuthService);
+
+  readonly a = A;
+  readonly canManageRoles = computed(() =>
+    this.authService.hasPermission(A.USER_MANAGE_ROLES),
+  );
 
   readonly navSections = NAV_SECTIONS;
 

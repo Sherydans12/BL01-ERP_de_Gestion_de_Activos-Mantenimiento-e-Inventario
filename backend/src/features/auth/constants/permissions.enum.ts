@@ -107,4 +107,26 @@ export enum SystemPermissions {
   // —— Operaciones: backlog de OT ——
   OPERATIONS_BACKLOG_READ = 'operations:backlog:read',
   OPERATIONS_BACKLOG_MANAGE = 'operations:backlog:manage',
+
+  // —— Administración: usuarios ——
+  ADMIN_USER_READ = 'admin:user:read',
+  ADMIN_USER_CREATE = 'admin:user:create',
+  ADMIN_USER_UPDATE = 'admin:user:update',
+  ADMIN_USER_DELETE = 'admin:user:delete',
+  ADMIN_USER_MANAGE_ROLES = 'admin:user:manage-roles',
+
+  // —— Administración: configuración tenant / empresa ——
+  ADMIN_TENANT_CONFIG_READ = 'admin:tenant-config:read',
+  ADMIN_TENANT_CONFIG_UPDATE = 'admin:tenant-config:update',
+
+  // —— Administración: contratos y subcontratos ——
+  ADMIN_CONTRACT_READ = 'admin:contract:read',
+  ADMIN_CONTRACT_MANAGE = 'admin:contract:manage',
+
+  // —— Administración: notificaciones ——
+  ADMIN_NOTIFICATION_READ = 'admin:notification:read',
+  ADMIN_NOTIFICATION_MANAGE_SETTINGS = 'admin:notification:manage-settings',
+
+  // —— Core ——
+  CORE_DASHBOARD_READ = 'core:dashboard:read',
 }
