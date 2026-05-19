@@ -27,7 +27,11 @@ import { ThemeService } from '../services/theme/theme.service';
 import { ContractsService } from '../services/contracts/contracts.service';
 import { PushNotificationsService } from '../services/push-notifications/push-notifications.service';
 import { Contract } from '../models/types';
-import { NAV_SECTIONS, AppRole } from '../navigation/nav.config';
+import {
+  NAV_SECTIONS,
+  AppRole,
+  filterNavItemsByPermission,
+} from '../navigation/nav.config';
 import {
   GlobalSearchResult,
   InventoryAnalyticsService,
@@ -85,10 +89,20 @@ export class LayoutComponent implements OnInit {
   filteredNav = computed(() => {
     const user = this.currentUser();
     const role = user?.role as AppRole | undefined;
+    const auth = this.authService;
+    const applyPbac = (items: typeof NAV_SECTIONS[0]['items']) =>
+      filterNavItemsByPermission(
+        items,
+        (p) => auth.hasPermission(p),
+        (p) => auth.hasPermissionAny(p),
+      );
 
-    // SUPER_ADMIN siempre ve todo.
+    // SUPER_ADMIN siempre ve todo (PBAC bypass en hasPermission).
     if (role === 'SUPER_ADMIN') {
-      return NAV_SECTIONS.map((s) => ({ ...s, visibleItems: s.items }));
+      return NAV_SECTIONS.map((s) => ({
+        ...s,
+        visibleItems: applyPbac(s.items),
+      })).filter((s) => s.visibleItems.length > 0);
     }
 
     // 1. Rol custom asignado al usuario → usa sus rutas específicas.
@@ -100,7 +114,9 @@ export class LayoutComponent implements OnInit {
         const allowed = new Set(customRole.routes as string[]);
         return NAV_SECTIONS.map((section) => ({
           ...section,
-          visibleItems: section.items.filter((item) => allowed.has(item.route)),
+          visibleItems: applyPbac(
+            section.items.filter((item) => allowed.has(item.route)),
+          ),
         })).filter((s) => s.visibleItems.length > 0);
       }
     }
@@ -111,15 +127,19 @@ export class LayoutComponent implements OnInit {
       const allowed = new Set(customPerms[role]);
       return NAV_SECTIONS.map((section) => ({
         ...section,
-        visibleItems: section.items.filter((item) => allowed.has(item.route)),
+        visibleItems: applyPbac(
+          section.items.filter((item) => allowed.has(item.route)),
+        ),
       })).filter((s) => s.visibleItems.length > 0);
     }
 
     // 3. Fallback: defaults de nav.config.ts.
     return NAV_SECTIONS.map((section) => ({
       ...section,
-      visibleItems: section.items.filter(
-        (item) => !item.roles || !role || item.roles.includes(role),
+      visibleItems: applyPbac(
+        section.items.filter(
+          (item) => !item.roles || !role || item.roles.includes(role),
+        ),
       ),
     })).filter(
       (section) =>

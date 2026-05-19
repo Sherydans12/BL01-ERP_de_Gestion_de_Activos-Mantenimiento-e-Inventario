@@ -29,7 +29,13 @@
       </div>
     }
 
-    <div class="bg-surface rounded-xl border border-border p-6 space-y-6">
+    @if (isFormReadOnly()) {
+      <div class="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-main" role="status">
+        Vista de solo lectura: no puede registrar ni modificar facturas con su rol actual.
+      </div>
+    }
+
+    <fieldset [disabled]="isFormReadOnly()" class="bg-surface rounded-xl border border-border p-6 space-y-6 min-w-0 m-0 disabled:opacity-100">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-muted mb-1">Número de factura</label>
@@ -97,15 +103,25 @@
 
       <div class="flex flex-wrap gap-3 pt-2">
         @if (canRegister() || existingInvoice()) {
-          <button type="button"
-                  (click)="save()"
-                  [disabled]="isSaving() || (!!existingInvoice() && existingInvoice()!.status === 'PAID')"
-                  class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
-            {{ isSaving() ? 'Guardando…' : (existingInvoice() ? 'Actualizar y validar' : 'Registrar y validar') }}
-          </button>
+          @if (existingInvoice()) {
+            <button *appHasPermission="p.INVOICE_UPDATE" type="button"
+                    (click)="save()"
+                    [disabled]="isSaving() || existingInvoice()!.status === 'PAID'"
+                    class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
+              {{ isSaving() ? 'Guardando…' : 'Actualizar y validar' }}
+            </button>
+          } @else {
+            <button *appHasPermission="p.INVOICE_CREATE" type="button"
+                    (click)="save()"
+                    [disabled]="isSaving()"
+                    class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
+              {{ isSaving() ? 'Guardando…' : 'Registrar y validar' }}
+            </button>
+          }
         }
         @if (existingInvoice() && existingInvoice()!.status !== 'PAID') {
           <button
+            *appHasPermission="p.INVOICE_DELETE"
             type="button"
             (click)="requestDeleteInvoice()"
             [disabled]="isSaving()"
@@ -118,7 +134,7 @@
            [queryParams]="{ tab: 'billing' }"
            class="px-4 py-2 border border-border rounded-lg text-muted hover:text-main">Cancelar</a>
       </div>
-    </div>
+    </fieldset>
 
     <section class="mt-8 rounded-xl border border-border/80 bg-surface/80 p-5">
       <h2 class="text-lg font-semibold text-main mb-1">Historial de actividad</h2>

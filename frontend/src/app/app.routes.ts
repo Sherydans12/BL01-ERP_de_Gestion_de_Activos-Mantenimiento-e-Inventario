@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/services/auth/auth.guard';
+import { permissionGuard } from './core/guards/permission.guard';
+import { P, REQUISITION_EDIT_ANY } from './core/constants/purchases-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 
 export const routes: Routes = [
@@ -307,9 +309,11 @@ export const routes: Routes = [
         redirectTo: 'flota/registro-horas',
         pathMatch: 'full',
       },
-      // ── Compras (P2P) ──────────────────────────────────────────────────────
+      // ── Compras (P2P) — PBAC en permissionGuard ─────────────────────────────
       {
         path: 'compras/proveedores',
+        canActivate: [permissionGuard],
+        data: { permissions: P.VENDOR_READ },
         loadComponent: () =>
           import('./features/purchases/vendor-list/vendor-list.component').then(
             (m) => m.VendorListComponent,
@@ -317,6 +321,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/proveedores/nuevo',
+        canActivate: [permissionGuard],
+        data: { permissions: P.VENDOR_CREATE },
         loadComponent: () =>
           import('./features/purchases/vendor-form/vendor-form.component').then(
             (m) => m.VendorFormComponent,
@@ -324,6 +330,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/proveedores/:id',
+        canActivate: [permissionGuard],
+        data: { permissionsAny: [P.VENDOR_READ, P.VENDOR_UPDATE] },
         loadComponent: () =>
           import('./features/purchases/vendor-form/vendor-form.component').then(
             (m) => m.VendorFormComponent,
@@ -331,6 +339,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/requerimientos',
+        canActivate: [permissionGuard],
+        data: { permissions: P.REQUISITION_READ },
         loadComponent: () =>
           import('./features/purchases/requisition-list/requisition-list.component').then(
             (m) => m.RequisitionListComponent,
@@ -338,6 +348,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/requerimientos/nuevo',
+        canActivate: [permissionGuard],
+        data: { permissions: P.REQUISITION_CREATE },
         loadComponent: () =>
           import('./features/purchases/requisition-form/requisition-form.component').then(
             (m) => m.RequisitionFormComponent,
@@ -345,6 +357,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/requerimientos/:id/edit',
+        canActivate: [permissionGuard],
+        data: { permissionsAny: [...REQUISITION_EDIT_ANY] },
         loadComponent: () =>
           import('./features/purchases/requisition-form/requisition-form.component').then(
             (m) => m.RequisitionFormComponent,
@@ -352,6 +366,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/requerimientos/:id',
+        canActivate: [permissionGuard],
+        data: { permissions: P.REQUISITION_READ },
         loadComponent: () =>
           import('./features/purchases/requisition-detail/requisition-detail.component').then(
             (m) => m.RequisitionDetailComponent,
@@ -359,8 +375,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/analytics',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'] },
+        canActivate: [permissionGuard],
+        data: { permissions: P.ANALYTICS_READ },
         loadComponent: () =>
           import('./features/purchases/purchases-dashboard/purchases-dashboard.component').then(
             (m) => m.PurchasesDashboardComponent,
@@ -368,6 +384,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/facturas',
+        canActivate: [permissionGuard],
+        data: { permissions: P.INVOICE_READ },
         loadComponent: () =>
           import('./features/purchases/purchase-invoice-list/purchase-invoice-list.component').then(
             (m) => m.PurchaseInvoiceListComponent,
@@ -375,6 +393,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/calendario-pagos',
+        canActivate: [permissionGuard],
+        data: { permissions: P.INVOICE_READ },
         loadComponent: () =>
           import('./features/purchases/purchase-payment-calendar/purchase-payment-calendar.component').then(
             (m) => m.PurchasePaymentCalendarComponent,
@@ -382,6 +402,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/ordenes',
+        canActivate: [permissionGuard],
+        data: { permissions: P.ORDER_READ },
         loadComponent: () =>
           import('./features/purchases/purchase-order-list/purchase-order-list.component').then(
             (m) => m.PurchaseOrderListComponent,
@@ -389,6 +411,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/ordenes/:orderId/factura',
+        canActivate: [permissionGuard],
+        data: { permissionsAny: [P.INVOICE_CREATE, P.INVOICE_UPDATE] },
         loadComponent: () =>
           import('./features/purchases/purchase-invoice-form/purchase-invoice-form.component').then(
             (m) => m.PurchaseInvoiceFormComponent,
@@ -396,6 +420,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/ordenes/:id',
+        canActivate: [permissionGuard],
+        data: { permissions: P.ORDER_READ },
         loadComponent: () =>
           import('./features/purchases/purchase-order-detail/purchase-order-detail.component').then(
             (m) => m.PurchaseOrderDetailComponent,
@@ -403,6 +429,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/recepciones',
+        canActivate: [permissionGuard],
+        data: { permissions: P.RECEIPT_READ },
         loadComponent: () =>
           import('./features/purchases/receipt-list/receipt-list.component').then(
             (m) => m.ReceiptListComponent,
@@ -410,6 +438,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/recepciones/nueva',
+        canActivate: [permissionGuard],
+        data: { permissions: P.RECEIPT_CREATE },
         loadComponent: () =>
           import('./features/purchases/receipt-create/receipt-create.component').then(
             (m) => m.ReceiptCreateComponent,
@@ -417,6 +447,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/recepciones/:id',
+        canActivate: [permissionGuard],
+        data: { permissions: P.RECEIPT_READ },
         loadComponent: () =>
           import('./features/purchases/receipt-form/receipt-form.component').then(
             (m) => m.ReceiptFormComponent,
@@ -424,8 +456,8 @@ export const routes: Routes = [
       },
       {
         path: 'compras/configuracion',
-        canActivate: [authGuard],
-        data: { roles: ['ADMIN', 'SUPER_ADMIN'] },
+        canActivate: [permissionGuard],
+        data: { permissions: P.SETTING_READ },
         loadComponent: () =>
           import('./features/purchases/purchase-settings/purchase-settings.component').then(
             (m) => m.PurchaseSettingsComponent,
@@ -466,6 +498,15 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/settings/notification-governance/notification-governance.component').then(
             (m) => m.NotificationGovernanceComponent,
+          ),
+      },
+      {
+        path: 'configuracion/gobernanza-roles',
+        canActivate: [authGuard],
+        data: { roles: ['ADMIN', 'SUPER_ADMIN'], pageTitle: 'Gobernanza de roles (PBAC)' },
+        loadComponent: () =>
+          import('./features/settings/role-governance/role-governance.component').then(
+            (m) => m.RoleGovernanceComponent,
           ),
       },
       // ── Administración (ADMIN) ─────────────────────────────────────────────

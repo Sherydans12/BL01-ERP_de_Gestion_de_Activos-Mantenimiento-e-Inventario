@@ -21,6 +21,8 @@ import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 type RequisitionListSortField =
   | 'createdAt'
@@ -39,10 +41,12 @@ type RequisitionListSortField =
     FormsModule,
     PurchasesPushNoticeComponent,
     EntityLinkComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './requisition-list.component.html',
 })
 export class RequisitionListComponent {
+  protected readonly p = P;
   private purchasesService = inject(PurchasesService);
   private authService = inject(AuthService);
   private notify = inject(NotificationService);

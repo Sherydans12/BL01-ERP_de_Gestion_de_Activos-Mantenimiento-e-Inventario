@@ -1,4 +1,4 @@
-import { Injectable, signal, Inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -47,6 +47,8 @@ export interface UserPayload {
   customRoleName?: string | null;
   /** Permiso explícito para autorizar discrepancias de 3-way match en facturas de compra. */
   canOverruleThreeWayMatch?: boolean;
+  /** Capacidades PBAC del JWT (`TenantRole.permissions`). */
+  permissions?: string[];
   /** Empresa en sesión; SUPER_ADMIN sin fila tenant en BD igual puede tener snapshot desde login. */
   tenant?: {
     id: string;
@@ -56,10 +58,11 @@ export interface UserPayload {
   };
 }
 
-/** Payload mínimo del JWT de acceso (Nest/jwt exp en segundos). */
+/** Payload del JWT de acceso (Nest). */
 interface JwtPayload {
   exp?: number;
   iat?: number;
+  permissions?: unknown;
 }
 
 function decodeJwtPayload(token: string): JwtPayload | null {
@@ -75,6 +78,24 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   } catch {
     return null;
   }
+}
+
+function parsePermissionsFromJwt(token: string): string[] {
+  const payload = decodeJwtPayload(token);
+  if (!Array.isArray(payload?.permissions)) return [];
+  return payload.permissions.filter((p): p is string => typeof p === 'string');
+}
+
+function mergeUserWithJwtPermissions(
+  user: UserPayload,
+  token: string,
+): UserPayload {
+  const fromJwt = parsePermissionsFromJwt(token);
+  const fromUser = Array.isArray(user.permissions)
+    ? user.permissions.filter((p): p is string => typeof p === 'string')
+    : [];
+  const permissions = fromJwt.length > 0 ? fromJwt : fromUser;
+  return { ...user, permissions };
 }
 
 /** Margen ante desfase de reloj (segundos). */
@@ -109,6 +130,12 @@ export class AuthService {
   currentUser = signal<UserPayload | null>(null);
   isAuthenticated = signal<boolean>(false);
   currentContractId = signal<string | null>(null); // Modificado
+
+  /** Permisos PBAC del usuario activo (desde JWT / sesión). */
+  userPermissions = computed(() => {
+    const perms = this.currentUser()?.permissions;
+    return Array.isArray(perms) ? perms : [];
+  });
 
   constructor(
     private http: HttpClient,
@@ -360,44 +387,51 @@ export class AuthService {
 
   private setSession(token: string, user: UserPayload) {
     let initialContract = 'ALL';
+    const userWithPermissions = mergeUserWithJwtPermissions(user, token);
 
     if (isPlatformBrowser(this.platformId)) {
       localStorage.setItem('tpm_token', token);
-      if (user.role === 'ADMIN' && !user.allowedContracts?.includes('ALL')) {
-        user.allowedContracts = ['ALL', ...(user.allowedContracts || [])];
+      if (
+        userWithPermissions.role === 'ADMIN' &&
+        !userWithPermissions.allowedContracts?.includes('ALL')
+      ) {
+        userWithPermissions.allowedContracts = [
+          'ALL',
+          ...(userWithPermissions.allowedContracts || []),
+        ];
       }
-      localStorage.setItem('tpm_user', JSON.stringify(user));
+      localStorage.setItem('tpm_user', JSON.stringify(userWithPermissions));
 
       const savedContract = localStorage.getItem('tpm_contract_id');
       if (
         savedContract &&
-        (user.allowedContracts?.includes(savedContract) ||
-          user.allowedContracts?.includes('ALL'))
+        (userWithPermissions.allowedContracts?.includes(savedContract) ||
+          userWithPermissions.allowedContracts?.includes('ALL'))
       ) {
         initialContract = savedContract;
       } else if (
-        user.role !== 'ADMIN' &&
-        user.allowedContracts?.length > 0 &&
-        !user.allowedContracts.includes('ALL')
+        userWithPermissions.role !== 'ADMIN' &&
+        userWithPermissions.allowedContracts?.length > 0 &&
+        !userWithPermissions.allowedContracts.includes('ALL')
       ) {
-        initialContract = user.allowedContracts[0];
+        initialContract = userWithPermissions.allowedContracts[0];
       }
 
       localStorage.setItem('tpm_contract_id', initialContract); // Modificado
     } else {
       if (
-        user.role !== 'ADMIN' &&
-        user.allowedContracts?.length > 0 &&
-        !user.allowedContracts.includes('ALL')
+        userWithPermissions.role !== 'ADMIN' &&
+        userWithPermissions.allowedContracts?.length > 0 &&
+        !userWithPermissions.allowedContracts.includes('ALL')
       ) {
-        initialContract = user.allowedContracts[0];
+        initialContract = userWithPermissions.allowedContracts[0];
       }
     }
 
     this.currentContractId.set(initialContract); // Modificado
-    this.currentUser.set(user);
+    this.currentUser.set(userWithPermissions);
     this.isAuthenticated.set(true);
-    this.syncTenantContextFromUser(user);
+    this.syncTenantContextFromUser(userWithPermissions);
   }
 
   /** SUPER_ADMIN: contexto operativo vía TenantService → interceptor envía x-tenant-id. */
@@ -437,7 +471,10 @@ export class AuthService {
         return;
       }
       try {
-        const parsedUser = JSON.parse(user);
+        const parsedUser = mergeUserWithJwtPermissions(
+          JSON.parse(user) as UserPayload,
+          token,
+        );
         this.currentUser.set(parsedUser);
         this.isAuthenticated.set(true);
 
@@ -468,6 +505,9 @@ export class AuthService {
           this.currentUser.set({ ...parsedUser });
         }
 
+        if (isPlatformBrowser(this.platformId)) {
+          localStorage.setItem('tpm_user', JSON.stringify(parsedUser));
+        }
         this.syncTenantContextFromUser(parsedUser);
       } catch (e) {
         this.logout();
@@ -525,6 +565,38 @@ export class AuthService {
     // SUPER_ADMIN siempre tiene acceso a cualquier recurso protegido por rol.
     if (user.role === 'SUPER_ADMIN') return true;
     return roles.includes(user.role);
+  }
+
+  /**
+   * PBAC en UI: bypass para ADMIN y SUPER_ADMIN; si no, exige todos los permisos listados (AND).
+   */
+  hasPermission(requiredPermission: string | string[]): boolean {
+    const user = this.currentUser();
+    if (!user) return false;
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') {
+      return true;
+    }
+    const required = Array.isArray(requiredPermission)
+      ? requiredPermission
+      : [requiredPermission];
+    if (required.length === 0) return true;
+    const granted = new Set(this.userPermissions());
+    return required.every((p) => granted.has(p));
+  }
+
+  /** PBAC con lógica OR: al menos un permiso concedido. Bypass ADMIN / SUPER_ADMIN. */
+  hasPermissionAny(requiredPermission: string | string[]): boolean {
+    const user = this.currentUser();
+    if (!user) return false;
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') {
+      return true;
+    }
+    const required = Array.isArray(requiredPermission)
+      ? requiredPermission
+      : [requiredPermission];
+    if (required.length === 0) return true;
+    const granted = new Set(this.userPermissions());
+    return required.some((p) => granted.has(p));
   }
 
   /**

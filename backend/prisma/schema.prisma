@@ -659,6 +659,8 @@ model TenantRole {
   description String?  @db.VarChar(255)
   baseRole    UserRole @default(MECHANIC) @map("base_role")
   routes      Json     @default("[]")
+  /// Capacidades PBAC para API (independiente de `routes` en UI).
+  permissions Json     @default("[]")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

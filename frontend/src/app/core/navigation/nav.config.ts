@@ -1,3 +1,5 @@
+import { P } from '../constants/purchases-permissions';
+
 /** Roles disponibles en el sistema (deben coincidir con Prisma UserRole). */
 export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
 
@@ -16,6 +18,26 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   MECHANIC: 'Opera en terreno: ejecuta órdenes de trabajo asignadas y consulta flota y stock.',
 };
 
+/** Filtra ítems de menú según PBAC (tras rutas/roles legacy). */
+export function filterNavItemsByPermission(
+  items: NavItem[],
+  hasPermission: (p: string | string[]) => boolean,
+  hasPermissionAny: (p: string | string[]) => boolean,
+): NavItem[] {
+  return items.filter((item) => {
+    if (item.permissionsAny) {
+      const any = Array.isArray(item.permissionsAny)
+        ? item.permissionsAny
+        : [item.permissionsAny];
+      return hasPermissionAny(any);
+    }
+    if (item.permissions) {
+      return hasPermission(item.permissions);
+    }
+    return true;
+  });
+}
+
 export interface NavItem {
   label: string;
   route: string;
@@ -29,6 +51,10 @@ export interface NavItem {
    * Estos defaults se sobreescriben si el tenant tiene `sidebarPermissions` configurados.
    */
   roles?: AppRole[];
+  /** PBAC: requiere todos los permisos (AND). Bypass ADMIN / SUPER_ADMIN en `AuthService`. */
+  permissions?: string | string[];
+  /** PBAC: requiere al menos uno (OR). */
+  permissionsAny?: string | string[];
 }
 
 export interface NavSection {
@@ -188,23 +214,55 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Compras',
     roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
     items: [
-      { label: 'Requerimientos', route: '/app/compras/requerimientos', icon: ICONS.documentText },
-      { label: 'Analítica', route: '/app/compras/analytics', icon: ICONS.chartBar },
-      { label: 'Facturas', route: '/app/compras/facturas', icon: ICONS.documentText },
-      { label: 'Calendario de Pagos', route: '/app/compras/calendario-pagos', icon: ICONS.calendar },
-      { label: 'Órdenes de Compra', route: '/app/compras/ordenes', icon: ICONS.clipboard },
-      { label: 'Recepciones', route: '/app/compras/recepciones', icon: ICONS.archive },
+      {
+        label: 'Requerimientos',
+        route: '/app/compras/requerimientos',
+        icon: ICONS.documentText,
+        permissions: P.REQUISITION_READ,
+      },
+      {
+        label: 'Analítica',
+        route: '/app/compras/analytics',
+        icon: ICONS.chartBar,
+        permissions: P.ANALYTICS_READ,
+      },
+      {
+        label: 'Facturas',
+        route: '/app/compras/facturas',
+        icon: ICONS.documentText,
+        permissions: P.INVOICE_READ,
+      },
+      {
+        label: 'Calendario de Pagos',
+        route: '/app/compras/calendario-pagos',
+        icon: ICONS.calendar,
+        permissions: P.INVOICE_READ,
+      },
+      {
+        label: 'Órdenes de Compra',
+        route: '/app/compras/ordenes',
+        icon: ICONS.clipboard,
+        permissions: P.ORDER_READ,
+      },
+      {
+        label: 'Recepciones',
+        route: '/app/compras/recepciones',
+        icon: ICONS.archive,
+        permissions: P.RECEIPT_READ,
+      },
       {
         label: 'Proveedores',
         route: '/app/compras/proveedores',
         icon: ICONS.users,
         roles: ['SUPER_ADMIN', 'ADMIN'],
+        permissions: P.VENDOR_READ,
       },
       {
         label: 'Config. Compras',
         route: '/app/compras/configuracion',
         icon: ICONS.cog,
         roles: ['SUPER_ADMIN', 'ADMIN'],
+        permissions: P.SETTING_READ,
       },
     ],
   },
@@ -231,6 +289,12 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: 'Notificaciones',
         route: '/app/configuracion/notificaciones',
+        icon: ICONS.shieldCheck,
+        roles: ['SUPER_ADMIN', 'ADMIN'],
+      },
+      {
+        label: 'Roles y permisos API',
+        route: '/app/configuracion/gobernanza-roles',
         icon: ICONS.shieldCheck,
         roles: ['SUPER_ADMIN', 'ADMIN'],
       },

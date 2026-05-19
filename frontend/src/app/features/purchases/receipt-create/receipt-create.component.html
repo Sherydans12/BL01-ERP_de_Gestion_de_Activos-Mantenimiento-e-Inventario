@@ -80,6 +80,7 @@
 
       <div class="pt-2">
         <button
+          *appHasPermission="p.RECEIPT_CREATE"
           type="button"
           (click)="submit()"
           [disabled]="isSubmitting() || !selectedOrderId() || !selectedWarehouseId()"

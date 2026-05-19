@@ -272,6 +272,7 @@
                 }
                 @if (inv.status === 'MATCHED') {
                   <button
+                    *appHasPermission="p.INVOICE_MARK_PAID"
                     type="button"
                     (click)="openPayDialog(inv)"
                     class="text-sm text-green-400 hover:underline"

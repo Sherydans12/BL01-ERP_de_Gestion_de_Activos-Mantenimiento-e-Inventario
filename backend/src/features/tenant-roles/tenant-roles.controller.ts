@@ -15,11 +15,19 @@ import { UpdateTenantRoleDto } from './dto/update-tenant-role.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { getPermissionsCatalog } from '../auth/constants/permissions-catalog';
 
 @Controller('tenant-roles')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TenantRolesController {
   constructor(private readonly tenantRolesService: TenantRolesService) {}
+
+  /** Catálogo PBAC para UI de gobernanza (Compras y futuros módulos). */
+  @Get('permissions-catalog')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  getPermissionsCatalog() {
+    return getPermissionsCatalog();
+  }
 
   @Get()
   findAll(@Req() req: any) {

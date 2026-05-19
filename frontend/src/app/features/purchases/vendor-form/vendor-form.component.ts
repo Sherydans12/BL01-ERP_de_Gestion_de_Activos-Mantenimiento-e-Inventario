@@ -1,17 +1,39 @@
-import { Component, signal, inject, OnInit } from '@angular/core';
+import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { VendorsService, Vendor } from '../../../core/services/vendors/vendors.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
+import { AuthService } from '../../../core/services/auth/auth.service';
 
 @Component({
   selector: 'app-vendor-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterModule,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
+  ],
   templateUrl: './vendor-form.component.html',
 })
 export class VendorFormComponent implements OnInit {
+  protected readonly p = P;
+
+  private auth = inject(AuthService);
+
+  readonly isFormReadOnly = computed(() =>
+    this.isEditing()
+      ? !this.auth.hasPermission(P.VENDOR_UPDATE)
+      : !this.auth.hasPermission(P.VENDOR_CREATE),
+  );
+
   private vendorsService = inject(VendorsService);
   private notify = inject(NotificationService);
   private router = inject(Router);
@@ -54,6 +76,7 @@ export class VendorFormComponent implements OnInit {
   }
 
   save() {
+    if (this.isFormReadOnly()) return;
     const data = this.form();
     if (!data.code || !data.name) { this.notify.error('Código y nombre son obligatorios'); return; }
     this.isSaving.set(true);
@@ -75,6 +98,7 @@ export class VendorFormComponent implements OnInit {
   }
 
   updateField(field: string, value: string) {
+    if (this.isFormReadOnly()) return;
     this.form.update((f) => ({ ...f, [field]: value }));
   }
 }

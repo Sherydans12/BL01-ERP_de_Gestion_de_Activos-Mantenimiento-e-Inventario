@@ -68,17 +68,19 @@
             <textarea rows="3"
                       [ngModel]="deliveryDraft()"
                       (ngModelChange)="deliveryDraft.set($event)"
+                      [disabled]="!canEditLogistics()"
                       placeholder="Ej. bodega central, acceso camión, horario…"
-                      class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-sm text-main focus:border-primary focus:outline-none resize-y min-h-[5rem]"></textarea>
+                      class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-sm text-main focus:border-primary focus:outline-none resize-y min-h-[5rem] disabled:opacity-60 disabled:cursor-not-allowed"></textarea>
           </div>
           <div>
             <label class="block text-xs font-medium text-muted mb-1">Condición de pago</label>
             <input type="text"
                    [ngModel]="paymentTermsDraft()"
                    (ngModelChange)="paymentTermsDraft.set($event)"
+                   [disabled]="!canEditLogistics()"
                    placeholder="Ej. 30 días fecha factura, contado, etc."
-                   class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-sm text-main focus:border-primary focus:outline-none" />
-            <button type="button"
+                   class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-sm text-main focus:border-primary focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed" />
+            <button *appHasPermission="p.ORDER_UPDATE_LOGISTICS" type="button"
                     (click)="saveLogistics()"
                     [disabled]="savingLogistics()"
                     class="mt-3 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-dark hover:bg-primary/90 disabled:opacity-50">
@@ -138,19 +140,19 @@
           </svg>
         </button>
         @if (canReset()) {
-          <button type="button" (click)="requestResetToDraft()"
+          <button *appHasPermission="p.ORDER_RESET_DRAFT" type="button" (click)="requestResetToDraft()"
                   class="px-4 py-2 border border-yellow-500/30 text-yellow-400 font-medium rounded-lg hover:bg-yellow-500/10 transition-colors">
             Reiniciar a Borrador
           </button>
         }
         @if (canForceClose()) {
-          <button (click)="openCloseModal()"
+          <button *appHasPermission="p.ORDER_FORCE_CLOSE" (click)="openCloseModal()"
                   class="px-4 py-2 border border-purple-500/30 text-purple-400 font-medium rounded-lg hover:bg-purple-500/10 transition-colors">
             Cerrar Orden
           </button>
         }
         @if (canMarkSentToSupplier()) {
-          <button type="button"
+          <button *appHasPermission="p.ORDER_SEND_TO_SUPPLIER" type="button"
                   (click)="markSentToSupplier()"
                   [disabled]="isMarkingSentToSupplier()"
                   class="px-4 py-2 border border-blue-500/40 text-blue-300 font-medium rounded-lg hover:bg-blue-500/10 transition-colors disabled:opacity-50">
@@ -158,14 +160,15 @@
           </button>
         }
         @if (canCancelOrder()) {
-          <button type="button"
+          <button *appHasPermission="p.ORDER_CANCEL" type="button"
                   (click)="requestCancelOrder()"
                   class="px-4 py-2 border border-red-500/40 text-red-300 font-medium rounded-lg hover:bg-red-500/10 transition-colors">
             Anular OC
           </button>
         }
         @if (canOpenWarehouseReceipt()) {
-          <a [routerLink]="['/app/compras/recepciones/nueva']"
+          <a *appHasPermission="p.RECEIPT_CREATE"
+             [routerLink]="['/app/compras/recepciones/nueva']"
              [queryParams]="{ orderId: order()!.id }"
              class="px-4 py-2 bg-primary/15 border border-primary/40 text-primary font-medium rounded-lg hover:bg-primary/25 transition-colors">
             Nueva recepción (bodega)
@@ -372,11 +375,11 @@
             <input type="text" placeholder="Comentario de aprobación (opcional)"
                    [ngModel]="approveComment()" (ngModelChange)="approveComment.set($event)"
                    class="flex-1 px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:border-primary focus:outline-none">
-            <button type="button" (click)="requestApprove()"
+            <button *appHasPermission="p.ORDER_APPROVE" type="button" (click)="requestApprove()"
                     class="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
               Firmar
             </button>
-            <button (click)="openRejectModal()"
+            <button *appHasPermission="p.ORDER_REJECT" (click)="openRejectModal()"
                     class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
               Rechazar
             </button>
@@ -428,7 +431,7 @@
                       </svg>
                     </span>
                     @if (canLinkCatalogOnOrder()) {
-                      <button type="button"
+                      <button *appHasPermission="p.ORDER_LINK_CATALOG" type="button"
                               (click)="openLinkCatalogModal(item.id)"
                               [disabled]="isLinkingCatalog()"
                               class="text-xs font-medium text-primary/90 hover:text-primary underline decoration-primary/40 underline-offset-2 disabled:opacity-50">
@@ -506,6 +509,7 @@
             @if (canOverruleShortShipment()) {
               <button
                 type="button"
+                *appHasPermission="p.INVOICE_OVERRULE"
                 (click)="openOverruleThreeWayModal()"
                 class="mt-4 inline-flex items-center px-4 py-2.5 rounded-lg bg-primary text-black text-sm font-semibold hover:bg-primary/90 transition-colors"
               >
@@ -619,18 +623,19 @@
 
         <div class="flex flex-wrap gap-2">
           @if (['APPROVED','SENT','ORDERED','SENT_TO_SUPPLIER','PARTIALLY_RECEIVED','RECEIVED','CLOSED'].includes(order()!.status)) {
-            <a [routerLink]="['/app/compras/ordenes', order()!.id, 'factura']"
+            <a *appHasAnyPermission="[p.INVOICE_CREATE, p.INVOICE_UPDATE]"
+               [routerLink]="['/app/compras/ordenes', order()!.id, 'factura']"
                class="inline-flex items-center px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90">
               {{ primaryInvoice() ? 'Nueva factura / editar' : 'Registrar factura' }}
             </a>
           }
           @if (primaryInvoice()) {
-            <button type="button" (click)="revalidateInvoice()"
+            <button *appHasPermission="p.INVOICE_VALIDATE" type="button" (click)="revalidateInvoice()"
                     class="px-4 py-2 border border-border rounded-lg text-main hover:bg-dark/40">
               Volver a validar
             </button>
             @if (primaryInvoice()!.status === 'MATCHED') {
-              <button type="button" (click)="markInvoicePaid()"
+              <button *appHasPermission="p.INVOICE_MARK_PAID" type="button" (click)="markInvoicePaid()"
                       class="px-4 py-2 border border-green-500/40 text-green-400 rounded-lg hover:bg-green-500/10">
                 Marcar factura como pagada
               </button>

@@ -30,7 +30,7 @@
         <p class="text-sm text-muted mt-1">{{ requisition()!.description }}</p>
       </div>
       <div class="flex flex-wrap gap-2 justify-end">
-        <button type="button" (click)="duplicateRequisition()" [disabled]="isDuplicating()"
+        <button *appHasPermission="p.REQUISITION_DUPLICATE" type="button" (click)="duplicateRequisition()" [disabled]="isDuplicating()"
                 class="inline-flex items-center gap-1.5 px-4 py-2 border border-border text-muted font-medium rounded-lg hover:bg-dark/80 hover:text-main transition-colors disabled:opacity-50"
                 title="Crear copia en borrador con los mismos ítems">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -48,19 +48,21 @@
           {{ isRequisitionPdfDownloading() ? 'Generando PDF…' : 'PDF resumen' }}
         </button>
         @if (canEditRequisition()) {
-          <a [routerLink]="['/app/compras/requerimientos', requisition()!.id, 'edit']"
+          <a *appHasAnyPermission="requisitionEditPerms"
+             [routerLink]="['/app/compras/requerimientos', requisition()!.id, 'edit']"
              class="inline-flex items-center px-4 py-2 border border-border text-main font-medium rounded-lg hover:bg-dark/80 transition-colors">
             Editar
           </a>
         }
         @if (canSubmit()) {
-          <button type="button" (click)="requestSubmitRequisition()" [disabled]="isSubmitting()"
+          <button *appHasPermission="p.REQUISITION_SUBMIT" type="button" (click)="requestSubmitRequisition()" [disabled]="isSubmitting()"
                   class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
             {{ isSubmitting() ? 'Enviando...' : 'Enviar requerimiento' }}
           </button>
         }
         @if (canCancelRequisition()) {
           <button
+            *appHasPermission="p.REQUISITION_CANCEL"
             type="button"
             (click)="requestCancelRequisition()"
             [disabled]="isSubmitting()"
@@ -70,7 +72,7 @@
           </button>
         }
         @if (canStartQuoting()) {
-          <button type="button" (click)="requestStartQuoting()" [disabled]="isStartingQuotation()"
+          <button *appHasPermission="p.REQUISITION_START_QUOTING" type="button" (click)="requestStartQuoting()" [disabled]="isStartingQuotation()"
                   class="px-4 py-2 bg-primary/20 text-primary font-medium rounded-lg hover:bg-primary/30 transition-colors disabled:opacity-50 border border-primary/40">
             {{ isStartingQuotation() ? 'Iniciando...' : 'Iniciar Cotización' }}
           </button>
@@ -242,7 +244,7 @@
         <div class="px-4 py-3 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 class="text-lg font-semibold text-main">Cuadro Comparativo de Cotizaciones</h2>
           @if (canAddQuotation()) {
-            <button type="button" (click)="toggleQuotationForm()"
+            <button *appHasPermission="p.REQUISITION_MANAGE_QUOTATIONS" type="button" (click)="toggleQuotationForm()"
                     class="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary/20 text-primary rounded-lg hover:bg-primary/30 transition-colors text-sm font-medium border border-primary/40">
               {{ showQuotationForm() ? 'Cerrar formulario' : 'Agregar cotización' }}
             </button>
@@ -265,7 +267,7 @@
                     </select>
                   </div>
                   @if (canManagePurchases()) {
-                    <button type="button" (click)="toggleInlineVendorForm()"
+                    <button *appHasPermission="p.VENDOR_CREATE" type="button" (click)="toggleInlineVendorForm()"
                             class="shrink-0 px-3 py-2 text-sm font-medium rounded-lg border border-border text-main hover:bg-dark/80 transition-colors whitespace-nowrap">
                       {{ showInlineVendorForm() ? 'Ocultar registro' : '+ Nuevo proveedor' }}
                     </button>
@@ -364,7 +366,7 @@
               <p class="text-sm text-main">
                 Total cotización: <span class="font-mono font-semibold text-primary">{{ getQuotationTotal() | clpCurrency:'CLP' }}</span>
               </p>
-              <button type="button" (click)="requestSubmitQuotation()" [disabled]="isSavingQuotation()"
+              <button *appHasPermission="p.REQUISITION_MANAGE_QUOTATIONS" type="button" (click)="requestSubmitQuotation()" [disabled]="isSavingQuotation()"
                       class="px-4 py-2 bg-primary text-black font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50">
                 {{ isSavingQuotation() ? 'Guardando...' : 'Registrar cotización' }}
               </button>
@@ -425,7 +427,7 @@
                     </td>
                     <td class="px-4 py-3 text-right">
                       @if (canSelectWinner() && !q.isWinner && (requisition()!.status === 'PENDING_APPROVAL' || q.status !== 'REJECTED')) {
-                        <button type="button" (click)="requestSelectWinner(q.id)" class="text-sm font-medium text-primary hover:text-primary/80">Seleccionar</button>
+                        <button *appHasPermission="p.REQUISITION_MANAGE_QUOTATIONS" type="button" (click)="requestSelectWinner(q.id)" class="text-sm font-medium text-primary hover:text-primary/80">Seleccionar</button>
                       } @else {
                         <span class="text-muted text-xs">—</span>
                       }
@@ -547,13 +549,13 @@
           <p class="text-xs text-sky-300/95 border border-sky-500/30 bg-sky-500/10 rounded-lg px-2 py-2">Cambios sin guardar en el servidor.</p>
         }
         <div class="flex flex-col gap-2">
-          <button type="button"
+          <button *appHasPermission="p.REQUISITION_AWARD_LINES" type="button"
                   (click)="saveMatrixSelection()"
                   [disabled]="!canSaveLineAwards() || isSavingLineAwards()"
                   class="w-full px-3 py-2.5 rounded-lg bg-primary text-black text-sm font-medium disabled:opacity-45 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors">
             {{ isSavingLineAwards() ? 'Guardando…' : 'Guardar selección' }}
           </button>
-          <button type="button"
+          <button *appHasPermission="p.ORDER_CREATE_FROM_REQUISITION" type="button"
                   (click)="requestGenerateSplitOrders()"
                   [disabled]="!canGenerateSplitOrders() || isGeneratingSplitOrders()"
                   class="w-full px-3 py-2.5 rounded-lg border border-green-500/45 text-green-300 text-sm font-medium hover:bg-green-500/10 disabled:opacity-45 disabled:cursor-not-allowed transition-colors">

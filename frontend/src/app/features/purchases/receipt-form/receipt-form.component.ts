@@ -12,6 +12,9 @@ import {
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
+import { AuthService } from '../../../core/services/auth/auth.service';
 
 interface EditableReceiptItem extends ReceiptItem {
   _quantityReceived: number;
@@ -21,10 +24,25 @@ interface EditableReceiptItem extends ReceiptItem {
 @Component({
   selector: 'app-receipt-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, ConfirmModalComponent, PurchasesPushNoticeComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ConfirmModalComponent,
+    PurchasesPushNoticeComponent,
+    HasPermissionDirective,
+  ],
   templateUrl: './receipt-form.component.html',
 })
 export class ReceiptFormComponent implements OnInit {
+  protected readonly p = P;
+
+  private auth = inject(AuthService);
+
+  /** Sin permiso de registro o guía cerrada: cantidades no editables. */
+  readonly isQuantityEntryDisabled = computed(
+    () => this.isReadonly() || !this.auth.hasPermission(P.RECEIPT_REGISTER),
+  );
+
   private purchasesService = inject(PurchasesService);
   private notify = inject(NotificationService);
   private route = inject(ActivatedRoute);
@@ -322,6 +340,7 @@ export class ReceiptFormComponent implements OnInit {
   // ── Edición de ítems ───────────────────────────────────────────────────────
 
   updateItemQty(index: number, value: number) {
+    if (this.isQuantityEntryDisabled()) return;
     const items = this.editableItems();
     const item = items[index];
     if (!item) return;

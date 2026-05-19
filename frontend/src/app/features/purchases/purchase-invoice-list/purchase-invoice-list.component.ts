@@ -22,6 +22,8 @@ import { ClpCurrencyPipe } from '../../../shared/pipes/clp-currency.pipe';
 import { Contract } from '../../../core/models/types';
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 type InvoiceListSortField =
   | 'invoiceNumber'
@@ -45,10 +47,13 @@ type InvoiceListSortField =
     ClpCurrencyPipe,
     PurchasesPushNoticeComponent,
     EntityLinkComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './purchase-invoice-list.component.html',
 })
 export class PurchaseInvoiceListComponent implements OnInit {
+  protected readonly p = P;
+
   private purchasesService = inject(PurchasesService);
   private contractsService = inject(ContractsService);
   private notify = inject(NotificationService);

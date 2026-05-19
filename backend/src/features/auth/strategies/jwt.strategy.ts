@@ -5,6 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserSessionService } from '../user-session.service';
+import { parseTenantRolePermissions } from '../permissions.util';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -69,11 +70,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       });
     }
 
+    const jwtPermissions = parseTenantRolePermissions(payload.permissions);
+
     return {
       ...user,
       tenantId: effectiveTenantId,
       tenant,
       allowedContracts: user.contractAccess.map((access) => access.contractId),
+      permissions: jwtPermissions,
       jti,
     };
   }

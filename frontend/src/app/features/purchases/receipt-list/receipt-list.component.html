@@ -7,6 +7,7 @@
       <p class="text-sm text-muted mt-1">Ingresos de stock desde órdenes de compra aprobadas o enviadas al proveedor.</p>
     </div>
     <a
+      *appHasPermission="p.RECEIPT_CREATE"
       routerLink="/app/compras/recepciones/nueva"
       class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-black font-semibold text-base shadow-lg shadow-primary/25 hover:bg-primary/90 transition-colors shrink-0"
     >
@@ -160,6 +161,7 @@
                 } @else {
                   <p class="text-muted text-sm mb-3">Aún no hay recepciones registradas.</p>
                   <a
+                    *appHasPermission="p.RECEIPT_CREATE"
                     routerLink="/app/compras/recepciones/nueva"
                     class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:bg-primary/90"
                   >

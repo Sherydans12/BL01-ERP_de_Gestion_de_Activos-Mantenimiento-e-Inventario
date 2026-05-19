@@ -18,6 +18,8 @@ import {
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 type ReceiptListSortField =
   | 'correlative'
@@ -39,10 +41,12 @@ type ReceiptListSortField =
     FormsModule,
     PurchasesPushNoticeComponent,
     EntityLinkComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './receipt-list.component.html',
 })
 export class ReceiptListComponent {
+  protected readonly p = P;
   private purchasesService = inject(PurchasesService);
   private notify = inject(NotificationService);
   private destroyRef = inject(DestroyRef);

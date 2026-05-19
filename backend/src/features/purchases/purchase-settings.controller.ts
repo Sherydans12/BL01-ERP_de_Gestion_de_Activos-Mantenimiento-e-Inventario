@@ -1,21 +1,23 @@
 import { Controller, Get, Put, Body, Req, UseGuards } from '@nestjs/common';
 import { PurchaseSettingsService } from './purchase-settings.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('purchase-settings')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'SUPER_ADMIN')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchaseSettingsController {
   constructor(private readonly settingsService: PurchaseSettingsService) {}
 
   @Get()
+  @RequirePermissions(SystemPermissions.PURCHASES_SETTING_READ)
   getSettings(@Req() req: any) {
     return this.settingsService.getSettings(req.user.tenantId);
   }
 
   @Put()
+  @RequirePermissions(SystemPermissions.PURCHASES_SETTING_UPDATE)
   updateSettings(
     @Body()
     body: {
@@ -29,11 +31,13 @@ export class PurchaseSettingsController {
   }
 
   @Get('policies')
+  @RequirePermissions(SystemPermissions.PURCHASES_SETTING_READ)
   getPolicies(@Req() req: any) {
     return this.settingsService.getPolicies(req.user.tenantId);
   }
 
   @Put('policies')
+  @RequirePermissions(SystemPermissions.PURCHASES_SETTING_UPDATE)
   upsertPolicies(
     @Body()
     body: {

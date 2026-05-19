@@ -25,6 +25,11 @@ import { EntityLinkComponent } from '../../../shared/components/entity-link/enti
 import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
 import { MAX_UPLOAD_FILE_BYTES } from '../../../core/constants/file-upload.constants';
 import { finalize } from 'rxjs/operators';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { P, REQUISITION_EDIT_ANY } from '../../../core/constants/purchases-permissions';
 
 const PO_INACTIVE = new Set(['CANCELLED', 'REJECTED']);
 
@@ -43,10 +48,15 @@ const PO_INACTIVE = new Set(['CANCELLED', 'REJECTED']);
     ActivityTimelineComponent,
     EntityLinkComponent,
     PurchaseDocumentsPanelComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
   ],
   templateUrl: './requisition-detail.component.html',
 })
 export class RequisitionDetailComponent implements OnInit {
+  protected readonly p = P;
+  protected readonly requisitionEditPerms = [...REQUISITION_EDIT_ANY];
+
   private purchasesService = inject(PurchasesService);
   private notify = inject(NotificationService);
   private auth = inject(AuthService);

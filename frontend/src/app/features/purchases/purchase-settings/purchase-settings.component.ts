@@ -11,6 +11,9 @@ import { UsersService, User } from '../../../core/services/users/users.service';
 import { PushNotificationsService } from '../../../core/services/push-notifications/push-notifications.service';
 import { ClpCurrencyPipe } from '../../../shared/pipes/clp-currency.pipe';
 import { switchMap } from 'rxjs/operators';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
+import { AuthService } from '../../../core/services/auth/auth.service';
 
 interface PolicyRow {
   level: number;
@@ -22,13 +25,27 @@ interface PolicyRow {
 @Component({
   selector: 'app-purchase-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, ClpCurrencyPipe],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterModule,
+    ClpCurrencyPipe,
+    HasPermissionDirective,
+  ],
   templateUrl: './purchase-settings.component.html',
 })
 export class PurchaseSettingsComponent implements OnInit {
+  protected readonly p = P;
+
   private purchasesService = inject(PurchasesService);
   private usersService = inject(UsersService);
   private notify = inject(NotificationService);
+  private auth = inject(AuthService);
+
+  /** Sin `SETTING_UPDATE`: formulario y matriz en solo lectura (equivalente a `form.disable()`). */
+  readonly isFormReadOnly = computed(
+    () => !this.auth.hasPermission(P.SETTING_UPDATE),
+  );
 
   settings = signal<PurchaseSettings | null>(null);
   /** Lista plana de usuarios activos del tenant para el selector. */
@@ -133,6 +150,7 @@ export class PurchaseSettingsComponent implements OnInit {
   }
 
   addUserToPolicy(levelIndex: number, userId: string) {
+    if (this.isFormReadOnly()) return;
     this.policies.update((ps) =>
       ps.map((p, i) =>
         i === levelIndex && !p.userIds.includes(userId)
@@ -148,6 +166,7 @@ export class PurchaseSettingsComponent implements OnInit {
   }
 
   removeUserFromPolicy(levelIndex: number, userId: string) {
+    if (this.isFormReadOnly()) return;
     this.policies.update((ps) =>
       ps.map((p, i) =>
         i === levelIndex ? { ...p, userIds: p.userIds.filter((id) => id !== userId) } : p,
@@ -156,10 +175,12 @@ export class PurchaseSettingsComponent implements OnInit {
   }
 
   setUserSearch(level: number, value: string) {
+    if (this.isFormReadOnly()) return;
     this.userSearch.update((s) => ({ ...s, [level]: value }));
   }
 
   addPolicy() {
+    if (this.isFormReadOnly()) return;
     if (this.policies().length >= this.maxLevels) {
       this.notify.warning('BaseLogic soporta hasta 3 niveles de escalamiento (Base + Crítico).');
       return;
@@ -172,18 +193,21 @@ export class PurchaseSettingsComponent implements OnInit {
   }
 
   removePolicy(index: number) {
+    if (this.isFormReadOnly()) return;
     this.policies.update((p) =>
       p.filter((_, i) => i !== index).map((item, i) => ({ ...item, level: i + 1 })),
     );
   }
 
   updatePolicyField(index: number, field: keyof PolicyRow, value: any) {
+    if (this.isFormReadOnly()) return;
     this.policies.update((p) =>
       p.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
   }
 
   save() {
+    if (this.isFormReadOnly()) return;
     if (this.policies().length < 2) {
       this.notify.error('Debe configurar al menos 2 niveles de firma.');
       return;

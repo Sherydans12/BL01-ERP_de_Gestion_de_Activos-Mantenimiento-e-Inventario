@@ -12,15 +12,17 @@ import {
 } from '@nestjs/common';
 import { VendorsService } from './vendors.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('vendors')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class VendorsController {
   constructor(private readonly vendorsService: VendorsService) {}
 
   @Get()
+  @RequirePermissions(SystemPermissions.PURCHASES_VENDOR_READ)
   findAll(
     @Req() req: any,
     @Query('search') search?: string,
@@ -48,24 +50,25 @@ export class VendorsController {
   }
 
   @Get(':id')
+  @RequirePermissions(SystemPermissions.PURCHASES_VENDOR_READ)
   findById(@Param('id') id: string, @Req() req: any) {
     return this.vendorsService.findById(id, req.user.tenantId);
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  @RequirePermissions(SystemPermissions.PURCHASES_VENDOR_CREATE)
   create(@Body() body: any, @Req() req: any) {
     return this.vendorsService.create(body, req.user.tenantId);
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_VENDOR_UPDATE)
   update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     return this.vendorsService.update(id, body, req.user.tenantId);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_VENDOR_DELETE)
   remove(@Param('id') id: string, @Req() req: any) {
     return this.vendorsService.remove(id, req.user.tenantId);
   }

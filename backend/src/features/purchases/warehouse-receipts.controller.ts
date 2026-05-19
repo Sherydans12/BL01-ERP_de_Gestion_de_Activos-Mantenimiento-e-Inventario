@@ -11,15 +11,17 @@ import {
 } from '@nestjs/common';
 import { WarehouseReceiptsService } from './warehouse-receipts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('warehouse-receipts')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class WarehouseReceiptsController {
   constructor(private readonly service: WarehouseReceiptsService) {}
 
   @Get()
+  @RequirePermissions(SystemPermissions.PURCHASES_RECEIPT_READ)
   findAll(
     @Req() req: any,
     @Query('search') search?: string,
@@ -45,17 +47,19 @@ export class WarehouseReceiptsController {
   }
 
   @Get(':id')
+  @RequirePermissions(SystemPermissions.PURCHASES_RECEIPT_READ)
   findById(@Param('id') id: string, @Req() req: any) {
     return this.service.findById(id, req.user.tenantId);
   }
 
   @Get(':id/logs')
+  @RequirePermissions(SystemPermissions.PURCHASES_RECEIPT_READ)
   findLogs(@Param('id') id: string, @Req() req: any) {
     return this.service.findLogs(id, req.user.tenantId);
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_RECEIPT_CREATE)
   create(
     @Body() body: { purchaseOrderId: string; warehouseId: string },
     @Req() req: any,
@@ -64,7 +68,7 @@ export class WarehouseReceiptsController {
   }
 
   @Patch(':id/items')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_RECEIPT_REGISTER)
   updateItems(
     @Param('id') id: string,
     @Body()
@@ -81,7 +85,7 @@ export class WarehouseReceiptsController {
   }
 
   @Post(':id/confirm')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_RECEIPT_REGISTER)
   confirm(@Param('id') id: string, @Req() req: any) {
     return this.service.confirm(id, req.user);
   }

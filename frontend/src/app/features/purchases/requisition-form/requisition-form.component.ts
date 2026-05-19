@@ -24,6 +24,11 @@ import {
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
 import { GLOBAL_ITEM_PICKER_CATALOG } from '../../../shared/components/global-item-picker/global-item-picker.catalog';
 import { Contract, Equipment } from '../../../core/models/types';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { P, REQUISITION_EDIT_ANY } from '../../../core/constants/purchases-permissions';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,10 +52,20 @@ export type RequisitionFormItemRow = {
 @Component({
   selector: 'app-requisition-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, GlobalItemPickerComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterModule,
+    GlobalItemPickerComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
+  ],
   templateUrl: './requisition-form.component.html',
 })
 export class RequisitionFormComponent implements OnInit {
+  protected readonly p = P;
+  protected readonly requisitionEditPerms = [...REQUISITION_EDIT_ANY];
+
   private platformId = inject(PLATFORM_ID);
   private purchasesService = inject(PurchasesService);
   private authService = inject(AuthService);
@@ -121,6 +136,12 @@ export class RequisitionFormComponent implements OnInit {
   pickerRowIndex = signal<number | null>(null);
 
   isEditMode = computed(() => !!this.editId());
+
+  readonly isFormReadOnly = computed(() =>
+    this.isEditMode()
+      ? !this.authService.hasPermissionAny([...REQUISITION_EDIT_ANY])
+      : !this.authService.hasPermission(P.REQUISITION_CREATE),
+  );
 
   pageLoading = computed(
     () => this.isLoadingContracts() || this.isLoadingRequisition(),
@@ -452,6 +473,7 @@ export class RequisitionFormComponent implements OnInit {
   }
 
   openRowPicker(index: number) {
+    if (this.isFormReadOnly()) return;
     this.pickerRowIndex.set(index);
     this.showItemPicker.set(true);
   }
@@ -497,6 +519,7 @@ export class RequisitionFormComponent implements OnInit {
   }
 
   addItem() {
+    if (this.isFormReadOnly()) return;
     this.items.update((items) => [
       ...items,
       {
@@ -511,6 +534,7 @@ export class RequisitionFormComponent implements OnInit {
   }
 
   removeItem(index: number) {
+    if (this.isFormReadOnly()) return;
     this.items.update((items) => items.filter((_, i) => i !== index));
   }
 
@@ -549,6 +573,7 @@ export class RequisitionFormComponent implements OnInit {
   }
 
   save() {
+    if (this.isFormReadOnly()) return;
     if (!this.description()) {
       this.notify.error('La descripci\u00F3n es obligatoria');
       return;

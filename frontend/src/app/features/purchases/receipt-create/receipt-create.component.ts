@@ -6,14 +6,24 @@ import { PurchasesService, PurchaseOrder } from '../../../core/services/purchase
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { PurchasesPushNoticeComponent } from '../../../shared/components/purchases-push-notice/purchases-push-notice.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 @Component({
   selector: 'app-receipt-create',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, PurchasesPushNoticeComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterModule,
+    PurchasesPushNoticeComponent,
+    HasPermissionDirective,
+  ],
   templateUrl: './receipt-create.component.html',
 })
 export class ReceiptCreateComponent implements OnInit {
+  protected readonly p = P;
+
   private purchasesService = inject(PurchasesService);
   private warehousesService = inject(WarehousesService);
   private notify = inject(NotificationService);

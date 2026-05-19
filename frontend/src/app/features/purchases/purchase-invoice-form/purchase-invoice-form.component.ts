@@ -16,6 +16,11 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { MAX_UPLOAD_FILE_BYTES } from '../../../core/constants/file-upload.constants';
 import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 @Component({
   selector: 'app-purchase-invoice-form',
@@ -29,10 +34,13 @@ import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purc
     ActivityTimelineComponent,
     ConfirmModalComponent,
     PurchaseDocumentsPanelComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
   ],
   templateUrl: './purchase-invoice-form.component.html',
 })
 export class PurchaseInvoiceFormComponent implements OnInit {
+  protected readonly p = P;
   /** Etiquetas de estado de OC (misma nomenclatura que en detalle de orden). */
   readonly poStatusLabels: Record<string, string> = {
     DRAFT: 'Borrador',
@@ -89,6 +97,12 @@ export class PurchaseInvoiceFormComponent implements OnInit {
   });
 
   existingInvoice = computed(() => this.order()?.purchaseInvoices?.[0] ?? null);
+
+  readonly isFormReadOnly = computed(() =>
+    this.existingInvoice()
+      ? !this.auth.hasPermission(P.INVOICE_UPDATE)
+      : !this.auth.hasPermission(P.INVOICE_CREATE),
+  );
 
   ngOnInit() {
     const orderId = this.route.snapshot.paramMap.get('orderId');
@@ -200,6 +214,7 @@ export class PurchaseInvoiceFormComponent implements OnInit {
   }
 
   save() {
+    if (this.isFormReadOnly()) return;
     const o = this.order();
     if (!o?.quotation?.vendorId) {
       this.notify.error('La orden no tiene proveedor adjudicado.');

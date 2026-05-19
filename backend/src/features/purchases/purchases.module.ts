@@ -17,6 +17,7 @@ import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { PurchasesAnalyticsController } from './purchases-analytics.controller';
 import { PurchasesAnalyticsService } from './purchases-analytics.service';
 import { UsersModule } from '../users/users.module';
+import { AuthModule } from '../auth/auth.module';
 import { PurchaseDocumentsController } from './purchase-documents.controller';
 import { PurchaseDocumentsService } from './purchase-documents.service';
 import { PurchaseCreditNotesController } from './purchase-credit-notes.controller';
@@ -30,6 +31,7 @@ import { PurchaseCreditNotesService } from './purchase-credit-notes.service';
     NotificationSettingsModule,
     InventoryStockModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [
     PurchaseSettingsController,

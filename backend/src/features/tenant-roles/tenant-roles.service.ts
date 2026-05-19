@@ -18,6 +18,7 @@ const ROLE_SELECT = {
   description: true,
   baseRole: true,
   routes: true,
+  permissions: true,
   createdAt: true,
   updatedAt: true,
   _count: { select: { users: true } },
@@ -58,6 +59,7 @@ export class TenantRolesService {
         description: dto.description,
         baseRole: dto.baseRole,
         routes: dto.routes,
+        permissions: dto.permissions ?? [],
       },
       select: ROLE_SELECT,
     });
@@ -91,14 +93,16 @@ export class TenantRolesService {
       }
     }
 
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.baseRole !== undefined) data.baseRole = dto.baseRole;
+    if (dto.routes !== undefined) data.routes = dto.routes;
+    if (dto.permissions !== undefined) data.permissions = dto.permissions;
+
     return this.prisma.tenantRole.update({
       where: { id },
-      data: {
-        name: dto.name,
-        description: dto.description,
-        baseRole: dto.baseRole,
-        routes: dto.routes,
-      },
+      data,
       select: ROLE_SELECT,
     });
   }

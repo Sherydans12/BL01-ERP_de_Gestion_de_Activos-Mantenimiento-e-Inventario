@@ -30,6 +30,7 @@ import { StorageService } from '../../common/storage/storage.service';
 import { LoginStepUpService } from './login-step-up.service';
 import { StepUpPolicyService } from './step-up-policy.service';
 import { TotpService } from './totp.service';
+import { parseTenantRolePermissions } from './permissions.util';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
 const BCRYPT_DUMMY_HASH =
@@ -102,6 +103,17 @@ export class AuthService {
         `No se pudo enviar alerta SecurityEvent.UnusualLogin: ${e}`,
       );
     }
+  }
+
+  /** Permisos PBAC desde TenantRole; vacío si no hay rol custom o el JSON no es válido. */
+  private resolveJwtPermissions(user: {
+    customRoleId: string | null;
+    customRole?: { permissions?: unknown } | null;
+  }): string[] {
+    if (!user.customRoleId || !user.customRole) {
+      return [];
+    }
+    return parseTenantRolePermissions(user.customRole.permissions);
   }
 
   private async ensureMinFailureDelay(started: number): Promise<void> {
@@ -513,7 +525,7 @@ export class AuthService {
         code: string;
         logoUrl: string | null;
       } | null;
-      customRole: { name: string } | null;
+      customRole: { name: string; permissions?: unknown } | null;
     },
     ctx: {
       ip: string;
@@ -586,6 +598,8 @@ export class AuthService {
     const tokenTenantId =
       user.role === 'SUPER_ADMIN' ? null : jwtTenantId ?? user.tenantId;
 
+    const permissions = this.resolveJwtPermissions(user);
+
     const payload = {
       email: user.email,
       sub: user.id,
@@ -593,6 +607,7 @@ export class AuthService {
       tenantId: tokenTenantId,
       allowedContracts,
       customRoleId: user.customRoleId ?? null,
+      permissions,
       jti,
     };
 
@@ -788,6 +803,8 @@ export class AuthService {
       ipAddress: ip,
     });
 
+    const permissions = this.resolveJwtPermissions(user);
+
     const payload = {
       email: updatedUser.email,
       sub: updatedUser.id,
@@ -798,6 +815,7 @@ export class AuthService {
           : updatedUser.tenantId,
       allowedContracts,
       customRoleId: user.customRoleId ?? null,
+      permissions,
       jti,
     };
 

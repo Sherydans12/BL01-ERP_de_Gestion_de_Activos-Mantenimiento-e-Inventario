@@ -26,6 +26,11 @@ import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-moda
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
 import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purchase-documents-panel/purchase-documents-panel.component';
+import {
+  HasAnyPermissionDirective,
+  HasPermissionDirective,
+} from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 @Component({
   selector: 'app-purchase-order-detail',
@@ -44,10 +49,18 @@ import { PurchaseDocumentsPanelComponent } from '../../../shared/components/purc
     WorkOrderDetailModalComponent,
     EntityLinkComponent,
     PurchaseDocumentsPanelComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
   ],
   templateUrl: './purchase-order-detail.component.html',
 })
 export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
+  protected readonly p = P;
+
+  readonly canEditLogistics = computed(() =>
+    this.authService.hasPermission(P.ORDER_UPDATE_LOGISTICS),
+  );
+
   private purchasesService = inject(PurchasesService);
   private authService = inject(AuthService);
   private notify = inject(NotificationService);
@@ -351,14 +364,10 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
   overruleThreeWayNotes = signal('');
   isOverrulingThreeWay = signal(false);
 
-  /** Misma gobernanza que `POST .../three-way-match/overrule` en backend. */
+  /** Contexto de negocio para mostrar CTA de overrule (permiso vía `*appHasPermission`). */
   canOverruleShortShipment = computed(() => {
     const inv = this.primaryInvoice();
     if (!inv || inv.status !== 'DISCREPANCY') return false;
-    const user = this.authService.currentUser();
-    const hasPermission =
-      user?.canOverruleThreeWayMatch === true || user?.role === 'SUPER_ADMIN';
-    if (!hasPermission) return false;
     return inv.match?.matchReceived === true;
   });
 

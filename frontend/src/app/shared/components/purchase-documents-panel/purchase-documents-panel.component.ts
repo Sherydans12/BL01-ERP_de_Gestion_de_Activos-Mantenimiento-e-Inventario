@@ -12,6 +12,7 @@ import { environment } from '../../../../environments/environment';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { MAX_UPLOAD_FILE_BYTES } from '../../../core/constants/file-upload.constants';
+import { P } from '../../../core/constants/purchases-permissions';
 
 export type PurchaseDocumentEntity =
   | 'REQUISITION'
@@ -119,9 +120,7 @@ export class PurchaseDocumentsPanelComponent {
   documents = signal<PurchaseDocumentRow[]>([]);
   loading = signal(false);
 
-  canManage = computed(() =>
-    this.auth.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']),
-  );
+  canManage = computed(() => this.auth.hasPermission(P.DOCUMENT_MANAGE));
 
   constructor() {
     effect(() => {

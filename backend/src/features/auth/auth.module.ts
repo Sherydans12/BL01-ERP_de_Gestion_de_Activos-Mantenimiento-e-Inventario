@@ -13,6 +13,7 @@ import { UserSessionModule } from './user-session.module';
 import { LoginStepUpService } from './login-step-up.service';
 import { StepUpPolicyService } from './step-up-policy.service';
 import { TotpService } from './totp.service';
+import { PermissionsGuard } from './guards/permissions.guard';
 
 @Module({
   imports: [
@@ -42,7 +43,14 @@ import { TotpService } from './totp.service';
     LoginStepUpService,
     StepUpPolicyService,
     TotpService,
+    PermissionsGuard,
   ],
-  exports: [AuthService, AuthAuditModule, StepUpPolicyService, TotpService],
+  exports: [
+    AuthService,
+    AuthAuditModule,
+    StepUpPolicyService,
+    TotpService,
+    PermissionsGuard,
+  ],
 })
 export class AuthModule {}

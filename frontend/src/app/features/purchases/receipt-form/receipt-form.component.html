@@ -53,9 +53,9 @@
       </div>
 
       <!-- Botón confirmar -->
-      @if (!isReadonly()) {
+      @if (!isReadonly() && !isQuantityEntryDisabled()) {
         <div class="shrink-0">
-          <button type="button" (click)="requestConfirmReceipt()"
+          <button *appHasPermission="p.RECEIPT_REGISTER" type="button" (click)="requestConfirmReceipt()"
                   [disabled]="isSaving() || totalReceivedDraft() <= 0"
                   class="px-5 py-2.5 font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center gap-2"
                   [class]="isFullReceipt()
@@ -267,7 +267,8 @@
                     } @else {
                       <input type="number" min="0" [max]="capQty(item)"
                              [ngModel]="item._quantityReceived" (ngModelChange)="updateItemQty(i, $event)"
-                             class="w-20 px-2 py-1.5 bg-dark border rounded-lg text-main text-sm text-center font-mono focus:outline-none transition-colors"
+                             [disabled]="isQuantityEntryDisabled()"
+                             class="w-20 px-2 py-1.5 bg-dark border rounded-lg text-main text-sm text-center font-mono focus:outline-none transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                              [class]="item._quantityReceived > 0
                                ? (item._quantityReceived >= capQty(item) ? 'border-green-600 focus:border-green-500' : 'border-amber-600 focus:border-amber-500')
                                : 'border-border focus:border-primary'">

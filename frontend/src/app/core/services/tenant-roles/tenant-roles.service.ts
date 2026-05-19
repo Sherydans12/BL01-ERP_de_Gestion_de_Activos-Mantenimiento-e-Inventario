@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import type { PermissionCatalogModule } from '../../models/permissions-catalog.interface';
 
 export interface TenantRole {
   id: string;
@@ -9,6 +10,7 @@ export interface TenantRole {
   description?: string | null;
   baseRole: 'SUPER_ADMIN' | 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
   routes: string[];
+  permissions?: string[];
   createdAt?: string;
   updatedAt?: string;
   _count?: { users: number };
@@ -19,6 +21,7 @@ export interface CreateTenantRolePayload {
   description?: string;
   baseRole: 'SUPER_ADMIN' | 'MECHANIC' | 'SUPERVISOR' | 'ADMIN';
   routes: string[];
+  permissions?: string[];
 }
 
 export type UpdateTenantRolePayload = Partial<CreateTenantRolePayload>;
@@ -31,6 +34,12 @@ export class TenantRolesService {
 
   getAll(): Observable<TenantRole[]> {
     return this.http.get<TenantRole[]>(this.url);
+  }
+
+  getPermissionsCatalog(): Observable<PermissionCatalogModule[]> {
+    return this.http.get<PermissionCatalogModule[]>(
+      `${this.url}/permissions-catalog`,
+    );
   }
 
   /** Crea roles espejo Sistema · … si faltan y devuelve el listado completo. */

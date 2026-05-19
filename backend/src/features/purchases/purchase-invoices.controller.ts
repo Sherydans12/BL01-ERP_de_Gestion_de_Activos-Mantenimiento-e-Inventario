@@ -3,7 +3,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -17,8 +16,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 import { PurchaseDocumentsService } from './purchase-documents.service';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
@@ -30,7 +30,7 @@ import {
 const invoiceFileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
 @Controller('purchase-invoices')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchaseInvoicesController {
   constructor(
     private readonly service: PurchaseInvoicesService,
@@ -45,7 +45,7 @@ export class PurchaseInvoicesController {
    * (ADMIN/SUPER_ADMIN: todos los contratos; resto: contratos permitidos en el JWT).
    */
   @Get()
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_READ)
   findAll(
     @Req() req: any,
     @Query('status') status?: string,
@@ -87,7 +87,7 @@ export class PurchaseInvoicesController {
    * Calendario de pagos: totales por día de vencimiento (facturas MATCHED o DISCREPANCY pendientes de pago).
    */
   @Get('payment-calendar')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_READ)
   getPaymentCalendar(
     @Req() req: any,
     @Query('from') from: string,
@@ -103,12 +103,13 @@ export class PurchaseInvoicesController {
   }
 
   @Get(':id')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_READ)
   findById(@Param('id') id: string, @Req() req: any) {
     return this.service.findByIdForApi(id, req.user);
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_CREATE)
   @UseInterceptors(
     FileInterceptor('pdf', invoiceFileLimits),
     new FileValidationInterceptor(documentUploadPolicy),
@@ -190,7 +191,7 @@ export class PurchaseInvoicesController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_UPDATE)
   @UseInterceptors(
     FileInterceptor('pdf', invoiceFileLimits),
     new FileValidationInterceptor(documentUploadPolicy),
@@ -271,7 +272,7 @@ export class PurchaseInvoicesController {
   }
 
   @Post(':id/validate')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_VALIDATE)
   validate(@Param('id') id: string, @Req() req: any) {
     return this.service.validateInvoiceMatch(
       id,
@@ -280,39 +281,26 @@ export class PurchaseInvoicesController {
     );
   }
 
-  /**
-   * Excepción manual 3-way (short shipment).
-   * Requiere el flag explícito `canOverruleThreeWayMatch` en el usuario o ser SUPER_ADMIN.
-   * Se elimina la restricción de rol organizacional (ADMIN/SUPERVISOR) para permitir
-   * asignación flexible del permiso a cualquier usuario autorizado por el administrador.
-   */
+  /** Excepción manual 3-way (short shipment). PBAC: `purchases:invoice:overrule`. */
   @Post(':id/three-way-match/overrule')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_OVERRULE)
   overruleThreeWayMatch(
     @Param('id') id: string,
     @Body() body: { notes?: string },
     @Req() req: any,
   ) {
-    const user = req.user as {
-      role: string;
-      canOverruleThreeWayMatch: boolean;
-    };
-    if (!user.canOverruleThreeWayMatch && user.role !== 'SUPER_ADMIN') {
-      throw new ForbiddenException(
-        'No tienes el permiso explícito para autorizar discrepancias financieras del 3-way match.',
-      );
-    }
     return this.service.overruleThreeWayMatch(id, body?.notes ?? '', req.user);
   }
 
   @Post(':id/mark-paid')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_MARK_PAID)
   markPaid(@Param('id') id: string, @Req() req: any) {
     return this.service.markPaid(id, req.user);
   }
 
   /** Registra pago con referencia y fecha efectiva (paidAt). */
   @Post(':id/pay')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_MARK_PAID)
   pay(
     @Param('id') id: string,
     @Body() body: { paymentReference: string },
@@ -327,7 +315,7 @@ export class PurchaseInvoicesController {
 
   /** Elimina factura no pagada (auditoría previa obligatoria en servicio). */
   @Delete(':id')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_INVOICE_DELETE)
   remove(@Param('id') id: string, @Req() req: any) {
     return this.service.remove(id, req.user);
   }

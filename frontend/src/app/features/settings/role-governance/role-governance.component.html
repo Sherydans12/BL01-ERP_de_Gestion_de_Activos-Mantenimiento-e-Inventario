@@ -1,0 +1,202 @@
+<div class="min-h-screen bg-dark p-4 lg:p-6 space-y-6">
+
+  <header class="bg-surface border border-border rounded-2xl p-6 shadow-lg">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div class="min-w-0">
+        <h1 class="text-2xl font-extrabold text-main tracking-tight flex items-center gap-3">
+          <svg class="w-7 h-7 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          Gobernanza de roles (PBAC)
+        </h1>
+        <p class="text-muted mt-1 text-sm max-w-2xl">
+          Configura capacidades granulares por rol personalizado. Los cambios aplican tras un nuevo inicio de sesión.
+          Los usuarios con rol base <span class="font-mono text-primary">ADMIN</span> conservan bypass global en API.
+        </p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="text-xs font-mono text-muted border border-border rounded-lg px-3 py-1.5 bg-dark">
+          {{ selectedCount() }} / {{ totalCatalogPermissions() }} activos
+        </span>
+        <button type="button" (click)="openCreateModal()"
+          class="text-xs font-mono font-bold bg-primary text-dark px-4 py-2 rounded-lg hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
+          + Nuevo rol
+        </button>
+      </div>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <div class="rounded-xl border border-border bg-surface p-12 flex items-center justify-center gap-3">
+      <svg class="w-5 h-5 text-primary animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      <span class="text-sm text-muted font-mono">Cargando roles y catálogo…</span>
+    </div>
+  } @else {
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 min-h-[32rem]">
+
+      <aside class="xl:col-span-4 rounded-xl border border-border bg-surface overflow-hidden flex flex-col">
+        <div class="px-4 py-3 border-b border-border bg-dark/40">
+          <p class="text-xs font-semibold uppercase tracking-widest text-muted">Roles personalizados</p>
+          <p class="text-[11px] text-muted/70 mt-0.5">{{ customRoles().length }} rol(es) configurables</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-2 space-y-1">
+          @if (customRoles().length === 0) {
+            <p class="text-sm text-muted text-center py-10 px-4">
+              Crea un rol para asignar permisos de Compras a perfiles como Jefe de Compras.
+            </p>
+          } @else {
+            @for (role of customRoles(); track role.id) {
+              <button type="button" (click)="selectRole(role)"
+                class="w-full text-left rounded-lg border px-3 py-3 transition-all"
+                [ngClass]="roleListItemClasses(role.id)">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-main truncate">{{ role.name }}</p>
+                    @if (role.description) {
+                      <p class="text-xs text-muted mt-0.5 line-clamp-2">{{ role.description }}</p>
+                    }
+                    <p class="text-[10px] font-mono text-muted/60 mt-1.5">
+                      Base {{ role.baseRole }} · {{ (role.permissions ?? []).length }} permiso(s)
+                    </p>
+                  </div>
+                  <span class="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded-full border border-border text-muted">
+                    {{ role._count?.users ?? 0 }} usr
+                  </span>
+                </div>
+              </button>
+            }
+          }
+        </div>
+      </aside>
+
+      <section class="xl:col-span-8 rounded-xl border border-border bg-surface flex flex-col overflow-hidden min-h-[28rem]">
+        @if (!selectedRole()) {
+          <div class="flex-1 flex flex-col items-center justify-center p-10 text-center">
+            <p class="text-main font-medium">Selecciona un rol</p>
+            <p class="text-sm text-muted mt-1 max-w-md">
+              Elige un rol de la lista para editar su matriz de permisos de API (módulo Compras).
+            </p>
+          </div>
+        } @else {
+          <div class="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-dark/30">
+            <div>
+              <p class="text-xs font-mono text-muted uppercase tracking-wider">Editando</p>
+              <h2 class="text-lg font-bold text-main">{{ selectedRole()!.name }}</h2>
+              <p class="text-xs text-muted mt-0.5">
+                Rol base: <span class="font-mono text-primary">{{ selectedRole()!.baseRole }}</span>
+              </p>
+            </div>
+            <button type="button" (click)="savePermissions()" [disabled]="saving()"
+              class="text-xs font-mono font-bold px-5 py-2.5 rounded-lg bg-primary text-dark hover:bg-primary/90 disabled:opacity-50 shrink-0">
+              {{ saving() ? 'Guardando…' : 'Guardar permisos' }}
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-4 space-y-3">
+            @for (mod of catalog(); track mod.module) {
+              <div class="rounded-xl border border-border overflow-hidden bg-dark/20">
+                <button type="button" (click)="toggleModule(mod.module)"
+                  class="w-full flex items-center justify-between px-4 py-3 hover:bg-border/30 transition-colors">
+                  <span class="text-xs font-bold uppercase tracking-widest text-primary">{{ mod.module }}</span>
+                  <svg class="w-4 h-4 text-muted transition-transform" [class.rotate-180]="isModuleExpanded(mod.module)"
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+
+                @if (isModuleExpanded(mod.module)) {
+                  <div class="border-t border-border divide-y divide-border/50">
+                    @for (group of mod.groups; track group.name) {
+                      <div class="p-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                          <div>
+                            <h3 class="text-sm font-semibold text-main">{{ group.name }}</h3>
+                            <p class="text-[10px] font-mono text-muted mt-0.5">
+                              {{ groupEnabledCount(group) }} / {{ group.permissions.length }} activos
+                            </p>
+                          </div>
+                          <button type="button" (click)="enableAllInGroup(group)"
+                            class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-border text-muted hover:text-primary hover:border-primary/40 shrink-0">
+                            Activar todos en este grupo
+                          </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          @for (perm of group.permissions; track perm.key) {
+                            <button type="button" (click)="togglePermission(perm.key)"
+                              class="flex items-start gap-3 p-3 rounded-lg border text-left transition-colors w-full"
+                              [ngClass]="permissionTileClasses(perm.key)">
+                              <span class="relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full border transition-colors"
+                                [class.bg-primary]="isPermissionEnabled(perm.key)"
+                                [class.border-primary]="isPermissionEnabled(perm.key)"
+                                [class.bg-dark]="!isPermissionEnabled(perm.key)"
+                                [class.border-border]="!isPermissionEnabled(perm.key)">
+                                <span class="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform mt-px"
+                                  [class.translate-x-4]="isPermissionEnabled(perm.key)"
+                                  [class.translate-x-0.5]="!isPermissionEnabled(perm.key)"></span>
+                              </span>
+                              <span class="min-w-0">
+                                <span class="text-sm font-medium text-main block">{{ perm.label }}</span>
+                                <span class="text-[11px] text-muted block mt-0.5">{{ perm.description }}</span>
+                                <span class="text-[10px] font-mono text-muted/50 mt-1 block truncate">{{ perm.key }}</span>
+                              </span>
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+
+  @if (showCreateModal()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      (click)="closeCreateModal()" role="presentation">
+      <div class="w-full max-w-md bg-surface border border-border rounded-2xl shadow-2xl p-6"
+        (click)="$event.stopPropagation()" role="dialog" aria-labelledby="create-role-title">
+        <h2 id="create-role-title" class="text-lg font-bold text-main mb-4">Nuevo rol personalizado</h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-mono text-muted uppercase mb-1.5">Nombre *</label>
+            <input type="text" [(ngModel)]="createForm.name"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main focus:outline-none focus:border-primary"
+              placeholder="Ej: Jefe de Compras" />
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-muted uppercase mb-1.5">Descripción</label>
+            <input type="text" [(ngModel)]="createForm.description"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main focus:outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-muted uppercase mb-1.5">Rol base *</label>
+            <select [(ngModel)]="createForm.baseRole"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main focus:outline-none focus:border-primary">
+              <option value="MECHANIC">MECHANIC</option>
+              <option value="SUPERVISOR">SUPERVISOR</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-6">
+          <button type="button" (click)="closeCreateModal()"
+            class="text-xs font-mono px-4 py-2 rounded-lg border border-border text-muted">Cancelar</button>
+          <button type="button" (click)="submitCreateRole()" [disabled]="creating() || !createForm.name.trim()"
+            class="text-xs font-mono font-bold px-4 py-2 rounded-lg bg-primary text-dark disabled:opacity-50">
+            {{ creating() ? 'Creando…' : 'Crear rol' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

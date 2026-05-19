@@ -23,4 +23,9 @@ export class CreateTenantRoleDto {
   @IsArray()
   @IsString({ each: true })
   routes: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  permissions?: string[];
 }

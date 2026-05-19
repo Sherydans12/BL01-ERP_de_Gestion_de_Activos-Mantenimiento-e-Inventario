@@ -17,6 +17,8 @@ import {
 } from '../../../core/services/vendors/vendors.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { P } from '../../../core/constants/purchases-permissions';
 
 type VendorListSortField =
   | 'name'
@@ -29,10 +31,18 @@ type VendorListSortField =
 @Component({
   selector: 'app-vendor-list',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ConfirmModalComponent],
+  imports: [
+    CommonModule,
+    RouterModule,
+    FormsModule,
+    ConfirmModalComponent,
+    HasPermissionDirective,
+  ],
   templateUrl: './vendor-list.component.html',
 })
 export class VendorListComponent {
+  protected readonly p = P;
+
   private vendorsService = inject(VendorsService);
   private notify = inject(NotificationService);
   private destroyRef = inject(DestroyRef);
