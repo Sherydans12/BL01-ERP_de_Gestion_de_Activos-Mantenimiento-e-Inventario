@@ -22,7 +22,10 @@ import {
   EQUIPMENT_LINK_SELECT,
   WORK_ORDER_LINK_SELECT,
 } from './purchase-asset-links.include';
-import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import {
+  assertUserHasContractAccess,
+  buildPurchaseContractScopeFilter,
+} from './purchase-contract-access.util';
 import { SaveLineAwardsDto } from './dto/line-awards.dto';
 import {
   syncPurchaseQuotationStatusesFromLineAwards,
@@ -324,15 +327,7 @@ export class PurchaseRequisitionsService {
     user?: { role?: string; allowedContracts?: string[] },
     contractId?: string,
   ): { contractId?: string | { in: string[] } } {
-    if (contractId && contractId !== 'ALL') return { contractId };
-    if (!user) return {};
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return {};
-    const allowed = user.allowedContracts ?? [];
-    if (allowed.includes('ALL')) return {};
-    if (!allowed.length) {
-      return { contractId: '00000000-0000-4000-8000-000000000000' };
-    }
-    return { contractId: { in: allowed } };
+    return buildPurchaseContractScopeFilter(user, contractId);
   }
 
   /** Condiciones OR para búsqueda en listado (correlativo, texto, vínculos, líneas). */

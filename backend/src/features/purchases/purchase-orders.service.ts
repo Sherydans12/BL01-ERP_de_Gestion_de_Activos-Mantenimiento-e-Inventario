@@ -23,7 +23,10 @@ import {
   WORK_ORDER_LINK_SELECT,
 } from './purchase-asset-links.include';
 import { generatePurchaseOrderPdfBuffer } from './purchase-order-pdf.generator';
-import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import {
+  assertUserHasContractAccess,
+  buildPurchaseContractScopeFilter,
+} from './purchase-contract-access.util';
 import { syncPurchaseQuotationStatusesFromLineAwards } from './purchase-quotation-status-sync.util';
 import {
   ActivityAction,
@@ -112,15 +115,7 @@ export class PurchaseOrdersService {
     user?: { role?: string; allowedContracts?: string[] },
     contractId?: string,
   ): Prisma.PurchaseOrderWhereInput {
-    if (contractId && contractId !== 'ALL') return { contractId };
-    if (!user) return {};
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return {};
-    const allowed = user.allowedContracts ?? [];
-    if (allowed.includes('ALL')) return {};
-    if (!allowed.length) {
-      return { contractId: '00000000-0000-4000-8000-000000000000' };
-    }
-    return { contractId: { in: allowed } };
+    return buildPurchaseContractScopeFilter(user, contractId);
   }
 
   private poListSearchOr(rawTerm: string): Prisma.PurchaseOrderWhereInput[] {

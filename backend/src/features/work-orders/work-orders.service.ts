@@ -21,6 +21,11 @@ import {
   MeterLogSource,
 } from '@prisma/client';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import {
+  buildEquipmentContractAccessOr,
+  buildPurchaseContractScopeFilter,
+  isTenantWideContractAccess,
+} from '../../common/contract-scope.util';
 import Decimal from 'decimal.js';
 
 import {
@@ -360,25 +365,11 @@ export class WorkOrdersService {
     user: any,
     activeContract?: string,
   ): Prisma.EquipmentWhereInput | undefined {
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (activeContract && activeContract !== 'ALL') {
-        return {
-          OR: [
-            { contractId: activeContract },
-            { subcontract: { contractId: activeContract } },
-          ],
-        };
-      }
+    const or = buildEquipmentContractAccessOr(user, activeContract);
+    if (!or.length) {
       return undefined;
     }
-    return {
-      OR: [
-        { contractId: { in: user.allowedContracts || [] } },
-        {
-          subcontract: { contractId: { in: user.allowedContracts || [] } },
-        },
-      ],
-    };
+    return { OR: or as Prisma.EquipmentWhereInput['OR'] };
   }
 
   private workOrderAccessWhere(
@@ -793,28 +784,9 @@ export class WorkOrdersService {
     const where: Prisma.WorkOrderWhereInput = { tenantId };
     const andConditions: Prisma.WorkOrderWhereInput[] = [];
 
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (activeContract && activeContract !== 'ALL') {
-        andConditions.push({
-          equipment: {
-            OR: [
-              { contractId: activeContract },
-              { subcontract: { contractId: activeContract } },
-            ],
-          },
-        });
-      }
-    } else {
-      andConditions.push({
-        equipment: {
-          OR: [
-            { contractId: { in: user.allowedContracts || [] } },
-            {
-              subcontract: { contractId: { in: user.allowedContracts || [] } },
-            },
-          ],
-        },
-      });
+    const eqFilter = this.equipmentAccessWhere(user, activeContract);
+    if (eqFilter) {
+      andConditions.push({ equipment: eqFilter });
     }
 
     if (query?.equipmentId)
@@ -887,7 +859,7 @@ export class WorkOrdersService {
     const filterEqConditions: Prisma.EquipmentWhereInput[] = [];
     const filterWoConditions: Prisma.WorkOrderWhereInput[] = [];
 
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+    if (isTenantWideContractAccess(user)) {
       if (activeContract && activeContract !== 'ALL') {
         const cFilter = {
           OR: [
@@ -900,10 +872,7 @@ export class WorkOrdersService {
       }
     } else {
       const authFilter = {
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
+        OR: buildEquipmentContractAccessOr(user) as Prisma.EquipmentWhereInput['OR'],
       };
       filterEqConditions.push(authFilter);
       filterWoConditions.push({ equipment: authFilter });
@@ -918,12 +887,10 @@ export class WorkOrdersService {
       AND: filterEqConditions,
     };
 
-    const contractScope =
-      user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
-        ? activeContract && activeContract !== 'ALL'
-          ? { contractId: activeContract }
-          : {}
-        : { contractId: { in: user.allowedContracts || [] } };
+    const contractScope = buildPurchaseContractScopeFilter(
+      user,
+      activeContract,
+    );
 
     const stockWarehouseWhere: Prisma.WarehouseWhereInput = {
       tenantId,

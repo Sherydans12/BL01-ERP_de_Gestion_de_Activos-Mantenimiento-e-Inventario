@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { ActivityAction, Prisma, PurchaseInvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import {
+  assertUserHasContractAccess,
+  buildPurchaseContractScopeFilter,
+} from './purchase-contract-access.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService, pickChanged } from '../../common/audit/audit.service';
 import { buildActivityLogDetails } from '../../common/audit/activity-log-details.util';
@@ -519,21 +522,7 @@ export class PurchaseInvoicesService {
     user: { role?: string; allowedContracts?: string[] },
     contractId?: string,
   ): Prisma.PurchaseOrderWhereInput {
-    const cid = contractId?.trim();
-    if (cid) {
-      return { contractId: cid };
-    }
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      return {};
-    }
-    const allowed = user.allowedContracts ?? [];
-    if (allowed.includes('ALL')) {
-      return {};
-    }
-    if (!allowed.length) {
-      return { contractId: '00000000-0000-4000-8000-000000000001' };
-    }
-    return { contractId: { in: allowed } };
+    return buildPurchaseContractScopeFilter(user, contractId);
   }
 
   private invoiceListSearchOr(term: string): Prisma.PurchaseInvoiceWhereInput[] {

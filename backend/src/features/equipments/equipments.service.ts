@@ -8,12 +8,37 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MeterLogSource, Prisma } from '@prisma/client';
 import { pickEquipmentWritablePayload } from './equipment-write-keys';
 import { applyCurrentMeterChange } from './equipment-meter-sync';
+import { buildEquipmentContractAccessOr } from '../../common/contract-scope.util';
 
 @Injectable()
 export class EquipmentsService {
   private readonly logger = new Logger(EquipmentsService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Alcance por contrato/subcontrato (JWT `allowedContracts`; vacío → sin filas). */
+  private pushEquipmentContractScope(
+    andConditions: Prisma.EquipmentWhereInput[],
+    user: { role?: string; allowedContracts?: string[] },
+    siteHeader?: string,
+  ): void {
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (siteHeader && siteHeader !== 'ALL') {
+        andConditions.push({
+          OR: [
+            { contractId: siteHeader },
+            { subcontract: { contractId: siteHeader } },
+          ],
+        });
+      }
+      return;
+    }
+    andConditions.push({
+      OR: buildEquipmentContractAccessOr(
+        user,
+      ) as Prisma.EquipmentWhereInput['OR'],
+    });
+  }
 
   /**
    * Coherencia subarriendo: si isSubleased, exige empresa; si no, limpia nombre.
@@ -186,24 +211,7 @@ export class EquipmentsService {
     const where: Prisma.EquipmentWhereInput = { tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    // Lógica de Seguridad y Filtro por Contrato/Subcontrato
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (siteHeader && siteHeader !== 'ALL') {
-        andConditions.push({
-          OR: [
-            { contractId: siteHeader },
-            { subcontract: { contractId: siteHeader } },
-          ],
-        });
-      }
-    } else {
-      andConditions.push({
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
-      });
-    }
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
     if (query?.type) andConditions.push({ type: query.type });
     if (query?.brand) andConditions.push({ brand: query.brand });
@@ -261,21 +269,7 @@ export class EquipmentsService {
     const where: Prisma.EquipmentWhereInput = { id, tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      andConditions.push({
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
-      });
-    } else if (siteHeader && siteHeader !== 'ALL') {
-      andConditions.push({
-        OR: [
-          { contractId: siteHeader },
-          { subcontract: { contractId: siteHeader } },
-        ],
-      });
-    }
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
     if (andConditions.length > 0) {
       where.AND = andConditions;
@@ -369,21 +363,7 @@ export class EquipmentsService {
     const where: Prisma.EquipmentWhereInput = { id, tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      andConditions.push({
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
-      });
-    } else if (siteHeader && siteHeader !== 'ALL') {
-      andConditions.push({
-        OR: [
-          { contractId: siteHeader },
-          { subcontract: { contractId: siteHeader } },
-        ],
-      });
-    }
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
     if (andConditions.length > 0) {
       where.AND = andConditions;
@@ -441,21 +421,7 @@ export class EquipmentsService {
     const where: Prisma.EquipmentWhereInput = { id, tenantId: user.tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      andConditions.push({
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
-      });
-    } else if (siteHeader && siteHeader !== 'ALL') {
-      andConditions.push({
-        OR: [
-          { contractId: siteHeader },
-          { subcontract: { contractId: siteHeader } },
-        ],
-      });
-    }
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
     if (andConditions.length > 0) {
       where.AND = andConditions;
@@ -477,16 +443,7 @@ export class EquipmentsService {
       const where: Prisma.EquipmentWhereInput = { id, tenantId };
       const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-      if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-        andConditions.push({
-          OR: [
-            { contractId: { in: user.allowedContracts || [] } },
-            {
-              subcontract: { contractId: { in: user.allowedContracts || [] } },
-            },
-          ],
-        });
-      }
+      this.pushEquipmentContractScope(andConditions, user);
 
       if (andConditions.length > 0) {
         where.AND = andConditions;
@@ -636,23 +593,7 @@ export class EquipmentsService {
     const where: Prisma.EquipmentWhereInput = { tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (siteHeader && siteHeader !== 'ALL') {
-        andConditions.push({
-          OR: [
-            { contractId: siteHeader },
-            { subcontract: { contractId: siteHeader } },
-          ],
-        });
-      }
-    } else {
-      andConditions.push({
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
-      });
-    }
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
     if (query?.type) {
       andConditions.push({ type: query.type });
@@ -776,23 +717,7 @@ export class EquipmentsService {
     const whereBase: Prisma.EquipmentWhereInput = { tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (siteHeader && siteHeader !== 'ALL') {
-        andConditions.push({
-          OR: [
-            { contractId: siteHeader },
-            { subcontract: { contractId: siteHeader } },
-          ],
-        });
-      }
-    } else {
-      andConditions.push({
-        OR: [
-          { contractId: { in: user.allowedContracts || [] } },
-          { subcontract: { contractId: { in: user.allowedContracts || [] } } },
-        ],
-      });
-    }
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
     if (andConditions.length > 0) {
       whereBase.AND = andConditions;
     }
@@ -885,16 +810,7 @@ export class EquipmentsService {
       const where: Prisma.EquipmentWhereInput = { id, tenantId };
       const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-      if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-        andConditions.push({
-          OR: [
-            { contractId: { in: user.allowedContracts || [] } },
-            {
-              subcontract: { contractId: { in: user.allowedContracts || [] } },
-            },
-          ],
-        });
-      }
+      this.pushEquipmentContractScope(andConditions, user);
 
       if (andConditions.length > 0) {
         where.AND = andConditions;

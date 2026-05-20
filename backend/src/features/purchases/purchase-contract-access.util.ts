@@ -1,25 +1,31 @@
 import { ForbiddenException } from '@nestjs/common';
+import {
+  buildPurchaseContractScopeFilter,
+  isTenantWideContractAccess,
+  normalizedAllowedContractIds,
+  type ContractScopedUser,
+} from '../../common/contract-scope.util';
+
+export {
+  buildPurchaseContractScopeFilter,
+  isTenantWideContractAccess,
+  normalizedAllowedContractIds,
+  type ContractScopedUser,
+};
 
 /**
- * Verifica acceso a un contrato de compras según JWT / usuario cargado.
- * ADMIN y SUPER_ADMIN tienen alcance global en el tenant.
- * `allowedContracts` puede incluir 'ALL' (payload de login) o IDs de UserContract.
+ * Verifica acceso a un contrato según JWT / usuario cargado.
+ * No depende del enum UserRole salvo bypass ADMIN / SUPER_ADMIN.
  */
 export function assertUserHasContractAccess(
-  user: {
-    role?: string;
-    allowedContracts?: string[];
-  },
+  user: ContractScopedUser,
   contractId: string,
   message = 'No tiene acceso al contrato de esta operación',
 ): void {
-  if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+  if (isTenantWideContractAccess(user)) {
     return;
   }
-  const allowed = user.allowedContracts ?? [];
-  if (allowed.includes('ALL')) {
-    return;
-  }
+  const allowed = normalizedAllowedContractIds(user);
   if (allowed.includes(contractId)) {
     return;
   }

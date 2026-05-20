@@ -13,7 +13,10 @@ import {
   EQUIPMENT_LINK_SELECT,
   WORK_ORDER_LINK_SELECT,
 } from './purchase-asset-links.include';
-import { assertUserHasContractAccess } from './purchase-contract-access.util';
+import {
+  assertUserHasContractAccess,
+  buildPurchaseContractScopeFilter,
+} from './purchase-contract-access.util';
 import { PO_STATUSES_ALLOW_WAREHOUSE_RECEIPT } from './po-receipt-eligible-statuses';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 import {
@@ -180,14 +183,7 @@ export class WarehouseReceiptsService {
     role?: string;
     allowedContracts?: string[];
   }): Prisma.PurchaseOrderWhereInput {
-    if (!user) return {};
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') return {};
-    const allowed = user.allowedContracts ?? [];
-    if (allowed.includes('ALL')) return {};
-    if (!allowed.length) {
-      return { contractId: '00000000-0000-4000-8000-000000000000' };
-    }
-    return { contractId: { in: allowed } };
+    return buildPurchaseContractScopeFilter(user);
   }
 
   private receiptListSearchOr(

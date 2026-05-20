@@ -692,10 +692,7 @@ import { A } from '../../../core/constants/admin-permissions';
                   </p>
                 </div>
 
-                @if (
-                  selectedRoleBaseRole() === 'SUPERVISOR' ||
-                  selectedRoleBaseRole() === 'MECHANIC'
-                ) {
+                @if (needsContractAssignment()) {
                   <div class="mt-6 pt-5 border-t border-border">
                     <label
                       class="block text-xs font-mono text-muted mb-3 uppercase tracking-wider"
@@ -1197,6 +1194,12 @@ export class UserManagementComponent implements OnInit {
   availableRoles = signal<TenantRole[]>([]);
   /** Rol base (enum) del TenantRole seleccionado en el formulario */
   selectedRoleBaseRole = signal<TenantRole['baseRole'] | null>(null);
+
+  /** Contratos en UserContract (cualquier rol no ADMIN en el tenant). */
+  needsContractAssignment = computed(() => {
+    const br = this.selectedRoleBaseRole();
+    return br === 'SUPERVISOR' || br === 'MECHANIC' || br === 'USER';
+  });
 
   // Paginación
   currentPage = signal(1);
