@@ -1,7 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/services/auth/auth.guard';
 import { permissionGuard } from './core/guards/permission.guard';
-import { appDefaultLandingGuard } from './core/guards/app-default-landing.guard';
 import { P, REQUISITION_EDIT_ANY } from './core/constants/purchases-permissions';
 import { I } from './core/constants/inventory-permissions';
 import { O } from './core/constants/operations-permissions';
@@ -47,7 +46,7 @@ export const routes: Routes = [
       {
         path: '',
         pathMatch: 'full',
-        canActivate: [appDefaultLandingGuard],
+        redirectTo: 'dashboard',
       },
       {
         path: 'dashboard',
