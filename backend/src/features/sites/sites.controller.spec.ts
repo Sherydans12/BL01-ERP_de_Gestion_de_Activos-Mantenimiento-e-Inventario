@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { SitesController } from './sites.controller';
 import { SitesService } from './sites.service';
 
@@ -16,12 +18,17 @@ describe('SitesController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SitesController],
       providers: [{ provide: SitesService, useValue: mockSitesService }],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .overrideGuard(PermissionsGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .compile();
 
-    controller = module.get<SitesController>(SitesController);
+    controller = module.get(SitesController);
   });
 
-  it('should be defined', () => {
+  it('debe instanciarse', () => {
     expect(controller).toBeDefined();
   });
 });

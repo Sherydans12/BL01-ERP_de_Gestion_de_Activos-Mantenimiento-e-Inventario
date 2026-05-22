@@ -64,12 +64,12 @@ npm run test:domain:watch
 cd backend
 npm run test:domain                   # bloque crítico (recomendado)
 npm run test:domain:watch             # mismo bloque, watch
-npm test                              # suite completa (puede fallar smoke § nota abajo)
+npm test                              # suite completa (~220 tests, smoke + dominio)
 npm test -- inventory-stock.service.spec   # un archivo
 npm run test:cov                      # cobertura (opcional)
 ```
 
-**Nota:** `npm test` incluye specs smoke de controladores que hoy pueden fallar por import ESM de `file-type` vía `file-validation.interceptor`. Eso no afecta `test:domain`. Ver [pruebas-unitarias.md](pruebas-unitarias.md) §5.
+**Setup global:** `backend/test/jest-setup.ts` (mock `file-type`). Smoke: mocks de `PrismaService`, guards (`JwtAuthGuard`, `ThrottlerGuard`) y deps faltantes en auth/users/sites.
 
 ### Patrón `$transaction`
 
