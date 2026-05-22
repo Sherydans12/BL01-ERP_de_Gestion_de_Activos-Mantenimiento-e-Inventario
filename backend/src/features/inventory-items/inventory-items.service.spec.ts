@@ -575,3 +575,130 @@ describe('InventoryItemsService — quickCreate', () => {
     ).rejects.toThrow(/Ya existe un artículo con este Número de Parte/);
   });
 });
+
+describe('InventoryItemsService — update', () => {
+  let service: InventoryItemsService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const itemId = '22222222-2222-4222-8222-222222222222';
+  const categoryId = '44444444-4444-4444-4444-444444444444';
+  const parentCategoryId = '55555555-5555-5555-5555-555555555555';
+  const uomId = '66666666-6666-6666-6666-666666666666';
+  const user = { id: '77777777-7777-7777-7777-777777777777', tenantId };
+
+  const existingItem = {
+    id: itemId,
+    tenantId,
+    name: 'Artículo base',
+    inventoryCode: 'IN0001',
+    partNumber: null,
+    categoryId,
+    unitOfMeasureId: uomId,
+    description: null,
+    brand: null,
+    compatibilityInfo: null,
+    isSerialized: false,
+    isInventory: true,
+    isAsset: false,
+    isConsumable: true,
+    itemCategory: { id: categoryId, name: 'Sub' },
+    unitOfMeasure: { id: uomId, name: 'UN', abbreviation: 'UN' },
+    inventorySupplier: null,
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InventoryItemsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: mockDeep<SequenceService>() },
+        { provide: StorageService, useValue: mockDeep<StorageService>() },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        {
+          provide: NotificationDispatcherService,
+          useValue: { dispatch: jest.fn() },
+        },
+        { provide: AuditService, useValue: { log: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(InventoryItemsService);
+  });
+
+  function mockCategoryAndUom(): void {
+    prisma.itemCategory.findFirst
+      .mockResolvedValueOnce({
+        id: categoryId,
+        parentCategoryId,
+      } as never)
+      .mockResolvedValueOnce({ id: parentCategoryId } as never);
+    prisma.unitOfMeasure.findFirst.mockResolvedValue({ id: uomId } as never);
+  }
+
+  it('no permite modificar inventoryCode', async () => {
+    jest.spyOn(service, 'findOne').mockResolvedValue(existingItem as never);
+
+    await expect(
+      service.update(itemId, { inventoryCode: 'IN9999' } as never, user),
+    ).rejects.toThrow(/código de inventario no se puede modificar/);
+  });
+
+  it('rechaza part number duplicado de otro artículo', async () => {
+    jest.spyOn(service, 'findOne').mockResolvedValue(existingItem as never);
+    prisma.inventoryItem.findFirst.mockResolvedValue({
+      id: 'other-item',
+      inventoryCode: 'IN0099',
+      name: 'Otro',
+    } as never);
+    mockCategoryAndUom();
+
+    await expect(
+      service.update(itemId, { partNumber: 'PN-DUP' } as never, user),
+    ).rejects.toThrow(/Ya existe un artículo con este Número de Parte/);
+  });
+
+  it('actualiza nombre conservando categoría y UoM', async () => {
+    jest.spyOn(service, 'findOne').mockResolvedValue(existingItem as never);
+    mockCategoryAndUom();
+    prisma.inventoryItem.update.mockResolvedValue({
+      ...existingItem,
+      name: 'Artículo editado',
+    } as never);
+
+    const updated = await service.update(
+      itemId,
+      { name: 'Artículo editado' } as never,
+      user,
+    );
+
+    expect(updated.name).toBe('Artículo editado');
+    expect(prisma.inventoryItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: itemId },
+        data: expect.objectContaining({ name: 'Artículo editado' }),
+      }),
+    );
+  });
+
+  it('resuelve artículo por código IN en update', async () => {
+    prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
+    jest.spyOn(service, 'findOne').mockResolvedValue(existingItem as never);
+    mockCategoryAndUom();
+    prisma.inventoryItem.update.mockResolvedValue({
+      ...existingItem,
+      description: 'Nueva descripción',
+    } as never);
+
+    await service.update('IN0001', { description: 'Nueva descripción' } as never, user);
+
+    expect(prisma.inventoryItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: itemId } }),
+    );
+  });
+});

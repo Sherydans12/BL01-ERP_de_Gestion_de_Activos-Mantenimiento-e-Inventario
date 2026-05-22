@@ -1013,6 +1013,8 @@ describe('PurchaseRequisitionsService — update', () => {
 
   const owner = { id: ownerId, tenantId, role: 'USER' };
   const purchaser = { id: ownerId, tenantId, role: 'ADMIN' };
+  const woId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const eqId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
   function draftReq(overrides: Partial<{ status: string; requestedById: string }> = {}) {
     return {
@@ -1167,5 +1169,50 @@ describe('PurchaseRequisitionsService — update', () => {
         purchaser,
       ),
     ).rejects.toThrow(/figura en una cotización/);
+  });
+
+  it('en SUBMITTED vincula OT y equipo (solicitante)', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'SUBMITTED' }) as never);
+    prisma.workOrder.findFirst.mockResolvedValue({
+      id: woId,
+      equipmentId: eqId,
+      equipment: {
+        id: eqId,
+        contractId,
+        subcontractId: null,
+        subcontract: { contractId },
+      },
+    } as never);
+    prisma.purchaseRequisition.update.mockResolvedValue({
+      ...draftReq({ status: 'SUBMITTED' }),
+      workOrderId: woId,
+      equipmentId: eqId,
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1', type: 'T' },
+      workOrder: { correlative: 'OT-100', description: 'Mantenimiento' },
+    } as never);
+
+    const updated = await service.update(requisitionId, { workOrderId: woId }, owner);
+
+    expect(updated.workOrderId).toBe(woId);
+    expect(updated.equipmentId).toBe(eqId);
+    expect(prisma.purchaseRequisition.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { equipmentId: eqId, workOrderId: woId },
+      }),
+    );
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'UPDATE', entityType: 'REQUISITION' }),
+    );
+  });
+
+  it('en SUBMITTED solo solicitante o admin puede cambiar vínculos', async () => {
+    const otherOwner = '99999999-9999-9999-9999-999999999999';
+    jest.spyOn(service, 'findById').mockResolvedValue(
+      draftReq({ status: 'SUBMITTED', requestedById: otherOwner }) as never,
+    );
+
+    await expect(
+      service.update(requisitionId, { equipmentId: eqId }, owner),
+    ).rejects.toThrow(ForbiddenException);
   });
 });
