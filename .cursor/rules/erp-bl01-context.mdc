@@ -18,6 +18,12 @@ Este repositorio es el **TPM / BL01**: EAM, flota, mantenimiento e inventario (C
 
 Seguí **`.cursor/rules/tpm-arquitectura.mdc`** (persona, tenant/site, NestJS, Angular, tokens UI TPM).
 
+## Pruebas unitarias
+
+- Índice maestro: **[`docs/agentes/pruebas-unitarias.md`](../../docs/agentes/pruebas-unitarias.md)** — reglas BaseLogic EAM, `test:domain`, watch para agentes.
+- Backend (inventario specs): [`pruebas-unitarias-backend.md`](../../docs/agentes/pruebas-unitarias-backend.md). Regla Cursor al editar specs: **`.cursor/rules/testing-baselogic.mdc`**.
+- Tras cambios en dominio: `cd backend && npm run test:domain` (mínimo antes de cerrar la tarea).
+
 ## Convenciones
 
 - Respetá **multi-tenant** (`tenantId`) y modelos de contrato/faena existentes.
@@ -47,5 +53,6 @@ No hay captura automática de sesión como en claude-mem. Si el usuario pide **�
 | UI/UX visual o patrones (accesibilidad, layout, jerarquía) | `.cursor/skills/ui-ux-pro-max/SKILL.md` |
 | Registrar decisión de arquitectura (ADR) | `.cursor/skills/ecc-adr/SKILL.md` |
 | Explicar / mapear el repo (onboarding) | `.cursor/skills/ecc-codebase-onboarding/SKILL.md` |
+| Escribir o ampliar `*.spec.ts` / tests Jest | `.cursor/rules/testing-baselogic.mdc` + `docs/agentes/pruebas-unitarias.md` |
 
 Cambios de **API nuevas o expuestas**: conviene **api-design** + **security-review**. **Angular:** `ui-ux-pro-max` complementa la **sección 5** de `tpm-arquitectura.mdc` (tokens / shell industrial); pedí confirmación antes de un rediseño grande si el usuario no lo pidió.

@@ -1,6 +1,8 @@
 # Pruebas unitarias — backend NestJS (Jest)
 
-Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones para ampliar cobertura sin PostgreSQL real. Complementa `tpm-arquitectura.mdc` (reglas de agente para generar specs) y la documentación de dominio por módulo.
+Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones para ampliar cobertura sin PostgreSQL real.
+
+**Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
 **Última actualización:** 2026-05-22
 
@@ -8,13 +10,13 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **203 tests** en 12 archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **212 tests** en 12 archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
 | **Inventario — stock/kardex** | ~85 % del núcleo | 40 | Stock, IRA, regularización, PDF conteo (§3.2) |
-| **Compras — SRC** | ~75 % flujo completo | 27 | Crear, duplicar, cotizar, adjudicar, enviar (§4.9) |
-| **Inventario — catálogo** | ~40 % CRUD búsqueda | 14 | `search`, `create`, `remove` + ledger (§3.5) |
+| **Compras — SRC** | ~80 % flujo completo | 32 | Crear, duplicar, cotizar, adjudicar, enviar, `update` (§4.9) |
+| **Inventario — catálogo** | ~50 % CRUD búsqueda | 18 | `search`, `create`, `remove`, `quickCreate` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
 | **Inventario — transferencias W2W** | ~85 % listado/detalle | 16 | W2W + `listTransfers` / `getTransferById` (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
@@ -26,13 +28,20 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ```bash
 cd backend
-npm test -- inventory-stock.service.spec inventory-transfer.service.spec inventory-adjustment.service.spec inventory-items.service.spec warehouse-receipts.service.spec purchase-requisitions.service.spec tenant-role-defaults.spec purchase-settings.service.spec purchase-orders.service.spec purchase-invoices.service.spec purchase-credit-notes.service.spec signature.util.spec
+npm run test:domain
+# Sesión larga (agente o dev):
+npm run test:domain:watch
 ```
 
-### Siguiente paso recomendado (iteración N+7)
+### Iteración N+7 (2026-05-22) — hecho
 
-1. **`PurchaseRequisitionsService.update`** — edición borrador / comprador.
-2. **`InventoryItemsService.quickCreate`** / políticas bodega en alta.
+- **`PurchaseRequisitionsService.update`** (+5): QUOTING solo compras; SUBMITTED solo OT/equipo; DRAFT descripción + reemplazo líneas; ítem en cotización no borrable.
+- **`InventoryItemsService.quickCreate`** (+4): validaciones nombre/min-max; alta con política bodega + SKU; PN duplicado.
+
+### Siguiente paso recomendado (iteración N+8)
+
+1. **`PurchaseRequisitionsService.update`** en `SUBMITTED` (cambio OT/equipo con `resolveRequisitionAssetLinks` mockeado).
+2. **`InventoryItemsService.update`** / edición maestro (paridad con `create`).
 3. **`npm test -- --coverage`** en CI con umbral mínimo por carpeta `features/` (opcional).
 4. Smoke **supertest** auth guard (opcional).
 
@@ -53,12 +62,14 @@ npm test -- inventory-stock.service.spec inventory-transfer.service.spec invento
 
 ```bash
 cd backend
-npm test                              # toda la suite en src/
-# Bloque dominio crítico (inventario + compras ACL):
-npm test -- inventory-stock.service.spec tenant-role-defaults.spec purchase-settings.service.spec purchase-orders.service.spec purchase-invoices.service.spec purchase-credit-notes.service.spec signature.util.spec
-npm test -- inventory-stock.service.spec   # solo inventario
-npm test -- --coverage                # cobertura (opcional)
+npm run test:domain                   # bloque crítico (recomendado)
+npm run test:domain:watch             # mismo bloque, watch
+npm test                              # suite completa (puede fallar smoke § nota abajo)
+npm test -- inventory-stock.service.spec   # un archivo
+npm run test:cov                      # cobertura (opcional)
 ```
+
+**Nota:** `npm test` incluye specs smoke de controladores que hoy pueden fallar por import ESM de `file-type` vía `file-validation.interceptor`. Eso no afecta `test:domain`. Ver [pruebas-unitarias.md](pruebas-unitarias.md) §5.
 
 ### Patrón `$transaction`
 
@@ -80,8 +91,8 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | Archivo spec | Servicio / ámbito | Tests | Notas |
 |--------------|-------------------|-------|-------|
 | `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **40** | Movimientos, regularización, IRA, PDF (§3.2) |
-| `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **27** | Ciclo SRC completo (§4.9) |
-| `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **14** | `search`, `create`, ledger (§3.5) |
+| `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **32** | Ciclo SRC + `update` (§4.9) |
+| `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **18** | `search`, `create`, `quickCreate`, ledger (§3.5) |
 | `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **16** | Mutación + listado/detalle (§3.3) |
 | `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
 | `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **14** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
@@ -100,7 +111,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 203 tests passed (inventario 89 + compras 114).
+**Suite dominio crítico (2026-05-22):** 212 tests passed (inventario 93 + compras 119).
 
 ---
 
@@ -171,13 +182,14 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.5 Spec: `inventory-items.service.spec.ts`
 
-**Última ejecución:** 14 passed (2026-05-22).
+**Última ejecución:** 18 passed (2026-05-22).
 
 | Bloque | Casos |
 |--------|-------|
 | `findItemLedger` | Código `IN`, bodega, OT, saldo pendiente, W2W, génesis |
 | `search` | Query corta; sin hits; orden por ranking trgm |
 | `create` | Categoría/UoM; part number duplicado; no `inventoryCode` manual |
+| `quickCreate` | Nombre; min/max bodega; SKU + política; PN duplicado |
 | `remove` | FK → mensaje historial stock |
 
 #### Pendiente (inventario)
@@ -350,7 +362,7 @@ Mocks: `findById` (spy), `purchase-contract-access.util`, `inventory-item-stock-
 
 ### 4.9 Spec: `purchase-requisitions.service.spec.ts`
 
-**Última ejecución:** 27 passed (2026-05-22).
+**Última ejecución:** 32 passed (2026-05-22).
 
 | Bloque | Casos |
 |--------|-------|
@@ -363,12 +375,13 @@ Mocks: `findById` (spy), `purchase-contract-access.util`, `inventory-item-stock-
 | `startQuoting` | Solo `SUBMITTED`; pasa a `QUOTING` |
 | `addQuotation` | Estado; ítems; total; crea cotización + `QUOTING` |
 | `findAll` | Filtro contrato; `USER` + `allowedContracts` |
+| `update` | QUOTING solo compras; SUBMITTED restricciones; DRAFT descripción/líneas; ítem en cotización |
 
 Mocks: `purchase-quotation-status-sync.util`, `purchase-requisition-reconciliation.util`, `purchase-contract-access.util` (`requireActual`).
 
 #### Pendiente (compras)
 
-- [ ] `update` requerimiento (borrador / permisos comprador)
+- [ ] `update` en `SUBMITTED` con vínculo OT/equipo (happy path + audit)
 - [ ] PDF OC / recepción (Playwright en CI)
 
 ---
@@ -385,6 +398,8 @@ Mocks: `purchase-quotation-status-sync.util`, `purchase-requisition-reconciliati
 
 ## 6. Referencias
 
-- Prompt / reglas de agente para generar specs: mensaje tipo «Pruebas unitarias BaseLogic EAM» + `tpm-arquitectura.mdc` § workflows.
+- Índice maestro y flujo watch: [pruebas-unitarias.md](pruebas-unitarias.md).
+- Reglas agente: `.cursor/rules/testing-baselogic.mdc`, `tpm-arquitectura.mdc` §6.
 - Inventario dominio: [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md).
 - Compras ACL: [../PURCHASE-GOVERNANCE.md](../PURCHASE-GOVERNANCE.md).
+- Git / QA futuro: [entornos-git-despliegue.md](entornos-git-despliegue.md).

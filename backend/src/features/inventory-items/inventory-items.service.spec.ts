@@ -428,3 +428,150 @@ describe('InventoryItemsService — remove', () => {
     );
   });
 });
+
+describe('InventoryItemsService — quickCreate', () => {
+  let service: InventoryItemsService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+  let sequenceService: DeepMockProxy<SequenceService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const categoryId = '44444444-4444-4444-4444-444444444444';
+  const parentCategoryId = '55555555-5555-5555-5555-555555555555';
+  const uomId = '66666666-6666-6666-6666-666666666666';
+  const warehouseId = '88888888-8888-8888-8888-888888888888';
+  const user = { id: '77777777-7777-7777-7777-777777777777', tenantId };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    sequenceService = mockDeep<SequenceService>();
+    sequenceService.getNextCorrelative.mockResolvedValue('IN0200');
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InventoryItemsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: sequenceService },
+        { provide: StorageService, useValue: mockDeep<StorageService>() },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        {
+          provide: NotificationDispatcherService,
+          useValue: { dispatch: jest.fn().mockResolvedValue(undefined) },
+        },
+        { provide: AuditService, useValue: { log: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(InventoryItemsService);
+    prisma.$transaction.mockImplementation(async (fn, opts) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+  });
+
+  function mockCategoryAndUom(): void {
+    tx.itemCategory.findFirst
+      .mockResolvedValueOnce({
+        id: categoryId,
+        parentCategoryId,
+      } as never)
+      .mockResolvedValueOnce({ id: parentCategoryId } as never);
+    tx.unitOfMeasure.findFirst.mockResolvedValue({ id: uomId } as never);
+  }
+
+  it('exige nombre no vacío', async () => {
+    await expect(
+      service.quickCreate(
+        { name: '   ', categoryId, unitOfMeasureId: uomId } as never,
+        user,
+      ),
+    ).rejects.toThrow(/nombre del artículo/);
+  });
+
+  it('rechaza política min/max inválida con bodega', async () => {
+    mockCategoryAndUom();
+    tx.inventoryItem.findMany.mockResolvedValue([] as never);
+    tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+
+    await expect(
+      service.quickCreate(
+        {
+          name: 'Artículo rápido',
+          categoryId,
+          unitOfMeasureId: uomId,
+          warehouseId,
+          minStock: 10,
+          maxStock: 5,
+        } as never,
+        user,
+      ),
+    ).rejects.toThrow(/máximo no puede ser menor/);
+  });
+
+  it('crea artículo con SKU autogenerado y política en bodega', async () => {
+    mockCategoryAndUom();
+    tx.inventoryItem.findMany.mockResolvedValue([] as never);
+    tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+    tx.inventoryItem.create.mockResolvedValue({
+      id: 'item-quick',
+      inventoryCode: 'IN0200',
+      qrCode: 'INV:item-quick',
+      partNumber: null,
+      name: 'Artículo rápido',
+      categoryId,
+      unitOfMeasure: { id: uomId, name: 'UN', abbreviation: 'UN' },
+      itemCategory: { id: categoryId, name: 'Sub' },
+    } as never);
+
+    const created = await service.quickCreate(
+      {
+        name: 'Artículo rápido',
+        categoryId,
+        unitOfMeasureId: uomId,
+        warehouseId,
+        minStock: 2,
+        maxStock: 20,
+      } as never,
+      user,
+    );
+
+    expect(created.inventoryCode).toBe('IN0200');
+    expect(tx.inventoryItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          policyTargetWarehouseId: warehouseId,
+          policyMinStock: 2,
+          policyMaxStock: 20,
+        }),
+      }),
+    );
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      }),
+    );
+  });
+
+  it('rechaza part number duplicado (unique compuesto)', async () => {
+    prisma.inventoryItem.findUnique.mockResolvedValue({
+      inventoryCode: 'IN0005',
+      name: 'Existente',
+    } as never);
+
+    await expect(
+      service.quickCreate(
+        {
+          name: 'Nuevo',
+          categoryId,
+          unitOfMeasureId: uomId,
+          partNumber: 'PN-DUP',
+        } as never,
+        user,
+      ),
+    ).rejects.toThrow(/Ya existe un artículo con este Número de Parte/);
+  });
+});

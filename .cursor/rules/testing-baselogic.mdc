@@ -1,0 +1,53 @@
+---
+description: Reglas maestras de testing BaseLogic EAM — Jest, mocks Prisma, flujo watch para agentes
+globs:
+  - backend/src/**/*.spec.ts
+  - backend/src/features/**/*.service.ts
+  - frontend/src/**/*.spec.ts
+  - docs/agentes/pruebas-unitarias*.md
+---
+
+# Testing — BaseLogic EAM
+
+Complementa `tpm-arquitectura.mdc`. Índice y scripts: **`docs/agentes/pruebas-unitarias.md`**.
+
+## Backend (NestJS + Prisma)
+
+1. **NUNCA** conectar a PostgreSQL en unit tests.
+2. **SIEMPRE** `jest-mock-extended`: `mockDeep<PrismaService>()`, `DeepMockProxy<Prisma.TransactionClient>` para callbacks de `$transaction`.
+3. `Test.createTestingModule` con el servicio bajo prueba y `{ provide: PrismaService, useValue: prisma }`.
+4. **Foco:** validaciones de negocio, CPP, kardex, ACL compras (`approve`, `minAmount`), 3-way, SRC/OC/recepción, `tenantId` / contrato.
+5. Salida: `.spec.ts` completo (imports incluidos), `describe` por método/flujo, `it` en **español**, happy path + **≥2** casos de error (`BadRequestException`, `ForbiddenException`, etc.).
+
+### Ejecutar (obligatorio tras cambios en specs o servicios de dominio)
+
+```bash
+cd backend
+npm test -- <archivo>.spec.ts    # rápido, archivo editado
+npm run test:domain              # 12 specs críticos antes de cerrar tarea
+```
+
+**Sesión con muchas iteraciones:** arrancar `npm run test:domain:watch` en terminal background o pedir al usuario una terminal con watch. Revisar salida entre ediciones; no asumir verde sin ejecutar.
+
+### Patrón `$transaction`
+
+```typescript
+prisma.$transaction.mockImplementation(async (fn) =>
+  (fn as (client: typeof tx) => Promise<unknown>)(tx),
+);
+```
+
+## Frontend (Angular 18)
+
+1. `TestBed.configureTestingModule({ imports: [ComponenteStandalone] })` — sin `NgModules` ni `declarations`.
+2. Estado: Signals con `.set()` / `.update()`; verificar `computed()`.
+3. Mock de `HttpClient` y servicios (`jasmine.createSpyObj` o `jest.fn` según el spec vecino).
+4. Directivas `*appHasPermission` / guards: proveer mocks o `OverrideDirective` si afectan el DOM.
+
+## Documentación viva
+
+Al añadir o ampliar specs de dominio, actualizar **`docs/agentes/pruebas-unitarias-backend.md`** (conteo §0, tabla §2). Specs de frontend: **`pruebas-unitarias-frontend.md`**.
+
+## CI / QA (futuro)
+
+Antes de merge a `main`: `npm run test:domain`. Ver `docs/agentes/entornos-git-despliegue.md`.

@@ -49,7 +49,10 @@ Convención sugerida:
 - `docs/agentes/README.md` — índice y enlaces.
 - `docs/agentes/decisiones.md` — decisiones de diseño breves (fecha + contexto + decisión).
 - `docs/agentes/glosario.md` — términos TPM/EAM internos.
-- `docs/agentes/pruebas-unitarias-backend.md` — inventario de specs Jest, convenciones `jest-mock-extended` y plan de cobertura (inventario kardex, compras ACL).
+- `docs/agentes/pruebas-unitarias.md` — **índice maestro** de testing (reglas BaseLogic, `npm run test:domain`, watch para agentes).
+- `docs/agentes/pruebas-unitarias-backend.md` — inventario de specs Jest backend, `jest-mock-extended`, cobertura inventario/compras.
+- `docs/agentes/pruebas-unitarias-frontend.md` — convenciones Angular 18 + inventario smoke.
+- `docs/agentes/entornos-git-despliegue.md` — transición `main`/prod → rama QA/staging (futuro).
 
 Actualiza estos archivos cuando cambie el modelo mental del producto; así los chats nuevos recuperan contexto sin depender solo del historial.
 

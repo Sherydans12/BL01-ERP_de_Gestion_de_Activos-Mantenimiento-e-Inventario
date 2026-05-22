@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -991,5 +995,177 @@ describe('PurchaseRequisitionsService — selectQuotation', () => {
         }),
       }),
     );
+  });
+});
+
+describe('PurchaseRequisitionsService — update', () => {
+  let service: PurchaseRequisitionsService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+  let auditLog: jest.Mock;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const requisitionId = '22222222-2222-2222-2222-222222222222';
+  const contractId = '33333333-3333-3333-3333-333333333333';
+  const reqItemId = '44444444-4444-4444-4444-444444444444';
+  const itemId = '66666666-6666-6666-6666-666666666666';
+  const ownerId = '77777777-7777-7777-7777-777777777777';
+
+  const owner = { id: ownerId, tenantId, role: 'USER' };
+  const purchaser = { id: ownerId, tenantId, role: 'ADMIN' };
+
+  function draftReq(overrides: Partial<{ status: string; requestedById: string }> = {}) {
+    return {
+      id: requisitionId,
+      tenantId,
+      contractId,
+      status: overrides.status ?? 'DRAFT',
+      requestedById: overrides.requestedById ?? ownerId,
+      description: 'Descripción inicial',
+      justification: null,
+      priority: 'MEDIUM',
+      subcontractId: null,
+      equipmentId: null,
+      workOrderId: null,
+      equipment: null,
+      workOrder: null,
+      items: [
+        {
+          id: reqItemId,
+          quantity: 2,
+          description: 'Línea 1',
+          unitOfMeasure: 'UN',
+          inventoryItemId: itemId,
+        },
+      ],
+    };
+  }
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    auditLog = jest.fn().mockResolvedValue(undefined);
+    mockAssertContractAccess.mockImplementation(() => undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PurchaseRequisitionsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: mockDeep<SequenceService>() },
+        { provide: StorageService, useValue: mockDeep<StorageService>() },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        { provide: AuditService, useValue: { log: auditLog } },
+        {
+          provide: NotificationDispatcherService,
+          useValue: { dispatch: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    service = module.get(PurchaseRequisitionsService);
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+  });
+
+  it('en QUOTING solo compras puede editar', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'QUOTING' }) as never);
+
+    await expect(
+      service.update(requisitionId, { description: 'Cambio' }, owner),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('en SUBMITTED solo permite cambios de OT/equipo', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'SUBMITTED' }) as never);
+
+    await expect(
+      service.update(requisitionId, { description: 'Nueva' }, owner),
+    ).rejects.toThrow(/solo puede actualizar equipo/);
+  });
+
+  it('actualiza descripción en DRAFT (solicitante)', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(draftReq() as never);
+    tx.purchaseRequisition.update.mockResolvedValue({
+      ...draftReq(),
+      description: 'Descripción editada',
+      items: draftReq().items,
+    } as never);
+
+    const updated = await service.update(
+      requisitionId,
+      { description: 'Descripción editada' },
+      owner,
+    );
+
+    expect(updated.description).toBe('Descripción editada');
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'UPDATE', entityType: 'REQUISITION' }),
+    );
+  });
+
+  it('reemplaza líneas en DRAFT vía transacción', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(draftReq() as never);
+    prisma.inventoryItem.findMany.mockResolvedValue([{ id: itemId }] as never);
+    tx.requisitionItem.deleteMany.mockResolvedValue({ count: 1 } as never);
+    tx.requisitionItem.createMany.mockResolvedValue({ count: 1 } as never);
+    tx.purchaseRequisition.update.mockResolvedValue({
+      ...draftReq(),
+      items: [
+        {
+          id: 'line-new',
+          quantity: 5,
+          description: 'Línea nueva',
+          unitOfMeasure: 'UN',
+        },
+      ],
+    } as never);
+
+    await service.update(
+      requisitionId,
+      {
+        items: [
+          {
+            inventoryItemId: itemId,
+            description: 'Línea nueva',
+            quantity: 5,
+            unitOfMeasure: 'UN',
+          },
+        ],
+      },
+      owner,
+    );
+
+    expect(tx.requisitionItem.deleteMany).toHaveBeenCalledWith({
+      where: { requisitionId },
+    });
+    expect(tx.requisitionItem.createMany).toHaveBeenCalled();
+  });
+
+  it('impide borrar ítem referenciado en cotización', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'QUOTING' }) as never);
+    prisma.inventoryItem.findMany.mockResolvedValue([{ id: itemId }] as never);
+    tx.quotationItem.count.mockResolvedValue(1);
+
+    await expect(
+      service.update(
+        requisitionId,
+        {
+          items: [
+            {
+              id: 'line-other',
+              description: 'Otra',
+              quantity: 1,
+              unitOfMeasure: 'UN',
+              inventoryItemId: itemId,
+            },
+          ],
+        },
+        purchaser,
+      ),
+    ).rejects.toThrow(/figura en una cotización/);
   });
 });

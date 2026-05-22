@@ -86,6 +86,9 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [ui-modales-tema-claro.md](ui-modales-tema-claro.md) | **UI:** modales en `data-theme='light'` — tokens (`text-main`, `bg-surface`), evitar `text-white` sobre `bg-dark`; `app-confirm-modal` + overrides en `styles.scss` |
 | [ui-busquedas-iconos-checkbox.md](ui-busquedas-iconos-checkbox.md) | **UI:** lupa duplicada (`type="search"` vs icono SVG), reset en `styles.scss`, `role="searchbox"`; checkboxes custom y `:where()` |
 | [control-stock-umbrales-vs-correccion-fisica.md](control-stock-umbrales-vs-correccion-fisica.md) | **Control de stock:** dos acciones (Umbrales vs Corregir físico); no mezclar conteo con mín/máx |
-| [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) | **Jest / Nest:** inventario de specs, convenciones (`jest-mock-extended`), cobertura inventario (kardex) y plan compras (ACL / `approve`) |
+| [pruebas-unitarias.md](pruebas-unitarias.md) | **Testing (índice maestro):** reglas BaseLogic EAM, `npm run test:domain` / `test:domain:watch`, flujo agente |
+| [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) | **Jest / Nest:** inventario de specs, `jest-mock-extended`, cobertura inventario (kardex) y compras (ACL) |
+| [pruebas-unitarias-frontend.md](pruebas-unitarias-frontend.md) | **Angular 18:** standalone, Signals, inventario smoke |
+| [entornos-git-despliegue.md](entornos-git-despliegue.md) | **Git / Coolify:** `main` prod hoy; modelo `develop` + staging QA |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.

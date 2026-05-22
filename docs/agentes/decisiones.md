@@ -9,10 +9,21 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-05-22 — Suite N+7: SRC `update` + `quickCreate` catálogo
+
+- **Decisión:** `purchase-requisitions` +5 (`update`: permisos QUOTING/SUBMITTED/DRAFT, líneas, cotización); `inventory-items` +4 (`quickCreate`: validaciones, política bodega, PN duplicado).
+- **Consecuencias:** Suite dominio **212 tests** (inventario 93 + compras 119). Pendiente commit/push; siguiente N+8: `update` SUBMITTED happy path, `InventoryItemsService.update`.
+
 ## 2026-05-22 — Suite N+6: SRC create/duplicate/selectQuotation + catálogo
 
 - **Decisión:** `purchase-requisitions` +7 (`create`, `duplicate`, `selectQuotation`); `inventory-items` +7 (`search`, `create`, `remove`).
 - **Consecuencias:** Suite dominio **203 tests**. Siguiente: `update` SRC, `quickCreate` artículo, cobertura CI opcional.
+
+## 2026-05-22 — Documentación y reglas maestras de testing + scripts `test:domain`
+
+- **Contexto:** Suite de dominio ~212 tests; reglas del usuario (BaseLogic EAM) y necesidad de que agentes ejecuten Jest al editar sin depender de PostgreSQL.
+- **Decisión:** Índice [`pruebas-unitarias.md`](pruebas-unitarias.md), regla Cursor `testing-baselogic.mdc`, workflow en `tpm-arquitectura.mdc` §6; scripts `npm run test:domain` y `test:domain:watch` en `backend/package.json`; doc frontend y [`entornos-git-despliegue.md`](entornos-git-despliegue.md) para QA futuro.
+- **Consecuencias:** Agentes deben correr `test:domain` al cerrar cambios de dominio; `npm test` completo puede fallar en smoke de controladores (ESM `file-type`) hasta remediar.
 
 ## 2026-05-22 — Suite N+5: SRC cancel/cotizaciones, regularización inventario
 
