@@ -32,6 +32,8 @@ Para **transferencias W2W**, al **enviar** se crea `TRANSFER_OUT` en la bodega *
 
 Validación de cantidad: si la UoM del artículo no admite decimales, el servicio rechaza cantidades no enteras (`Number.isInteger`).
 
+**Pruebas unitarias:** `backend/src/features/inventory-transfer/inventory-transfer.service.spec.ts` — inventario en [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) §3.3.
+
 ## Kardex / historial por artículo (global al ítem)
 
 - **Endpoint:** `GET /inventory-items/:id/ledger` (query opcional: `warehouseId`, `page`, `pageSize`) → `InventoryItemsService.findItemLedger`.
@@ -40,6 +42,8 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 - Si `referenceType = 'PURCHASE_RECEIPT'` y **`type = 'ADJUST'`** (cierre de saldo pendiente desde stock), `reference.kind` = **`ADJUST_SALDO_PENDIENTE`** y `label` describe recepción + OC; incluye `warehouseReceiptId` / `purchaseOrderId` para enlaces WR/OC en UI (misma forma que una recepción de compra “normal” en ledger).
 
 **Frontend:** pestaña «Historial de movimientos» en `inventory-item-form` y modal de catálogo (`loadLedger` → `getItemLedger`). Título de fila: `ledgerMovementTitle` (p. ej. «Ajuste · saldo pendiente (recepción)» cuando `reference.kind === 'ADJUST_SALDO_PENDIENTE'`). Cantidades con signo (`ledgerSignedQty`); bloque dedicado para transferencias con notas y enlace a `/app/inventario/transferencias`.
+
+**Pruebas unitarias:** `backend/src/features/inventory-items/inventory-items.service.spec.ts` — [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) §3.5.
 
 ## Kardex por bodega (gestión de stock)
 
@@ -51,9 +55,13 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 **Frontend:** modal «Ver kardex» en `stock-dashboard` (`openKardexModal`, `loadKardexPage`, `kardexMovementTitle`); paginación Anterior/Siguiente alineada al total del servidor.
 
+**Pruebas unitarias:** `enrichTransactionsTrace` en `inventory-stock.service.spec.ts` — [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) §3.2. Recepción → kardex: `warehouse-receipts.service.spec.ts` §4.8.
+
 ## Ajustes de inventario
 
 - Movimientos `type = ADJUST` con referencias según implementación (`INVENTORY_ADJUSTMENT` u otros); detalle en UI con modal de ajuste en `inventory-item-form`. No confundir con transferencias.
+
+**Pruebas unitarias ajustes:** `backend/src/features/inventory-adjustment/inventory-adjustment.service.spec.ts` — [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) §3.4.
 
 ### Motivo «Saldo pendiente» (compra / recepción incompleta)
 

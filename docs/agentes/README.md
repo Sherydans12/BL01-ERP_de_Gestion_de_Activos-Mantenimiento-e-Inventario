@@ -86,5 +86,6 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [ui-modales-tema-claro.md](ui-modales-tema-claro.md) | **UI:** modales en `data-theme='light'` — tokens (`text-main`, `bg-surface`), evitar `text-white` sobre `bg-dark`; `app-confirm-modal` + overrides en `styles.scss` |
 | [ui-busquedas-iconos-checkbox.md](ui-busquedas-iconos-checkbox.md) | **UI:** lupa duplicada (`type="search"` vs icono SVG), reset en `styles.scss`, `role="searchbox"`; checkboxes custom y `:where()` |
 | [control-stock-umbrales-vs-correccion-fisica.md](control-stock-umbrales-vs-correccion-fisica.md) | **Control de stock:** dos acciones (Umbrales vs Corregir físico); no mezclar conteo con mín/máx |
+| [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) | **Jest / Nest:** inventario de specs, convenciones (`jest-mock-extended`), cobertura inventario (kardex) y plan compras (ACL / `approve`) |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.

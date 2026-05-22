@@ -49,6 +49,7 @@ Convención sugerida:
 - `docs/agentes/README.md` — índice y enlaces.
 - `docs/agentes/decisiones.md` — decisiones de diseño breves (fecha + contexto + decisión).
 - `docs/agentes/glosario.md` — términos TPM/EAM internos.
+- `docs/agentes/pruebas-unitarias-backend.md` — inventario de specs Jest, convenciones `jest-mock-extended` y plan de cobertura (inventario kardex, compras ACL).
 
 Actualiza estos archivos cuando cambie el modelo mental del producto; así los chats nuevos recuperan contexto sin depender solo del historial.
 

@@ -124,3 +124,4 @@ Flujo resumido:
 | Upsert políticas / ACL | `backend/src/features/purchases/purchase-settings.service.ts` |
 | UI matriz | `frontend/src/app/features/purchases/purchase-settings/` |
 | Util cliente | `frontend/src/app/core/utils/approval-policy.util.ts` |
+| Pruebas unitarias (ACL, OC, 3-way, firma hash) | [docs/agentes/pruebas-unitarias-backend.md](agentes/pruebas-unitarias-backend.md) §4 — 53 tests compras + 4 hash; suite dominio 76 (2026-05-22) |
