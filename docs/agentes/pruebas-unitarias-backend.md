@@ -4,13 +4,13 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-05-22
+**Última actualización:** 2026-05-24
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **280 tests** en **13** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **282 tests** en **13** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -18,12 +18,12 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
 | **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
-| **Inventario — transferencias W2W** | ~90 % mutación/recepción | 20 | W2W + validaciones recepción (§3.3) |
+| **Inventario — transferencias W2W** | ~90 % mutación/recepción | 22 | W2W + alcance contrato en `getTransferById` (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~90 % | 30 | CRUD factura + 3-way + pago (§4) |
-| **Mantenimiento — OT cierre** | ~92 % cierre + backlog | 22 | CLOSED, `IN_PROGRESS`, `promoteBacklogItem` (§3.6) |
+| **Mantenimiento — OT cierre** | ~92 % cierre + backlog | 23 | CLOSED (PBAC + reglas negocio), `IN_PROGRESS`, `promoteBacklogItem` (§3.6) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -158,7 +158,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
 | `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **17** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
-| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **3** | `updateStatus` CLOSED + consumo stock (§3.6) |
+| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **23** | `updateStatus` CLOSED/IN_PROGRESS + backlog (§3.6) |
 | `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **8** | `create`/`remove`, P2002, revalidación 3-way (§4) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
 | `features/auth/auth.service.spec.ts` | Auth | 1 | Smoke (`should be defined`) |
@@ -170,7 +170,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 280 tests passed (inventario 103 + compras 155 + OT 22).
+**Suite dominio crítico (2026-05-24):** 282 tests passed (inventario 105 + compras 154 + OT 23).
 
 ---
 
@@ -199,13 +199,13 @@ Documentación de dominio: [inventario-stock-transferencias-kardex.md](inventari
 | `clearPendingRegularizationFlags` | No-op si saldo &lt; 0; `updateMany` si saldo ≥ 0 |
 | `performTransactionCore` | Usuario requerido; cantidad &gt; 0 (excepto ADJUST); bodega válida; **IN** + CPP ponderado; **OUT** + flag regularización; **ADJUST** negativo; **FIELD_DISPATCH** solo OUT; **FIELD_RETURN** costo y tope terreno; política min/max al crear `item_stock` |
 | `performTransaction` | `$transaction` con `Serializable` |
-| `performReturn` | Cantidad positiva; sin salidas OT; tope vs consumo; happy path `WORK_ORDER_RETURN`; enmascaramiento costo **MECHANIC** |
+| `performReturn` | Cantidad positiva; sin salidas OT; tope vs consumo; happy path `WORK_ORDER_RETURN`; enmascaramiento costo sin `inventory:stock:view_cost` |
 | `updateStockLevels` | Bodega inexistente; payload vacío; max &lt; min |
 | `getTransactionsByWarehouse — enrichTransactionsTrace` | Trace recepción/OC; transferencia IN; `saldoPendienteAdjust` en ADJUST |
 | `getSupplyAlerts` | Filtro bajo mínimo; `suggestedOrderQty`; sin `groupBy` si no hay alertas |
 | `getInventoryRecordAccuracy` | IRA 30 días; denominador cero; tope 0–100%; filtro bodega |
 | `regularización pendiente` | `getPendingRegularizations`, `getPendingCount`, página paginada |
-| `getStockByWarehouse` | Reservas, terreno, costo MECHANIC, filtro ubicación |
+| `getStockByWarehouse` | Reservas, terreno, enmascaramiento costo PBAC, filtro ubicación |
 | `buildPhysicalCountSheetPdf` | Bodega inexistente; generador mockeado + filename |
 | `getStockPosition` | Ubicación normalizada; quantity 0 sin fila |
 
@@ -216,14 +216,14 @@ Documentación de dominio: [inventario-stock-transferencias-kardex.md](inventari
 
 ### 3.3 Spec: `inventory-transfer.service.spec.ts`
 
-**Última ejecución:** 16 passed (2026-05-22).
+**Última ejecución:** 22 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
-| `executeTransfer` | Rol MECHANIC; origen=destino; sin líneas; cantidad inválida; UoM sin decimales; stock insuficiente; happy path `SHIPPED` + `TRANSFER_OUT` + línea con `unitCost` origen |
+| `executeTransfer` | Sin `inventory:transfer:create`; origen=destino; sin líneas; cantidad inválida; UoM sin decimales; stock insuficiente; happy path `SHIPPED` + `TRANSFER_OUT` + línea con `unitCost` origen |
 | `confirmReception` | Not found; estado ≠ `SHIPPED`; contrato destino; **CPP ponderado** en destino (6×10 + 4×5 → 8); stock nuevo en destino con política; `TRANSFER_IN` + `clearPendingRegularizationFlags` |
-| `listTransfers` | Paginación + `lineCount`; filtro contratos SUPERVISOR |
-| `getTransferById` | Not found; `reception` en `COMPLETED` vía último `TRANSFER_IN` |
+| `listTransfers` | Paginación + `lineCount`; filtro `allowedContracts` (USER) |
+| `getTransferById` | Not found (sin registro / sin alcance contrato); `reception` en `COMPLETED` vía último `TRANSFER_IN` |
 
 Mocks: `InventoryStockService.clearPendingRegularizationFlags`; `inventory-item-stock-policy.helper`.
 
@@ -258,11 +258,11 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.6 Spec: `work-orders.service.spec.ts`
 
-**Última ejecución:** 22 passed (2026-05-22).
+**Última ejecución:** 23 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
-| `updateStatus` CLOSED / IN_PROGRESS | Cierre, downtime, stock, medidor, garantía, disponibilidad |
+| `updateStatus` CLOSED / IN_PROGRESS | Cierre con `USER`+permisos PBAC; reglas negocio (downtime, stock, medidor, garantía); `IN_PROGRESS` |
 | `promoteBacklogItem` | `TO_TASK`, `TO_NEW_OT`, validación PENDING |
 
 Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock-policy.helper`; `EmailService` + `WARRANTY_NOTIFY_EMAILS`.

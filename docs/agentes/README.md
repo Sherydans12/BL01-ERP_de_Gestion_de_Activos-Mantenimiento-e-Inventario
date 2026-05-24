@@ -4,7 +4,7 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 **Arquitectura y dominio (documento maestro):** [../MASTER-CONTEXT.md](../MASTER-CONTEXT.md) — entidades Prisma, módulos NestJS, rutas Angular, PBAC y flujos transaccionales (OT, kardex, compras 3-way). Incluye tabla de **fuentes canónicas** a revisar cuando cambie el código; actualizar la fecha del doc al sincronizar.
 
-**PBAC — matriz de verificación y deuda legacy:** [pbac-matriz-verificacion.md](pbac-matriz-verificacion.md) (personas de prueba, grep `MECHANIC`/`SUPERVISOR`, checklist E2E).
+**PBAC — matriz de verificación:** [pbac-matriz-verificacion.md](pbac-matriz-verificacion.md) (personas de prueba, fases 0–3, checklist E2E).
 
 **Mapa de repos externos** (claude-mem, ui-ux, n8n-mcp, LightRAG, everything-claude-code): [repos-externos.md](repos-externos.md).
 

@@ -21,7 +21,7 @@ Documento **maestro de canales salientes** que hoy implementa el repo: **Web Pus
 | Registro de suscripción | `POST /api/notifications/subscribe` → `notifications.controller.ts` | Cuerpo estándar Push API; persiste `PushSubscription` (único por `endpoint`). Requiere usuario con `tenantId`. |
 | Modelo Prisma | `PushSubscription` | Por usuario; purga en herramienta SUPER_ADMIN: [`platform-data-admin.md`](platform-data-admin.md). |
 | Frontend | `frontend/src/app/core/services/push-notifications/push-notifications.service.ts` | `SwPush` + Angular Service Worker; clic → navegación según `data`. |
-| Auto-registro | `frontend/src/app/core/layout/layout.component.ts` | Solo roles `ADMIN`, `SUPER_ADMIN`, `SUPERVISOR`; una vez por sesión (`maybeSubscribeOncePerSession`). |
+| Auto-registro | `frontend/src/app/core/layout/layout.component.ts` | Usuarios con `purchases:order:approve` (PBAC); una vez por sesión (`maybeSubscribeOncePerSession`). |
 
 **Variables de entorno (backend):** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, opcional `VAPID_SUBJECT` (default `mailto:admin@baselogic.local`). Si faltan las claves, **no se envía ningún push** (silencioso en runtime salvo log).
 

@@ -9,6 +9,12 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-05-24 — PBAC Fase 3: erradicación enum `MECHANIC` / `SUPERVISOR`
+
+- **Contexto:** Fase 2 migró lógica a permisos; el enum y la UI aún exponían roles legacy. Pre-producción sin deuda masiva de datos.
+- **Decisión:** `UserRole` = `SUPER_ADMIN` | `ADMIN` | `USER` únicamente. Migración `20260524120000_remove_legacy_roles` (UPDATE a `USER` antes de alterar enum). Espejos tenant por defecto: `Sistema · ADMIN` y `Sistema · USER`; `ensureSuperAdminMirrorRole` en seed. `findAssignableForOt` solo por permisos OT en JSON.
+- **Consecuencias:** Re-login tras deploy. Usuarios legacy quedan `USER` — reasignar `TenantRole` PBAC. Suite dominio **282 tests**. Ver [pbac-matriz-verificacion.md](pbac-matriz-verificacion.md).
+
 ## 2026-05-24 — Migración W2W: ALTER condicional (orden vs tablas futuras)
 
 - **Contexto:** `20260414170504` hacía `ALTER TABLE unit_of_measures` antes de que existiera la tabla (`20260417100000`); QA en bucle P3018.

@@ -2,7 +2,7 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-05-19 |
+| **Última modificación** | 2026-05-24 |
 | **Versión documento** | 1.0 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
@@ -298,7 +298,7 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
 - Ver decisión 2026-05-19: [decisiones.md](agentes/decisiones.md).
 
 **W2W (`InventoryTransferService`):**
-- Roles: `ADMIN`, `SUPERVISOR`, `SUPER_ADMIN`.
+- PBAC: `inventory:transfer:read` / `create` / `approve`; alcance contrato en `USER`.
 - `create`: `TRANSFER_OUT`, estado `SHIPPED`.
 - `confirmReception`: `TRANSFER_IN`; CPP destino = promedio ponderado.
 
@@ -405,7 +405,7 @@ Base: `environment.apiUrl` + interceptores JWT y contrato activo.
 | Datos | `tenantId` en consultas Prisma |
 | Contratos | `UserContract` → `allowedContracts[]` en JWT |
 | Contexto UI | `x-contract-id` / `x-site-id`; `ALL` solo ADMIN/SUPER_ADMIN |
-| MECHANIC/SUPERVISOR | Filtro por `allowedContracts` |
+| `USER` (y perfiles custom) | Filtro por `allowedContracts` en JWT |
 | Compras | `assertUserHasContractAccess` en servicios P2P |
 
 Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arquitectura.mdc).
@@ -418,8 +418,7 @@ Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arqui
 |-----|---------|
 | `SUPER_ADMIN` | Multi-tenant; bypass PBAC |
 | `ADMIN` | Tenant completo; bypass `PermissionsGuard` |
-| `SUPERVISOR` | Operaciones + inventario (por contratos) |
-| `MECHANIC` | OT y consultas operativas |
+| `USER` | Sin privilegios por defecto; capacidades vía `TenantRole.permissions` + contratos `UserContract` |
 
 #### PBAC Compras
 
