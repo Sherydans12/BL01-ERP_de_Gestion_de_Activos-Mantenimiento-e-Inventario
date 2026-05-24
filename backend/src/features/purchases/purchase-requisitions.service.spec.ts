@@ -1012,7 +1012,12 @@ describe('PurchaseRequisitionsService — update', () => {
   const ownerId = '77777777-7777-7777-7777-777777777777';
 
   const owner = { id: ownerId, tenantId, role: 'USER' };
-  const purchaser = { id: ownerId, tenantId, role: 'ADMIN' };
+  const purchaser = {
+    id: ownerId,
+    tenantId,
+    role: 'USER',
+    permissions: ['purchases:requisition:update-purchasing'],
+  };
   const woId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const eqId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 

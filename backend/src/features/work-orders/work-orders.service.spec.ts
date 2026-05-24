@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
@@ -17,6 +17,7 @@ jest.mock('../equipments/equipment-meter-sync', () => ({
 jest.mock('../inventory-items/inventory-item-stock-policy.helper');
 
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 const mockApplyCurrentMeterChange = jest.mocked(applyCurrentMeterChange);
 const mockGetPolicyThresholds = jest.mocked(getPolicyThresholdsForNewItemStockRow);
@@ -35,7 +36,16 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
   const fluidItemId = '77777777-7777-4777-8777-777777777777';
   const userId = '66666666-6666-6666-6666-666666666666';
 
-  const user = { id: userId, tenantId, role: 'ADMIN' };
+  const adminUser = { id: userId, tenantId, role: 'ADMIN' };
+  const pbacCloserUser = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    permissions: [
+      SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+      SystemPermissions.OPERATIONS_WORK_ORDER_CLOSE,
+    ],
+  };
 
   const detentionStart = new Date('2024-06-01T08:00:00.000Z');
   const detentionEnd = new Date('2024-06-01T12:00:00.000Z');
@@ -107,6 +117,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     mockGetPolicyThresholds.mockResolvedValue({ minStock: 0, maxStock: 0 });
     mockClearItemStockPolicy.mockResolvedValue(undefined);
     mockApplyCurrentMeterChange.mockClear();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -120,6 +131,31 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     service = module.get(WorkOrdersService);
   });
 
+  it('cierra OT con usuario PBAC (execute + close) sin repuestos', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+
+    const result = await service.updateStatus(pbacCloserUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    expect(result.status).toBe('CLOSED');
+  });
+
   it('rechaza cierre sin fechas de detención', async () => {
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(
@@ -129,7 +165,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -150,7 +186,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -171,7 +207,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -195,7 +231,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     } as never);
     prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
@@ -219,7 +255,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -234,7 +270,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
       }),
@@ -262,7 +298,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     } as never);
     prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
@@ -286,7 +322,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         closureEquipmentOperational: true,
       }),
@@ -302,7 +338,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -338,7 +374,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     } as never);
     prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
 
-    const result = await service.updateStatus(user, woId, {
+    const result = await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
@@ -380,7 +416,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         closureEquipmentOperational: true,
       }),
@@ -418,7 +454,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     } as never);
     prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
@@ -447,7 +483,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -472,7 +508,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     } as never);
     prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: false,
@@ -519,7 +555,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     } as never);
     prisma.tenant.findUnique.mockResolvedValue({ name: 'Acme Minera' } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       closureEquipmentOperational: true,
     });
@@ -541,7 +577,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
   const woId = '22222222-2222-2222-2222-222222222222';
   const equipId = '33333333-3333-3333-3333-333333333333';
   const userId = '66666666-6666-6666-6666-666666666666';
-  const user = { id: userId, tenantId, role: 'ADMIN' };
+  const inProgressUser = { id: userId, tenantId, role: 'ADMIN' };
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -573,7 +609,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     } as never);
     prisma.equipment.update.mockResolvedValue({} as never);
 
-    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+    await service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' });
 
     expect(prisma.equipment.update).toHaveBeenCalledWith({
       where: { id: equipId },
@@ -600,7 +636,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     prisma.workOrder.findFirst.mockResolvedValue(wo as never);
     prisma.workOrder.update.mockResolvedValue({ ...wo, status: 'IN_PROGRESS' } as never);
 
-    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+    await service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' });
 
     expect(prisma.equipment.update).not.toHaveBeenCalled();
   });
@@ -618,7 +654,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     prisma.workOrder.findFirst.mockResolvedValue(wo as never);
     prisma.workOrder.update.mockResolvedValue(wo as never);
 
-    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+    await service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' });
 
     expect(prisma.equipment.update).not.toHaveBeenCalled();
     expect(prisma.workOrder.update).toHaveBeenCalledWith({
@@ -631,7 +667,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     prisma.workOrder.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.updateStatus(user, woId, { status: 'IN_PROGRESS' }),
+      service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' }),
     ).rejects.toThrow(/Orden no encontrada/);
   });
 });

@@ -39,6 +39,7 @@ describe('InventoryTransferService', () => {
   const userId = '55555555-5555-5555-5555-555555555555';
   const transferId = '66666666-6666-6666-6666-666666666666';
   const destContractId = '77777777-7777-7777-7777-777777777777';
+  const foreignContractId = '88888888-8888-8888-8888-888888888888';
 
   const adminUser = {
     id: userId,
@@ -51,6 +52,24 @@ describe('InventoryTransferService', () => {
     tenantId,
     role: 'USER',
     allowedContracts: [destContractId],
+  };
+
+  /** USER sin permiso de creación ni lectura de transferencias (PBAC). */
+  const userWithoutTransferRead = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    allowedContracts: [destContractId],
+    permissions: ['inventory:stock:read'],
+  };
+
+  /** USER con lectura pero sin contrato en alcance (ABAC por contrato). */
+  const userWithoutContractScope = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    allowedContracts: [foreignContractId],
+    permissions: ['inventory:transfer:read'],
   };
 
   const userWithoutTransferCreate = {
@@ -524,12 +543,33 @@ describe('InventoryTransferService', () => {
       createdBy: { id: userId, name: 'Admin', email: 'a@test.com' },
     };
 
-    it('lanza NotFoundException si no hay acceso o no existe', async () => {
+    it('lanza NotFoundException si la transferencia no existe', async () => {
       prisma.inventoryTransfer.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.getTransferById(transferId, adminUser),
+        service.getTransferById(transferId, userWithoutTransferRead),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('lanza NotFoundException si el usuario no tiene alcance de contrato', async () => {
+      prisma.inventoryTransfer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getTransferById(transferId, userWithoutContractScope),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.inventoryTransfer.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: transferId,
+            tenantId,
+            OR: [
+              { originWarehouse: { contractId: { in: [foreignContractId] } } },
+              { destinationWarehouse: { contractId: { in: [foreignContractId] } } },
+            ],
+          }),
+        }),
+      );
     });
 
     it('adjunta reception cuando la transferencia está COMPLETED', async () => {
