@@ -18,7 +18,7 @@ import {
   template: `
     <div
       #toastStack
-      class="fixed bottom-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none"
+      class="toast-stack-host fixed bottom-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none"
       [attr.popover]="popoverTopLayer ? 'manual' : null"
     >
       @for (toast of notificationService.toasts(); track toast.id) {
@@ -121,6 +121,27 @@ import {
   `,
   styles: [
     `
+      /*
+       * UA stylesheet de [popover] centra el host (inset:0; margin:auto).
+       * Sin esto los toasts quedan en el medio de la pantalla siempre que hay avisos.
+       */
+      .toast-stack-host,
+      .toast-stack-host:popover-open {
+        position: fixed;
+        inset: auto 1rem 1rem auto;
+        top: auto;
+        left: auto;
+        width: auto;
+        height: auto;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        border: none;
+        overflow: visible;
+        background: transparent;
+        color: inherit;
+      }
+
       .animate-fade-in-up {
         animation: fadeInUp 0.3s ease-out forwards;
       }
