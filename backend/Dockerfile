@@ -3,13 +3,14 @@ FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
-# prisma.config.ts + postinstall → `prisma generate` (requiere DATABASE_URL)
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-# .npmrc: legacy-peer-deps (jest-mock-extended vs Jest 30)
-RUN npm ci
+# legacy-peer-deps (jest-mock-extended vs Jest 30); browsers en etapa runner
+ENV NPM_CONFIG_LEGACY_PEER_DEPS=true
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm ci --ignore-scripts && npx prisma generate
 
 # 2. Build (Compilación y generación de cliente)
 FROM node:20-bookworm-slim AS builder
