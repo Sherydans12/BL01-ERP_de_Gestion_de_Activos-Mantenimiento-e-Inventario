@@ -245,6 +245,62 @@ describe('PurchaseInvoicesService', () => {
       expect(result.status).toBe('MATCHED');
     });
 
+    it('revoca overrule si la recepción ya no cubre la factura', async () => {
+      const invoice = {
+        ...buildInvoice({ status: 'DISCREPANCY' }),
+        threeWayMatchOverruled: true,
+      };
+      prisma.purchaseInvoice.findFirst
+        .mockResolvedValueOnce(invoice as never)
+        .mockResolvedValueOnce({
+          ...invoice,
+          threeWayMatchOverruled: false,
+        } as never);
+      prisma.purchaseInvoice.findMany.mockResolvedValue([] as never);
+      prisma.purchaseCreditNote.findMany.mockResolvedValue([] as never);
+      prisma.purchaseSettings.findUnique.mockResolvedValue({
+        invoiceMatchTolerancePercent: new Prisma.Decimal(1),
+      } as never);
+      prisma.warehouseReceipt.findMany.mockResolvedValue([
+        {
+          items: [{ quantityReceived: 2, orderItem: { unitCost: new Prisma.Decimal(1000) } }],
+        },
+      ] as never);
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        requisitionId: null,
+        quotation: null,
+      } as never);
+      prisma.activityLog.findMany.mockResolvedValue([] as never);
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.purchaseInvoice.update.mockImplementation(async ({ data }) => ({
+          ...invoice,
+          ...data,
+          vendor: invoice.vendor,
+          purchaseOrder: invoice.purchaseOrder,
+        }));
+        tx.activityLog.create.mockResolvedValue({} as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      const result = await service.validateInvoiceMatch(
+        invoiceId,
+        tenantId,
+        userId,
+      );
+
+      expect(prisma.purchaseInvoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: invoiceId },
+          data: expect.objectContaining({
+            threeWayMatchOverruled: false,
+            threeWayMatchOverruledAt: null,
+          }),
+        }),
+      );
+      expect(result.match.matchReceived).toBe(false);
+      expect(result.status).toBe('DISCREPANCY');
+    });
+
     it('concilia monto neto restando notas de crédito de la OC', async () => {
       const invoice = buildInvoice({
         totalAmount: new Prisma.Decimal(10500),

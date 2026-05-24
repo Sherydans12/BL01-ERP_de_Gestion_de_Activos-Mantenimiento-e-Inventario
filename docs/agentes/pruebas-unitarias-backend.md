@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **240 tests** en 12 archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **244 tests** en **13** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -22,7 +22,8 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~85 % flujo físico | 17 | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | **Compras — gobernanza OC** | ~90 % firma/edición/SRC | 52 | ACL, reset/edición sensible, ciclo OC (§4.4) |
-| **Compras — 3-way / facturas** | ~65 % | 22 | `validateInvoiceMatch`, `overrule`, NC en monto neto (§4) |
+| **Compras — 3-way / facturas** | ~70 % | 17 | `validateInvoiceMatch`, overrule, revoca overrule (§4) |
+| **Mantenimiento — OT cierre** | ~40 % cierre + stock | 3 | `updateStatus` CLOSED + `WORK_ORDER_ISSUE` (§3.6) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -64,11 +65,17 @@ npm run test:domain:watch
 - **`warehouse-receipts.confirm`** (+3): sobre-recepción al confirmar; bodega inactiva; gasto directo sin stock + audit.
 - **`purchase-invoices`** (+4): tolerancia MATCHED; NC en monto neto; overrule sin contrato; overrule bloqueado si supera recepción.
 
-### Siguiente paso recomendado (iteración N+13)
+### Iteración N+13 (2026-05-22) — hecho
 
-1. **`work-orders`**: consumo materiales / cierre con stock.
-2. **`purchase-invoices`**: revalidación revoca `threeWayMatchOverruled` si cambia recepción.
-3. Cobertura CI (`test:cov`) con umbral en `features/purchases/*` e `inventory-*` (opcional).
+- **`WorkOrdersService.updateStatus` (CLOSED)** (+3): bodega obligatoria con repuestos; OT ya cerrada; `WORK_ORDER_ISSUE` + reservas.
+- **`validateInvoiceMatch`** (+1): revoca `threeWayMatchOverruled` si recepción insuficiente.
+- **`npm run test:domain`**: incluye `work-orders.service.spec` (13 suites).
+
+### Siguiente paso recomendado (iteración N+14)
+
+1. **`work-orders`**: cierre con fluidos / medidor final / garantía.
+2. **`warehouse-receipts`**: confirm multi-línea con mix inventario/gasto directo.
+3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
 
@@ -124,7 +131,8 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/tenant-roles/tenant-role-defaults.spec.ts` | **Compras — `resolveApprovalPolicyForUser`** | **5** | Función pura ACL (ver §4) |
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
-| `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **16** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
+| `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **17** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
+| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **3** | `updateStatus` CLOSED + consumo stock (§3.6) |
 | `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **8** | `create`/`remove`, P2002, revalidación 3-way (§4) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
 | `features/auth/auth.service.spec.ts` | Auth | 1 | Smoke (`should be defined`) |
@@ -136,7 +144,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 240 tests passed (inventario 103 + compras 137).
+**Suite dominio crítico (2026-05-22):** 244 tests passed (inventario 103 + compras 138 + OT 3).
 
 ---
 
@@ -221,6 +229,22 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 #### Pendiente (inventario)
 
 - [ ] `performTransaction` integración con reservas (si se expone regla nueva)
+
+### 3.6 Spec: `work-orders.service.spec.ts`
+
+**Última ejecución:** 3 passed (2026-05-22).
+
+| Bloque | Casos |
+|--------|-------|
+| `updateStatus` CLOSED | Bodega obligatoria con repuestos; OT ya cerrada; `WORK_ORDER_ISSUE` + limpia reservas |
+
+Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock-policy.helper`.
+
+#### Pendiente (mantenimiento)
+
+- [ ] Cierre con fluidos de inventario
+- [ ] Medidor final + `applyCurrentMeterChange`
+- [ ] Notificación `POSIBLE_GARANTIA`
 
 ---
 
