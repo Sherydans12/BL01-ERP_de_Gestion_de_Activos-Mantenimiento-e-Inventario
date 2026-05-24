@@ -1,0 +1,15 @@
+{
+  "name": "tpm-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:compras-pbac": "playwright test tests/compras-pbac.spec.ts",
+    "test:ui": "playwright test --ui",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}

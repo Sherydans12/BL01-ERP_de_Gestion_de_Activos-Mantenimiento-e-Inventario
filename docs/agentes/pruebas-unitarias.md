@@ -67,6 +67,20 @@ Detalle por módulo, bloques `describe` y pendientes: [pruebas-unitarias-backend
 
 ---
 
+## 4.1 Compras PBAC — integración API + E2E UI (no Jest)
+
+Complementa `test:domain` con HTTP real y Playwright (requiere backend/front levantados):
+
+| Capa | Comando |
+|------|---------|
+| Seed 13 personas | `cd backend && npm run seed:compras-pbac-personas` |
+| API matriz + flujos | `npm run simulate:compras-pbac -- --all` |
+| UI smoke Compras | `cd e2e && E2E_SKIP_WEBSERVER=1 npm run test:compras-pbac` |
+
+Guía: [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md).
+
+---
+
 ## 5. Suite completa (`npm test`)
 
 Desde 2026-05-22 la suite completa pasa (~220 tests): smoke auth/users/sites con mocks de dependencias y `backend/test/jest-setup.ts` (mock ESM de `file-type`). CI en GitHub ejecuta `test:domain` + `npm test` — ver [entornos-git-despliegue.md](entornos-git-despliegue.md) §3.
@@ -88,4 +102,5 @@ Hoy: rama **`main`** → un ambiente de **producción** (Coolify). Cuando abras 
 - Reglas agente: `.cursor/rules/testing-baselogic.mdc`, `.cursor/rules/tpm-arquitectura.mdc` §6 (workflow Testing).
 - `AGENTS.md` — índice del repo.
 - Compras ACL: [../PURCHASE-GOVERNANCE.md](../PURCHASE-GOVERNANCE.md).
+- Compras PBAC API/E2E: [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md).
 - Inventario kardex: [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md).

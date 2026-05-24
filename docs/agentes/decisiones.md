@@ -9,6 +9,12 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-05-24 — Compras PBAC: simulador API + E2E Playwright
+
+- **Contexto:** Tras Fase 3 PBAC faltaba verificación automatizada end-to-end del módulo P2P (43 permisos `purchases:*`, ACL firmas, menú UI).
+- **Decisión:** Seed `seed-compras-pbac-personas.ts` (13 personas); script `simulate-compras-pbac.mjs` con matriz 43 probes, flujos A–J y cobertura K–S; paquete `e2e/` con Playwright (5 smoke UI). Doc: [`compras-pbac-pruebas-api-e2e.md`](compras-pbac-pruebas-api-e2e.md).
+- **Consecuencias:** QA en `develop` puede correr `simulate:compras-pbac -- --all` y `e2e` tras seed. No incluir `.xlsx` de inventario en commits. Throttle login: `PBAC_LOGIN_DELAY_MS=3500` si 429.
+
 ## 2026-05-24 — PBAC Fase 3: erradicación enum `MECHANIC` / `SUPERVISOR`
 
 - **Contexto:** Fase 2 migró lógica a permisos; el enum y la UI aún exponían roles legacy. Pre-producción sin deuda masiva de datos.

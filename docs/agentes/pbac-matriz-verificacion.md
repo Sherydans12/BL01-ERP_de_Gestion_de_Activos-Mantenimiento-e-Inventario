@@ -24,9 +24,18 @@
 | **Mecánico terreno** | `USER` | `Mecánico` (custom) | Contrato A | `operations:work-order:read`, `execute`, `close`, `operations:equipment:read`, `inventory:stock:read`, `operations:meter-reading:read`, `create` | Menú OT + Flota + Control stock; ejecutar/cerrar OT asignada; ver flota; lectura stock sin costo sin `inventory:stock:view_cost`. **Negativo:** sin `operations:work-order:close` → no puede cerrar OT. |
 | **Admin Empresa** | `ADMIN` | (sin custom, o espejo `Sistema · ADMIN`) | Ninguno (tenant-wide) | Bypass PBAC en API/UI | Todo el menú según permisos efectivos del bypass; gestión usuarios, gobernanza, contratos, configuración empresa, compras e inventario completos. **Negativo:** no aplica quitar permisos individuales (bypass). Validar `x-contract-id: ALL` en listados. |
 
-### Checklist por persona (E2E — otro agente / Playwright)
+### Checklist por persona (E2E Playwright + API)
 
-1. Login con credenciales seed.
+**Automatizado en repo:**
+
+| Capa | Comando | Doc |
+|------|---------|-----|
+| API matriz + flujos | `cd backend && npm run simulate:compras-pbac -- --all` | [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md) |
+| UI smoke Compras | `cd e2e && E2E_SKIP_WEBSERVER=1 npm run test:compras-pbac` | idem |
+
+**Manual (QA):**
+
+1. Login con credenciales seed (`npm run seed:compras-pbac-personas`).
 2. Verificar ítems del sidebar vs matriz (solo rutas con permiso `read`).
 3. Abrir formulario principal del módulo → acciones de escritura visibles según permisos.
 4. En gobernanza: desactivar **un** permiso crítico → guardar → re-login.
@@ -89,6 +98,7 @@
 ## Referencias
 
 - Catálogo maestro: [`docs/RBAC-PERMISSIONS-CATALOG.md`](../RBAC-PERMISSIONS-CATALOG.md)
+- Pruebas compras PBAC (API + Playwright): [`compras-pbac-pruebas-api-e2e.md`](compras-pbac-pruebas-api-e2e.md)
 - Frontend: [`docs/FRONTEND-SECURITY.md`](../FRONTEND-SECURITY.md)
 - Decisión contratos + USER: [`decisiones.md`](decisiones.md) (2026-05-19)
 - Suite dominio: [`pruebas-unitarias.md`](pruebas-unitarias.md) — **282 tests** (`test:domain`)

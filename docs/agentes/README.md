@@ -6,6 +6,8 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 **PBAC — matriz de verificación:** [pbac-matriz-verificacion.md](pbac-matriz-verificacion.md) (personas de prueba, fases 0–3, checklist E2E).
 
+**Compras PBAC — pruebas API/E2E:** [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md) (seed 13 personas, `simulate:compras-pbac`, Playwright `e2e/`).
+
 **Mapa de repos externos** (claude-mem, ui-ux, n8n-mcp, LightRAG, everything-claude-code): [repos-externos.md](repos-externos.md).
 
 ## Equivalente a claude-mem en Cursor
@@ -77,6 +79,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [notificaciones-sistema.md](notificaciones-sistema.md) | **Web Push** (VAPID, suscripción, payloads `data.type`), inventario de envíos activos y checklist al añadir nuevas notificaciones |
 | [../CORREOS-SISTEMA.md](../CORREOS-SISTEMA.md) | **Catálogo maestro** de todos los `sendMail` y plantillas; actualizar al añadir correos nuevos |
 | [../PURCHASE-FLOWS.md](../PURCHASE-FLOWS.md) y [../PURCHASE-GOVERNANCE.md](../PURCHASE-GOVERNANCE.md) | **Compras:** flujos SRC → OC → recepción (cantidades, catálogo por línea, generación OC) y matriz de firmas ACL / `minAmount` |
+| [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md) | **Compras PBAC:** seed personas, simulador API (`simulate:compras-pbac`), Playwright E2E menú Compras |
 | `decisiones.md` | ADRs ligeras (opcional, creado cuando queráis) |
 | `glosario.md` | Términos de negocio TPM (opcional) |
 | [pdf-html-playwright-plantilla-base.md](pdf-html-playwright-plantilla-base.md) | **PDF backend:** plantilla base HTML + Playwright (A4, estilos, seguridad); OC como referencia |
