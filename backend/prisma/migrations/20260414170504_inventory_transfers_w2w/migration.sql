@@ -12,17 +12,17 @@ CREATE TYPE "InventoryTransferStatus" AS ENUM ('COMPLETED', 'CANCELLED');
 ALTER TYPE "TransactionType" ADD VALUE 'TRANSFER_OUT';
 ALTER TYPE "TransactionType" ADD VALUE 'TRANSFER_IN';
 
--- DropIndex
-DROP INDEX "idx_inventory_items_name_trgm";
+-- DropIndex (IF EXISTS: en BD nueva los índices trgm se crean en 20260418130000; el unique en 20260415130000)
+DROP INDEX IF EXISTS "idx_inventory_items_name_trgm";
 
 -- DropIndex
-DROP INDEX "idx_inventory_items_part_number_trgm";
+DROP INDEX IF EXISTS "idx_inventory_items_part_number_trgm";
 
 -- DropIndex
-DROP INDEX "idx_inventory_items_tenant_category";
+DROP INDEX IF EXISTS "idx_inventory_items_tenant_category";
 
 -- DropIndex
-DROP INDEX "item_categories_tenant_id_name_key";
+DROP INDEX IF EXISTS "item_categories_tenant_id_name_key";
 
 -- AlterTable
 ALTER TABLE "item_categories" ALTER COLUMN "id" DROP DEFAULT;

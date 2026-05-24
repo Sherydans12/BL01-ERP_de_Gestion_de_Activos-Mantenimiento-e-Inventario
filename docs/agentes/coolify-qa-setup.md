@@ -290,6 +290,22 @@ Si el primer arranque creó el volumen `pgdata-qa` **sin** contraseña válida, 
 2. Confirmar `DB_USER`, `DB_PASSWORD`, `DB_NAME` en Environment.
 3. **Redeploy** (el volumen `backend_uploads_qa` puede conservarse si ya tenías archivos).
 
+### Migración Prisma fallida (P3018 / P3009)
+
+Si el backend muestra `migration … inventory_transfers_w2w failed` o `idx_inventory_items_name_trgm does not exist`:
+
+- La BD quedó a **medio migrar** (`_prisma_migrations` con fallo).
+- En **QA nuevo**, lo más simple: **borrar volumen `pgdata-qa`** y redeploy tras el fix en repo (`DROP INDEX IF EXISTS` en esa migración).
+- Alternativa sin borrar volumen (desde tu PC con `DATABASE_URL` QA):
+
+```bash
+cd backend
+npx prisma migrate resolve --rolled-back 20260414170504_inventory_transfers_w2w
+npx prisma migrate deploy
+```
+
+Luego redeploy o reiniciar el contenedor backend.
+
 ---
 
 ## 9. Duplicar app prod como plantilla (alternativa)
