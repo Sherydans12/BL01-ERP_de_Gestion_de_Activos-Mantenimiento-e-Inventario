@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PurgeTenantDomainDto } from './dto/purge-tenant-domain.dto';
+import { PurgeLocalStorageDto } from './dto/purge-local-storage.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import {
   PlatformDataAdminService,
@@ -31,6 +32,24 @@ export class PlatformDataAdminController {
   @Get('tenants')
   listTenants() {
     return this.platformData.listTenants();
+  }
+
+  @Get('local-storage')
+  localStorageSummary() {
+    return this.platformData.getLocalStorageSummary();
+  }
+
+  @Post('local-storage/purge')
+  @HttpCode(200)
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  purgeLocalStorage(@Body() dto: PurgeLocalStorageDto) {
+    return this.platformData.purgeLocalStorage(dto.confirmPhrase);
   }
 
   @Post('tenants')

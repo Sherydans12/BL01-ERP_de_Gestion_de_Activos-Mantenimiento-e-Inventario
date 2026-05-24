@@ -3,7 +3,26 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { existsSync } from 'fs';
+import { readdir, rmdir, stat, unlink } from 'fs/promises';
+import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
+
+export const LOCAL_STORAGE_PURGE_PHRASE = 'PURGE_LOCAL_UPLOADS';
+
+export interface LocalStorageSummaryDto {
+  driver: string;
+  uploadPath: string | null;
+  purgeEnabled: boolean;
+  fileCount: number;
+  totalBytes: number;
+}
+
+export interface PurgeLocalStorageResultDto {
+  filesRemoved: number;
+  bytesFreed: number;
+}
 
 export type PurgeDomain =
   | 'purchases'
@@ -85,7 +104,10 @@ const INVENTORY_SEQUENCE_TYPES = ['INV_SKU', 'INV_ITEM_AUTO'] as const;
 
 @Injectable()
 export class PlatformDataAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async listTenants(): Promise<PlatformTenantRow[]> {
     return this.prisma.tenant.findMany({
@@ -456,5 +478,111 @@ export class PlatformDataAdminService {
     }
 
     throw new BadRequestException('Dominio de purga no implementado.');
+  }
+
+  async getLocalStorageSummary(): Promise<LocalStorageSummaryDto> {
+    const driver = (
+      this.config.get<string>('STORAGE_DRIVER') || 'local'
+    ).toLowerCase();
+    if (driver !== 'local') {
+      return {
+        driver,
+        uploadPath: null,
+        purgeEnabled: false,
+        fileCount: 0,
+        totalBytes: 0,
+      };
+    }
+    const uploadPath =
+      this.config.get<string>('UPLOAD_PATH')?.trim() || './uploads';
+    const purgeEnabled =
+      this.config.get<string>('ALLOW_LOCAL_STORAGE_PURGE') === 'true';
+    const { fileCount, totalBytes } =
+      await this.scanLocalUploadDirectory(uploadPath);
+    return {
+      driver,
+      uploadPath,
+      purgeEnabled,
+      fileCount,
+      totalBytes,
+    };
+  }
+
+  async purgeLocalStorage(
+    confirmPhrase: string,
+  ): Promise<PurgeLocalStorageResultDto> {
+    if (confirmPhrase.trim() !== LOCAL_STORAGE_PURGE_PHRASE) {
+      throw new BadRequestException(
+        `Frase incorrecta. Escriba exactamente: ${LOCAL_STORAGE_PURGE_PHRASE}`,
+      );
+    }
+    if (this.config.get<string>('ALLOW_LOCAL_STORAGE_PURGE') !== 'true') {
+      throw new BadRequestException(
+        'Purga de archivos locales deshabilitada (ALLOW_LOCAL_STORAGE_PURGE).',
+      );
+    }
+    const driver = (
+      this.config.get<string>('STORAGE_DRIVER') || 'local'
+    ).toLowerCase();
+    if (driver !== 'local') {
+      throw new BadRequestException(
+        'Solo disponible con STORAGE_DRIVER=local (QA / disco).',
+      );
+    }
+    const uploadPath =
+      this.config.get<string>('UPLOAD_PATH')?.trim() || './uploads';
+    if (!existsSync(uploadPath)) {
+      return { filesRemoved: 0, bytesFreed: 0 };
+    }
+    return this.emptyLocalUploadDirectory(uploadPath);
+  }
+
+  private async scanLocalUploadDirectory(
+    root: string,
+  ): Promise<{ fileCount: number; totalBytes: number }> {
+    if (!existsSync(root)) {
+      return { fileCount: 0, totalBytes: 0 };
+    }
+    let fileCount = 0;
+    let totalBytes = 0;
+    const walk = async (dir: string) => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.isFile()) {
+          const s = await stat(full);
+          fileCount += 1;
+          totalBytes += s.size;
+        }
+      }
+    };
+    await walk(root);
+    return { fileCount, totalBytes };
+  }
+
+  private async emptyLocalUploadDirectory(
+    root: string,
+  ): Promise<PurgeLocalStorageResultDto> {
+    let filesRemoved = 0;
+    let bytesFreed = 0;
+    const walk = async (dir: string) => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+          await rmdir(full);
+        } else if (entry.isFile()) {
+          const s = await stat(full);
+          bytesFreed += s.size;
+          await unlink(full);
+          filesRemoved += 1;
+        }
+      }
+    };
+    await walk(root);
+    return { filesRemoved, bytesFreed };
   }
 }

@@ -139,28 +139,86 @@ Si el login falla con error CORS, `FRONTEND_URL` en el backend no coincide **car
 
 Podés usar la misma `RESEND_API_KEY` que prod con `RESEND_FROM_NAME=BaseLogic QA` para distinguir correos.
 
-### 4.4 Storage
+### 4.4 Storage (local en QA)
 
-| Modo | QA recomendado |
+Config recomendada en Coolify:
+
+```env
+STORAGE_DRIVER=local
+UPLOAD_PATH=/uploads
+ALLOW_LOCAL_STORAGE_PURGE=true
+```
+
+| Tema | Comportamiento |
 |------|----------------|
-| **local** | Volumen `backend_uploads_qa` (simple, aislado de prod) |
-| **r2** | Mismo bucket con `R2_KEY_PREFIX=env/qa` **o** bucket distinto |
+| **Redeploy** | Los archivos **no se pierden** si Coolify mantiene el volumen nombrado **`backend_uploads_qa`**. Un redeploy normal solo recrea contenedores, no el volumen. |
+| **Pérdida de archivos** | Solo si en Coolify **eliminás el volumen** o borrás el stack con “delete volumes”. |
+| **Limpiar disco** | UI **Datos plataforma** (`/app/admin/platform-data`) como `SUPER_ADMIN` → bloque «Archivos en disco» → confirmar `PURGE_LOCAL_UPLOADS`. API: `POST /api/super-admin/platform/local-storage/purge`. |
+| **BD vs archivos** | Purga de módulos (compras, etc.) **no** borra ficheros huérfanos; usá «Vaciar uploads» cuando quieras resetear adjuntos en QA. |
+
+En **producción** no definas `ALLOW_LOCAL_STORAGE_PURGE` (o `false`): el botón queda deshabilitado.
 
 ---
 
 ## 5. Datos iniciales en Postgres QA
 
-Elegí **una** opción:
+### 5.0 Comprobar si ya hay tenants y usuarios
+
+En Coolify → servicio **db** → terminal, o desde tu PC con `DATABASE_URL` de QA:
+
+```sql
+SELECT id, code, name FROM tenants;
+SELECT email, role, "isActive", "tenantId" FROM users ORDER BY email;
+```
+
+| Resultado | Significado |
+|-----------|-------------|
+| **0 tenants** | BD vacía tras migraciones (normal en QA nuevo). Hay que crear tenant + usuario (§5 A) o restaurar dump (§5 B). |
+| **Tenants sin users** | Ejecutá `npm run seed:super-admin` (§5 A). |
+| **Filas con emails conocidos** | Podés iniciar sesión en `https://qa.app.baselogic.cl` con esas credenciales (si no importaste solo BD sin conocer passwords, reseteá con bootstrap). |
+
+No puedo ver tu BD QA desde el repo; ejecutá esas consultas en tu entorno.
+
+Elegí **una** opción de carga:
 
 ### A) Base vacía + migraciones (arranque limpio)
 
-El entrypoint ya ejecuta `migrate deploy`. Luego, desde tu PC contra el Postgres QA (túnel o IP permitida):
+El entrypoint ya ejecuta `migrate deploy`. **`prisma seed` no inserta datos** (está vacío a propósito).
+
+1. Crear empresa **TPM** (si no existe tenant), desde tu PC apuntando a QA:
 
 ```bash
 cd backend
-# Usuarios / bootstrap controlado (solo QA)
+# .env con DATABASE_URL de Postgres QA
+```
+
+Si no hay tenant, insert mínimo (una vez):
+
+```sql
+INSERT INTO tenants (id, code, name, "isActive", "primaryColor", "createdAt", "updatedAt")
+VALUES (
+  gen_random_uuid(),
+  'TPM',
+  'TPM QA',
+  true,
+  '#00B4D8',
+  NOW(),
+  NOW()
+);
+```
+
+2. Usuario **SUPER_ADMIN** (acceso a Datos plataforma y limpieza de uploads):
+
+```bash
+npm run seed:super-admin
+# Por defecto: superadmin@test.com / Test1234!  — cambiar en QA tras primer login
+```
+
+3. Opcional — usuarios de negocio de prueba:
+
+```bash
 npm run db:clean-bootstrap-tpm
-# o seeds puntuales:
+# o solo catálogos:
 npm run seed:catalog-masters
 ```
 

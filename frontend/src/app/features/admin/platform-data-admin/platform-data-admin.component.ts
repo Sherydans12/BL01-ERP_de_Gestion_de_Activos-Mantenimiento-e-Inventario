@@ -67,6 +67,21 @@ export interface PurgeResultDto {
   deleted: Record<string, number>;
 }
 
+export interface LocalStorageSummaryDto {
+  driver: string;
+  uploadPath: string | null;
+  purgeEnabled: boolean;
+  fileCount: number;
+  totalBytes: number;
+}
+
+export interface PurgeLocalStorageResultDto {
+  filesRemoved: number;
+  bytesFreed: number;
+}
+
+const LOCAL_STORAGE_PURGE_PHRASE = 'PURGE_LOCAL_UPLOADS';
+
 const PURGE_COPY: Record<
   PurgeDomain,
   { title: string; hint: string }
@@ -171,6 +186,11 @@ export class PlatformDataAdminComponent implements OnInit {
   createForm = signal({ code: '', name: '', primaryColor: '#FF3366' });
   createSubmitting = signal(false);
 
+  localStorageSummary = signal<LocalStorageSummaryDto | null>(null);
+  localStorageLoading = signal(false);
+  localPurgePhrase = signal('');
+  localPurgeSubmitting = signal(false);
+
   purgeModalCopy = computed(() => {
     const d = this.purgeModalDomain();
     if (!d) return null;
@@ -179,6 +199,69 @@ export class PlatformDataAdminComponent implements OnInit {
 
   ngOnInit() {
     void this.loadTenants();
+    void this.loadLocalStorageSummary();
+  }
+
+  formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  async loadLocalStorageSummary() {
+    this.localStorageLoading.set(true);
+    try {
+      const s = await firstValueFrom(
+        this.http.get<LocalStorageSummaryDto>(
+          `${this.base}/local-storage`,
+        ),
+      );
+      this.localStorageSummary.set(s);
+    } catch {
+      this.localStorageSummary.set(null);
+    } finally {
+      this.localStorageLoading.set(false);
+    }
+  }
+
+  onLocalPurgePhraseInput(ev: Event) {
+    this.localPurgePhrase.set((ev.target as HTMLInputElement).value);
+  }
+
+  async executeLocalStoragePurge() {
+    if (this.localPurgePhrase().trim() !== LOCAL_STORAGE_PURGE_PHRASE) {
+      this.notify.error(
+        `Escriba exactamente: ${LOCAL_STORAGE_PURGE_PHRASE}`,
+      );
+      return;
+    }
+    this.localPurgeSubmitting.set(true);
+    try {
+      const res = await firstValueFrom(
+        this.http.post<PurgeLocalStorageResultDto>(
+          `${this.base}/local-storage/purge`,
+          { confirmPhrase: LOCAL_STORAGE_PURGE_PHRASE },
+        ),
+      );
+      this.notify.success(
+        `Archivos eliminados: ${res.filesRemoved} (${this.formatBytes(res.bytesFreed)}).`,
+      );
+      this.localPurgePhrase.set('');
+      await this.loadLocalStorageSummary();
+    } catch (err: unknown) {
+      const msg =
+        err &&
+        typeof err === 'object' &&
+        'error' in err &&
+        err.error &&
+        typeof err.error === 'object' &&
+        'message' in err.error
+          ? String((err.error as { message: string }).message)
+          : 'No se pudo vaciar la carpeta de uploads.';
+      this.notify.error(msg);
+    } finally {
+      this.localPurgeSubmitting.set(false);
+    }
   }
 
   async loadTenants() {

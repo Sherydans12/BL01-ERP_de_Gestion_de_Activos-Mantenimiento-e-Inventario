@@ -26,6 +26,8 @@ Todas las rutas: `JwtAuthGuard` + `RolesGuard` + `@Roles('SUPER_ADMIN')`.
 | `GET` | `/tenants` | Lista empresas (`id`, `code`, `name`, `isActive`). |
 | `GET` | `/tenants/:tenantId/data-summary` | Conteos por módulo (compras, inventario, operaciones, plataforma). |
 | `POST` | `/tenants/:tenantId/purge/:domain` | Ejecuta purga del dominio (ver tabla abajo). Cuerpo JSON: `{ "confirmTenantCode": "<Tenant.code exacto>" }`. |
+| `GET` | `/local-storage` | Resumen de disco local (`STORAGE_DRIVER=local`): ruta, conteo, bytes, si `ALLOW_LOCAL_STORAGE_PURGE=true`. |
+| `POST` | `/local-storage/purge` | Vacía la carpeta `UPLOAD_PATH` (todos los tenants). Cuerpo: `{ "confirmPhrase": "PURGE_LOCAL_UPLOADS" }`. Solo si `ALLOW_LOCAL_STORAGE_PURGE=true`. |
 
 Validación del path `:domain`: debe estar en la constante exportada **`PURGE_DOMAINS`** del servicio (el controlador importa la misma lista).
 
@@ -49,7 +51,7 @@ Cada purga corre en **`$transaction`** donde aplica. El código de confirmación
 ### Qué **no** hace este módulo
 
 - No elimina **usuarios**, **contratos**, **subcontratos**, **`tenant_roles`**, **`purchase_settings`** (salvo políticas en dominio dedicado).
-- No borra **archivos** en storage por `purchase_documents` / PDFs: solo filas en BD (posibles huérfanos en volumen; GC futuro si se centraliza).
+- Las purgas por dominio **no** borran ficheros en disco/R2 (posibles huérfanos). Con `STORAGE_DRIVER=local` y `ALLOW_LOCAL_STORAGE_PURGE=true`, usar **`POST /local-storage/purge`** o el bloque «Archivos en disco» en la UI.
 - No implementa purga de **contratos/faenas**: el resumen solo expone **conteos** de `contracts` / `subcontracts` para contexto.
 
 ## Orden sugerido (reset “duro” de datos de negocio)

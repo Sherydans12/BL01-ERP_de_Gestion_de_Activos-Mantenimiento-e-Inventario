@@ -45,6 +45,7 @@ services:
       R2_REGION: ${R2_REGION:-auto}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       R2_KEY_PREFIX: ${R2_KEY_PREFIX:-env/qa}
+      ALLOW_LOCAL_STORAGE_PURGE: ${ALLOW_LOCAL_STORAGE_PURGE:-true}
       # QA: no bypass 2FA salvo prueba puntual
       # AUTH_STEP_UP_BYPASS: "false"
     volumes:

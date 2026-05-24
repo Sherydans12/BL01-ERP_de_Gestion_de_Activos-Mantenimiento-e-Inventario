@@ -26,6 +26,52 @@
     </div>
   </div>
 
+  @if (localStorageSummary(); as ls) {
+    @if (ls.driver === 'local') {
+      <section class="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3">
+        <h2 class="text-sm font-semibold text-main">Archivos en disco (QA / local)</h2>
+        <p class="text-xs text-muted">
+          Volumen <span class="font-mono text-main">{{ ls.uploadPath }}</span> —
+          {{ ls.fileCount }} archivo(s), {{ formatBytes(ls.totalBytes) }}.
+          Los redeploy conservan el volumen <span class="font-mono">backend_uploads_qa</span> salvo que lo borres en Coolify.
+        </p>
+        @if (ls.purgeEnabled) {
+          <p class="text-xs text-muted">
+            Vacía <strong class="text-main">toda</strong> la carpeta de uploads (todos los tenants).
+            No borra filas en BD; purga módulos de compras si necesitás coherencia.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-2 sm:items-end">
+            <label class="flex-1 text-xs text-muted">
+              Confirmación: escriba
+              <span class="font-mono text-primary">{{ 'PURGE_LOCAL_UPLOADS' }}</span>
+              <input
+                type="text"
+                class="mt-1 w-full rounded-lg border border-border bg-dark/40 px-3 py-2 text-sm text-main font-mono"
+                [value]="localPurgePhrase()"
+                (input)="onLocalPurgePhraseInput($event)"
+                autocomplete="off"
+              />
+            </label>
+            <button
+              type="button"
+              (click)="executeLocalStoragePurge()"
+              [disabled]="localPurgeSubmitting()"
+              class="px-4 py-2 rounded-lg border border-red-500/50 text-sm font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50 shrink-0"
+            >
+              {{ localPurgeSubmitting() ? 'Borrando…' : 'Vaciar uploads' }}
+            </button>
+          </div>
+        } @else {
+          <p class="text-xs text-amber-400/90">
+            Purga deshabilitada. En QA definí <span class="font-mono">ALLOW_LOCAL_STORAGE_PURGE=true</span>.
+          </p>
+        }
+      </section>
+    }
+  } @else if (localStorageLoading()) {
+    <p class="text-xs text-muted">Comprobando almacenamiento…</p>
+  }
+
   @if (loading() && tenants().length === 0) {
     <p class="text-sm text-muted">Cargando empresas…</p>
   } @else {
