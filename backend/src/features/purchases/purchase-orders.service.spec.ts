@@ -733,6 +733,14 @@ describe('PurchaseOrdersService — resetToDraft', () => {
     service = module.get(PurchaseOrdersService);
   });
 
+  it('rechaza reinicio si la OC no existe', async () => {
+    prisma.purchaseOrder.findFirst.mockResolvedValue(null);
+
+    await expect(service.resetToDraft(orderId, user)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
   it('solo permite reiniciar OC en estado REJECTED', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue({
       id: orderId,
@@ -1079,6 +1087,24 @@ describe('PurchaseOrdersService — updateSensitiveFields', () => {
   it('rechaza edición en estado no permitido', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue(
       baseOrder({ status: 'APPROVED', approvals: [] }) as never,
+    );
+
+    await expect(
+      service.updateSensitiveFields(orderId, { totalAmount: 100 }, user),
+    ).rejects.toThrow(/no se puede editar en su estado actual/);
+  });
+
+  it('rechaza edición en SENT o PARTIALLY_RECEIVED (post-aprobación operativa)', async () => {
+    prisma.purchaseOrder.findFirst.mockResolvedValue(
+      baseOrder({ status: 'SENT', approvals: [] }) as never,
+    );
+
+    await expect(
+      service.updateSensitiveFields(orderId, { totalAmount: 100 }, user),
+    ).rejects.toThrow(/no se puede editar en su estado actual/);
+
+    prisma.purchaseOrder.findFirst.mockResolvedValue(
+      baseOrder({ status: 'PARTIALLY_RECEIVED', approvals: [] }) as never,
     );
 
     await expect(

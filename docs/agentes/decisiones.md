@@ -19,6 +19,11 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:** `backend/test/jest-setup.ts` (mock `file-type`); specs smoke con deps/guards; workflow `.github/workflows/backend-tests.yml` (`test:domain` + `npm test` en `main`/`develop`); rama remota **`develop`** para staging.
 - **Consecuencias:** Suite completa **220 tests** verde. Pendiente usuario: subdominio QA + segunda app Coolify (checklist §4 en `entornos-git-despliegue.md`).
 
+## 2026-05-22 — Suite N+11: resetToDraft, edición OC post-envío, W2W recepción
+
+- **Decisión:** `purchase-orders` +3; `inventory-transfer` +4 (validaciones execute/confirm + política destino).
+- **Consecuencias:** Suite dominio **233 tests**. `updateSensitiveFields` no valida recepciones (solo estados); anulación sí (`cancel`).
+
 ## 2026-05-22 — Suite N+10: OC parcial, SRC delete línea, performReturn sin stock
 
 - **Decisión:** `purchase-orders` +4 (reject vs recepción parcial, cancel sin guías, forceClose audit); `purchase-requisitions` +1 (delete línea); `inventory-stock` +1 (política en primera devolución).

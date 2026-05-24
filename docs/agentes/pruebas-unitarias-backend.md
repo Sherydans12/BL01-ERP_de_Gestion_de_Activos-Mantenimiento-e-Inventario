@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **227 tests** en 12 archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **233 tests** en 12 archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -18,10 +18,10 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
 | **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
-| **Inventario — transferencias W2W** | ~85 % listado/detalle | 16 | W2W + `listTransfers` / `getTransferById` (§3.3) |
+| **Inventario — transferencias W2W** | ~90 % mutación/recepción | 20 | W2W + validaciones recepción (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~75 % flujo físico | 14 | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
-| **Compras — gobernanza OC** | ~88 % firma/edición/SRC | 50 | ACL, reject/cancel/forceClose, ciclo OC (§4.4) |
+| **Compras — gobernanza OC** | ~90 % firma/edición/SRC | 52 | ACL, reset/edición sensible, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~50 % | 19 | `validateInvoiceMatch`, `overrule`, notas de crédito + revalidación |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
@@ -54,10 +54,15 @@ npm run test:domain:watch
 - **`PurchaseRequisitionsService.update`** (+1): elimina línea sin cotización en `PENDING_APPROVAL`.
 - **`InventoryStockService.performReturn`** (+1): alta de `itemStock` con política del artículo.
 
-### Siguiente paso recomendado (iteración N+11)
+### Iteración N+11 (2026-05-22) — hecho
 
-1. **`PurchaseOrdersService.resetToDraft`** / edición sensible con recepciones.
-2. **`InventoryTransferService`**: casos borde cancelación o rechazo W2W.
+- **`PurchaseOrdersService`** (+3): `resetToDraft` not found; `updateSensitiveFields` bloquea `SENT` / `PARTIALLY_RECEIVED`.
+- **`InventoryTransferService`** (+4): usuario/bodega inválidos en `executeTransfer`; usuario sin id en `confirmReception`; `clearItemStockPolicy` post-recepción.
+
+### Siguiente paso recomendado (iteración N+12)
+
+1. **`warehouse-receipts`**: `confirm` con discrepancias / cantidades parciales adicionales.
+2. **`purchase-invoices`**: `overruleThreeWayMatch` casos borde.
 3. Cobertura CI (`test:cov`) con umbral por carpeta (opcional).
 
 ---
@@ -108,12 +113,12 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **41** | Movimientos, devoluciones OT, IRA, PDF (§3.2) |
 | `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **38** | Ciclo SRC + `update` (§4.9) |
 | `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
-| `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **16** | Mutación + listado/detalle (§3.3) |
+| `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **20** | Mutación, recepción, listado (§3.3) |
 | `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
 | `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **14** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | `features/tenant-roles/tenant-role-defaults.spec.ts` | **Compras — `resolveApprovalPolicyForUser`** | **5** | Función pura ACL (ver §4) |
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
-| `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **50** | Firmas, reject/cancel/forceClose, SRC→OC (§4.4) |
+| `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
 | `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **12** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
 | `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **8** | `create`/`remove`, P2002, revalidación 3-way (§4) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
@@ -126,7 +131,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 227 tests passed (inventario 99 + compras 128).
+**Suite dominio crítico (2026-05-22):** 233 tests passed (inventario 103 + compras 130).
 
 ---
 

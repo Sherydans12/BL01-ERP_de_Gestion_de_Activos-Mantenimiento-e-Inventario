@@ -95,6 +95,25 @@ describe('InventoryTransferService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    it('rechaza usuario sin identificador', async () => {
+      await expect(
+        service.executeTransfer(baseDto, { tenantId, role: 'ADMIN' }),
+      ).rejects.toThrow(/Usuario no identificado/);
+    });
+
+    it('rechaza bodega origen o destino inexistente', async () => {
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ id: destId, code: 'DST', tenantId } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await expect(
+        service.executeTransfer(baseDto, adminUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
     it('rechaza origen y destino iguales', async () => {
       await expect(
         service.executeTransfer(
@@ -261,6 +280,12 @@ describe('InventoryTransferService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it('rechaza recepción sin usuario identificado', async () => {
+      await expect(
+        service.confirmReception(transferId, { tenantId, role: 'ADMIN' }),
+      ).rejects.toThrow(/Usuario no identificado/);
+    });
+
     it('rechaza recepción si no está en SHIPPED', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransfer.findFirst.mockResolvedValue({
@@ -377,6 +402,34 @@ describe('InventoryTransferService', () => {
             maxStock: 50,
           }),
         }),
+      );
+    });
+
+    it('invoca clearItemStockPolicy en destino tras recepción', async () => {
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.inventoryTransfer.findFirst.mockResolvedValue(
+          shippedTransfer as never,
+        );
+        tx.itemStock.findUnique.mockResolvedValue({
+          quantity: 2,
+          unitCost: 8,
+        } as never);
+        tx.itemStock.upsert.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.inventoryTransfer.update.mockResolvedValue({} as never);
+        tx.inventoryTransfer.findUnique.mockResolvedValue({
+          status: 'COMPLETED',
+        } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await service.confirmReception(transferId, supervisorDestAccess);
+
+      expect(mockClearItemStockPolicy).toHaveBeenCalledWith(
+        tx,
+        tenantId,
+        itemId,
+        destId,
       );
     });
   });
