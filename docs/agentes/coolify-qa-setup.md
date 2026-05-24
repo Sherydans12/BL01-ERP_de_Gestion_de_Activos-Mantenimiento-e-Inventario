@@ -312,15 +312,24 @@ PRISMA_MIGRATE_AUTO_RECOVER_FAILED=true
 
 **Opción C — Manual** (contenedor backend o tu PC con `DATABASE_URL` QA):
 
+Si el log dice *«type InventoryTransferStatus already exists»*, el esquema W2W quedó **a medias** — no uses `rolled-back` (repite el fallo). Marcá la migración como aplicada:
+
 ```bash
 cd backend
+npx prisma migrate resolve --applied 20260414170504_inventory_transfers_w2w
+npx prisma migrate deploy
+```
+
+Si la BD está vacía o la migración falló sin crear objetos:
+
+```bash
 npx prisma migrate resolve --rolled-back 20260414170504_inventory_transfers_w2w
 npx prisma migrate deploy
 ```
 
 Reiniciar el contenedor backend en Coolify.
 
-Si tras el `rolled-back` falla con *«type InventoryTransferStatus already exists»*, la migración se aplicó **a medias**. El repo corrige el SQL para reintentos idempotentes; hace falta **redeploy del backend** (imagen con migración nueva) y otro ciclo de recover + deploy, o borrar volumen `pgdata-qa`.
+Con `PRISMA_MIGRATE_AUTO_RECOVER_FAILED=true`, el entrypoint detecta enum/tabla W2W y usa `--applied` automáticamente. Para reintentos con SQL idempotente (`DO $$ … duplicate_object`), redeploy del backend con `develop` actualizado (commit `292ae40` o posterior).
 
 ---
 
