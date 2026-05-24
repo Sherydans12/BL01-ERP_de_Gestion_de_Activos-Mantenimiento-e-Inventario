@@ -16,6 +16,8 @@ En `toast.component.ts`, el contenedor de la pila de toasts usa **`popover="manu
 
 Si el navegador no soporta popover, se mantiene el comportamiento anterior (`z-[9999]` sin atributo `popover`).
 
+**Posicionamiento:** el UA stylesheet de `[popover]` centra el host (`inset: 0; margin: auto`). La clase `.toast-stack-host` (y `:popover-open`) **anula** eso y fija la pila en **abajo-derecha** (`bottom/right: 1rem`). Sin esa regla, cualquier toast aparece en el centro de la pantalla, no solo en modales.
+
 ## Reglas para agentes / PRs
 
 1. **No asumir** que “subí el z-index a 99999” hará visible un aviso sobre un `<dialog showModal>`: revisar este documento.
