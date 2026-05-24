@@ -214,27 +214,23 @@ cd backend
 # .env con DATABASE_URL de Postgres QA
 ```
 
-Si no hay tenant, insert mínimo (una vez):
-
-```sql
-INSERT INTO tenants (id, code, name, "isActive", "primaryColor", "createdAt", "updatedAt")
-VALUES (
-  gen_random_uuid(),
-  'TPM',
-  'TPM QA',
-  true,
-  '#00B4D8',
-  NOW(),
-  NOW()
-);
-```
-
-2. Usuario **SUPER_ADMIN** (acceso a Datos plataforma y limpieza de uploads):
+2. Usuario **SUPER_ADMIN** (en terminal del contenedor **backend**, `/app`):
 
 ```bash
 npm run seed:super-admin
-# Por defecto: superadmin@test.com / Test1234!  — cambiar en QA tras primer login
 ```
+
+Crea el tenant **TPM** si no existe. Credenciales por defecto: `superadmin@test.com` / `Test1234!`
+
+(No uses `ts-node` en Docker: la imagen no incluye `src/`. El script es `scripts/seed-super-admin.mjs`.)
+
+**Solo si preferís SQL manual** — contenedor **db** (una línea, no pegar SQL multilínea en `sh`):
+
+```sh
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "INSERT INTO tenants (id, code, name, is_active, primary_color, created_at, updated_at) VALUES (gen_random_uuid(), 'TPM', 'TPM QA', true, '#00B4D8', NOW(), NOW()) ON CONFLICT (code) DO NOTHING;"
+```
+
+Luego igual `npm run seed:super-admin` en el backend.
 
 3. Opcional — usuarios de negocio de prueba:
 

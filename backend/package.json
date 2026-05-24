@@ -27,7 +27,7 @@
     "email-previews": "ts-node -r tsconfig-paths/register --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" src/common/email/preview-renderer.ts",
     "seed:p2p-test-users": "ts-node prisma/seed-p2p-test-users.ts",
     "seed:catalog-masters": "ts-node prisma/seed-catalog-masters.ts",
-    "seed:super-admin": "ts-node prisma/seed-super-admin-user.ts",
+    "seed:super-admin": "node scripts/seed-super-admin.mjs",
     "seed:load-test-items": "ts-node prisma/seed-load-test-items.ts",
     "db:clean-test-data": "ts-node prisma/clean-test-data.ts",
     "db:clean-bootstrap-tpm": "ts-node prisma/clean-and-bootstrap-tpm-users.ts",
