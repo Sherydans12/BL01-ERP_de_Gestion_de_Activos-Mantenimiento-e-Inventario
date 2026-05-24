@@ -1,40 +1,29 @@
+-- Idempotente: BD nueva o reintento tras fallo parcial (P3018 / rolled-back).
+
 -- CreateEnum
-CREATE TYPE "InventoryTransferStatus" AS ENUM ('COMPLETED', 'CANCELLED');
+DO $$ BEGIN
+    CREATE TYPE "InventoryTransferStatus" AS ENUM ('COMPLETED', 'CANCELLED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
--- AlterEnum
--- This migration adds more than one value to an enum.
--- With PostgreSQL versions 11 and earlier, this is not possible
--- in a single migration. This can be worked around by creating
--- multiple migrations, each migration adding only one value to
--- the enum.
+-- AlterEnum (PostgreSQL 16: IF NOT EXISTS)
+ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'TRANSFER_OUT';
+ALTER TYPE "TransactionType" ADD VALUE IF NOT EXISTS 'TRANSFER_IN';
 
-
-ALTER TYPE "TransactionType" ADD VALUE 'TRANSFER_OUT';
-ALTER TYPE "TransactionType" ADD VALUE 'TRANSFER_IN';
-
--- DropIndex (IF EXISTS: en BD nueva los índices trgm se crean en 20260418130000; el unique en 20260415130000)
+-- DropIndex
 DROP INDEX IF EXISTS "idx_inventory_items_name_trgm";
-
--- DropIndex
 DROP INDEX IF EXISTS "idx_inventory_items_part_number_trgm";
-
--- DropIndex
 DROP INDEX IF EXISTS "idx_inventory_items_tenant_category";
-
--- DropIndex
 DROP INDEX IF EXISTS "item_categories_tenant_id_name_key";
 
 -- AlterTable
 ALTER TABLE "item_categories" ALTER COLUMN "id" DROP DEFAULT;
-
--- AlterTable
 ALTER TABLE "unit_of_measures" ALTER COLUMN "id" DROP DEFAULT;
-
--- AlterTable
 ALTER TABLE "warehouse_bins" ALTER COLUMN "id" DROP DEFAULT;
 
 -- CreateTable
-CREATE TABLE "inventory_transfers" (
+CREATE TABLE IF NOT EXISTS "inventory_transfers" (
     "id" UUID NOT NULL,
     "tenant_id" UUID NOT NULL,
     "origin_warehouse_id" UUID NOT NULL,
@@ -46,8 +35,7 @@ CREATE TABLE "inventory_transfers" (
     CONSTRAINT "inventory_transfers_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "inventory_transfer_lines" (
+CREATE TABLE IF NOT EXISTS "inventory_transfer_lines" (
     "id" UUID NOT NULL,
     "transfer_id" UUID NOT NULL,
     "item_id" UUID NOT NULL,
@@ -58,31 +46,44 @@ CREATE TABLE "inventory_transfer_lines" (
 );
 
 -- CreateIndex
-CREATE INDEX "inventory_transfers_tenant_id_created_at_idx" ON "inventory_transfers"("tenant_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "inventory_transfer_lines_transfer_id_idx" ON "inventory_transfer_lines"("transfer_id");
-
--- CreateIndex
-CREATE INDEX "item_categories_tenant_id_idx" ON "item_categories"("tenant_id");
-
--- CreateIndex
-CREATE INDEX "item_categories_tenant_id_parent_category_id_idx" ON "item_categories"("tenant_id", "parent_category_id");
+CREATE INDEX IF NOT EXISTS "inventory_transfers_tenant_id_created_at_idx" ON "inventory_transfers"("tenant_id", "created_at");
+CREATE INDEX IF NOT EXISTS "inventory_transfer_lines_transfer_id_idx" ON "inventory_transfer_lines"("transfer_id");
+CREATE INDEX IF NOT EXISTS "item_categories_tenant_id_idx" ON "item_categories"("tenant_id");
+CREATE INDEX IF NOT EXISTS "item_categories_tenant_id_parent_category_id_idx" ON "item_categories"("tenant_id", "parent_category_id");
 
 -- AddForeignKey
-ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_transfers_tenant_id_fkey') THEN
+        ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_origin_warehouse_id_fkey" FOREIGN KEY ("origin_warehouse_id") REFERENCES "warehouses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_transfers_origin_warehouse_id_fkey') THEN
+        ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_origin_warehouse_id_fkey" FOREIGN KEY ("origin_warehouse_id") REFERENCES "warehouses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_destination_warehouse_id_fkey" FOREIGN KEY ("destination_warehouse_id") REFERENCES "warehouses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_transfers_destination_warehouse_id_fkey') THEN
+        ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_destination_warehouse_id_fkey" FOREIGN KEY ("destination_warehouse_id") REFERENCES "warehouses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_transfers_created_by_id_fkey') THEN
+        ALTER TABLE "inventory_transfers" ADD CONSTRAINT "inventory_transfers_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "inventory_transfer_lines" ADD CONSTRAINT "inventory_transfer_lines_transfer_id_fkey" FOREIGN KEY ("transfer_id") REFERENCES "inventory_transfers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_transfer_lines_transfer_id_fkey') THEN
+        ALTER TABLE "inventory_transfer_lines" ADD CONSTRAINT "inventory_transfer_lines_transfer_id_fkey" FOREIGN KEY ("transfer_id") REFERENCES "inventory_transfers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "inventory_transfer_lines" ADD CONSTRAINT "inventory_transfer_lines_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "inventory_items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_transfer_lines_item_id_fkey') THEN
+        ALTER TABLE "inventory_transfer_lines" ADD CONSTRAINT "inventory_transfer_lines_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "inventory_items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+END $$;

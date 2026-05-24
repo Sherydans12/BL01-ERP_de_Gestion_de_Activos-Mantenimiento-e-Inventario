@@ -320,6 +320,8 @@ npx prisma migrate deploy
 
 Reiniciar el contenedor backend en Coolify.
 
+Si tras el `rolled-back` falla con *«type InventoryTransferStatus already exists»*, la migración se aplicó **a medias**. El repo corrige el SQL para reintentos idempotentes; hace falta **redeploy del backend** (imagen con migración nueva) y otro ciclo de recover + deploy, o borrar volumen `pgdata-qa`.
+
 ---
 
 ## 9. Duplicar app prod como plantilla (alternativa)
