@@ -2,7 +2,7 @@
 
 Guía operativa para una **segunda aplicación** en la misma VPS que producción: base Postgres **aislada**, dominios **distintos**, rama Git **`develop`**, compose **`docker-compose.qa.yml`**.
 
-**Última actualización:** 2026-05-22
+**Última actualización:** 2026-05-24
 
 ---
 
@@ -12,8 +12,8 @@ Guía operativa para una **segunda aplicación** en la misma VPS que producción
 |---------|---------------------|------------|
 | Rama Git | `main` | **`develop`** |
 | Compose | `docker-compose.prod.yml` | **`docker-compose.qa.yml`** |
-| Front (ejemplo) | `https://app.baselogic.cl` | `https://qa.app.baselogic.cl` |
-| API (ejemplo) | `https://api.baselogic.cl` | `https://qa.api.baselogic.cl` |
+| Front | `https://app.baselogic.cl` | **`https://qa.baselogic.cl`** |
+| API | `https://api.baselogic.cl` | **`https://qa-api.baselogic.cl`** |
 | Postgres | volumen prod | volumen **`pgdata-qa`** (otro) |
 | Uploads | volumen prod | volumen **`backend_uploads_qa`** |
 | JWT / VAPID | prod | **valores nuevos** (no reutilizar prod) |
@@ -25,10 +25,22 @@ Guía operativa para una **segunda aplicación** en la misma VPS que producción
 - [ ] Coolify operativo en la VPS (misma instancia que prod está bien).
 - [ ] Red Docker externa **`coolify`** existe (la crea Coolify; prod ya la usa).
 - [ ] Rama **`develop`** en GitHub con este repo (compose QA + `environment.qa.ts`).
-- [ ] DNS: registros **A** (o CNAME) hacia la IP de la VPS, por ejemplo:
-  - `qa.app.baselogic.cl`
-  - `qa.api.baselogic.cl`  
-  (Podés usar otros nombres; luego los copiás **tal cual** en variables y en Coolify.)
+- [ ] DNS en Cloudflare (registros **A** o CNAME, proxy naranja opcional) hacia la IP de la VPS:
+  - **`qa.baselogic.cl`** → front
+  - **`qa-api.baselogic.cl`** → API (misma IP; Coolify enruta por FQDN)
+
+### 1.1 Cloudflare y certificado SSL
+
+Los hostnames QA son **un solo nivel** bajo `baselogic.cl` (`qa` y `qa-api`). El certificado **Universal SSL** (`*.baselogic.cl`) los cubre, a diferencia de `qa.app.baselogic.cl` (dos niveles, no incluido en el wildcard gratuito).
+
+| Host | Servicio Coolify |
+|------|------------------|
+| `qa.baselogic.cl` | `frontend` (puerto interno **8080**) |
+| `qa-api.baselogic.cl` | `backend` (puerto **3000**) |
+
+**SSL/TLS** en Cloudflare: **Full** o **Full (strict)** si el origen (Coolify/Let’s Encrypt) ya sirve HTTPS.
+
+Tras crear los registros DNS, esperá unos minutos a que el edge certificate incluya los nuevos nombres. Si cambiás de `qa.app.*` / `qa.api.*`, actualizá también variables en Coolify (§4) y **rebuild** del frontend.
 
 ---
 
@@ -90,8 +102,8 @@ Asigná dominio HTTPS en Coolify **por servicio** (Traefik / Let’s Encrypt):
 
 | Servicio en compose | Puerto interno | FQDN sugerido |
 |---------------------|----------------|---------------|
-| `backend` | **3000** | `qa.api.baselogic.cl` |
-| `frontend` | **8080** (no 80) | `qa.app.baselogic.cl` |
+| `backend` | **3000** | `qa-api.baselogic.cl` |
+| `frontend` | **8080** (no 80) | `qa.baselogic.cl` |
 
 **Importante (puerto 8080):** el nginx del front escucha en **8080** dentro del contenedor. En healthcheck y “port mapping” interno usá **8080**. La URL pública **no** debe llevar `:8080`. Ver [DEPLOY-COOLIFY.md](../../DEPLOY-COOLIFY.md) § Frontend Docker.
 
@@ -115,7 +127,7 @@ Si Coolify no creó la red, en la VPS: `docker network create coolify` (suele ex
    - Nest escuchando en 3000
    - Sin error de `STORAGE_DRIVER=r2` incompleto (si usás R2).
 3. Revisá logs del **frontend**: nginx en 8080.
-4. Abrí `https://qa.app.baselogic.cl` → login (si hay usuarios en BD).
+4. Abrí `https://qa.baselogic.cl` → login (si hay usuarios en BD).
 
 ---
 
@@ -135,9 +147,9 @@ cd backend && npx web-push generate-vapid-keys
 |----------|--------|
 | `JWT_SECRET` | **Distinto** al de producción |
 | `DB_PASSWORD` | Fuerte, solo QA |
-| `FRONTEND_URL` | Exactamente el origen del front QA (`https://qa.app...`, sin `/` final) |
-| `BACKEND_PUBLIC_URL` | Origen API sin `/api` (`https://qa.api...`) |
-| `QA_API_URL` | API + `/api` (`https://qa.api.../api`) |
+| `FRONTEND_URL` | Origen front: `https://qa.baselogic.cl` (sin `/` final) |
+| `BACKEND_PUBLIC_URL` | Origen API sin `/api`: `https://qa-api.baselogic.cl` |
+| `QA_API_URL` | `https://qa-api.baselogic.cl/api` |
 | `QA_SITE_URL` | Mismo origen que `FRONTEND_URL` |
 | `VAPID_*` | Par **nuevo**; `VAPID_PUBLIC_KEY` también va al build del front |
 
@@ -185,7 +197,7 @@ SELECT email, role, "isActive", "tenantId" FROM users ORDER BY email;
 |-----------|-------------|
 | **0 tenants** | BD vacía tras migraciones (normal en QA nuevo). Hay que crear tenant + usuario (§5 A) o restaurar dump (§5 B). |
 | **Tenants sin users** | Ejecutá `npm run seed:super-admin` (§5 A). |
-| **Filas con emails conocidos** | Podés iniciar sesión en `https://qa.app.baselogic.cl` con esas credenciales (si no importaste solo BD sin conocer passwords, reseteá con bootstrap). |
+| **Filas con emails conocidos** | Podés iniciar sesión en `https://qa.baselogic.cl` con esas credenciales (si no importaste solo BD sin conocer passwords, reseteá con bootstrap). |
 
 No puedo ver tu BD QA desde el repo; ejecutá esas consultas en tu entorno.
 
@@ -249,7 +261,7 @@ Opcional: anonimizar emails en QA con SQL ad hoc antes de dar acceso al equipo.
 
 ## 6. Checklist post-deploy
 
-- [ ] `GET https://qa.api.baselogic.cl/api` responde (health del backend).
+- [ ] `GET https://qa-api.baselogic.cl/api` responde (health del backend).
 - [ ] Front carga sin 522 / sin `:8080` en la barra de direcciones.
 - [ ] Login con usuario de prueba.
 - [ ] Un flujo inventario (consulta stock) o lectura de OT.
@@ -262,7 +274,7 @@ Opcional: anonimizar emails en QA con SQL ad hoc antes de dar acceso al equipo.
 
 ```text
 feature/xxx  →  PR a develop  →  CI verde  →  Coolify auto-deploy QA
-       →  pruebas en qa.app.*
+       →  pruebas en qa.baselogic.cl
        →  PR develop → main  →  deploy producción
 ```
 

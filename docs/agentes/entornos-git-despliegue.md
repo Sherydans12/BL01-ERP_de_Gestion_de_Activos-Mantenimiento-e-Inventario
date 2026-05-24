@@ -2,7 +2,7 @@
 
 Flujo **main → producción** y rama **`develop` → QA/staging** (Coolify). CI en GitHub Actions valida tests antes de merge.
 
-**Última actualización:** 2026-05-22
+**Última actualización:** 2026-05-24
 
 ---
 
@@ -91,7 +91,7 @@ Archivos en repo:
 Checklist rápido:
 
 - [ ] Proyecto **TPM QA** en Coolify → Docker Compose → `docker-compose.qa.yml` → rama **`develop`**
-- [ ] DNS `qa.app.*` y `qa.api.*` (o tus subdominios) → misma VPS
+- [ ] DNS `qa.baselogic.cl` y `qa-api.baselogic.cl` → misma VPS (ver [coolify-qa-setup.md](coolify-qa-setup.md) §1)
 - [ ] Variables desde `deploy/qa.env.example` (`JWT_SECRET` y VAPID **nuevos**)
 - [ ] FQDN backend puerto **3000**, frontend puerto interno **8080**
 - [ ] Volúmenes **nuevos** (`pgdata-qa`, `backend_uploads_qa`) — no los de prod

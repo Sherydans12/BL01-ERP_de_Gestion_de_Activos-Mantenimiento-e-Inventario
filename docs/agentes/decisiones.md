@@ -9,6 +9,12 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-05-24 — Dominios QA: `qa.baselogic.cl` + `qa-api.baselogic.cl`
+
+- **Contexto:** `qa.app.*` / `qa.api.*` no entran en el wildcard gratuito `*.baselogic.cl` de Cloudflare (dos niveles).
+- **Decisión:** Front `https://qa.baselogic.cl`, API `https://qa-api.baselogic.cl`; plantilla `deploy/qa.env.example` y [coolify-qa-setup.md](coolify-qa-setup.md) actualizados.
+- **Consecuencias:** Tras cambio DNS, actualizar variables Coolify y **rebuild** frontend (`QA_API_URL`, `FRONTEND_URL`).
+
 ## 2026-05-22 — Stack Coolify QA (`docker-compose.qa.yml`)
 
 - **Decisión:** Compose QA, `environment.qa.ts` + build args en `frontend/Dockerfile`, plantilla `deploy/qa.env.example`, guía [coolify-qa-setup.md](coolify-qa-setup.md).

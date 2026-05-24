@@ -1,5 +1,6 @@
 /**
  * QA / staging — sustituido en build Docker vía ARG (ver frontend/Dockerfile).
+ * Ejemplo: api https://qa-api.baselogic.cl/api · site https://qa.baselogic.cl
  * Placeholders: __QA_API_URL__, __QA_SITE_URL__, __QA_VAPID_PUBLIC_KEY__
  */
 export const environment = {

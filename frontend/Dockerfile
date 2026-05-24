@@ -3,8 +3,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 ARG ANGULAR_BUILD_CONFIGURATION=production
-ARG QA_API_URL=https://api-qa.ejemplo.com/api
-ARG QA_SITE_URL=https://qa.ejemplo.com
+ARG QA_API_URL=https://qa-api.baselogic.cl/api
+ARG QA_SITE_URL=https://qa.baselogic.cl
 ARG QA_VAPID_PUBLIC_KEY=
 
 COPY package*.json ./
