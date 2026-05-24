@@ -17,7 +17,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
     build: () =>
       buildMailInviteUser({
         name: 'María Ignacia Pérez',
-        role: 'SUPERVISOR',
+        role: 'USER',
         activationLink: `${SAMPLE_BASE}/auth/activate?token=ejemplo_token_activacion_hex_64`,
         organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),
@@ -28,7 +28,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
     build: () =>
       buildMailResendActivation({
         name: 'Juan Mecánico',
-        role: 'MECHANIC',
+        role: 'USER',
         activationLink: `${SAMPLE_BASE}/auth/activate?token=otro_token_reeenvio`,
         organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),

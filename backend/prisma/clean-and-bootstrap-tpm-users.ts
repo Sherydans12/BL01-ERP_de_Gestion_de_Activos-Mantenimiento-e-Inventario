@@ -48,7 +48,7 @@ const BOOTSTRAP_USERS: BootstrapUser[] = [
     tenantRoleName: 'Supervisor de mantención',
     tenantRoleDescription:
       'Supervisión de mantención; permisos base tipo supervisor.',
-    baseRole: UserRole.SUPERVISOR,
+    baseRole: UserRole.USER,
   },
   {
     email: 'hugo.godoy@tmp-chile.con',

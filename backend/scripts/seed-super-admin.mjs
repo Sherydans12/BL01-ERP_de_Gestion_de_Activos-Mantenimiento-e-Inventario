@@ -12,8 +12,6 @@ import { PrismaClient, UserRole } from '@prisma/client';
 const SYSTEM_MIRROR_ROLE_NAME = {
   [UserRole.SUPER_ADMIN]: 'Sistema · SUPER_ADMIN',
   [UserRole.ADMIN]: 'Sistema · ADMIN',
-  [UserRole.SUPERVISOR]: 'Sistema · SUPERVISOR',
-  [UserRole.MECHANIC]: 'Sistema · MECHANIC',
   [UserRole.USER]: 'Sistema · USER',
 };
 
@@ -22,40 +20,35 @@ const ROLE_DESCRIPTIONS = {
     'Rol base (espejo). Asignable en matriz de firmas; equivale a SUPER_ADMIN del usuario.',
   [UserRole.ADMIN]:
     'Rol base (espejo). Asignable en matriz de firmas; equivale a ADMIN del usuario.',
-  [UserRole.SUPERVISOR]:
-    'Rol base (espejo). Asignable en matriz de firmas; equivale a SUPERVISOR del usuario.',
-  [UserRole.MECHANIC]:
-    'Rol base (espejo). Asignable en matriz de firmas; equivale a MECHANIC del usuario.',
   [UserRole.USER]:
     'Rol base (espejo). Sin privilegios por defecto; pizarra en blanco para permisos y menú.',
 };
 
-const ALL_ROLES = [
-  UserRole.SUPER_ADMIN,
-  UserRole.ADMIN,
-  UserRole.SUPERVISOR,
-  UserRole.MECHANIC,
-  UserRole.USER,
-];
+const TENANT_DEFAULT_MIRROR_ROLES = [UserRole.ADMIN, UserRole.USER];
+
+async function ensureMirrorRole(prisma, tenantId, baseRole) {
+  const name = SYSTEM_MIRROR_ROLE_NAME[baseRole];
+  const existing = await prisma.tenantRole.findFirst({
+    where: { tenantId, name },
+    select: { id: true },
+  });
+  if (existing) return;
+  await prisma.tenantRole.create({
+    data: {
+      tenantId,
+      name,
+      description: ROLE_DESCRIPTIONS[baseRole],
+      baseRole,
+      routes: [],
+    },
+  });
+}
 
 async function ensureDefaultTenantRoles(prisma, tenantId) {
-  for (const baseRole of ALL_ROLES) {
-    const name = SYSTEM_MIRROR_ROLE_NAME[baseRole];
-    const existing = await prisma.tenantRole.findFirst({
-      where: { tenantId, name },
-      select: { id: true },
-    });
-    if (existing) continue;
-    await prisma.tenantRole.create({
-      data: {
-        tenantId,
-        name,
-        description: ROLE_DESCRIPTIONS[baseRole],
-        baseRole,
-        routes: [],
-      },
-    });
+  for (const baseRole of TENANT_DEFAULT_MIRROR_ROLES) {
+    await ensureMirrorRole(prisma, tenantId, baseRole);
   }
+  await ensureMirrorRole(prisma, tenantId, UserRole.SUPER_ADMIN);
 }
 
 async function main() {

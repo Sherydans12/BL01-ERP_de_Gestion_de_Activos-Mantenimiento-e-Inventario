@@ -39,7 +39,7 @@ export interface UserPayload {
   lastName?: string | null;
   phone?: string | null;
   avatarUrl?: string | null;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
   allowedContracts: string[];
   /** ID del rol custom asignado al usuario (si tiene uno). */
   customRoleId?: string | null;

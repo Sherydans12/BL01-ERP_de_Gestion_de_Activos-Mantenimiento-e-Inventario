@@ -7,7 +7,7 @@ import { EMPTY, from, Observable } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
 
-const APPROVER_ROLES = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'] as const;
+const APPROVER_ROLES = ['ADMIN', 'SUPER_ADMIN'] as const;
 const SESSION_ATTEMPT_KEY = 'bl_push_subscribe_attempted';
 
 /**

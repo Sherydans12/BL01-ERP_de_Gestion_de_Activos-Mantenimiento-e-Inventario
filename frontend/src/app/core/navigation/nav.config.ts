@@ -4,22 +4,18 @@ import { O } from '../constants/operations-permissions';
 import { A } from '../constants/admin-permissions';
 
 /** Roles disponibles en el sistema (deben coincidir con Prisma UserRole). */
-export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC' | 'USER';
+export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'USER';
 
 /** Descripción de cada rol para mostrar en la interfaz. */
 export const ROLE_LABELS: Record<AppRole, string> = {
   SUPER_ADMIN: 'Super Administrador',
   ADMIN: 'Administrador',
-  SUPERVISOR: 'Supervisor',
-  MECHANIC: 'Mecánico',
   USER: 'Usuario base',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   SUPER_ADMIN: 'Acceso total al sistema. Gestiona múltiples tenants.',
   ADMIN: 'Control total sobre el tenant. Gestiona usuarios, contratos y configuración de la empresa.',
-  SUPERVISOR: 'Supervisa operaciones: órdenes de trabajo, flota, inventario y pautas de mantenimiento.',
-  MECHANIC: 'Opera en terreno: ejecuta órdenes de trabajo asignadas y consulta flota y stock.',
   USER: 'Sin privilegios por defecto. Configure permisos PBAC en el perfil (TenantRole).',
 };
 

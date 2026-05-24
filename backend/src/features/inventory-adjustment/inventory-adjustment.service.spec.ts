@@ -35,7 +35,7 @@ describe('InventoryAdjustmentService', () => {
   const mechanicUser = {
     id: userId,
     tenantId,
-    role: 'MECHANIC',
+    role: 'USER',
   };
 
   const longComment =

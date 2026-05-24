@@ -527,7 +527,7 @@ model User {
   lastName            String?         @map("last_name") @db.VarChar(100)
   /// Ruta pública servida bajo `/uploads/...` (StorageService local).
   avatarUrl           String?         @map("avatar_url") @db.VarChar(500)
-  role                UserRole        @default(MECHANIC)
+  role                UserRole        @default(USER)
   isActive            Boolean         @default(false) @map("is_active")
   activationToken     String?         @map("activation_token") @db.VarChar(255)
   resetPasswordToken  String?         @map("reset_password_token") @db.VarChar(255)
@@ -657,7 +657,7 @@ model TenantRole {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String   @db.VarChar(100)
   description String?  @db.VarChar(255)
-  baseRole    UserRole @default(MECHANIC) @map("base_role")
+  baseRole    UserRole @default(USER) @map("base_role")
   routes      Json     @default("[]")
   /// Capacidades PBAC para API (independiente de `routes` en UI).
   permissions Json     @default("[]")
@@ -673,8 +673,6 @@ model TenantRole {
 enum UserRole {
   SUPER_ADMIN
   ADMIN
-  SUPERVISOR
-  MECHANIC
   USER
 }
 

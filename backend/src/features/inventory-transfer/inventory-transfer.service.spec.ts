@@ -49,7 +49,7 @@ describe('InventoryTransferService', () => {
   const supervisorDestAccess = {
     id: userId,
     tenantId,
-    role: 'SUPERVISOR',
+    role: 'USER',
     allowedContracts: [destContractId],
   };
 
@@ -528,7 +528,7 @@ describe('InventoryTransferService', () => {
       prisma.inventoryTransfer.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.getTransferById(transferId, mechanicUser),
+        service.getTransferById(transferId, adminUser),
       ).rejects.toThrow(NotFoundException);
     });
 

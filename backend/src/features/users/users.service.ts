@@ -287,7 +287,7 @@ export class UsersService {
     data: {
       email: string;
       name: string;
-      role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+      role: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
       /** Si se envía, debe pertenecer al tenant; el rol efectivo sale del TenantRole.baseRole */
       customRoleId?: string | null;
       rut?: string;
@@ -602,15 +602,7 @@ export class UsersService {
       where: {
         tenantId,
         isActive: true,
-        OR: [
-          ...permissionOr,
-          { role: { in: ['MECHANIC', 'SUPERVISOR'] } },
-          {
-            customRole: {
-              baseRole: { in: ['MECHANIC', 'SUPERVISOR'] },
-            },
-          },
-        ],
+        OR: permissionOr,
       },
       select: {
         id: true,
