@@ -635,3 +635,121 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     ).rejects.toThrow(/Orden no encontrada/);
   });
 });
+
+describe('WorkOrdersService — promoteBacklogItem', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const woId = '22222222-2222-2222-2222-222222222222';
+  const itemId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const equipId = '33333333-3333-3333-3333-333333333333';
+  const userId = '66666666-6666-6666-6666-666666666666';
+  const user = { id: userId, tenantId, role: 'ADMIN' };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get(WorkOrdersService);
+  });
+
+  it('rechaza si el ítem de backlog no está PENDING', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue({
+      id: woId,
+      equipmentId: equipId,
+      equipment: { currentMeter: 1000 },
+    } as never);
+    prisma.workOrderBacklogItem.findFirst.mockResolvedValue({
+      id: itemId,
+      status: 'DONE',
+      description: 'Revisar bomba',
+    } as never);
+
+    await expect(
+      service.promoteBacklogItem(user, woId, itemId, { mode: 'TO_TASK' }),
+    ).rejects.toThrow(/estado pendiente/);
+  });
+
+  it('promueve backlog a tarea en la misma OT (TO_TASK)', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue({
+      id: woId,
+      equipmentId: equipId,
+      equipment: { currentMeter: 1000 },
+    } as never);
+    prisma.workOrderBacklogItem.findFirst.mockResolvedValue({
+      id: itemId,
+      status: 'PENDING',
+      description: 'Cambiar filtro hidráulico',
+    } as never);
+    prisma.workOrderTask.create.mockResolvedValue({} as never);
+    prisma.workOrderBacklogItem.update.mockResolvedValue({} as never);
+
+    const result = await service.promoteBacklogItem(user, woId, itemId, {
+      mode: 'TO_TASK',
+    });
+
+    expect(result).toEqual({ promoted: true, mode: 'TO_TASK' });
+    expect(prisma.workOrderTask.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workOrderId: woId,
+        description: 'Cambiar filtro hidráulico',
+        isCompleted: false,
+      }),
+    });
+    expect(prisma.workOrderBacklogItem.update).toHaveBeenCalledWith({
+      where: { id: itemId },
+      data: { status: 'DONE' },
+    });
+  });
+
+  it('promueve backlog a nueva OT (TO_NEW_OT)', async () => {
+    const newWoId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    prisma.workOrder.findFirst.mockResolvedValue({
+      id: woId,
+      tenantId,
+      equipmentId: equipId,
+      warehouseId: null,
+      classificationTags: [],
+      affectsAvailability: 'NO',
+      responsibleMechanicName: 'Juan',
+      responsible: null,
+      equipment: { currentMeter: 1200 },
+      finalMeter: null,
+      initialMeter: 1000,
+    } as never);
+    prisma.workOrderBacklogItem.findFirst.mockResolvedValue({
+      id: itemId,
+      status: 'PENDING',
+      description: 'Falla en transmisión',
+    } as never);
+    prisma.workOrderBacklogItem.update.mockResolvedValue({} as never);
+    const createSpy = jest
+      .spyOn(service, 'create')
+      .mockResolvedValue({ id: newWoId } as never);
+
+    const result = await service.promoteBacklogItem(user, woId, itemId, {
+      mode: 'TO_NEW_OT',
+    });
+
+    expect(result).toEqual({
+      promoted: true,
+      mode: 'TO_NEW_OT',
+      newWorkOrderId: newWoId,
+    });
+    expect(createSpy).toHaveBeenCalledWith(
+      user,
+      expect.objectContaining({
+        equipmentId: equipId,
+        workPerformedDescription: 'Falla en transmisión',
+      }),
+    );
+    createSpy.mockRestore();
+  });
+});

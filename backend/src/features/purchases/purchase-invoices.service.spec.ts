@@ -561,6 +561,89 @@ describe('PurchaseInvoicesService', () => {
     });
   });
 
+  describe('recordPayment', () => {
+    const user = {
+      id: userId,
+      tenantId,
+      role: 'ADMIN' as const,
+    };
+
+    it('rechaza referencia de pago vacía', async () => {
+      await expect(service.recordPayment(invoiceId, '  ', user)).rejects.toThrow(
+        /paymentReference es obligatorio/,
+      );
+    });
+
+    it('rechaza pago si la factura no está MATCHED', async () => {
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoiceEntity({ status: 'PENDING' }) as never,
+      );
+
+      await expect(
+        service.recordPayment(invoiceId, 'TRX-9001', user),
+      ).rejects.toThrow(/validación 3-way OK/);
+    });
+
+    it('registra PAID con paymentReference', async () => {
+      const inv = invoiceEntity({ status: 'MATCHED' });
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(inv as never);
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        contractId: inv.purchaseOrder.contractId,
+      } as never);
+      prisma.purchaseInvoice.update.mockResolvedValue({
+        ...inv,
+        status: 'PAID',
+        paymentReference: 'TRX-9001',
+        paidAt: new Date('2024-06-20'),
+      } as never);
+
+      const result = await service.recordPayment(invoiceId, 'TRX-9001', user);
+
+      expect(result.status).toBe('PAID');
+      expect(prisma.purchaseInvoice.update).toHaveBeenCalledWith({
+        where: { id: invoiceId },
+        data: expect.objectContaining({
+          status: 'PAID',
+          paymentReference: 'TRX-9001',
+        }),
+        include: expect.any(Object),
+      });
+    });
+  });
+
+  describe('remove', () => {
+    const user = {
+      id: userId,
+      tenantId,
+      role: 'ADMIN' as const,
+    };
+
+    it('rechaza eliminar factura PAID', async () => {
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoiceEntity({ status: 'PAID' }) as never,
+      );
+
+      await expect(service.remove(invoiceId, user)).rejects.toThrow(
+        /marcada como pagada/,
+      );
+    });
+
+    it('elimina factura no pagada y audita', async () => {
+      const inv = invoiceEntity({ status: 'DISCREPANCY' });
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(inv as never);
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        contractId: inv.purchaseOrder.contractId,
+      } as never);
+      prisma.purchaseInvoice.delete.mockResolvedValue(inv as never);
+
+      await service.remove(invoiceId, user);
+
+      expect(prisma.purchaseInvoice.delete).toHaveBeenCalledWith({
+        where: { id: invoiceId },
+      });
+    });
+  });
+
   describe('overruleThreeWayMatch', () => {
     const user = {
       id: userId,
