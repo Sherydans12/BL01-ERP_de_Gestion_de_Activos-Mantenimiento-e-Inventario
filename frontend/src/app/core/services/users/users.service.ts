@@ -21,6 +21,9 @@ export interface User {
   position?: string;
   customRoleId?: string | null;
   customRole?: { id: string; name: string; baseRole: string } | null;
+  /** `GET /users/assignable-for-ot` */
+  canExecuteOt?: boolean;
+  canSuperviseOt?: boolean;
   contractAccess?: { contractId: string }[];
   /** Política global: si a este rol podría exigírsele 2FA por correo (IP inusual), según config. */
   emailStepUpPolicyApplies?: boolean;

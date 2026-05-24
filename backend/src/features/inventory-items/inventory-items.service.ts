@@ -23,6 +23,7 @@ import { NotificationDispatcherService } from '../../common/notifications/notifi
 import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-events';
 import { buildMailInventoryItemCreated } from '../../common/email/transactional-mail.builder';
 import { AuditService } from '../../common/audit/audit.service';
+import { userCanViewInventoryCost } from '../auth/permissions.util';
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 /** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
@@ -148,15 +149,11 @@ export class InventoryItemsService {
     }
   }
 
-  private isMechanic(user: { role?: string } | null | undefined): boolean {
-    return user?.role === 'MECHANIC';
-  }
-
   private maskPickerCostByRole(
-    user: { role?: string } | null | undefined,
+    user: { role?: string; permissions?: string[] } | null | undefined,
     value: number | null,
   ): number | null {
-    if (!this.isMechanic(user)) return value;
+    if (userCanViewInventoryCost(user)) return value;
     return null;
   }
 

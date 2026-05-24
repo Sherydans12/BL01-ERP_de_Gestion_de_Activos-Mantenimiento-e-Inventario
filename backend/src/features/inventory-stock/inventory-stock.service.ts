@@ -16,6 +16,7 @@ import {
   FIELD_RETURN_REFERENCE_TYPE,
 } from '../../common/inventory/field-dispatch.constants';
 import { getFieldDispatchOutstandingForItem } from '../../common/inventory/field-dispatch-outstanding';
+import { userCanViewInventoryCost } from '../auth/permissions.util';
 
 export interface PerformTransactionDto {
   warehouseId: string;
@@ -58,15 +59,11 @@ export class InventoryStockService {
     };
   }
 
-  private isMechanic(user: { role?: string } | null | undefined): boolean {
-    return user?.role === 'MECHANIC';
-  }
-
   private maskCostValue(
-    user: { role?: string } | null | undefined,
+    user: { role?: string; permissions?: string[] } | null | undefined,
     value: number | null,
   ): number | null {
-    if (!this.isMechanic(user)) return value;
+    if (userCanViewInventoryCost(user)) return value;
     return 0;
   }
 
@@ -1096,7 +1093,7 @@ export class InventoryStockService {
           s.unitCost != null ? Number(s.unitCost) : null,
         ),
         physicalShortageQty,
-        debtValue: this.isMechanic(user) ? 0 : debtValue,
+        debtValue: userCanViewInventoryCost(user) ? debtValue : 0,
         location: s.location,
         bin: s.bin,
         item: this.ensureItemDescription(s.item),

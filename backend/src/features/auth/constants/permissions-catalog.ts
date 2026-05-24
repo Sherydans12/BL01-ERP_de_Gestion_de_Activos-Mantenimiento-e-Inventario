@@ -370,6 +370,44 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
             description:
               'Movimientos manuales, devoluciones, niveles min/max y ajustes de inventario físico (kardex).',
           },
+          {
+            key: SystemPermissions.INVENTORY_STOCK_VIEW_COST,
+            label: 'Ver costos de stock',
+            description:
+              'Visualizar costo unitario, CPP y valorización en kardex, picker y reportes de inventario.',
+          },
+        ],
+      },
+      {
+        name: 'Proveedores (inventario)',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_SUPPLIER_READ,
+            label: 'Ver proveedores de inventario',
+            description: 'Listar proveedores del maestro ligero de inventario.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_SUPPLIER_MANAGE,
+            label: 'Gestionar proveedores de inventario',
+            description: 'Alta y baja de proveedores en el maestro de inventario.',
+          },
+        ],
+      },
+      {
+        name: 'Analítica de inventario',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_ANALYTICS_READ,
+            label: 'Ver analítica',
+            description:
+              'Valorización por familia, desempeño de proveedores y búsqueda global (command palette).',
+          },
+          {
+            key: SystemPermissions.INVENTORY_ANALYTICS_REPORT,
+            label: 'Reportes contables',
+            description:
+              'Reporte maestro de valorización (PDF/Excel) y variación de ahorro (cierre contable).',
+          },
         ],
       },
     ],

@@ -81,6 +81,15 @@ export enum SystemPermissions {
   // —— Inventario: stock y ajustes ——
   INVENTORY_STOCK_READ = 'inventory:stock:read',
   INVENTORY_STOCK_ADJUST = 'inventory:stock:adjust',
+  INVENTORY_STOCK_VIEW_COST = 'inventory:stock:view_cost',
+
+  // —— Inventario: proveedores (maestro ligero) ——
+  INVENTORY_SUPPLIER_READ = 'inventory:supplier:read',
+  INVENTORY_SUPPLIER_MANAGE = 'inventory:supplier:manage',
+
+  // —— Inventario: analítica ——
+  INVENTORY_ANALYTICS_READ = 'inventory:analytics:read',
+  INVENTORY_ANALYTICS_REPORT = 'inventory:analytics:report',
 
   // —— Operaciones: flota / equipos ——
   OPERATIONS_EQUIPMENT_READ = 'operations:equipment:read',

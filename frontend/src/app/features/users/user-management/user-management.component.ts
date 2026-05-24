@@ -1198,7 +1198,7 @@ export class UserManagementComponent implements OnInit {
   /** Contratos en UserContract (cualquier rol no ADMIN en el tenant). */
   needsContractAssignment = computed(() => {
     const br = this.selectedRoleBaseRole();
-    return br === 'SUPERVISOR' || br === 'MECHANIC' || br === 'USER';
+    return br !== 'ADMIN' && br !== 'SUPER_ADMIN';
   });
 
   // Paginación

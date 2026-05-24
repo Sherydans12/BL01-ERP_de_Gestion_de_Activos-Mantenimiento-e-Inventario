@@ -8,8 +8,9 @@ import {
 } from '@nestjs/common';
 import { PurchasesAnalyticsService } from './purchases-analytics.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 
 type PurchasesAnalyticsRequest = {
@@ -21,12 +22,12 @@ type PurchasesAnalyticsRequest = {
 };
 
 @Controller('purchases/analytics')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchasesAnalyticsController {
   constructor(private readonly analytics: PurchasesAnalyticsService) {}
 
   @Get('report/pdf')
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  @RequirePermissions(SystemPermissions.PURCHASES_ANALYTICS_READ)
   async executiveReportPdf(
     @Req() req: PurchasesAnalyticsRequest,
     @Query('contractId') contractId?: string,
@@ -47,7 +48,7 @@ export class PurchasesAnalyticsController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'SUPER_ADMIN', 'SUPERVISOR')
+  @RequirePermissions(SystemPermissions.PURCHASES_ANALYTICS_READ)
   dashboard(
     @Req() req: PurchasesAnalyticsRequest,
     @Query('contractId') contractId?: string,

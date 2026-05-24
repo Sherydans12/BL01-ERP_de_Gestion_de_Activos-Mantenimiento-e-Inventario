@@ -23,6 +23,11 @@ import { AuthAuditService } from '../auth/auth-audit.service';
 import type { LoginRequestMeta } from '../auth/auth-request.util';
 import { UserSessionService } from '../auth/user-session.service';
 import { EmailService } from '../../common/email/email.service';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import {
+  userHasGlobalRoleBypass,
+  userHasPermission,
+} from '../auth/permissions.util';
 import {
   normalizeEmail,
   prismaEmailInsensitive,
@@ -574,16 +579,31 @@ export class UsersService {
     };
   }
 
-  /** Usuarios activos del tenant con rol base mecánico o supervisor (asignación OT). */
+  /** Usuarios activos del tenant asignables a OT (ejecutar, asignar o planificar). */
   async findAssignableForOt(tenantId: string) {
     if (!tenantId) {
       throw new BadRequestException('Tenant no disponible');
     }
-    return this.prisma.user.findMany({
+    const otPermissionKeys = [
+      'operations:work-order:execute',
+      'operations:work-order:assign',
+      'operations:work-order:update',
+    ] as const;
+
+    const permissionOr = otPermissionKeys.map((key) => ({
+      customRole: {
+        is: {
+          permissions: { array_contains: key },
+        },
+      },
+    }));
+
+    const rows = await this.prisma.user.findMany({
       where: {
         tenantId,
         isActive: true,
         OR: [
+          ...permissionOr,
           { role: { in: ['MECHANIC', 'SUPERVISOR'] } },
           {
             customRole: {
@@ -598,10 +618,30 @@ export class UsersService {
         email: true,
         role: true,
         customRole: {
-          select: { id: true, name: true, baseRole: true },
+          select: { id: true, name: true, baseRole: true, permissions: true },
         },
       },
       orderBy: { name: 'asc' },
+    });
+
+    return rows.map((u) => {
+      const bearer = {
+        role: u.role,
+        customRole: u.customRole,
+      };
+      const canSuperviseOt =
+        userHasGlobalRoleBypass(u.role) ||
+        userHasPermission(bearer, SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN) ||
+        userHasPermission(bearer, SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE);
+      const canExecuteOt =
+        userHasGlobalRoleBypass(u.role) ||
+        userHasPermission(bearer, SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE) ||
+        canSuperviseOt;
+      return {
+        ...u,
+        canExecuteOt,
+        canSuperviseOt,
+      };
     });
   }
 

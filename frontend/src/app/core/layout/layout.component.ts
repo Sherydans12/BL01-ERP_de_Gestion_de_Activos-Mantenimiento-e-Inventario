@@ -38,6 +38,7 @@ import {
 } from '../services/inventory-analytics/inventory-analytics.service';
 import { QuickViewService } from '../../shared/components/quick-view/quick-view.service';
 import { AvatarComponent } from '../../shared/components/avatar/avatar.component';
+import { P } from '../constants/purchases-permissions';
 
 @Component({
   selector: 'app-layout',
@@ -86,66 +87,38 @@ export class LayoutComponent implements OnInit {
   profileMenuOpen = signal(false);
   profileMenuRoot = viewChild<ElementRef<HTMLElement>>('profileMenuRoot');
 
+  /** Selector de contrato: usuarios con alcance por contrato (no tenant-wide). */
+  showContractSelector = computed(() => {
+    const role = this.currentUser()?.role;
+    return role !== 'ADMIN' && role !== 'SUPER_ADMIN';
+  });
+
+  canUsePushDebugTools = computed(() =>
+    this.authService.hasPermission(P.ORDER_APPROVE),
+  );
+
+  showPushBlockedHint = computed(
+    () =>
+      this.pushNotificationsBlocked() &&
+      this.canUsePushDebugTools(),
+  );
+
   filteredNav = computed(() => {
-    const user = this.currentUser();
-    const role = user?.role as AppRole | undefined;
+    const role = this.currentUser()?.role as AppRole | undefined;
     const auth = this.authService;
-    const applyPbac = (items: typeof NAV_SECTIONS[0]['items']) =>
-      filterNavItemsByPermission(
-        items,
-        (p) => auth.hasPermission(p),
-        (p) => auth.hasPermissionAny(p),
-      );
+    const navFilterOptions = {
+      hasPlatformRole: (roles: AppRole[]) => !!role && roles.includes(role),
+    };
 
-    // SUPER_ADMIN siempre ve todo (PBAC bypass en hasPermission).
-    if (role === 'SUPER_ADMIN') {
-      return NAV_SECTIONS.map((s) => ({
-        ...s,
-        visibleItems: applyPbac(s.items),
-      })).filter((s) => s.visibleItems.length > 0);
-    }
-
-    // 1. Rol custom asignado al usuario → usa sus rutas específicas.
-    if (user?.customRoleId) {
-      const customRole = this.currentTenant()?.tenantRoles?.find(
-        (r) => r.id === user.customRoleId,
-      );
-      if (customRole) {
-        const allowed = new Set(customRole.routes as string[]);
-        return NAV_SECTIONS.map((section) => ({
-          ...section,
-          visibleItems: applyPbac(
-            section.items.filter((item) => allowed.has(item.route)),
-          ),
-        })).filter((s) => s.visibleItems.length > 0);
-      }
-    }
-
-    // 2. Permisos configurados por rol base (sidebarPermissions del tenant).
-    const customPerms = this.currentTenant()?.sidebarPermissions;
-    if (customPerms && role && customPerms[role]) {
-      const allowed = new Set(customPerms[role]);
-      return NAV_SECTIONS.map((section) => ({
-        ...section,
-        visibleItems: applyPbac(
-          section.items.filter((item) => allowed.has(item.route)),
-        ),
-      })).filter((s) => s.visibleItems.length > 0);
-    }
-
-    // 3. Fallback: defaults de nav.config.ts.
     return NAV_SECTIONS.map((section) => ({
       ...section,
-      visibleItems: applyPbac(
-        section.items.filter(
-          (item) => !item.roles || !role || item.roles.includes(role),
-        ),
+      visibleItems: filterNavItemsByPermission(
+        section.items,
+        (p) => auth.hasPermission(p),
+        (p) => auth.hasPermissionAny(p),
+        navFilterOptions,
       ),
-    })).filter(
-      (section) =>
-        section.visibleItems.length > 0 &&
-        (!section.roles || !role || section.roles.includes(role)),
-    );
+    })).filter((s) => s.visibleItems.length > 0);
   });
 
   /** Logo del sidebar: en tema claro usa `logoLight*` si está configurado; si no, el logo principal. */
@@ -199,7 +172,7 @@ export class LayoutComponent implements OnInit {
     }
     effect(() => {
       const user = this.authService.currentUser();
-      if (!user || !PushNotificationsService.isApproverRole(user.role)) {
+      if (!this.authService.hasPermission(P.ORDER_APPROVE)) {
         return;
       }
       queueMicrotask(() => this.pushNotifications.maybeSubscribeOncePerSession());

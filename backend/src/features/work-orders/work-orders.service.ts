@@ -27,6 +27,8 @@ import {
   isTenantWideContractAccess,
 } from '../../common/contract-scope.util';
 import Decimal from 'decimal.js';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { userHasPermission } from '../auth/permissions.util';
 
 import {
   getPolicyThresholdsForNewItemStockRow,
@@ -1243,13 +1245,16 @@ export class WorkOrdersService {
       throw new BadRequestException('No se puede editar una OT cerrada.');
     }
 
-    if (
-      user.role === 'MECHANIC' &&
-      (existing.status === 'IN_PROGRESS' || existing.status === 'ON_HOLD')
-    ) {
-      throw new ForbiddenException(
-        'En OT en curso o en pausa solo un supervisor o administrador puede modificar el formulario.',
-      );
+    if (existing.status === 'IN_PROGRESS' || existing.status === 'ON_HOLD') {
+      const canEditInProgress =
+        userHasPermission(user, SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE) ||
+        userHasPermission(user, SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN) ||
+        existing.shiftSupervisorUserId === user.id;
+      if (!canEditInProgress) {
+        throw new ForbiddenException(
+          'En OT en curso o en pausa solo quien supervise la OT o tenga permiso de planificación puede modificar el formulario.',
+        );
+      }
     }
 
     const parseOptDate = (s?: string | null) =>

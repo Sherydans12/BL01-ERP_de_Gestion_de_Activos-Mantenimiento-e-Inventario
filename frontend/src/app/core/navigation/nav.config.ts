@@ -20,16 +20,31 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   ADMIN: 'Control total sobre el tenant. Gestiona usuarios, contratos y configuración de la empresa.',
   SUPERVISOR: 'Supervisa operaciones: órdenes de trabajo, flota, inventario y pautas de mantenimiento.',
   MECHANIC: 'Opera en terreno: ejecuta órdenes de trabajo asignadas y consulta flota y stock.',
-  USER: 'Sin privilegios por defecto. Configure menú y permisos PBAC según el perfil.',
+  USER: 'Sin privilegios por defecto. Configure permisos PBAC en el perfil (TenantRole).',
 };
 
-/** Filtra ítems de menú según PBAC (tras rutas/roles legacy). */
+export interface NavFilterOptions {
+  /** Rutas de plataforma fuera del catálogo PBAC tenant (`/app/admin/*`). */
+  hasPlatformRole?: (roles: AppRole[]) => boolean;
+}
+
+/**
+ * Filtra ítems del menú lateral: única fuente PBAC (+ excepciones de plataforma).
+ * Sin permiso definido → oculto. `alwaysVisible` solo para cuenta del usuario.
+ */
 export function filterNavItemsByPermission(
   items: NavItem[],
   hasPermission: (p: string | string[]) => boolean,
   hasPermissionAny: (p: string | string[]) => boolean,
+  options?: NavFilterOptions,
 ): NavItem[] {
   return items.filter((item) => {
+    if (item.alwaysVisible) {
+      return true;
+    }
+    if (item.platformRoles?.length) {
+      return options?.hasPlatformRole?.(item.platformRoles) ?? false;
+    }
     if (item.permissionsAny) {
       const any = Array.isArray(item.permissionsAny)
         ? item.permissionsAny
@@ -39,7 +54,7 @@ export function filterNavItemsByPermission(
     if (item.permissions) {
       return hasPermission(item.permissions);
     }
-    return true;
+    return false;
   });
 }
 
@@ -50,12 +65,13 @@ export interface NavItem {
   icon: string;
   /** Si true, routerLinkActive aplica exact matching. */
   exact?: boolean;
+  /** Visible para cualquier usuario autenticado (p. ej. Mi cuenta). */
+  alwaysVisible?: boolean;
   /**
-   * Roles que pueden ver este ítem (permisos por defecto).
-   * `undefined` → visible para todos los roles autenticados.
-   * Estos defaults se sobreescriben si el tenant tiene `sidebarPermissions` configurados.
+   * Rutas de plataforma multi-tenant: no usan PBAC de tenant.
+   * Requiere `hasPlatformRole` en el filtro del layout.
    */
-  roles?: AppRole[];
+  platformRoles?: AppRole[];
   /** PBAC: requiere todos los permisos (AND). Bypass ADMIN / SUPER_ADMIN en `AuthService`. */
   permissions?: string | string[];
   /** PBAC: requiere al menos uno (OR). */
@@ -64,11 +80,6 @@ export interface NavItem {
 
 export interface NavSection {
   label: string;
-  /**
-   * Roles que pueden ver toda la sección (permisos por defecto).
-   * `undefined` → visible para todos los roles autenticados.
-   */
-  roles?: AppRole[];
   items: NavItem[];
 }
 
@@ -93,24 +104,8 @@ const ICONS = {
 };
 
 /**
- * Definición centralizada de la barra de navegación lateral.
- *
- * Matriz de permisos por defecto:
- *
- * Módulo                 | MECHANIC | SUPERVISOR | ADMIN | SUPER_ADMIN
- * ---------------------- | -------- | ---------- | ----- | -----------
- * Dashboard              |    ✓     |     ✓      |   ✓   |      ✓
- * Maestro de Flota       |    ✓     |     ✓      |   ✓   |      ✓
- * Órdenes de Trabajo     |    ✓     |     ✓      |   ✓   |      ✓
- * Config. Pautas (PM)    |    –     |     ✓      |   ✓   |      ✓
- * Catálogo Maestro       |    –     |     ✓      |   ✓   |      ✓
- * Gestión de Bodegas     |    –     |     ✓      |   ✓   |      ✓
- * Control de Stock       |    ✓     |     ✓      |   ✓   |      ✓
- * Catálogos Maestros     |    –     |     –      |   ✓   |      ✓
- * Maestro de Contratos   |    –     |     –      |   ✓   |      ✓
- * Config. Empresa        |    –     |     –      |   ✓   |      ✓
- * Gestión de Usuarios    |    –     |     –      |   ✓   |      ✓
- * Roles y Permisos       |    –     |     –      |   ✓   |      ✓
+ * Menú lateral: cada ítem requiere permiso PBAC de lectura (o excepción de plataforma).
+ * Ver `filterNavItemsByPermission` y `docs/agentes/pbac-matriz-verificacion.md`.
  */
 export const NAV_SECTIONS: NavSection[] = [
   {
@@ -127,18 +122,19 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Mi cuenta',
         route: '/app/configuracion',
         icon: ICONS.adjustments,
+        alwaysVisible: true,
       },
       {
         label: 'Seguridad global',
         route: '/app/admin/security',
         icon: ICONS.shieldCheck,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
+        platformRoles: ['SUPER_ADMIN', 'ADMIN'],
       },
       {
         label: 'Empresas (Tenants)',
         route: '/app/admin/platform-data',
         icon: ICONS.collection,
-        roles: ['SUPER_ADMIN'],
+        platformRoles: ['SUPER_ADMIN'],
       },
     ],
   },
@@ -231,7 +227,6 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'Compras',
-    roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
     items: [
       {
         label: 'Requerimientos',
@@ -273,14 +268,12 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Proveedores',
         route: '/app/compras/proveedores',
         icon: ICONS.users,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
         permissions: P.VENDOR_READ,
       },
       {
         label: 'Config. Compras',
         route: '/app/compras/configuracion',
         icon: ICONS.cog,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
         permissions: P.SETTING_READ,
       },
     ],
@@ -292,7 +285,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Catálogos Maestros',
         route: '/app/catalogos',
         icon: ICONS.collection,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
+        permissions: A.TENANT_CONFIG_READ,
       },
       {
         label: 'Maestro de Contratos',

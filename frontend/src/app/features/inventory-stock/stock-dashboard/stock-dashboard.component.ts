@@ -557,7 +557,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   canSeeValuationReport(): boolean {
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.hasPermission(I.ANALYTICS_READ);
   }
 
   loadInventoryValuation() {
@@ -583,7 +583,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   canSeeStockCosts(): boolean {
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.canViewInventoryCost();
   }
 
   adjustmentDifference(): number | null {

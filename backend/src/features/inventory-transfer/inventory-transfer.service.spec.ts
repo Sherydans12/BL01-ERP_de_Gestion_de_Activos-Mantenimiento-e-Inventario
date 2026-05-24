@@ -53,10 +53,11 @@ describe('InventoryTransferService', () => {
     allowedContracts: [destContractId],
   };
 
-  const mechanicUser = {
+  const userWithoutTransferCreate = {
     id: userId,
     tenantId,
-    role: 'MECHANIC',
+    role: 'USER',
+    permissions: ['inventory:transfer:read'],
   };
 
   const baseDto: CreateInventoryTransferDto = {
@@ -89,9 +90,9 @@ describe('InventoryTransferService', () => {
   });
 
   describe('executeTransfer', () => {
-    it('rechaza rol sin privilegio (MECHANIC)', async () => {
+    it('rechaza usuario sin permiso inventory:transfer:create', async () => {
       await expect(
-        service.executeTransfer(baseDto, mechanicUser),
+        service.executeTransfer(baseDto, userWithoutTransferCreate),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -480,7 +481,7 @@ describe('InventoryTransferService', () => {
       );
     });
 
-    it('filtra por contratos permitidos para SUPERVISOR', async () => {
+    it('filtra por contratos permitidos en listado (alcance contrato)', async () => {
       prisma.inventoryTransfer.findMany.mockResolvedValue([] as never);
       prisma.inventoryTransfer.count.mockResolvedValue(0);
 

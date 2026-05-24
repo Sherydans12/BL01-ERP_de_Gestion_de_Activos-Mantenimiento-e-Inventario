@@ -177,17 +177,11 @@ function buildNavRows(): NavRow[] {
   return rows;
 }
 
-/** Default routes per role from nav.config (used when no sidebarPermissions override). */
-function buildDefaultRoutes(role: BaseRole): Set<string> {
-  const routes = new Set<string>();
-  for (const section of NAV_SECTIONS) {
-    const sectionOk = !section.roles || section.roles.includes(role);
-    for (const item of section.items) {
-      const itemOk = !item.roles || item.roles.includes(role);
-      if (sectionOk && itemOk) routes.add(item.route);
-    }
-  }
-  return routes;
+/**
+ * @deprecated El menú se deriva de PBAC (`gobernanza-roles`). Sin override en tenant, no hay rutas por defecto.
+ */
+function buildDefaultRoutes(_role: BaseRole): Set<string> {
+  return new Set();
 }
 
 @Component({

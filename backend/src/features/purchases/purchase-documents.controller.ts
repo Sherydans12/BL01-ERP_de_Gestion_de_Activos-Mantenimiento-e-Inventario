@@ -15,8 +15,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { PurchaseDocumentsService } from './purchase-documents.service';
 import type { PurchaseDocumentEntity } from '@prisma/client';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
@@ -28,19 +29,12 @@ import {
 const fileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
 
 @Controller('purchase-documents')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchaseDocumentsController {
   constructor(private readonly service: PurchaseDocumentsService) {}
 
   @Get()
-  @Roles(
-    'ADMIN',
-    'SUPERVISOR',
-    'SUPER_ADMIN',
-    'MECHANIC',
-    'STOREKEEPER',
-    'PLANNER',
-  )
+  @RequirePermissions(SystemPermissions.PURCHASES_DOCUMENT_READ)
   list(
     @Query('entity') entity: string,
     @Query('entityId') entityId: string,
@@ -55,7 +49,7 @@ export class PurchaseDocumentsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_DOCUMENT_MANAGE)
   @UseInterceptors(
     FileInterceptor('file', fileLimits),
     new FileValidationInterceptor(documentUploadPolicy),
@@ -85,14 +79,7 @@ export class PurchaseDocumentsController {
   }
 
   @Get(':id/file')
-  @Roles(
-    'ADMIN',
-    'SUPERVISOR',
-    'SUPER_ADMIN',
-    'MECHANIC',
-    'STOREKEEPER',
-    'PLANNER',
-  )
+  @RequirePermissions(SystemPermissions.PURCHASES_DOCUMENT_READ)
   async download(
     @Param('id') id: string,
     @Req() req: any,
@@ -102,7 +89,7 @@ export class PurchaseDocumentsController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermissions.PURCHASES_DOCUMENT_MANAGE)
   delete(@Param('id') id: string, @Req() req: any) {
     return this.service.delete(id, req.user.tenantId, req.user.id, req.user);
   }

@@ -142,16 +142,12 @@
           </div>
         }
       </div>
-      @if (
-        pushNotificationsBlocked() &&
-        currentUser() &&
-        (currentUser()!.role === 'ADMIN' || currentUser()!.role === 'SUPER_ADMIN' || currentUser()!.role === 'SUPERVISOR')
-      ) {
+      @if (showPushBlockedHint()) {
         <p class="mt-2 px-2 text-[10px] leading-snug text-amber-600/90 dark:text-amber-400/90 border border-amber-500/30 rounded-lg py-2 bg-amber-500/5">
           Las notificaciones están bloqueadas en este navegador. Actívelas en la configuración del sitio para recibir alertas de firma.
         </p>
       }
-      @if (currentUser() && (currentUser()!.role === 'ADMIN' || currentUser()!.role === 'SUPER_ADMIN' || currentUser()!.role === 'SUPERVISOR')) {
+      @if (canUsePushDebugTools()) {
         <button
           type="button"
           (click)="debugTryPushSubscribe()"
@@ -239,11 +235,7 @@
           </div>
         }
 
-        @if (
-          currentUser()?.role === 'ADMIN' ||
-          currentUser()?.role === 'SUPER_ADMIN' ||
-          (currentUser()?.allowedContracts?.length ?? 0) > 0
-        ) {
+        @if (showContractSelector()) {
           <!-- z-[60]: por encima del backdrop y del contenido scroll -->
           <div class="relative z-[60]">
             <button

@@ -56,10 +56,11 @@ describe('InventoryStockService', () => {
     role: 'ADMIN',
   };
 
-  const mechanicUser = {
+  const userWithoutCostView = {
     id: userId,
     tenantId,
-    role: 'MECHANIC',
+    role: 'USER',
+    permissions: ['inventory:stock:read'],
   };
 
   beforeEach(async () => {
@@ -482,7 +483,7 @@ describe('InventoryStockService', () => {
       );
     });
 
-    it('enmascara unitCost para rol MECHANIC', async () => {
+    it('enmascara unitCost sin permiso inventory:stock:view_cost', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransaction.findMany
           .mockResolvedValueOnce([{ quantity: 5, type: 'OUT' }] as never)
@@ -493,7 +494,7 @@ describe('InventoryStockService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      const result = await service.performReturn(returnDto, mechanicUser);
+      const result = await service.performReturn(returnDto, userWithoutCostView);
       expect(result.unitCost).toBe(0);
     });
 
@@ -910,12 +911,12 @@ describe('InventoryStockService', () => {
       expect(rows[0].unitCost).toBe(500);
     });
 
-    it('enmascara unitCost para MECHANIC', async () => {
+    it('enmascara unitCost sin permiso inventory:stock:view_cost', async () => {
       setupWarehouseAndStock();
 
       const rows = await service.getStockByWarehouse(
         warehouseId,
-        mechanicUser,
+        userWithoutCostView,
       );
 
       expect(rows[0].unitCost).toBe(0);
@@ -975,7 +976,7 @@ describe('InventoryStockService', () => {
       expect(count).toBe(7);
     });
 
-    it('getPendingRegularizationPage pagina deuda y enmascara valor para MECHANIC', async () => {
+    it('getPendingRegularizationPage pagina deuda y enmascara valor sin view_cost', async () => {
       prisma.warehouse.findFirst.mockResolvedValue({
         id: warehouseId,
         code: 'B1',
@@ -1006,7 +1007,7 @@ describe('InventoryStockService', () => {
 
       const result = await service.getPendingRegularizationPage(
         warehouseId,
-        mechanicUser,
+        userWithoutCostView,
         { page: 1, pageSize: 10 },
       );
 

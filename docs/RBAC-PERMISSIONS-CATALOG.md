@@ -231,7 +231,7 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 | ✅ | `inventory:stock:read` | `GET /api/inventory-stock/supply-alerts`<br>`GET /api/inventory-stock/inventory-record-accuracy`<br>`GET /api/inventory-stock/pending`<br>`GET /api/inventory-stock/pending/count`<br>`GET /api/inventory-stock/warehouse/:warehouseId`<br>`GET /api/inventory-stock/warehouse/:warehouseId/transactions`<br>`GET /api/inventory-stock/warehouse/:warehouseId/item/:itemId/stock-position`<br>`GET /api/inventory-stock/warehouse/:warehouseId/item/:itemId/reservations`<br>`GET /api/inventory-stock/warehouse/:warehouseId/pending-regularization`<br>`GET /api/inventory-stock/warehouse/:warehouseId/physical-count-sheet/pdf` | Consultar saldos, kardex por bodega, alertas de abastecimiento, reservas OT y reportes operativos de stock. |
 | ✅ | `inventory:stock:adjust` | `POST /api/inventory-stock/transaction`<br>`POST /api/inventory-stock/return`<br>`PUT /api/inventory-stock/warehouse/:warehouseId/item/:itemId/levels`<br>`POST /api/inventory-adjustments` | Movimientos manuales de stock, devoluciones vinculadas a OT, políticas min/max por bodega y ajustes de inventario físico (kardex). |
 
-> **Pendiente PBAC (inventario):** `inventory-suppliers`, `inventory-analytics` siguen en `@Roles` legacy hasta un sprint de extensión.
+> **PBAC inventario (proveedores / analítica):** `inventory:supplier:read|manage`, `inventory:analytics:read|report` — migrados en sprint 2026-05-24 (Fase 1).
 
 ---
 

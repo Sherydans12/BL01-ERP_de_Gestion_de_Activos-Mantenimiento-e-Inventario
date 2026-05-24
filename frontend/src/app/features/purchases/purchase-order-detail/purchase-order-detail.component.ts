@@ -272,19 +272,23 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
     if (!po) return false;
     const threshold = Number(this.approvalThreshold() || 0);
     if (threshold <= 0) return false;
-    return Number(po.totalAmount) >= threshold && !this.authService.hasRole(['ADMIN', 'SUPER_ADMIN']);
+    return (
+      Number(po.totalAmount) >= threshold &&
+      !this.authService.hasPermission(P.ORDER_APPROVE)
+    );
   });
   canCancelOrder = computed(() => {
     const po = this.order();
     if (!po) return false;
     return (
       !['CANCELLED', 'CLOSED', 'RECEIVED'].includes(po.status) &&
-      this.authService.hasRole(['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'])
+      this.authService.hasPermission(P.ORDER_CANCEL)
     );
   });
-  requiresExtraCancelAck = computed(
-    () => !this.authService.hasRole(['ADMIN', 'SUPER_ADMIN']),
-  );
+  requiresExtraCancelAck = computed(() => {
+    const role = this.authService.currentUser()?.role;
+    return role !== 'ADMIN' && role !== 'SUPER_ADMIN';
+  });
 
   /** Cotizaciones del mismo requerimiento; la ganadora primero. */
   requisitionQuotations = computed(() => {
@@ -320,7 +324,7 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
     ) {
       return false;
     }
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.hasPermission(P.ORDER_LINK_CATALOG);
   });
 
   /**
@@ -330,7 +334,7 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
   canMarkSentToSupplier = computed(() => {
     const po = this.order();
     if (po?.status !== 'APPROVED') return false;
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.hasPermission(P.ORDER_SEND_TO_SUPPLIER);
   });
 
   isMarkingSentToSupplier = signal(false);
@@ -350,14 +354,14 @@ export class PurchaseOrderDetailComponent implements OnInit, OnDestroy {
     if (!s || !this.poStatusesAllowReception.includes(s)) {
       return false;
     }
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.hasPermission(P.RECEIPT_CREATE);
   });
 
   /** OC aprobada pero aún no enviada: mostrar acceso a recepción deshabilitado con tooltip. */
   canShowDisabledReceptionForApprovedOrder = computed(() => {
     const po = this.order();
     if (po?.status !== 'APPROVED') return false;
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.hasPermission(P.RECEIPT_CREATE);
   });
 
   showOverruleThreeWayModal = signal(false);

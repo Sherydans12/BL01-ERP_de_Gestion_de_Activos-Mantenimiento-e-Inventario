@@ -208,28 +208,32 @@ export class WorkOrderFormComponent implements OnInit {
     this.authService.hasPermission(O.WORK_ORDER_ASSIGN),
   );
 
-  /** Mecánico no puede editar OT en curso o en pausa (solo supervisor/admin). */
-  formLockedForMechanic = computed(
-    () =>
-      this.authService.currentUser()?.role === 'MECHANIC' &&
-      (this.currentStatus === 'IN_PROGRESS' ||
-        this.currentStatus === 'ON_HOLD'),
-  );
+  /** Sin permiso de planificación/asignación: no editar OT en curso o en pausa. */
+  formLockedForMechanic = computed(() => {
+    if (
+      this.currentStatus !== 'IN_PROGRESS' &&
+      this.currentStatus !== 'ON_HOLD'
+    ) {
+      return false;
+    }
+    const auth = this.authService;
+    if (
+      auth.hasPermission(O.WORK_ORDER_UPDATE) ||
+      auth.hasPermission(O.WORK_ORDER_ASSIGN)
+    ) {
+      return false;
+    }
+    const ot = this.otForm.getRawValue();
+    const supervisorId = ot.shiftSupervisorUserId as string | null;
+    return supervisorId !== auth.currentUser()?.id;
+  });
 
   mechanicsForPick = computed(() =>
-    this.assignableUsers().filter(
-      (u) =>
-        u.role === 'MECHANIC' ||
-        u.customRole?.baseRole === 'MECHANIC',
-    ),
+    this.assignableUsers().filter((u) => u.canExecuteOt !== false),
   );
 
   supervisorsForPick = computed(() =>
-    this.assignableUsers().filter(
-      (u) =>
-        u.role === 'SUPERVISOR' ||
-        u.customRole?.baseRole === 'SUPERVISOR',
-    ),
+    this.assignableUsers().filter((u) => u.canSuperviseOt === true),
   );
 
   fluidCompartmentOrder = FLUID_COMPARTMENTS_ORDER;
@@ -633,12 +637,9 @@ export class WorkOrderFormComponent implements OnInit {
           })),
         );
 
-        if (
-          this.authService.currentUser()?.role === 'MECHANIC' &&
-          (ot.status === 'IN_PROGRESS' || ot.status === 'ON_HOLD')
-        ) {
+        if (this.formLockedForMechanic()) {
           this.notificationService.warning(
-            'OT en curso o en pausa: solo un supervisor puede modificar el formulario.',
+            'OT en curso o en pausa: solo quien supervise la OT o tenga permiso de planificación puede modificar el formulario.',
           );
         }
       },

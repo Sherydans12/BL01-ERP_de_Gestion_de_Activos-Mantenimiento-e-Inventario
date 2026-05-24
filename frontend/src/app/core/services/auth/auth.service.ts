@@ -600,17 +600,20 @@ export class AuthService {
   }
 
   /**
-   * Compras / supervisión: montos completos en facturas y OC.
-   * Mecánicos y perfiles operativos ven ítems pero no precios ni totales.
+   * Compras: montos completos en facturas y OC (compras, aprobación o datos sensibles).
    */
   canSeePurchaseFinancials(): boolean {
-    const user = this.currentUser();
-    if (!user) return false;
-    return (
-      user.role === 'SUPER_ADMIN' ||
-      user.role === 'ADMIN' ||
-      user.role === 'SUPERVISOR'
-    );
+    return this.hasPermissionAny([
+      'purchases:requisition:update-purchasing',
+      'purchases:order:approve',
+      'purchases:order:update-sensitive',
+      'purchases:invoice:read',
+    ]);
+  }
+
+  /** Inventario: costos unitarios, CPP y valorización. */
+  canViewInventoryCost(): boolean {
+    return this.hasPermission('inventory:stock:view_cost');
   }
 
   forceLogout() {

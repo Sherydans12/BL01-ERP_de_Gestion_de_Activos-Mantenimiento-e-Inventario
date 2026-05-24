@@ -12,6 +12,8 @@ import {
   getPolicyThresholdsForNewItemStockRow,
   clearItemStockPolicyIfMatchesWarehouse,
 } from '../inventory-items/inventory-item-stock-policy.helper';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { userHasPermission } from '../auth/permissions.util';
 
 export interface ListInventoryTransfersQuery {
   page?: string;
@@ -40,9 +42,8 @@ export class InventoryTransferService {
     private readonly inventoryStockService: InventoryStockService,
   ) {}
 
-  private assertPrivilegedRole(user: any) {
-    const role = String(user?.role ?? '').toUpperCase();
-    if (!['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'].includes(role)) {
+  private assertCanCreateTransfer(user: { role?: string; permissions?: string[] }) {
+    if (!userHasPermission(user, SystemPermissions.INVENTORY_TRANSFER_CREATE)) {
       throw new ForbiddenException(
         'No tiene permisos para ejecutar transferencias entre bodegas.',
       );
@@ -233,7 +234,7 @@ export class InventoryTransferService {
   }
 
   async executeTransfer(dto: CreateInventoryTransferDto, user: any) {
-    this.assertPrivilegedRole(user);
+    this.assertCanCreateTransfer(user);
     const tenantId = user.tenantId as string;
     const userId = (user.id || user.sub) as string;
     if (!userId) {
@@ -262,7 +263,7 @@ export class InventoryTransferService {
     return this.prisma.$transaction(
       async (tx) => {
         // Defensa en profundidad: revalidamos permisos al entrar en la transacción.
-        this.assertPrivilegedRole(user);
+        this.assertCanCreateTransfer(user);
         const [origin, dest] = await Promise.all([
           tx.warehouse.findFirst({
             where: { id: dto.originWarehouseId, tenantId },

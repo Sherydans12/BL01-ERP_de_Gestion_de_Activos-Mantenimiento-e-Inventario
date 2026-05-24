@@ -33,6 +33,8 @@ import {
 } from './purchase-quotation-status-sync.util';
 import { buildRequisitionReconciliationSnapshot } from './purchase-requisition-reconciliation.util';
 import { generatePurchaseRequisitionPdfBuffer } from './purchase-requisition-pdf.generator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { userHasPermission } from '../auth/permissions.util';
 
 const PO_INACTIVE_FOR_LINK = ['CANCELLED', 'REJECTED'] as const;
 
@@ -828,8 +830,9 @@ export class PurchaseRequisitionsService {
     );
     const wantsAssetLinkChange = hasWorkOrderKey || hasEquipmentKey;
 
-    const isPurchaser = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'].includes(
-      user.role,
+    const isPurchaser = userHasPermission(
+      user,
+      SystemPermissions.PURCHASES_REQUISITION_UPDATE_PURCHASING,
     );
     const isOwnerOrAdmin =
       requisition.requestedById === user.id ||

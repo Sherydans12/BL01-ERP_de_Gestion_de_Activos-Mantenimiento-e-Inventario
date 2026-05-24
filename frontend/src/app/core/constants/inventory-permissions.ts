@@ -19,4 +19,11 @@ export const I = {
 
   STOCK_READ: 'inventory:stock:read',
   STOCK_ADJUST: 'inventory:stock:adjust',
+  STOCK_VIEW_COST: 'inventory:stock:view_cost',
+
+  SUPPLIER_READ: 'inventory:supplier:read',
+  SUPPLIER_MANAGE: 'inventory:supplier:manage',
+
+  ANALYTICS_READ: 'inventory:analytics:read',
+  ANALYTICS_REPORT: 'inventory:analytics:report',
 } as const;
