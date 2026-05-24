@@ -49,11 +49,18 @@ describe('WarehouseReceiptsService', () => {
   const itemId = '55555555-5555-5555-5555-555555555555';
   const expenseItemId = '88888888-8888-4888-8888-888888888888';
   const contractId = '66666666-6666-6666-6666-666666666666';
+  const equipmentId = '99999999-9999-4999-8999-999999999999';
   const userId = '77777777-7777-7777-7777-777777777777';
 
   const user = { id: userId, tenantId, role: 'ADMIN' };
 
-  function buildReceipt(overrides: Partial<{ status: string; quantityConfirmed: number }> = {}) {
+  function buildReceipt(
+    overrides: Partial<{
+      status: string;
+      quantityConfirmed: number;
+      equipmentId: string | null;
+    }> = {},
+  ) {
     return {
       id: receiptId,
       warehouseId,
@@ -65,7 +72,8 @@ describe('WarehouseReceiptsService', () => {
         id: poId,
         status: 'SENT',
         correlative: 'OC-900',
-        equipmentId: null,
+        equipmentId:
+          'equipmentId' in overrides ? overrides.equipmentId : null,
         contract: { id: contractId, code: 'C1', name: 'Contrato' },
       },
       items: [
@@ -263,6 +271,41 @@ describe('WarehouseReceiptsService', () => {
     await expect(service.confirm(receiptId, user)).rejects.toThrow(
       /bodega de recepción no existe/,
     );
+  });
+
+  it('imputa costo PURCHASE al equipo cuando la OC tiene equipmentId', async () => {
+    const receipt = buildReceipt({ quantityConfirmed: 0, equipmentId });
+
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValueOnce(receipt as never)
+      .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId } as never);
+      tx.receiptItem.groupBy.mockResolvedValue([] as never);
+      tx.receiptItem.update.mockResolvedValue({} as never);
+      tx.itemStock.findUnique.mockResolvedValue({ quantity: 0, unitCost: 0 } as never);
+      tx.itemStock.upsert.mockResolvedValue({} as never);
+      tx.inventoryTransaction.create.mockResolvedValue({} as never);
+      tx.assetCostRecord.create.mockResolvedValue({} as never);
+      tx.warehouseReceipt.update.mockResolvedValue({} as never);
+      tx.purchaseOrder.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await service.confirm(receiptId, user);
+
+    expect(tx.assetCostRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId,
+        equipmentId,
+        type: 'PURCHASE',
+        purchaseOrderId: poId,
+        warehouseReceiptId: receiptId,
+        amount: '1000.00',
+      }),
+    });
   });
 
   it('confirma multi-línea: solo inventario a stock y gasto directo en audit', async () => {

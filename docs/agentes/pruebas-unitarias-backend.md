@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **250 tests** en **13** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **255 tests** en **13** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -20,10 +20,10 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
 | **Inventario — transferencias W2W** | ~90 % mutación/recepción | 20 | W2W + validaciones recepción (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
-| **Compras — recepción bodega** | ~90 % flujo físico | 18 | `findAll`, `create`, `updateItems`, `confirm` mix multi-línea (§4.8) |
+| **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~90 % firma/edición/SRC | 52 | ACL, reset/edición sensible, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~70 % | 17 | `validateInvoiceMatch`, overrule, revoca overrule (§4) |
-| **Mantenimiento — OT cierre** | ~65 % cierre + stock | 8 | Fluidos, medidor, garantía, `WORK_ORDER_ISSUE` (§3.6) |
+| **Mantenimiento — OT cierre** | ~75 % cierre + stock | 12 | Validaciones cierre, `assetCostRecord`, fluidos (§3.6) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -76,10 +76,15 @@ npm run test:domain:watch
 - **`WorkOrdersService.updateStatus` (CLOSED)** (+5): bodega con fluidos; consumo fluido `WORK_ORDER_ISSUE`; medidor final inválido; `applyCurrentMeterChange`; correo `POSIBLE_GARANTIA`.
 - **`warehouse-receipts.confirm`** (+1): multi-línea inventario + gasto directo (solo una línea a stock).
 
-### Siguiente paso recomendado (iteración N+15)
+### Iteración N+15 (2026-05-22) — hecho
 
-1. **`work-orders`**: detención/atención mecánica obligatoria; `assetCostRecord` al cerrar.
-2. **`warehouse-receipts`**: imputación a equipo en `confirm` con OC vinculada.
+- **`WorkOrdersService.updateStatus` (CLOSED)** (+4): detención y atención mecánica obligatorias; equipo operativo; `assetCostRecord` por consumibles.
+- **`warehouse-receipts.confirm`** (+1): `assetCostRecord` tipo `PURCHASE` si OC tiene `equipmentId`.
+
+### Siguiente paso recomendado (iteración N+16)
+
+1. **`work-orders`**: fechas detención/atención invertidas; `cumulativeDowntimeHours` con `affectsAvailability`.
+2. **`purchase-orders`**: flujos de recepción parcial + facturación encadenada.
 3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
@@ -149,7 +154,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 250 tests passed (inventario 103 + compras 139 + OT 8).
+**Suite dominio crítico (2026-05-22):** 255 tests passed (inventario 103 + compras 140 + OT 12).
 
 ---
 
@@ -237,18 +242,18 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.6 Spec: `work-orders.service.spec.ts`
 
-**Última ejecución:** 8 passed (2026-05-22).
+**Última ejecución:** 12 passed (2026-05-22).
 
 | Bloque | Casos |
 |--------|-------|
-| `updateStatus` CLOSED | Bodega repuestos/fluidos; OT ya cerrada; repuestos y fluidos `WORK_ORDER_ISSUE`; medidor inválido; sync medidor; correo garantía |
+| `updateStatus` CLOSED | Detención/atención/operativo; `assetCostRecord`; bodega; stock; fluidos; medidor; garantía |
 
 Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock-policy.helper`; `EmailService` + `WARRANTY_NOTIFY_EMAILS`.
 
 #### Pendiente (mantenimiento)
 
-- [ ] Validaciones detención / atención mecánica al cerrar
-- [ ] `assetCostRecord` por consumibles
+- [ ] Fechas invertidas (detención / atención mecánica)
+- [ ] `cumulativeDowntimeHours` con `affectsAvailability: SI`
 
 ---
 

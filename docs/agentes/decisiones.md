@@ -31,6 +31,11 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:** `backend/test/jest-setup.ts` (mock `file-type`); specs smoke con deps/guards; workflow `.github/workflows/backend-tests.yml` (`test:domain` + `npm test` en `main`/`develop`); rama remota **`develop`** para staging.
 - **Consecuencias:** Suite completa **220 tests** verde. Pendiente usuario: subdominio QA + segunda app Coolify (checklist §4 en `entornos-git-despliegue.md`).
 
+## 2026-05-22 — Suite N+15: validaciones cierre OT + costo equipo en recepción
+
+- **Decisión:** `work-orders` +4 (detención, atención mecánica, operativo, `assetCostRecord`); `warehouse-receipts.confirm` +1 (imputación `PURCHASE` con `equipmentId`).
+- **Consecuencias:** Suite dominio **255 tests** (OT 12, recepción 19).
+
 ## 2026-05-22 — Suite N+14: OT fluidos/medidor/garantía + recepción multi-línea
 
 - **Decisión:** `work-orders.service.spec` +5 (fluidos, medidor, `applyCurrentMeterChange`, correo `POSIBLE_GARANTIA`); `warehouse-receipts.confirm` +1 (mix inventario/gasto directo).
