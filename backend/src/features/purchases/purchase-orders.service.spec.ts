@@ -16,7 +16,15 @@ import { StorageService } from '../../common/storage/storage.service';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 
-jest.mock('./purchase-contract-access.util');
+jest.mock('./purchase-contract-access.util', () => {
+  const actual = jest.requireActual<typeof import('./purchase-contract-access.util')>(
+    './purchase-contract-access.util',
+  );
+  return {
+    ...actual,
+    assertUserHasContractAccess: jest.fn(),
+  };
+});
 jest.mock('./purchase-quotation-status-sync.util', () => ({
   syncPurchaseQuotationStatusesFromLineAwards: jest
     .fn()
@@ -1604,5 +1612,80 @@ describe('PurchaseOrdersService — notifyApproversForPendingSignatureBatch', ()
     });
 
     expect(sendNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('PurchaseOrdersService — findEligibleForWarehouseReceipt', () => {
+  let service: PurchaseOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const orderId = '22222222-2222-2222-2222-222222222222';
+  const contractId = '33333333-3333-3333-3333-333333333333';
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    mockAssertContractAccess.mockImplementation(() => undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PurchaseOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: mockDeep<SequenceService>() },
+        { provide: AuditService, useValue: { log: jest.fn() } },
+        {
+          provide: NotificationsService,
+          useValue: { sendNotification: jest.fn() },
+        },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        { provide: StorageService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get(PurchaseOrdersService);
+  });
+
+  it('lista OCs en estados recepcionables sin guía PENDING abierta', async () => {
+    prisma.purchaseOrder.findMany.mockResolvedValue([
+      { id: orderId, status: 'PARTIALLY_RECEIVED' },
+    ] as never);
+
+    const result = await service.findEligibleForWarehouseReceipt(tenantId, {
+      role: 'ADMIN',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(prisma.purchaseOrder.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId,
+          status: {
+            in: expect.arrayContaining([
+              'SENT',
+              'PARTIALLY_RECEIVED',
+              'SENT_TO_SUPPLIER',
+            ]),
+          },
+          receipts: { none: { status: 'PENDING' } },
+        }),
+      }),
+    );
+  });
+
+  it('restringe por allowedContracts para USER', async () => {
+    prisma.purchaseOrder.findMany.mockResolvedValue([] as never);
+
+    await service.findEligibleForWarehouseReceipt(tenantId, {
+      role: 'USER',
+      allowedContracts: [contractId],
+    });
+
+    expect(prisma.purchaseOrder.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          contractId: { in: [contractId] },
+        }),
+      }),
+    );
   });
 });

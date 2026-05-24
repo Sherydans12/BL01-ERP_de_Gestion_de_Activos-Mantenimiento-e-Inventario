@@ -52,6 +52,8 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       detentionEndedAt: Date | null;
       mechanicAttentionStartedAt: Date | null;
       mechanicAttentionEndedAt: Date | null;
+      affectsAvailability: string;
+      personnelQuantity: number;
     }> = {},
   ) {
     return {
@@ -61,7 +63,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       correlative: 'OT-100',
       equipmentId: equipId,
       warehouseId: overrides.warehouseId ?? null,
-      personnelQuantity: 1,
+      personnelQuantity: overrides.personnelQuantity ?? 1,
       detentionStartedAt:
         'detentionStartedAt' in overrides
           ? overrides.detentionStartedAt
@@ -78,7 +80,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
           : detentionEnd,
       initialMeter: overrides.initialMeter ?? 1000,
       finalMeter: overrides.finalMeter ?? null,
-      affectsAvailability: 'NO',
+      affectsAvailability: overrides.affectsAvailability ?? 'NO',
       classificationTags: [] as string[],
       equipment: {
         currentMeter: 1000,
@@ -133,6 +135,79 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         closureEquipmentOperational: true,
       }),
     ).rejects.toThrow(/inicio y fin de detención/);
+  });
+
+  it('rechaza fin de detención anterior al inicio', async () => {
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(
+        openWorkOrder({
+          parts: [],
+          detentionStartedAt: detentionEnd,
+          detentionEndedAt: detentionStart,
+        }) as never,
+      );
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(
+      service.updateStatus(user, woId, {
+        status: 'CLOSED',
+        warehouseId,
+        closureEquipmentOperational: true,
+      }),
+    ).rejects.toThrow(/fin de detención debe ser posterior/);
+  });
+
+  it('rechaza fin de atención mecánica anterior al inicio', async () => {
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(
+        openWorkOrder({
+          parts: [],
+          mechanicAttentionStartedAt: detentionEnd,
+          mechanicAttentionEndedAt: detentionStart,
+        }) as never,
+      );
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(
+      service.updateStatus(user, woId, {
+        status: 'CLOSED',
+        warehouseId,
+        closureEquipmentOperational: true,
+      }),
+    ).rejects.toThrow(/fin de atención mecánica debe ser posterior/);
+  });
+
+  it('incrementa cumulativeDowntimeHours si affectsAvailability es SI', async () => {
+    const wo = openWorkOrder({ parts: [], affectsAvailability: 'SI' });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+
+    await service.updateStatus(user, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: true,
+        cumulativeDowntimeHours: { increment: 4 },
+      }),
+    });
   });
 
   it('rechaza cierre sin atención mecánica', async () => {

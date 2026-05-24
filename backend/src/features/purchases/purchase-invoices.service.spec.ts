@@ -321,6 +321,129 @@ describe('PurchaseInvoicesService', () => {
     });
   });
 
+  describe('create', () => {
+    const user = {
+      id: userId,
+      tenantId,
+      role: 'ADMIN' as const,
+    };
+    const vendorId = '66666666-6666-6666-6666-666666666666';
+    const contractId = '55555555-5555-5555-5555-555555555555';
+
+    it('rechaza factura si la OC no está en estado facturable', async () => {
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        id: poId,
+        tenantId,
+        contractId,
+        status: 'DRAFT',
+        correlative: 'OC-001',
+        quotation: { vendorId },
+      } as never);
+
+      await expect(
+        service.create(
+          {
+            purchaseOrderId: poId,
+            vendorId,
+            invoiceNumber: 'F-900',
+            emissionDate: '2024-06-01',
+            totalAmount: 5000,
+          },
+          user,
+        ),
+      ).rejects.toThrow(/debe estar aprobada/);
+    });
+
+    it('encadena validateInvoiceMatch al crear factura en OC PARTIALLY_RECEIVED', async () => {
+      const createdInvoice = {
+        ...buildInvoice(),
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        invoiceNumber: 'F-PARCIAL',
+        emissionDate: new Date('2024-06-01'),
+        dueDate: new Date('2024-07-01'),
+      };
+
+      prisma.purchaseInvoice.create.mockResolvedValue(createdInvoice as never);
+      prisma.vendor.findFirst.mockResolvedValue({
+        name: 'Proveedor',
+        code: 'P1',
+      } as never);
+      setupThreeWayPrismaMocks(createdInvoice, [{ qty: 4, unitCost: 1000 }]);
+      prisma.purchaseOrder.findFirst
+        .mockResolvedValueOnce({
+          id: poId,
+          tenantId,
+          contractId,
+          status: 'PARTIALLY_RECEIVED',
+          correlative: 'OC-001',
+          quotation: { vendorId },
+        } as never)
+        .mockResolvedValue({ requisitionId: null, quotation: null } as never);
+
+      const result = await service.create(
+        {
+          purchaseOrderId: poId,
+          vendorId,
+          invoiceNumber: 'F-PARCIAL',
+          emissionDate: '2024-06-01',
+          totalAmount: 10000,
+        },
+        user,
+      );
+
+      expect(prisma.purchaseInvoice.create).toHaveBeenCalled();
+      expect(result.match.matchReceived).toBe(false);
+      expect(result.status).toBe('DISCREPANCY');
+      expect(tx.purchaseInvoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'DISCREPANCY' },
+        }),
+      );
+    });
+
+    it('en recepción parcial: matchReceived ok pero DISCREPANCY si factura no calza con OC', async () => {
+      const createdInvoice = {
+        ...buildInvoice({ totalAmount: new Prisma.Decimal(4000) }),
+        id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        invoiceNumber: 'F-OK-PARCIAL',
+        emissionDate: new Date('2024-06-01'),
+        dueDate: new Date('2024-07-01'),
+      };
+
+      prisma.purchaseInvoice.create.mockResolvedValue(createdInvoice as never);
+      prisma.vendor.findFirst.mockResolvedValue({
+        name: 'Proveedor',
+        code: 'P1',
+      } as never);
+      setupThreeWayPrismaMocks(createdInvoice, [{ qty: 4, unitCost: 1000 }]);
+      prisma.purchaseOrder.findFirst
+        .mockResolvedValueOnce({
+          id: poId,
+          tenantId,
+          contractId,
+          status: 'PARTIALLY_RECEIVED',
+          correlative: 'OC-001',
+          quotation: { vendorId },
+        } as never)
+        .mockResolvedValue({ requisitionId: null, quotation: null } as never);
+
+      const result = await service.create(
+        {
+          purchaseOrderId: poId,
+          vendorId,
+          invoiceNumber: 'F-OK-PARCIAL',
+          emissionDate: '2024-06-01',
+          totalAmount: 4000,
+        },
+        user,
+      );
+
+      expect(result.match.matchReceived).toBe(true);
+      expect(result.match.matchPo).toBe(false);
+      expect(result.status).toBe('DISCREPANCY');
+    });
+  });
+
   describe('overruleThreeWayMatch', () => {
     const user = {
       id: userId,

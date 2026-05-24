@@ -31,6 +31,11 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:** `backend/test/jest-setup.ts` (mock `file-type`); specs smoke con deps/guards; workflow `.github/workflows/backend-tests.yml` (`test:domain` + `npm test` en `main`/`develop`); rama remota **`develop`** para staging.
 - **Consecuencias:** Suite completa **220 tests** verde. Pendiente usuario: subdominio QA + segunda app Coolify (checklist §4 en `entornos-git-despliegue.md`).
 
+## 2026-05-22 — Suite N+16: downtime OT + factura parcial 3-way + OC elegibles recepción
+
+- **Decisión:** OT +3 (fechas invertidas, `cumulativeDowntimeHours`); `purchase-invoices.create` +3 (encadena 3-way en `PARTIALLY_RECEIVED`); `findEligibleForWarehouseReceipt` +2; mock `purchase-contract-access` con `requireActual` en specs OC.
+- **Consecuencias:** Suite dominio **263 tests**.
+
 ## 2026-05-22 — Suite N+15: validaciones cierre OT + costo equipo en recepción
 
 - **Decisión:** `work-orders` +4 (detención, atención mecánica, operativo, `assetCostRecord`); `warehouse-receipts.confirm` +1 (imputación `PURCHASE` con `equipmentId`).
