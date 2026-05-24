@@ -68,9 +68,19 @@ Activá **Auto Deploy** en push a `develop` si querés CI + despliegue continuo 
 En el recurso Compose → **Environment Variables**:
 
 1. Abrí [`deploy/qa.env.example`](../../deploy/qa.env.example) en local.
-2. Copiá todas las claves al panel de Coolify.
+2. Copiá **todas** las claves al panel de Coolify (incluidas las de Postgres).
 3. Completá valores reales (ver §4).
 4. **No** subas un `.env` con secretos al repo.
+
+**Crítico — sin esto Postgres no arranca y el backend entra en bucle de reinicio:**
+
+| Variable | Uso |
+|----------|-----|
+| `DB_USER` | Usuario Postgres (`POSTGRES_USER` en el contenedor `db`) |
+| `DB_PASSWORD` | Contraseña **no vacía** (`POSTGRES_PASSWORD`) |
+| `DB_NAME` | Nombre de la BD (`POSTGRES_DB` y segmento final de `DATABASE_URL`) |
+
+Si `DB_PASSWORD` está vacía, verás en logs de **db**: *«superuser password is not specified»* y en **backend**: *P1001 Can't reach database server*.
 
 Coolify inyecta `${VAR}` en el compose y en los **build args** del frontend (`QA_API_URL`, etc.).
 
@@ -269,6 +279,16 @@ feature/xxx  →  PR a develop  →  CI verde  →  Coolify auto-deploy QA
 | Uploads perdidos | Sin volumen | Ver volumen `backend_uploads_qa` en Coolify |
 | Migraciones fallan | BD vieja / dump incompatible | Logs entrypoint; revisar `_prisma_migrations` |
 | Build backend falla en `npm install` / `npm ci` | Peer Jest 30 vs `jest-mock-extended`; falta `prisma.config.ts` en etapa deps | Repo: `backend/.npmrc` + `Dockerfile` con `COPY prisma.config.ts` y `npm ci` |
+| Backend reinicia / P1001 | `DB_PASSWORD` vacía o Postgres aún no listo | Definir `DB_USER`/`DB_PASSWORD`/`DB_NAME`; si el volumen `pgdata-qa` se creó sin password, **borrarlo** en Coolify y redeploy |
+| Log db: *password is not specified* | Falta `DB_PASSWORD` en variables Coolify | Misma tabla §3.3; volumen PG corrupto → eliminar volumen `pgdata-qa` y volver a desplegar |
+
+### Reparar Postgres tras primer deploy fallido
+
+Si el primer arranque creó el volumen `pgdata-qa` **sin** contraseña válida, Postgres puede quedar en estado inválido aunque luego agregues variables.
+
+1. En Coolify → recurso QA → **Volumes** → eliminar el volumen de datos Postgres (`pgdata-qa` o `…_pgdata-qa`).
+2. Confirmar `DB_USER`, `DB_PASSWORD`, `DB_NAME` en Environment.
+3. **Redeploy** (el volumen `backend_uploads_qa` puede conservarse si ya tenías archivos).
 
 ---
 

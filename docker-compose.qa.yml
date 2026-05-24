@@ -1,5 +1,6 @@
 # Stack QA / staging — Coolify: rama `develop`, dominios distintos a producción.
 # Guía: docs/agentes/coolify-qa-setup.md
+# OBLIGATORIO en Coolify: DB_USER, DB_PASSWORD, DB_NAME (servicio db + backend).
 version: '3.8'
 
 services:
@@ -8,13 +9,19 @@ services:
     container_name: erp-postgres-qa
     restart: always
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER:?set DB_USER in Coolify}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in Coolify}
+      POSTGRES_DB: ${DB_NAME:?set DB_NAME in Coolify}
     volumes:
       - pgdata-qa:/var/lib/postgresql/data
     networks:
       - erp-network-qa
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
 
   backend:
     build:
@@ -26,7 +33,7 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
       PORT: 3000
       NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in Coolify}
       FRONTEND_URL: ${FRONTEND_URL}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
@@ -46,12 +53,11 @@ services:
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       R2_KEY_PREFIX: ${R2_KEY_PREFIX:-env/qa}
       ALLOW_LOCAL_STORAGE_PURGE: ${ALLOW_LOCAL_STORAGE_PURGE:-true}
-      # QA: no bypass 2FA salvo prueba puntual
-      # AUTH_STEP_UP_BYPASS: "false"
     volumes:
       - backend_uploads_qa:/uploads
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     expose:
       - '3000'
     networks:
