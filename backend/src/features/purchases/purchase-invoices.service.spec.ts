@@ -55,6 +55,23 @@ describe('PurchaseInvoicesService', () => {
         requisitionId: null,
       },
       vendor: { id: 'v1', name: 'Proveedor', code: 'P1' },
+      emissionDate: new Date('2024-06-01'),
+      dueDate: new Date('2024-07-01'),
+      netAmount: null,
+      taxAmount: null,
+    };
+  }
+
+  function invoiceEntity(
+    overrides: Partial<{
+      status: string;
+      totalAmount: Prisma.Decimal;
+      threeWayMatchOverruled: boolean;
+    }> = {},
+  ) {
+    return {
+      ...buildInvoice(overrides),
+      threeWayMatchOverruled: overrides.threeWayMatchOverruled ?? false,
     };
   }
 
@@ -441,6 +458,106 @@ describe('PurchaseInvoicesService', () => {
       expect(result.match.matchReceived).toBe(true);
       expect(result.match.matchPo).toBe(false);
       expect(result.status).toBe('DISCREPANCY');
+    });
+  });
+
+  describe('update', () => {
+    const user = {
+      id: userId,
+      tenantId,
+      role: 'ADMIN' as const,
+    };
+
+    it('rechaza editar factura ya pagada', async () => {
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoiceEntity({ status: 'PAID' }) as never,
+      );
+
+      await expect(
+        service.update(invoiceId, { invoiceNumber: 'F-EDIT' }, user),
+      ).rejects.toThrow(/marcada como pagada/);
+    });
+
+    it('rechaza update sin campos', async () => {
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(invoiceEntity() as never);
+
+      await expect(service.update(invoiceId, {}, user)).rejects.toThrow(
+        /campos para actualizar/,
+      );
+    });
+
+    it('revoca overrule y encadena validateInvoiceMatch al cambiar totalAmount', async () => {
+      const inv = invoiceEntity({
+        status: 'DISCREPANCY',
+        threeWayMatchOverruled: true,
+      });
+      const fresh = {
+        ...inv,
+        totalAmount: new Prisma.Decimal(12000),
+      };
+      prisma.purchaseInvoice.findFirst
+        .mockResolvedValueOnce(inv as never)
+        .mockResolvedValueOnce(fresh as never);
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        contractId: inv.purchaseOrder.contractId,
+      } as never);
+      prisma.purchaseInvoice.update.mockResolvedValue({} as never);
+      const validateSpy = jest
+        .spyOn(service, 'validateInvoiceMatch')
+        .mockResolvedValue({ status: 'DISCREPANCY' } as never);
+
+      await service.update(invoiceId, { totalAmount: 12000 }, user);
+
+      expect(prisma.purchaseInvoice.update).toHaveBeenCalledWith({
+        where: { id: invoiceId },
+        data: expect.objectContaining({
+          status: 'PENDING',
+          threeWayMatchOverruled: false,
+          totalAmount: expect.any(Prisma.Decimal),
+        }),
+      });
+      expect(validateSpy).toHaveBeenCalledWith(invoiceId, tenantId, userId);
+      validateSpy.mockRestore();
+    });
+  });
+
+  describe('markPaid', () => {
+    const user = {
+      id: userId,
+      tenantId,
+      role: 'ADMIN' as const,
+    };
+
+    it('rechaza marcar pagada si no está MATCHED', async () => {
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoiceEntity({ status: 'DISCREPANCY' }) as never,
+      );
+
+      await expect(service.markPaid(invoiceId, user)).rejects.toThrow(
+        /match 3-way OK/,
+      );
+    });
+
+    it('marca factura MATCHED como PAID', async () => {
+      const inv = invoiceEntity({ status: 'MATCHED' });
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(inv as never);
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        contractId: inv.purchaseOrder.contractId,
+      } as never);
+      prisma.purchaseInvoice.update.mockResolvedValue({
+        ...inv,
+        status: 'PAID',
+        paidAt: new Date('2024-06-15'),
+      } as never);
+
+      const result = await service.markPaid(invoiceId, user);
+
+      expect(result.status).toBe('PAID');
+      expect(prisma.purchaseInvoice.update).toHaveBeenCalledWith({
+        where: { id: invoiceId },
+        data: expect.objectContaining({ status: 'PAID' }),
+        include: expect.any(Object),
+      });
     });
   });
 

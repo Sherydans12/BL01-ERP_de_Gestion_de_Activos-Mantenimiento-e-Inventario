@@ -532,3 +532,106 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     );
   });
 });
+
+describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const woId = '22222222-2222-2222-2222-222222222222';
+  const equipId = '33333333-3333-3333-3333-333333333333';
+  const userId = '66666666-6666-6666-6666-666666666666';
+  const user = { id: userId, tenantId, role: 'ADMIN' };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get(WorkOrdersService);
+  });
+
+  it('marca equipo no operativo al iniciar OT con affectsAvailability SI', async () => {
+    const wo = {
+      id: woId,
+      tenantId,
+      status: 'OPEN',
+      equipmentId: equipId,
+      affectsAvailability: 'SI',
+      inProgressAt: null,
+    };
+    prisma.workOrder.findFirst.mockResolvedValue(wo as never);
+    prisma.workOrder.update.mockResolvedValue({
+      ...wo,
+      status: 'IN_PROGRESS',
+      inProgressAt: new Date(),
+    } as never);
+    prisma.equipment.update.mockResolvedValue({} as never);
+
+    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+
+    expect(prisma.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: { isOperational: false },
+    });
+    expect(prisma.workOrder.update).toHaveBeenCalledWith({
+      where: { id: woId },
+      data: expect.objectContaining({
+        status: 'IN_PROGRESS',
+        inProgressAt: expect.any(Date),
+      }),
+    });
+  });
+
+  it('no altera equipo si affectsAvailability es NO', async () => {
+    const wo = {
+      id: woId,
+      tenantId,
+      status: 'OPEN',
+      equipmentId: equipId,
+      affectsAvailability: 'NO',
+      inProgressAt: null,
+    };
+    prisma.workOrder.findFirst.mockResolvedValue(wo as never);
+    prisma.workOrder.update.mockResolvedValue({ ...wo, status: 'IN_PROGRESS' } as never);
+
+    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+
+    expect(prisma.equipment.update).not.toHaveBeenCalled();
+  });
+
+  it('no vuelve a marcar equipo si la OT ya está IN_PROGRESS', async () => {
+    const existingProgressAt = new Date('2024-05-01T10:00:00.000Z');
+    const wo = {
+      id: woId,
+      tenantId,
+      status: 'IN_PROGRESS',
+      equipmentId: equipId,
+      affectsAvailability: 'SI',
+      inProgressAt: existingProgressAt,
+    };
+    prisma.workOrder.findFirst.mockResolvedValue(wo as never);
+    prisma.workOrder.update.mockResolvedValue(wo as never);
+
+    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+
+    expect(prisma.equipment.update).not.toHaveBeenCalled();
+    expect(prisma.workOrder.update).toHaveBeenCalledWith({
+      where: { id: woId },
+      data: { status: 'IN_PROGRESS' },
+    });
+  });
+
+  it('rechaza transición si la OT no existe', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateStatus(user, woId, { status: 'IN_PROGRESS' }),
+    ).rejects.toThrow(/Orden no encontrada/);
+  });
+});

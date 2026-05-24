@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **263 tests** en **13** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **272 tests** en **13** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -22,8 +22,8 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
-| **Compras — 3-way / facturas** | ~78 % | 20 | `create` + 3-way parcial, overrule (§4) |
-| **Mantenimiento — OT cierre** | ~82 % cierre + stock | 15 | Fechas, downtime, `assetCostRecord` (§3.6) |
+| **Compras — 3-way / facturas** | ~85 % | 25 | `create`, `update`, `markPaid`, overrule (§4) |
+| **Mantenimiento — OT cierre** | ~88 % cierre + estados | 19 | CLOSED + `IN_PROGRESS` / disponibilidad (§3.6) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -87,10 +87,15 @@ npm run test:domain:watch
 - **`PurchaseInvoicesService.create`** (+3): OC no facturable; encadena 3-way en `PARTIALLY_RECEIVED`; recepción parcial vs monto OC.
 - **`PurchaseOrdersService.findEligibleForWarehouseReceipt`** (+2): estados recepcionables; filtro por contrato USER.
 
-### Siguiente paso recomendado (iteración N+17)
+### Iteración N+17 (2026-05-22) — hecho
 
-1. **`work-orders`**: transición `IN_PROGRESS` y `isOperational` del equipo.
-2. **`purchase-invoices`**: `update` / marcar pagada con validaciones.
+- **`WorkOrdersService.updateStatus` (IN_PROGRESS)** (+4): `isOperational: false` con `affectsAvailability: SI`; sin efecto si `NO`; idempotencia; OT no encontrada.
+- **`PurchaseInvoicesService`** (+5): `update` (PAID, sin campos, revoca overrule + revalida); `markPaid` (solo MATCHED, éxito PAID).
+
+### Siguiente paso recomendado (iteración N+18)
+
+1. **`purchase-invoices`**: `recordPayment` / `remove`.
+2. **`work-orders`**: `promoteBacklogItem` o reservas de stock.
 3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
@@ -160,7 +165,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 263 tests passed (inventario 103 + compras 145 + OT 15).
+**Suite dominio crítico (2026-05-22):** 272 tests passed (inventario 103 + compras 150 + OT 19).
 
 ---
 
@@ -248,17 +253,18 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.6 Spec: `work-orders.service.spec.ts`
 
-**Última ejecución:** 15 passed (2026-05-22).
+**Última ejecución:** 19 passed (2026-05-22).
 
 | Bloque | Casos |
 |--------|-------|
 | `updateStatus` CLOSED | Validaciones fechas/downtime; `assetCostRecord`; bodega; stock; fluidos; medidor; garantía |
+| `updateStatus` IN_PROGRESS | Disponibilidad SI/NO; idempotencia; not found |
 
 Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock-policy.helper`; `EmailService` + `WARRANTY_NOTIFY_EMAILS`.
 
 #### Pendiente (mantenimiento)
 
-- [ ] `updateStatus` → `IN_PROGRESS` y `isOperational: false` si afecta disponibilidad
+- [ ] `promoteBacklogItem` / reservas de stock
 
 ---
 
