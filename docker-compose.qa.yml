@@ -53,6 +53,8 @@ services:
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       R2_KEY_PREFIX: ${R2_KEY_PREFIX:-env/qa}
       ALLOW_LOCAL_STORAGE_PURGE: ${ALLOW_LOCAL_STORAGE_PURGE:-true}
+      # Reintenta migraciones fallidas (P3009) tras fix SQL — solo QA
+      PRISMA_MIGRATE_AUTO_RECOVER_FAILED: ${PRISMA_MIGRATE_AUTO_RECOVER_FAILED:-true}
     volumes:
       - backend_uploads_qa:/uploads
     depends_on:

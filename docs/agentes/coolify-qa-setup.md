@@ -292,11 +292,25 @@ Si el primer arranque creó el volumen `pgdata-qa` **sin** contraseña válida, 
 
 ### Migración Prisma fallida (P3018 / P3009)
 
-Si el backend muestra `migration … inventory_transfers_w2w failed` o `idx_inventory_items_name_trgm does not exist`:
+Si el backend muestra **P3009** y sigue citando la misma migración fallida (`inventory_transfers_w2w` con fecha antigua), **no se borró el volumen Postgres** o Coolify reutilizó el mismo. El log de **db** lo delata: `Database directory appears to contain a database; Skipping initialization`.
 
-- La BD quedó a **medio migrar** (`_prisma_migrations` con fallo).
-- En **QA nuevo**, lo más simple: **borrar volumen `pgdata-qa`** y redeploy tras el fix en repo (`DROP INDEX IF EXISTS` en esa migración).
-- Alternativa sin borrar volumen (desde tu PC con `DATABASE_URL` QA):
+**Opción A — Borrar volumen (recomendado, BD limpia)**
+
+1. Coolify → recurso QA → **Stop** (opcional).
+2. **Volumes** → eliminar `pgdata-qa` / `…_pgdata-qa` (no confundir con `backend_uploads_qa`).
+3. Redeploy con `develop` actualizado.
+
+**Opción B — Recuperación automática (QA)**
+
+En variables de entorno:
+
+```env
+PRISMA_MIGRATE_AUTO_RECOVER_FAILED=true
+```
+
+(ya viene por defecto en `docker-compose.qa.yml`). Tras redeploy del **backend**, el entrypoint ejecuta `migrate resolve --rolled-back` sobre migraciones fallidas y vuelve a correr `migrate deploy` (con el SQL corregido `DROP INDEX IF EXISTS`).
+
+**Opción C — Manual** (contenedor backend o tu PC con `DATABASE_URL` QA):
 
 ```bash
 cd backend
@@ -304,7 +318,7 @@ npx prisma migrate resolve --rolled-back 20260414170504_inventory_transfers_w2w
 npx prisma migrate deploy
 ```
 
-Luego redeploy o reiniciar el contenedor backend.
+Reiniciar el contenedor backend en Coolify.
 
 ---
 

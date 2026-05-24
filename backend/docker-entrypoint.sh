@@ -31,6 +31,11 @@ c.connect()
 
 wait_for_postgres
 
+if [ "$PRISMA_MIGRATE_AUTO_RECOVER_FAILED" = "true" ]; then
+  echo "[entrypoint] QA: recovering failed Prisma migrations (if any)…"
+  node scripts/recover-failed-prisma-migrations.mjs
+fi
+
 echo "[entrypoint] prisma migrate deploy…"
 npx prisma migrate deploy
 
