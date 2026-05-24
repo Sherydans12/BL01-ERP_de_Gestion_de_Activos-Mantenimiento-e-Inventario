@@ -210,6 +210,7 @@ feature/xxx  →  PR a develop  →  CI verde  →  Coolify auto-deploy QA
 | Front llama API prod | Build sin args QA | Rebuild con `ANGULAR_BUILD_CONFIGURATION=qa` y `QA_API_URL` |
 | Uploads perdidos | Sin volumen | Ver volumen `backend_uploads_qa` en Coolify |
 | Migraciones fallan | BD vieja / dump incompatible | Logs entrypoint; revisar `_prisma_migrations` |
+| Build backend falla en `npm install` / `npm ci` | Peer Jest 30 vs `jest-mock-extended`; falta `prisma.config.ts` en etapa deps | Repo: `backend/.npmrc` + `Dockerfile` con `COPY prisma.config.ts` y `npm ci` |
 
 ---
 

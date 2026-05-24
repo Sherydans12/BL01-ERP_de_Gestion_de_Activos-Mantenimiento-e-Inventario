@@ -5,9 +5,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
   && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 COPY prisma ./prisma/
-# prisma.config.ts carga `DATABASE_URL`; `postinstall` → `prisma generate`
+COPY prisma.config.ts ./
+# prisma.config.ts + postinstall → `prisma generate` (requiere DATABASE_URL)
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-RUN npm install
+# .npmrc: legacy-peer-deps (jest-mock-extended vs Jest 30)
+RUN npm ci
 
 # 2. Build (Compilación y generación de cliente)
 FROM node:20-bookworm-slim AS builder

@@ -9,7 +9,7 @@ El contenedor ejecuta `docker-entrypoint.sh`:
 1. **`npx prisma migrate deploy`** — aplica migraciones pendientes (idempotente).
 2. Arranca NestJS.
 
-En la **imagen** Docker, `npm run build` ya ejecuta **`prisma generate`** antes de compilar Nest (`prebuild` en `backend/package.json`). Resumen local vs CI vs DB: [docs/agentes/prisma-client-y-migraciones.md](docs/agentes/prisma-client-y-migraciones.md).
+En la **imagen** Docker, `npm run build` ya ejecuta **`prisma generate`** antes de compilar Nest (`prebuild` en `backend/package.json`). El `backend/Dockerfile` usa `npm ci` con `backend/.npmrc` (`legacy-peer-deps`) por compatibilidad Jest 30 + `jest-mock-extended`, y copia `prisma.config.ts` antes del `postinstall`. Resumen local vs CI vs DB: [docs/agentes/prisma-client-y-migraciones.md](docs/agentes/prisma-client-y-migraciones.md).
 
 **No** se ejecuta `prisma db seed` automáticamente. El seed del repo solo imprime un mensaje: los datos reales vienen del **volcado que importes** desde tu entorno local.
 
