@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **233 tests** en 12 archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **240 tests** en 12 archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -20,9 +20,9 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
 | **Inventario — transferencias W2W** | ~90 % mutación/recepción | 20 | W2W + validaciones recepción (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
-| **Compras — recepción bodega** | ~75 % flujo físico | 14 | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
+| **Compras — recepción bodega** | ~85 % flujo físico | 17 | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | **Compras — gobernanza OC** | ~90 % firma/edición/SRC | 52 | ACL, reset/edición sensible, ciclo OC (§4.4) |
-| **Compras — 3-way / facturas** | ~50 % | 19 | `validateInvoiceMatch`, `overrule`, notas de crédito + revalidación |
+| **Compras — 3-way / facturas** | ~65 % | 22 | `validateInvoiceMatch`, `overrule`, NC en monto neto (§4) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -59,11 +59,16 @@ npm run test:domain:watch
 - **`PurchaseOrdersService`** (+3): `resetToDraft` not found; `updateSensitiveFields` bloquea `SENT` / `PARTIALLY_RECEIVED`.
 - **`InventoryTransferService`** (+4): usuario/bodega inválidos en `executeTransfer`; usuario sin id en `confirmReception`; `clearItemStockPolicy` post-recepción.
 
-### Siguiente paso recomendado (iteración N+12)
+### Iteración N+12 (2026-05-22) — hecho
 
-1. **`warehouse-receipts`**: `confirm` con discrepancias / cantidades parciales adicionales.
-2. **`purchase-invoices`**: `overruleThreeWayMatch` casos borde.
-3. Cobertura CI (`test:cov`) con umbral por carpeta (opcional).
+- **`warehouse-receipts.confirm`** (+3): sobre-recepción al confirmar; bodega inactiva; gasto directo sin stock + audit.
+- **`purchase-invoices`** (+4): tolerancia MATCHED; NC en monto neto; overrule sin contrato; overrule bloqueado si supera recepción.
+
+### Siguiente paso recomendado (iteración N+13)
+
+1. **`work-orders`**: consumo materiales / cierre con stock.
+2. **`purchase-invoices`**: revalidación revoca `threeWayMatchOverruled` si cambia recepción.
+3. Cobertura CI (`test:cov`) con umbral en `features/purchases/*` e `inventory-*` (opcional).
 
 ---
 
@@ -115,11 +120,11 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
 | `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **20** | Mutación, recepción, listado (§3.3) |
 | `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
-| `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **14** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
+| `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **17** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | `features/tenant-roles/tenant-role-defaults.spec.ts` | **Compras — `resolveApprovalPolicyForUser`** | **5** | Función pura ACL (ver §4) |
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
-| `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **12** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
+| `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **16** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
 | `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **8** | `create`/`remove`, P2002, revalidación 3-way (§4) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
 | `features/auth/auth.service.spec.ts` | Auth | 1 | Smoke (`should be defined`) |
@@ -131,7 +136,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 233 tests passed (inventario 103 + compras 130).
+**Suite dominio crítico (2026-05-22):** 240 tests passed (inventario 103 + compras 137).
 
 ---
 

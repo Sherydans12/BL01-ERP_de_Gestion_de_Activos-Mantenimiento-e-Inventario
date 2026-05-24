@@ -229,6 +229,71 @@ describe('WarehouseReceiptsService', () => {
       data: { status: 'RECEIVED' },
     });
   });
+
+  it('rechaza sobre-recepción al confirmar (suma otras guías)', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(buildReceipt() as never);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        isActive: true,
+      } as never);
+      tx.receiptItem.groupBy.mockResolvedValue([
+        { orderItemId: 'oi-1', _sum: { quantityReceived: 8 } },
+      ] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(service.confirm(receiptId, user)).rejects.toThrow(
+      /cantidad pendiente en la Orden de Compra/,
+    );
+  });
+
+  it('rechaza confirmación si la bodega está inactiva o no existe', async () => {
+    jest.spyOn(service, 'findById').mockResolvedValue(buildReceipt() as never);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.warehouse.findFirst.mockResolvedValue(null);
+      tx.receiptItem.groupBy.mockResolvedValue([] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(service.confirm(receiptId, user)).rejects.toThrow(
+      /bodega de recepción no existe/,
+    );
+  });
+
+  it('omite líneas de gasto directo y audita skippedItems', async () => {
+    const receipt = buildReceipt({ quantityConfirmed: 0 });
+    receipt.items[0].orderItem.inventoryItem = { isInventory: false };
+
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValueOnce(receipt as never)
+      .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      tx.receiptItem.groupBy.mockResolvedValue([] as never);
+      tx.receiptItem.update.mockResolvedValue({} as never);
+      tx.warehouseReceipt.update.mockResolvedValue({} as never);
+      tx.purchaseOrder.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await service.confirm(receiptId, user);
+
+    expect(tx.itemStock.upsert).not.toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        newValue: expect.objectContaining({
+          directExpenseItems: 1,
+          skippedItems: 1,
+        }),
+      }),
+    );
+  });
   });
 
   describe('updateItems', () => {

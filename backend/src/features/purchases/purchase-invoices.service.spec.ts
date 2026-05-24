@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -223,6 +227,42 @@ describe('PurchaseInvoicesService', () => {
       expect(result.match.matchReceived).toBe(false);
       expect(result.status).toBe('DISCREPANCY');
     });
+
+    it('marca MATCHED dentro del margen de tolerancia vs OC', async () => {
+      const invoice = buildInvoice({
+        totalAmount: new Prisma.Decimal(10050),
+      });
+      setupThreeWayPrismaMocks(invoice, [{ qty: 10, unitCost: 1000 }]);
+
+      const result = await service.validateInvoiceMatch(
+        invoiceId,
+        tenantId,
+        userId,
+      );
+
+      expect(result.match.matchPo).toBe(true);
+      expect(result.match.matchReceived).toBe(true);
+      expect(result.status).toBe('MATCHED');
+    });
+
+    it('concilia monto neto restando notas de crédito de la OC', async () => {
+      const invoice = buildInvoice({
+        totalAmount: new Prisma.Decimal(10500),
+      });
+      setupThreeWayPrismaMocks(invoice, [{ qty: 10, unitCost: 1000 }]);
+      prisma.purchaseCreditNote.findMany.mockResolvedValue([
+        { totalAmount: new Prisma.Decimal(500) },
+      ] as never);
+
+      const result = await service.validateInvoiceMatch(
+        invoiceId,
+        tenantId,
+        userId,
+      );
+
+      expect(result.match.creditNotesAmount).toBe(500);
+      expect(result.status).toBe('MATCHED');
+    });
   });
 
   describe('overruleThreeWayMatch', () => {
@@ -331,6 +371,29 @@ describe('PurchaseInvoicesService', () => {
         }),
       );
       expect(tx.activityLog.create).toHaveBeenCalled();
+    });
+
+    it('rechaza overrule sin acceso al contrato de la OC', async () => {
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(
+        buildInvoice({ status: 'DISCREPANCY' }) as never,
+      );
+      mockAssertContractAccess.mockImplementation(() => {
+        throw new ForbiddenException('Sin contrato');
+      });
+
+      await expect(
+        service.overruleThreeWayMatch(invoiceId, justification, user),
+      ).rejects.toThrow(ForbiddenException);
+
+      mockAssertContractAccess.mockImplementation(() => undefined);
+    });
+
+    it('rechaza overrule si factura vs OC no calza y supera recepción', async () => {
+      setupOverruleInvoice(25000, [{ qty: 5, unitCost: 1000 }]);
+
+      await expect(
+        service.overruleThreeWayMatch(invoiceId, justification, user),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
