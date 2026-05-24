@@ -47,6 +47,7 @@ describe('WarehouseReceiptsService', () => {
   const poId = '33333333-3333-3333-3333-333333333333';
   const warehouseId = '44444444-4444-4444-4444-444444444444';
   const itemId = '55555555-5555-5555-5555-555555555555';
+  const expenseItemId = '88888888-8888-4888-8888-888888888888';
   const contractId = '66666666-6666-6666-6666-666666666666';
   const userId = '77777777-7777-7777-7777-777777777777';
 
@@ -261,6 +262,79 @@ describe('WarehouseReceiptsService', () => {
 
     await expect(service.confirm(receiptId, user)).rejects.toThrow(
       /bodega de recepción no existe/,
+    );
+  });
+
+  it('confirma multi-línea: solo inventario a stock y gasto directo en audit', async () => {
+    const receipt = buildReceipt({ quantityConfirmed: 0 });
+    receipt.items = [
+      {
+        id: 'ri-inv',
+        orderItemId: 'oi-inv',
+        quantityReceived: 2,
+        quantityConfirmed: 0,
+        observations: null,
+        quantityPendingOnPurchase: 8,
+        orderItem: {
+          quantity: 10,
+          unitCost: 100,
+          inventoryItemId: itemId,
+          inventoryItem: { isInventory: true },
+        },
+      },
+      {
+        id: 'ri-exp',
+        orderItemId: 'oi-exp',
+        quantityReceived: 1,
+        quantityConfirmed: 0,
+        observations: 'Servicio',
+        quantityPendingOnPurchase: 4,
+        orderItem: {
+          quantity: 5,
+          unitCost: 500,
+          inventoryItemId: expenseItemId,
+          inventoryItem: { isInventory: false },
+        },
+      },
+    ];
+
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValueOnce(receipt as never)
+      .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId } as never);
+      tx.receiptItem.groupBy.mockResolvedValue([] as never);
+      tx.receiptItem.update.mockResolvedValue({} as never);
+      tx.itemStock.findUnique.mockResolvedValue({ quantity: 4, unitCost: 80 } as never);
+      tx.itemStock.upsert.mockResolvedValue({} as never);
+      tx.inventoryTransaction.create.mockResolvedValue({} as never);
+      tx.warehouseReceipt.update.mockResolvedValue({} as never);
+      tx.purchaseOrder.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await service.confirm(receiptId, user);
+
+    expect(tx.receiptItem.update).toHaveBeenCalledTimes(2);
+    expect(tx.itemStock.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.inventoryTransaction.create).toHaveBeenCalledTimes(1);
+    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'PURCHASE_RECEIPT',
+        itemId,
+        quantity: 2,
+      }),
+    });
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        newValue: expect.objectContaining({
+          directExpenseItems: 1,
+          stockTrackedArticles: 1,
+          skippedItems: 1,
+        }),
+      }),
     );
   });
 
