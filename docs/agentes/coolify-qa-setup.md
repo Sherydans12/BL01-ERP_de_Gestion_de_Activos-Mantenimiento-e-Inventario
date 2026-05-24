@@ -329,7 +329,24 @@ npx prisma migrate deploy
 
 Reiniciar el contenedor backend en Coolify.
 
-Con `PRISMA_MIGRATE_AUTO_RECOVER_FAILED=true`, el entrypoint detecta enum/tabla W2W y usa `--applied` automáticamente. Para reintentos con SQL idempotente (`DO $$ … duplicate_object`), redeploy del backend con `develop` actualizado (commit `292ae40` o posterior).
+Con `PRISMA_MIGRATE_AUTO_RECOVER_FAILED=true`, el entrypoint:
+
+- Si W2W quedó **applied** pero **no existe** `inventory_transfers`, borra esa fila en `_prisma_migrations` y `migrate deploy` vuelve a aplicar W2W (SQL idempotente).
+- `--applied` en fallos parciales **solo** si la tabla W2W existe (no basta el enum suelto).
+
+Si tras el `rolled-back` falla con *«relation inventory_transfers does not exist»*, la migración anterior W2W se saltó mal: redeploy con `develop` actualizado o borrar volumen `pgdata-qa`.
+
+**Manual (W2W saltada, tabla no existe):**
+
+```bash
+# En psql o contenedor db — solo QA
+DELETE FROM "_prisma_migrations"
+WHERE migration_name = '20260414170504_inventory_transfers_w2w';
+
+cd backend
+npx prisma migrate resolve --rolled-back 20260415195500_inventory_transfer_two_step_status
+npx prisma migrate deploy
+```
 
 ---
 
