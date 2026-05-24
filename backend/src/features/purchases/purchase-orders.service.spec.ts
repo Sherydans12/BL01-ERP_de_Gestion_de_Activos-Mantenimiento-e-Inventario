@@ -405,6 +405,20 @@ describe('PurchaseOrdersService — reject', () => {
       data: { status: 'REJECTED', notes: 'nota previa' },
     });
   });
+
+  it('no rechaza OC ya parcialmente recibida (solo flujo de aprobación)', async () => {
+    prisma.purchaseOrder.findFirst.mockResolvedValue({
+      id: orderId,
+      tenantId,
+      contractId,
+      status: 'PARTIALLY_RECEIVED',
+      notes: null,
+    } as never);
+
+    await expect(
+      service.reject(orderId, 'motivo', user),
+    ).rejects.toThrow('La OC no está pendiente de aprobación');
+  });
 });
 
 describe('PurchaseOrdersService — cancel', () => {
@@ -502,6 +516,25 @@ describe('PurchaseOrdersService — cancel', () => {
     await expect(
       service.cancel(orderId, cancelReason, user),
     ).rejects.toThrow(/recepciones de bodega confirmadas/);
+  });
+
+  it('permite anular OC PARTIALLY_RECEIVED sin guías confirmadas', async () => {
+    prisma.purchaseOrder.findFirst.mockResolvedValue(
+      baseCancelOrder({ status: 'PARTIALLY_RECEIVED' }) as never,
+    );
+    prisma.warehouseReceipt.count.mockResolvedValue(0);
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.purchaseOrder.update.mockResolvedValue({
+        id: orderId,
+        status: 'CANCELLED',
+        notes: cancelReason,
+      } as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    const result = await service.cancel(orderId, cancelReason, user);
+
+    expect(result.status).toBe('CANCELLED');
   });
 
   it('anula la OC y registra auditoría', async () => {
@@ -803,6 +836,14 @@ describe('PurchaseOrdersService — forceClose', () => {
     ).rejects.toThrow(/justificación/);
   });
 
+  it('rechaza cierre si la OC no existe', async () => {
+    prisma.purchaseOrder.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.forceClose(orderId, reason, user),
+    ).rejects.toThrow(NotFoundException);
+  });
+
   it('cierra OC y completa guías PENDING/PARTIAL', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue({
       id: orderId,
@@ -829,6 +870,15 @@ describe('PurchaseOrdersService — forceClose', () => {
           status: { in: ['PENDING', 'PARTIAL'] },
         }),
         data: { status: 'COMPLETED' },
+      }),
+    );
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'STATUS_CHANGE',
+        newValue: expect.objectContaining({
+          status: 'CLOSED',
+          closedOpenReceipts: true,
+        }),
       }),
     );
   });

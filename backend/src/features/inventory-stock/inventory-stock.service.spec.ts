@@ -496,6 +496,41 @@ describe('InventoryStockService', () => {
       const result = await service.performReturn(returnDto, mechanicUser);
       expect(result.unitCost).toBe(0);
     });
+
+    it('crea fila de stock con política del artículo si no existía saldo', async () => {
+      mockGetPolicyThresholds.mockResolvedValue({ minStock: 3, maxStock: 30 });
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.inventoryTransaction.findMany
+          .mockResolvedValueOnce([{ quantity: 4, type: 'WORK_ORDER_ISSUE' }] as never)
+          .mockResolvedValueOnce([] as never);
+        tx.itemStock.findUnique.mockResolvedValue(null);
+        setupUpsertResult(2, 0);
+        tx.inventoryTransaction.create.mockResolvedValue({
+          id: 'ret-new-row',
+          type: 'WORK_ORDER_RETURN',
+          quantity: 2,
+        } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await service.performReturn(returnDto, adminUser);
+
+      expect(mockGetPolicyThresholds).toHaveBeenCalledWith(
+        tx,
+        tenantId,
+        itemId,
+        warehouseId,
+      );
+      expect(tx.itemStock.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            minStock: 3,
+            maxStock: 30,
+            quantity: 2,
+          }),
+        }),
+      );
+    });
   });
 
   describe('updateStockLevels', () => {

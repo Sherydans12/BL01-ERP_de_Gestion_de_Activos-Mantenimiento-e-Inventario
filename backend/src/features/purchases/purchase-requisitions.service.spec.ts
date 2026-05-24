@@ -1345,4 +1345,54 @@ describe('PurchaseRequisitionsService — update', () => {
       }),
     );
   });
+
+  it('en PENDING_APPROVAL compras puede eliminar línea sin cotización', async () => {
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'PENDING_APPROVAL' }) as never);
+    prisma.inventoryItem.findMany.mockResolvedValue([{ id: itemId }] as never);
+    tx.quotationItem.count.mockResolvedValue(0);
+    tx.requisitionItem.delete.mockResolvedValue({ id: reqItemId } as never);
+    tx.requisitionItem.create.mockResolvedValue({
+      id: 'line-replacement',
+      quantity: 1,
+      description: 'Única línea',
+      unitOfMeasure: 'UN',
+      inventoryItemId: itemId,
+    } as never);
+    tx.purchaseRequisition.update.mockResolvedValue({
+      ...draftReq({ status: 'PENDING_APPROVAL' }),
+      items: [
+        {
+          id: 'line-replacement',
+          quantity: 1,
+          description: 'Única línea',
+          unitOfMeasure: 'UN',
+          inventoryItemId: itemId,
+        },
+      ],
+    } as never);
+
+    await service.update(
+      requisitionId,
+      {
+        items: [
+          {
+            description: 'Única línea',
+            quantity: 1,
+            unitOfMeasure: 'UN',
+            inventoryItemId: itemId,
+          },
+        ],
+      },
+      purchaser,
+    );
+
+    expect(tx.requisitionItem.delete).toHaveBeenCalledWith({
+      where: { id: reqItemId },
+    });
+    expect(tx.quotationItem.count).toHaveBeenCalledWith({
+      where: { requisitionItemId: reqItemId },
+    });
+  });
 });
