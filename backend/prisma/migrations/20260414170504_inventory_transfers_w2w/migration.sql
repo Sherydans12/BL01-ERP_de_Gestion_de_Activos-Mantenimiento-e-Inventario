@@ -1,4 +1,6 @@
--- Idempotente: BD nueva o reintento tras fallo parcial (P3018 / rolled-back).
+-- Idempotente: BD nueva, reintento tras fallo parcial, o QA con historial inconsistente.
+-- Nota: item_categories / warehouse_bins / unit_of_measures se crean en migraciones
+-- posteriores (20260415130000, 20260417100000); los ALTER/índices aquí son condicionales.
 
 -- CreateEnum
 DO $$ BEGIN
@@ -17,10 +19,33 @@ DROP INDEX IF EXISTS "idx_inventory_items_part_number_trgm";
 DROP INDEX IF EXISTS "idx_inventory_items_tenant_category";
 DROP INDEX IF EXISTS "item_categories_tenant_id_name_key";
 
--- AlterTable
-ALTER TABLE "item_categories" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "unit_of_measures" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "warehouse_bins" ALTER COLUMN "id" DROP DEFAULT;
+-- AlterTable (solo si la tabla ya existe en esta BD)
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'item_categories'
+    ) THEN
+        ALTER TABLE "item_categories" ALTER COLUMN "id" DROP DEFAULT;
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'unit_of_measures'
+    ) THEN
+        ALTER TABLE "unit_of_measures" ALTER COLUMN "id" DROP DEFAULT;
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'warehouse_bins'
+    ) THEN
+        ALTER TABLE "warehouse_bins" ALTER COLUMN "id" DROP DEFAULT;
+    END IF;
+END $$;
 
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "inventory_transfers" (
@@ -48,8 +73,26 @@ CREATE TABLE IF NOT EXISTS "inventory_transfer_lines" (
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "inventory_transfers_tenant_id_created_at_idx" ON "inventory_transfers"("tenant_id", "created_at");
 CREATE INDEX IF NOT EXISTS "inventory_transfer_lines_transfer_id_idx" ON "inventory_transfer_lines"("transfer_id");
-CREATE INDEX IF NOT EXISTS "item_categories_tenant_id_idx" ON "item_categories"("tenant_id");
-CREATE INDEX IF NOT EXISTS "item_categories_tenant_id_parent_category_id_idx" ON "item_categories"("tenant_id", "parent_category_id");
+
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'item_categories'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS "item_categories_tenant_id_idx" ON "item_categories"("tenant_id");
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'item_categories'
+          AND column_name = 'parent_category_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS "item_categories_tenant_id_parent_category_id_idx" ON "item_categories"("tenant_id", "parent_category_id");
+    END IF;
+END $$;
 
 -- AddForeignKey
 DO $$ BEGIN

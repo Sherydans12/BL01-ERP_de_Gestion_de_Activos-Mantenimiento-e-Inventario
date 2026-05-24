@@ -320,7 +320,9 @@ En variables de entorno:
 PRISMA_MIGRATE_AUTO_RECOVER_FAILED=true
 ```
 
-(ya viene por defecto en `docker-compose.qa.yml`). Tras redeploy del **backend**, el entrypoint ejecuta `migrate resolve --rolled-back` sobre migraciones fallidas y vuelve a correr `migrate deploy` (con el SQL corregido `DROP INDEX IF EXISTS`).
+(ya viene por defecto en `docker-compose.qa.yml`). Tras redeploy del **backend**, el entrypoint reintenta migraciones fallidas. El SQL de `20260414170504_inventory_transfers_w2w` es idempotente y **no altera** tablas que aún no existen (`unit_of_measures` se crea en `20260417100000`, etc.).
+
+**Error *«relation unit_of_measures does not exist»* en W2W:** la migración original asumía tablas de migraciones **posteriores**. Corregido en repo; hace falta **rebuild** del backend con `develop` actualizado. Si el bucle persiste → **Opción A** (borrar `pgdata-qa`).
 
 **Opción C — Manual** (contenedor backend o tu PC con `DATABASE_URL` QA):
 
@@ -373,7 +375,20 @@ Si ya tenés prod en Coolify como Compose:
 
 ---
 
-## 10. Referencias
+## 10. Producción: migración W2W editada (checksum)
+
+Si en **prod** `migrate deploy` avisa que `20260414170504_inventory_transfers_w2w` **fue modificada** tras aplicarse, actualizá el checksum en la BD (una vez):
+
+```bash
+cd backend
+node scripts/prisma-migration-checksum.mjs 20260414170504_inventory_transfers_w2w
+# En psql prod:
+# UPDATE "_prisma_migrations" SET checksum = '<hash>' WHERE migration_name = '20260414170504_inventory_transfers_w2w';
+```
+
+---
+
+## 11. Referencias
 
 - Git / ramas: [entornos-git-despliegue.md](entornos-git-despliegue.md)
 - Producción: [DEPLOY-COOLIFY.md](../../DEPLOY-COOLIFY.md)

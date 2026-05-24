@@ -9,6 +9,12 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-05-24 — Migración W2W: ALTER condicional (orden vs tablas futuras)
+
+- **Contexto:** `20260414170504` hacía `ALTER TABLE unit_of_measures` antes de que existiera la tabla (`20260417100000`); QA en bucle P3018.
+- **Decisión:** ALTER/índices de `item_categories`, `unit_of_measures`, `warehouse_bins` solo si la tabla/columna existe; script `prisma-migration-checksum.mjs` para prod si cambia checksum.
+- **Consecuencias:** QA: redeploy backend o borrar `pgdata-qa`. Prod ya migrado: actualizar checksum en `_prisma_migrations` tras deploy.
+
 ## 2026-05-24 — Dominios QA: `qa.baselogic.cl` + `qa-api.baselogic.cl`
 
 - **Contexto:** `qa.app.*` / `qa.api.*` no entran en el wildcard gratuito `*.baselogic.cl` de Cloudflare (dos niveles).
