@@ -77,18 +77,27 @@ Reemplazar `<ORG>/<REPO>` por el slug real del repositorio en GitHub.
 
 ---
 
-## 4. Coolify — segunda app (QA) — pendiente VPS
+## 4. Coolify — segunda app (QA)
 
-Checklist para cuando configures el subdominio y la VPS (no automatizado en este repo):
+**Guía paso a paso (compose, DNS, variables, datos):** [coolify-qa-setup.md](coolify-qa-setup.md)
 
-- [ ] Nueva aplicación **TPM QA** en Coolify.
-- [ ] Repositorio: mismo que prod; rama de despliegue **`develop`**.
-- [ ] Variables de entorno: `DATABASE_URL` (Postgres QA), `JWT_SECRET` (distinto de prod), URLs frontend/backend de staging, correo (sandbox o mismo con prefijo).
-- [ ] Dominio: p. ej. `qa.tudominio.com` → certificado TLS.
-- [ ] **No** compartir volúmenes de uploads ni Redis entre prod y QA si aplica.
-- [ ] Tras el primer deploy: verificar migraciones y smoke manual (login, inventario, una OC de prueba).
+Archivos en repo:
 
-Guía general de despliegue: [DEPLOY-COOLIFY.md](../DEPLOY-COOLIFY.md).
+| Archivo | Uso |
+|---------|-----|
+| `docker-compose.qa.yml` | Stack QA (rama `develop`) |
+| `deploy/qa.env.example` | Variables para pegar en Coolify |
+
+Checklist rápido:
+
+- [ ] Proyecto **TPM QA** en Coolify → Docker Compose → `docker-compose.qa.yml` → rama **`develop`**
+- [ ] DNS `qa.app.*` y `qa.api.*` (o tus subdominios) → misma VPS
+- [ ] Variables desde `deploy/qa.env.example` (`JWT_SECRET` y VAPID **nuevos**)
+- [ ] FQDN backend puerto **3000**, frontend puerto interno **8080**
+- [ ] Volúmenes **nuevos** (`pgdata-qa`, `backend_uploads_qa`) — no los de prod
+- [ ] Smoke: login + API + un flujo inventario ([coolify-qa-setup.md](coolify-qa-setup.md) §6)
+
+Producción: [DEPLOY-COOLIFY.md](../DEPLOY-COOLIFY.md).
 
 ---
 

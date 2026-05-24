@@ -89,6 +89,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [pruebas-unitarias.md](pruebas-unitarias.md) | **Testing (índice maestro):** reglas BaseLogic EAM, `npm run test:domain` / `test:domain:watch`, flujo agente |
 | [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) | **Jest / Nest:** inventario de specs, `jest-mock-extended`, cobertura inventario (kardex) y compras (ACL) |
 | [pruebas-unitarias-frontend.md](pruebas-unitarias-frontend.md) | **Angular 18:** standalone, Signals, inventario smoke |
-| [entornos-git-despliegue.md](entornos-git-despliegue.md) | **Git / Coolify:** `main` prod hoy; modelo `develop` + staging QA |
+| [entornos-git-despliegue.md](entornos-git-despliegue.md) | **Git / Coolify:** `main` prod; rama `develop` + CI |
+| [coolify-qa-setup.md](coolify-qa-setup.md) | **Coolify QA:** compose, DNS, variables, primer deploy, datos iniciales |
 
 Podéis añadir `integraciones.md`, `errores-conocidos.md`, etc., según necesidad.

@@ -52,7 +52,8 @@ Convención sugerida:
 - `docs/agentes/pruebas-unitarias.md` — **índice maestro** de testing (reglas BaseLogic, `npm run test:domain`, watch para agentes).
 - `docs/agentes/pruebas-unitarias-backend.md` — inventario de specs Jest backend, `jest-mock-extended`, cobertura inventario/compras.
 - `docs/agentes/pruebas-unitarias-frontend.md` — convenciones Angular 18 + inventario smoke.
-- `docs/agentes/entornos-git-despliegue.md` — transición `main`/prod → rama QA/staging (futuro).
+- `docs/agentes/entornos-git-despliegue.md` — `main`/prod y rama `develop`.
+- `docs/agentes/coolify-qa-setup.md` — montaje QA en Coolify (`docker-compose.qa.yml`, `deploy/qa.env.example`).
 
 Actualiza estos archivos cuando cambie el modelo mental del producto; así los chats nuevos recuperan contexto sin depender solo del historial.
 

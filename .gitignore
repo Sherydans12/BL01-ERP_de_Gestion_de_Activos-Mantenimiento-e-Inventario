@@ -4,6 +4,7 @@ node_modules/
 # Entorno y Secretos (CRÍTICO)
 .env
 .env.local
+deploy/qa.env
 
 # Backups de Base de Datos (volcados .sql van aquí; no uses *.sql global:
 # ignoraba también backend/prisma/migrations/*.sql y rompía el deploy)

@@ -1,0 +1,91 @@
+# Stack QA / staging — Coolify: rama `develop`, dominios distintos a producción.
+# Guía: docs/agentes/coolify-qa-setup.md
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: erp-postgres-qa
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - pgdata-qa:/var/lib/postgresql/data
+    networks:
+      - erp-network-qa
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: erp-backend-qa
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
+      PORT: 3000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
+      RESEND_FROM_NAME: ${RESEND_FROM_NAME:-BaseLogic QA}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:qa-notificaciones@baselogic.cl}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      UPLOAD_PATH: /uploads
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+      R2_KEY_PREFIX: ${R2_KEY_PREFIX:-env/qa}
+      # QA: no bypass 2FA salvo prueba puntual
+      # AUTH_STEP_UP_BYPASS: "false"
+    volumes:
+      - backend_uploads_qa:/uploads
+    depends_on:
+      - db
+    expose:
+      - '3000'
+    networks:
+      - erp-network-qa
+      - coolify
+    labels:
+      - 'traefik.docker.network=coolify'
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        ANGULAR_BUILD_CONFIGURATION: qa
+        QA_API_URL: ${QA_API_URL}
+        QA_SITE_URL: ${QA_SITE_URL}
+        QA_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+    container_name: erp-frontend-qa
+    restart: always
+    depends_on:
+      - backend
+    expose:
+      - '8080'
+    networks:
+      - erp-network-qa
+      - coolify
+    labels:
+      - 'traefik.docker.network=coolify'
+
+volumes:
+  pgdata-qa:
+  backend_uploads_qa:
+
+networks:
+  erp-network-qa:
+    driver: bridge
+  coolify:
+    external: true

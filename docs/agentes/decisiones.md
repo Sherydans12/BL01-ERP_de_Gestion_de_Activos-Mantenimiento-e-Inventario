@@ -9,10 +9,20 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-05-22 — Stack Coolify QA (`docker-compose.qa.yml`)
+
+- **Decisión:** Compose QA, `environment.qa.ts` + build args en `frontend/Dockerfile`, plantilla `deploy/qa.env.example`, guía [coolify-qa-setup.md](coolify-qa-setup.md).
+- **Consecuencias:** Coolify puede desplegar rama `develop` con dominios QA aislados; usuario completa DNS + variables en panel.
+
 ## 2026-05-22 — Smoke Jest + CI GitHub + rama `develop` (QA)
 
 - **Decisión:** `backend/test/jest-setup.ts` (mock `file-type`); specs smoke con deps/guards; workflow `.github/workflows/backend-tests.yml` (`test:domain` + `npm test` en `main`/`develop`); rama remota **`develop`** para staging.
 - **Consecuencias:** Suite completa **220 tests** verde. Pendiente usuario: subdominio QA + segunda app Coolify (checklist §4 en `entornos-git-despliegue.md`).
+
+## 2026-05-22 — Suite N+10: OC parcial, SRC delete línea, performReturn sin stock
+
+- **Decisión:** `purchase-orders` +4 (reject vs recepción parcial, cancel sin guías, forceClose audit); `purchase-requisitions` +1 (delete línea); `inventory-stock` +1 (política en primera devolución).
+- **Consecuencias:** Suite dominio **227 tests**.
 
 ## 2026-05-22 — Suite N+9: SRC post-adjudicación + update sin política bodega
 

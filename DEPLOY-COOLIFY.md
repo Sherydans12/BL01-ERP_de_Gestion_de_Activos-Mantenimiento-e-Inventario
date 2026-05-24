@@ -1,5 +1,7 @@
 # Despliegue en Coolify e importación de base de datos
 
+**Entorno QA / staging (rama `develop`):** [docs/agentes/coolify-qa-setup.md](docs/agentes/coolify-qa-setup.md) — `docker-compose.qa.yml` y `deploy/qa.env.example`.
+
 ## Qué hace el backend al arrancar (Docker)
 
 El contenedor ejecuta `docker-entrypoint.sh`:

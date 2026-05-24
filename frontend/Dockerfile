@@ -1,10 +1,23 @@
-# Build
+# Build — producción por defecto; QA: ANGULAR_BUILD_CONFIGURATION=qa + URLs (Coolify build args)
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+ARG ANGULAR_BUILD_CONFIGURATION=production
+ARG QA_API_URL=https://api-qa.ejemplo.com/api
+ARG QA_SITE_URL=https://qa.ejemplo.com
+ARG QA_VAPID_PUBLIC_KEY=
+
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build -- --configuration=production
+
+RUN if [ "$ANGULAR_BUILD_CONFIGURATION" = "qa" ]; then \
+      sed -i "s|__QA_API_URL__|${QA_API_URL}|g" src/environments/environment.qa.ts && \
+      sed -i "s|__QA_SITE_URL__|${QA_SITE_URL}|g" src/environments/environment.qa.ts && \
+      sed -i "s|__QA_VAPID_PUBLIC_KEY__|${QA_VAPID_PUBLIC_KEY}|g" src/environments/environment.qa.ts; \
+    fi
+
+RUN npm run build -- --configuration=${ANGULAR_BUILD_CONFIGURATION}
 
 # Nginx sin privilegios (puerto interno 8080; ver nginx.conf)
 FROM nginxinc/nginx-unprivileged:stable-alpine
