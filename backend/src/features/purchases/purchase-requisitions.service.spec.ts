@@ -1215,4 +1215,134 @@ describe('PurchaseRequisitionsService — update', () => {
       service.update(requisitionId, { equipmentId: eqId }, owner),
     ).rejects.toThrow(ForbiddenException);
   });
+
+  it('en PENDING_APPROVAL solo compras puede editar ítems', async () => {
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'PENDING_APPROVAL' }) as never);
+
+    await expect(
+      service.update(requisitionId, { description: 'Cambio' }, owner),
+    ).rejects.toThrow(/mientras la OC no haya sido generada/);
+  });
+
+  it('en PENDING_APPROVAL compras actualiza cantidad de línea existente', async () => {
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'PENDING_APPROVAL' }) as never);
+    prisma.inventoryItem.findMany.mockResolvedValue([{ id: itemId }] as never);
+    tx.requisitionItem.update.mockResolvedValue({
+      id: reqItemId,
+      quantity: 10,
+      description: 'Línea 1',
+      unitOfMeasure: 'UN',
+      inventoryItemId: itemId,
+    } as never);
+    tx.purchaseRequisition.update.mockResolvedValue({
+      ...draftReq({ status: 'PENDING_APPROVAL' }),
+      items: [
+        {
+          id: reqItemId,
+          quantity: 10,
+          description: 'Línea 1',
+          unitOfMeasure: 'UN',
+          inventoryItemId: itemId,
+        },
+      ],
+    } as never);
+
+    await service.update(
+      requisitionId,
+      {
+        items: [
+          {
+            id: reqItemId,
+            description: 'Línea 1',
+            quantity: 10,
+            unitOfMeasure: 'UN',
+            inventoryItemId: itemId,
+          },
+        ],
+      },
+      purchaser,
+    );
+
+    expect(tx.requisitionItem.update).toHaveBeenCalledWith({
+      where: { id: reqItemId },
+      data: expect.objectContaining({ quantity: 10 }),
+    });
+    expect(tx.requisitionItem.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('en PARTIALLY_PURCHASED compras puede agregar línea nueva', async () => {
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'PARTIALLY_PURCHASED' }) as never);
+    prisma.inventoryItem.findMany.mockResolvedValue([{ id: itemId }] as never);
+    tx.requisitionItem.update.mockResolvedValue({
+      id: reqItemId,
+      quantity: 2,
+      description: 'Línea 1',
+      unitOfMeasure: 'UN',
+      inventoryItemId: itemId,
+    } as never);
+    tx.requisitionItem.create.mockResolvedValue({
+      id: 'line-partial-new',
+      quantity: 4,
+      description: 'Línea adicional',
+      unitOfMeasure: 'UN',
+      inventoryItemId: itemId,
+    } as never);
+    tx.purchaseRequisition.update.mockResolvedValue({
+      ...draftReq({ status: 'PARTIALLY_PURCHASED' }),
+      items: [
+        {
+          id: reqItemId,
+          quantity: 2,
+          description: 'Línea 1',
+          unitOfMeasure: 'UN',
+          inventoryItemId: itemId,
+        },
+        {
+          id: 'line-partial-new',
+          quantity: 4,
+          description: 'Línea adicional',
+          unitOfMeasure: 'UN',
+          inventoryItemId: itemId,
+        },
+      ],
+    } as never);
+
+    await service.update(
+      requisitionId,
+      {
+        items: [
+          {
+            id: reqItemId,
+            description: 'Línea 1',
+            quantity: 2,
+            unitOfMeasure: 'UN',
+            inventoryItemId: itemId,
+          },
+          {
+            description: 'Línea adicional',
+            quantity: 4,
+            unitOfMeasure: 'UN',
+            inventoryItemId: itemId,
+          },
+        ],
+      },
+      purchaser,
+    );
+
+    expect(tx.requisitionItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          requisitionId,
+          description: 'Línea adicional',
+          quantity: 4,
+        }),
+      }),
+    );
+  });
 });

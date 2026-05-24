@@ -14,6 +14,11 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:** `backend/test/jest-setup.ts` (mock `file-type`); specs smoke con deps/guards; workflow `.github/workflows/backend-tests.yml` (`test:domain` + `npm test` en `main`/`develop`); rama remota **`develop`** para staging.
 - **Consecuencias:** Suite completa **220 tests** verde. Pendiente usuario: subdominio QA + segunda app Coolify (checklist §4 en `entornos-git-despliegue.md`).
 
+## 2026-05-22 — Suite N+9: SRC post-adjudicación + update sin política bodega
+
+- **Decisión:** `purchase-requisitions` +3 (`PENDING_APPROVAL` permisos/cantidad; `PARTIALLY_PURCHASED` línea nueva); `inventory-items` +1 (DTO `update` omite `warehouseId`/min-max).
+- **Consecuencias:** Suite dominio **222 tests**. Política de stock en alta sigue solo en `create`/`quickCreate`.
+
 ## 2026-05-22 — Suite N+8: SRC `update` SUBMITTED + `InventoryItemsService.update`
 
 - **Decisión:** `purchase-requisitions` +2 (`update` SUBMITTED OT/equipo, forbidden vínculos); `inventory-items` +4 (`update`: código fijo, PN, nombre, lookup `IN####`). UUIDs de fixture en formato v4 válido (`UUID_PARAM_RE`).

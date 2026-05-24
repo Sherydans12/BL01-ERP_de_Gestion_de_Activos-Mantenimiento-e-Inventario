@@ -10,13 +10,13 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **218 tests** en 12 archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **222 tests** en 12 archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
 | **Inventario — stock/kardex** | ~85 % del núcleo | 40 | Stock, IRA, regularización, PDF conteo (§3.2) |
-| **Compras — SRC** | ~85 % flujo completo | 34 | Crear, duplicar, cotizar, adjudicar, enviar, `update` (§4.9) |
-| **Inventario — catálogo** | ~55 % CRUD búsqueda | 22 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
+| **Compras — SRC** | ~90 % flujo completo | 37 | Ciclo completo + `update` post-adjudicación (§4.9) |
+| **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
 | **Inventario — transferencias W2W** | ~85 % listado/detalle | 16 | W2W + `listTransfers` / `getTransferById` (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
@@ -43,10 +43,15 @@ npm run test:domain:watch
 - **`PurchaseRequisitionsService.update`** (+2): `SUBMITTED` vincula OT/equipo + audit; no solicitante → `Forbidden`.
 - **`InventoryItemsService.update`** (+4): `inventoryCode` inmutable; PN duplicado; edición nombre; resolución por código `IN####`.
 
-### Siguiente paso recomendado (iteración N+9)
+### Iteración N+9 (2026-05-22) — hecho
 
-1. **`PurchaseRequisitionsService`**: `PENDING_APPROVAL` / `PARTIALLY_PURCHASED` edición ítems (compras).
-2. **`InventoryItemsService`**: política bodega en `update` (si aplica en DTO).
+- **`PurchaseRequisitionsService.update`** (+3): `PENDING_APPROVAL` solo compras; actualiza cantidad; `PARTIALLY_PURCHASED` agrega línea.
+- **`InventoryItemsService.update`** (+1): `UpdateInventoryItemDto` no incluye política bodega (`warehouseId` / min-max ignorados en servicio).
+
+### Siguiente paso recomendado (iteración N+10)
+
+1. **`PurchaseOrdersService`**: casos borde `reject` / `forceClose` con OC parcialmente recepcionada (si aplica).
+2. **`InventoryStockService`**: reservas o `performReturn` adicionales.
 3. **`npm test -- --coverage`** en CI con umbral mínimo por carpeta `features/` (opcional).
 4. Smoke **supertest** auth guard (opcional).
 
@@ -96,8 +101,8 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | Archivo spec | Servicio / ámbito | Tests | Notas |
 |--------------|-------------------|-------|-------|
 | `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **40** | Movimientos, regularización, IRA, PDF (§3.2) |
-| `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **34** | Ciclo SRC + `update` (§4.9) |
-| `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **22** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
+| `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **37** | Ciclo SRC + `update` (§4.9) |
+| `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
 | `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **16** | Mutación + listado/detalle (§3.3) |
 | `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
 | `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **14** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
@@ -116,7 +121,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 218 tests passed (inventario 97 + compras 121).
+**Suite dominio crítico (2026-05-22):** 222 tests passed (inventario 98 + compras 124).
 
 ---
 
@@ -187,14 +192,14 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.5 Spec: `inventory-items.service.spec.ts`
 
-**Última ejecución:** 22 passed (2026-05-22).
+**Última ejecución:** 23 passed (2026-05-22).
 
 | Bloque | Casos |
 |--------|-------|
 | `findItemLedger` | Código `IN`, bodega, OT, saldo pendiente, W2W, génesis |
 | `search` | Query corta; sin hits; orden por ranking trgm |
 | `create` | Categoría/UoM; part number duplicado; no `inventoryCode` manual |
-| `update` | `inventoryCode` fijo; PN duplicado; nombre; lookup por `IN####` |
+| `update` | `inventoryCode` fijo; PN duplicado; nombre; lookup `IN####`; sin política bodega |
 | `quickCreate` | Nombre; min/max bodega; SKU + política; PN duplicado |
 | `remove` | FK → mensaje historial stock |
 
@@ -368,7 +373,7 @@ Mocks: `findById` (spy), `purchase-contract-access.util`, `inventory-item-stock-
 
 ### 4.9 Spec: `purchase-requisitions.service.spec.ts`
 
-**Última ejecución:** 34 passed (2026-05-22).
+**Última ejecución:** 37 passed (2026-05-22).
 
 | Bloque | Casos |
 |--------|-------|
@@ -381,13 +386,13 @@ Mocks: `findById` (spy), `purchase-contract-access.util`, `inventory-item-stock-
 | `startQuoting` | Solo `SUBMITTED`; pasa a `QUOTING` |
 | `addQuotation` | Estado; ítems; total; crea cotización + `QUOTING` |
 | `findAll` | Filtro contrato; `USER` + `allowedContracts` |
-| `update` | QUOTING/SUBMITTED permisos; DRAFT descripción/líneas; SUBMITTED OT/equipo; ítem en cotización |
+| `update` | DRAFT/QUOTING/SUBMITTED; `PENDING_APPROVAL` / `PARTIALLY_PURCHASED` (compras); ítem en cotización |
 
 Mocks: `purchase-quotation-status-sync.util`, `purchase-requisition-reconciliation.util`, `purchase-contract-access.util` (`requireActual`).
 
 #### Pendiente (compras)
 
-- [ ] `update` en `PENDING_APPROVAL` / `PARTIALLY_PURCHASED` (compras, ítems)
+- [ ] `update` borra línea sin cotización en `PENDING_APPROVAL` (happy path delete)
 - [ ] PDF OC / recepción (Playwright en CI)
 
 ---

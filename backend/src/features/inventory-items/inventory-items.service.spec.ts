@@ -585,6 +585,7 @@ describe('InventoryItemsService — update', () => {
   const categoryId = '44444444-4444-4444-4444-444444444444';
   const parentCategoryId = '55555555-5555-5555-5555-555555555555';
   const uomId = '66666666-6666-6666-6666-666666666666';
+  const warehouseId = '88888888-8888-8888-8888-888888888888';
   const user = { id: '77777777-7777-7777-7777-777777777777', tenantId };
 
   const existingItem = {
@@ -699,6 +700,36 @@ describe('InventoryItemsService — update', () => {
 
     expect(prisma.inventoryItem.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: itemId } }),
+    );
+  });
+
+  it('ignora warehouseId y política min/max (no están en UpdateInventoryItemDto)', async () => {
+    jest.spyOn(service, 'findOne').mockResolvedValue(existingItem as never);
+    mockCategoryAndUom();
+    prisma.inventoryItem.update.mockResolvedValue({
+      ...existingItem,
+      name: 'Sin política en update',
+    } as never);
+
+    await service.update(
+      itemId,
+      {
+        name: 'Sin política en update',
+        warehouseId: warehouseId,
+        minStock: 5,
+        maxStock: 50,
+      } as never,
+      user,
+    );
+
+    expect(prisma.inventoryItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({
+          policyTargetWarehouseId: expect.anything(),
+          policyMinStock: expect.anything(),
+          policyMaxStock: expect.anything(),
+        }),
+      }),
     );
   });
 });
