@@ -35,6 +35,15 @@ export class MeterAdjustmentsService {
       throw new BadRequestException('Los valores de medidor deben ser >= 0.');
     }
 
+    if (dto.newValue < equipment.currentMeter) {
+      const reason = (dto.reason ?? '').trim();
+      if (reason.length < 15) {
+        throw new BadRequestException(
+          'Una lectura menor al medidor actual requiere justificación de cambio de motor (mín. 15 caracteres).',
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const adjustment = await tx.meterAdjustment.create({
         data: {
