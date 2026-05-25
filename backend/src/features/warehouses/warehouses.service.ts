@@ -2,8 +2,10 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { userCanAccessContractId } from '../../common/contract-scope.util';
 
 export interface CreateWarehouseDto {
   code: string;
@@ -67,6 +69,11 @@ export class WarehousesService {
       },
     });
     if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    if (!userCanAccessContractId(user, warehouse.contractId)) {
+      throw new ForbiddenException(
+        'No tiene acceso al contrato de esta bodega.',
+      );
+    }
     return warehouse;
   }
 

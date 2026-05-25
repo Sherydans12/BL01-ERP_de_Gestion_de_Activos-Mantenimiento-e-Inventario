@@ -277,6 +277,11 @@ export class InventoryTransferService {
             'Bodega de origen o destino no encontrada.',
           );
         }
+        if (!this.canAccessContract(user, origin.contractId)) {
+          throw new ForbiddenException(
+            'No tiene permisos para despachar desde esta bodega de origen.',
+          );
+        }
 
         const transfer = await tx.inventoryTransfer.create({
           data: {

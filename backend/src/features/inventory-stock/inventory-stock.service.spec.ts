@@ -50,6 +50,8 @@ describe('InventoryStockService', () => {
   const userId = '44444444-4444-4444-4444-444444444444';
   const workOrderId = '55555555-5555-5555-5555-555555555555';
 
+  const contractId = '66666666-6666-6666-6666-666666666666';
+
   const adminUser = {
     id: userId,
     tenantId,
@@ -61,6 +63,7 @@ describe('InventoryStockService', () => {
     tenantId,
     role: 'USER',
     permissions: ['inventory:stock:read'],
+    allowedContracts: [contractId],
   };
 
   beforeEach(async () => {
@@ -89,6 +92,20 @@ describe('InventoryStockService', () => {
     tx.warehouse.findFirst.mockResolvedValue({
       id: warehouseId,
       tenantId,
+      contractId,
+    } as never);
+  }
+
+  function mockPrismaWarehouse(
+    extra: Partial<{ code: string; name: string }> = {},
+  ): void {
+    prisma.warehouse.findFirst.mockResolvedValue({
+      id: warehouseId,
+      tenantId,
+      contractId,
+      code: 'WH-01',
+      name: 'Bodega test',
+      ...extra,
     } as never);
   }
 
@@ -549,7 +566,7 @@ describe('InventoryStockService', () => {
     });
 
     it('rechaza payload vacío', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
 
       await expect(
@@ -558,7 +575,7 @@ describe('InventoryStockService', () => {
     });
 
     it('rechaza máximo menor que mínimo', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.itemStock.findUnique.mockResolvedValue({
@@ -586,7 +603,7 @@ describe('InventoryStockService', () => {
     const trId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
     it('añade trace de recepción/OC y transferencia en kardex paginado', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([
         {
           type: 'IN',
@@ -653,7 +670,7 @@ describe('InventoryStockService', () => {
     });
 
     it('marca saldoPendienteAdjust en ADJUST vinculado a recepción', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([
         {
           type: 'ADJUST',
@@ -830,6 +847,11 @@ describe('InventoryStockService', () => {
     });
 
     it('aplica filtro warehouseId en ajustes y agregado', async () => {
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([] as never);
       prisma.itemStock.aggregate.mockResolvedValue({
         _sum: { quantity: 50 },
@@ -876,7 +898,7 @@ describe('InventoryStockService', () => {
     };
 
     function setupWarehouseAndStock(): void {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryTransaction.groupBy
         .mockResolvedValueOnce([
           { itemId: stockItemId, _sum: { quantity: 10 } },
@@ -979,6 +1001,8 @@ describe('InventoryStockService', () => {
     it('getPendingRegularizationPage pagina deuda y enmascara valor sin view_cost', async () => {
       prisma.warehouse.findFirst.mockResolvedValue({
         id: warehouseId,
+        tenantId,
+        contractId,
         code: 'B1',
         name: 'Central',
       } as never);
@@ -1030,6 +1054,9 @@ describe('InventoryStockService', () => {
 
     it('genera PDF con nombre derivado del código de bodega', async () => {
       prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
         code: 'B-CENTRAL',
         name: 'Bodega Central',
       } as never);
@@ -1065,7 +1092,7 @@ describe('InventoryStockService', () => {
 
   describe('getStockPosition', () => {
     it('devuelve ubicación y cantidad cuando existe posición', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.itemStock.findUnique.mockResolvedValue({
         location: '  A-01  ',
@@ -1082,7 +1109,7 @@ describe('InventoryStockService', () => {
     });
 
     it('devuelve quantityOnHand 0 si no hay fila item_stock', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.itemStock.findUnique.mockResolvedValue(null);
 

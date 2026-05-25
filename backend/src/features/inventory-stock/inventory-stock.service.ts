@@ -2,8 +2,10 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { userCanAccessContractId } from '../../common/contract-scope.util';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { generatePhysicalCountSheetPdfBuffer } from './physical-count-sheet-pdf.generator';
@@ -47,6 +49,26 @@ export interface UpdateStockLevelsDto {
 @Injectable()
 export class InventoryStockService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private assertWarehouseContractAccess(
+    user: { role?: string; allowedContracts?: string[] },
+    warehouse: { contractId: string },
+  ): void {
+    if (!userCanAccessContractId(user, warehouse.contractId)) {
+      throw new ForbiddenException(
+        'No tiene acceso al contrato de esta bodega.',
+      );
+    }
+  }
+
+  private async loadWarehouseForUser(warehouseId: string, user: any) {
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, tenantId: user.tenantId },
+    });
+    if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    this.assertWarehouseContractAccess(user, warehouse);
+    return warehouse;
+  }
 
   private ensureItemDescription<
     T extends { description?: string | null; name?: string | null },
@@ -388,10 +410,7 @@ export class InventoryStockService {
     opts?: { location?: string },
   ) {
     const tenantId = user.tenantId as string;
-    const warehouse = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-    });
-    if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    const warehouse = await this.loadWarehouseForUser(warehouseId, user);
 
     const fieldOutstandingByItem =
       await this.mapFieldDispatchOutstandingForWarehouse(
@@ -678,6 +697,7 @@ export class InventoryStockService {
     user: any,
     opts?: { itemId?: string; page?: number; pageSize?: number },
   ) {
+    await this.loadWarehouseForUser(warehouseId, user);
     const tenantId = user.tenantId as string;
     const where: Prisma.InventoryTransactionWhereInput = {
       warehouseId,
@@ -745,13 +765,7 @@ export class InventoryStockService {
     user: any,
   ): Promise<{ location: string | null; quantityOnHand: number }> {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada.');
-    }
+    await this.loadWarehouseForUser(warehouseId, user);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -779,13 +793,7 @@ export class InventoryStockService {
     user: any,
   ) {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada.');
-    }
+    await this.loadWarehouseForUser(warehouseId, user);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -885,11 +893,7 @@ export class InventoryStockService {
     user: any,
   ) {
     const tenantId = user.tenantId as string;
-    const warehouse = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true },
-    });
-    if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    await this.loadWarehouseForUser(warehouseId, user);
 
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
@@ -1013,13 +1017,7 @@ export class InventoryStockService {
     opts: { page?: number; pageSize?: number },
   ) {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true, code: true, name: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada');
-    }
+    const wh = await this.loadWarehouseForUser(warehouseId, user);
 
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 25));
@@ -1159,6 +1157,7 @@ export class InventoryStockService {
       where: { id: dto.warehouseId, tenantId: user.tenantId },
     });
     if (!warehouse) throw new NotFoundException('Bodega no válida.');
+    this.assertWarehouseContractAccess(user, warehouse);
 
     const refType = dto.referenceType?.trim() ?? '';
     if (refType === FIELD_DISPATCH_REFERENCE_TYPE && dto.type !== 'OUT') {
@@ -1317,6 +1316,9 @@ export class InventoryStockService {
     note: string;
   }> {
     const tenantId = user.tenantId as string;
+    if (opts?.warehouseId) {
+      await this.loadWarehouseForUser(opts.warehouseId, user);
+    }
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
@@ -1542,13 +1544,7 @@ export class InventoryStockService {
     warehouseId: string,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { code: true, name: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada.');
-    }
+    const wh = await this.loadWarehouseForUser(warehouseId, user);
 
     const stocks = await this.prisma.itemStock.findMany({
       where: { warehouseId, warehouse: { tenantId } },

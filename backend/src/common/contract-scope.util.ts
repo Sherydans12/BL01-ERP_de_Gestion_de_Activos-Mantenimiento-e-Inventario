@@ -28,6 +28,19 @@ export function normalizedAllowedContractIds(
   );
 }
 
+/** ¿El usuario puede operar sobre datos del contrato indicado? */
+export function userCanAccessContractId(
+  user: ContractScopedUser & { role?: string },
+  contractId: string,
+): boolean {
+  if (isTenantWideContractAccess(user)) return true;
+  const cid = contractId?.trim();
+  if (!cid) return false;
+  const allowed = normalizedAllowedContractIds(user);
+  if (!allowed.length) return false;
+  return allowed.includes(cid);
+}
+
 /**
  * Filtro Prisma `contractId` para compras (SRC, OC, recepciones, etc.).
  * Sin contratos asignados → sentinel que no coincide con filas reales.
