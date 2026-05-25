@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ActivityAction, Prisma } from '@prisma/client';
+import { ActivityAction, Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PurchaseInvoicesService } from './purchase-invoices.service';
@@ -156,9 +156,17 @@ export class PurchaseCreditNotesService {
 
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id: creditNote.purchaseOrderId, tenantId: user.tenantId },
-      select: { contractId: true },
+      select: { contractId: true, status: true },
     });
-    if (order) assertUserHasContractAccess(user, order.contractId);
+    if (!order) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+    assertUserHasContractAccess(user, order.contractId);
+    if (order.status === PurchaseOrderStatus.CLOSED) {
+      throw new BadRequestException(
+        'No se puede modificar una Nota de Crédito de una Orden de Compra cerrada técnico-financieramente',
+      );
+    }
 
     await this.audit.log({
       userId: user.id,

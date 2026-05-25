@@ -386,7 +386,7 @@ describe('PurchaseCreditNotesService', () => {
   });
 
   describe('remove — OC cerrada', () => {
-    it('elimina NC aunque la OC esté CLOSED (sin bloqueo en servicio hoy)', async () => {
+    it('rechaza eliminar NC si la OC está CLOSED (inmutabilidad 3-way)', async () => {
       prisma.purchaseCreditNote.findFirst.mockResolvedValue({
         id: creditNoteId,
         tenantId,
@@ -398,11 +398,32 @@ describe('PurchaseCreditNotesService', () => {
         contractId,
         status: 'CLOSED',
       } as never);
+
+      await expect(service.remove(creditNoteId, user)).rejects.toThrow(
+        /cerrada técnico-financieramente/i,
+      );
+      expect(prisma.purchaseCreditNote.delete).not.toHaveBeenCalled();
+    });
+
+    it('elimina NC cuando la OC no está CLOSED', async () => {
+      prisma.purchaseCreditNote.findFirst.mockResolvedValue({
+        id: creditNoteId,
+        tenantId,
+        purchaseOrderId: poId,
+        creditNoteNumber: 'NC-001',
+        totalAmount: new Prisma.Decimal(1500),
+      } as never);
+      prisma.purchaseOrder.findFirst.mockResolvedValue({
+        contractId,
+        status: 'APPROVED',
+      } as never);
       prisma.purchaseInvoice.findMany.mockResolvedValue([] as never);
 
       await service.remove(creditNoteId, user);
 
-      expect(prisma.purchaseCreditNote.delete).toHaveBeenCalled();
+      expect(prisma.purchaseCreditNote.delete).toHaveBeenCalledWith({
+        where: { id: creditNoteId },
+      });
     });
   });
 
