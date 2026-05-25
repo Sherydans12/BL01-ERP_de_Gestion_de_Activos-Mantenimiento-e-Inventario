@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:compras-pbac": "playwright test tests/compras-pbac.spec.ts",
+    "test:compras": "playwright test tests/compras",
+    "test:compras:smoke": "playwright test tests/compras/01-pbac-navigation.spec.ts",
+    "test:compras:p2p": "playwright test tests/compras/02-p2p-full-ui.spec.ts",
+    "test:compras-pbac": "playwright test tests/compras/01-pbac-navigation.spec.ts",
     "test:ui": "playwright test --ui",
     "install:browsers": "playwright install chromium"
   },

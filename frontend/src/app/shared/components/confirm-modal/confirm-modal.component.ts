@@ -5,6 +5,7 @@ import {
   Injector,
   Input,
   OnChanges,
+  OnDestroy,
   Output,
   SimpleChanges,
   afterNextRender,
@@ -151,9 +152,10 @@ import { FormsModule } from '@angular/forms';
     `,
   ],
 })
-export class ConfirmModalComponent implements OnChanges {
+export class ConfirmModalComponent implements OnChanges, OnDestroy {
   private injector = inject(Injector);
   confirmDialog = viewChild<ElementRef<HTMLDialogElement>>('confirmDialog');
+  private delayTimer: ReturnType<typeof setTimeout> | null = null;
 
   @Input() isOpen = false;
   @Input() title = 'Confirmar Acción';
@@ -201,6 +203,9 @@ export class ConfirmModalComponent implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['isOpen']?.currentValue === false) {
+      this.clearDelayTimer();
+    }
     if (changes['isOpen'] && this.isOpen) {
       this.resetStateForOpen();
       afterNextRender(
@@ -213,6 +218,10 @@ export class ConfirmModalComponent implements OnChanges {
         { injector: this.injector },
       );
     }
+  }
+
+  ngOnDestroy(): void {
+    this.clearDelayTimer();
   }
 
   onConfirm() {
@@ -231,9 +240,27 @@ export class ConfirmModalComponent implements OnChanges {
   }
 
   private resetStateForOpen() {
+    this.clearDelayTimer();
     this.reasonText = '';
     this.acknowledged = false;
     this.delayUntil = Date.now() + Math.max(0, this.confirmDelayMs);
+    this.scheduleDelayTick();
+  }
+
+  private clearDelayTimer() {
+    if (this.delayTimer != null) {
+      clearTimeout(this.delayTimer);
+      this.delayTimer = null;
+    }
+  }
+
+  /** Re-evalúa el countdown mientras el modal está abierto (zone.js no lo hace solo). */
+  private scheduleDelayTick() {
+    if (this.delaySecondsLeft() <= 0) return;
+    this.delayTimer = setTimeout(() => {
+      this.delayTimer = null;
+      this.scheduleDelayTick();
+    }, 250);
   }
 
   private delaySecondsLeft(): number {

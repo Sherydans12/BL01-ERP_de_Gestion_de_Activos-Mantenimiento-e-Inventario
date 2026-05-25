@@ -1,7 +1,13 @@
 # Compras PBAC — pruebas API y E2E UI
 
 **Fecha:** 2026-05-24  
-**Alcance:** módulo P2P (SRC → OC → recepción → factura → pago) con personas seed, matriz de **43 permisos** `purchases:*` y flujos funcionales vía HTTP + smoke Playwright del menú Compras.
+**Estado del hito:** **CERRADO** — Compras blindado en `develop` (commit local).  
+**Alcance:** módulo P2P (SRC → OC → recepción → factura → pago) con personas seed, matriz de **43 permisos** `purchases:*`, flujos API A–S y suite E2E Playwright modular.
+
+| Capa | Comando | Resultado |
+|------|---------|-----------|
+| **API matriz + flujos** | `npm run simulate:compras-pbac -- --all` | 43 probes × 13 personas + flujos A–S |
+| **E2E Playwright** | `E2E_SKIP_WEBSERVER=1 npm run test:compras` | **35/35 verdes** (6 specs modulares) |
 
 Relacionado: [pbac-matriz-verificacion.md](pbac-matriz-verificacion.md), [PURCHASE-FLOWS.md](../PURCHASE-FLOWS.md), [PURCHASE-GOVERNANCE.md](../PURCHASE-GOVERNANCE.md), [RBAC-PERMISSIONS-CATALOG.md](../RBAC-PERMISSIONS-CATALOG.md).
 
@@ -85,28 +91,73 @@ npm run simulate:compras-pbac -- --coverage    # Flujos K–S — endpoints rest
 
 ---
 
-## 3. E2E UI — Playwright (`e2e/`)
+## 3. E2E UI — Playwright avanzado (`e2e/`)
 
-Smoke del **sidebar Compras** y botón **Firmar** según PBAC. Login vía API + sesión en `localStorage` (evita captcha en cada test).
+Suite modular **35 tests** en `e2e/tests/compras/` con login vía API + `localStorage` (sin captcha en cada pantalla).
 
 ```bash
 cd e2e
 npm install
 npm run install:browsers
 
-# Con front y back ya levantados en local
-E2E_SKIP_WEBSERVER=1 npm run test:compras-pbac
+# Prerrequisito: backend :3000 + frontend :4200 + seed personas
+cd ../backend && npm run seed:compras-pbac-personas
+
+# Con servidores ya levantados
+E2E_SKIP_WEBSERVER=1 npm run test:compras
 ```
+
+### Scripts npm (`e2e/package.json`)
+
+| Script | Alcance |
+|--------|---------|
+| `npm run test:compras` | Suite completa (35 tests) |
+| `npm run test:compras:smoke` | `01-pbac-navigation` — menú PBAC |
+| `npm run test:compras:p2p` | `02-p2p-full-ui` — flujo P2P serial UI |
+
+### Archivos de la suite
+
+| Archivo | Tests | Qué cubre |
+|---------|-------|-----------|
+| `01-pbac-navigation.spec.ts` | 12 | Sidebar por persona, lectura sin crear, ACL sin Firmar, sin contrato |
+| `02-p2p-full-ui.spec.ts` | 6 | P2P completo UI: SRC → cotización → OC → firmas → envío → recepción → factura → pago |
+| `03-module-pages.spec.ts` | 9 | Smoke carga 8 rutas `/app/compras/*` + config solo lectura |
+| `04-requisition-lifecycle.spec.ts` | 2 | Duplicar SRC, anular SRC enviada |
+| `05-vendors-settings-analytics.spec.ts` | 4 | Config, proveedor, analytics PDF, calendario pagos |
+| `06-order-governance.spec.ts` | 2 | Reject OC + reset borrador, logistics OC |
+
+Helpers: `e2e/helpers/auth.ts`, `api-compras.ts`, `ui.ts`, `item-picker.ts`, `fixtures/compras.fixture.ts`.
+
+### Variables
 
 | Variable | Default |
 |----------|---------|
 | `E2E_BASE_URL` | `http://localhost:4200` |
 | `E2E_API_BASE` | `http://localhost:3000/api` |
+| `E2E_SKIP_WEBSERVER` | `1` si front/back ya corren |
 | `TENANT_CODE` / `PBAC_TEST_PASSWORD` | Igual que API |
 
-**Tests:** usuario vacío (sin Compras), solicitante, comprador, lectura (sin “Nuevo Requerimiento”), en ACL sin approve (sin “Firmar” en detalle OC).
+### Throttle auth
 
-Recomendación QA: correr `simulate:compras-pbac -- --flow` antes del E2E para dejar al menos una OC `PENDING_APPROVAL`.
+Tras ~30 logins seguidos el backend puede responder `429` en `/auth/captcha`. Mitigación:
+
+- Retry automático en `auth.ts` y `compras.fixture.ts`
+- Entre suites largas: `PBAC_LOGIN_DELAY_MS=3500` o pausa manual
+- Para CI: subir límite auth en QA o serializar workers (ya `workers: 1`)
+
+### Bugs de producto corregidos durante la suite
+
+| Área | Fix |
+|------|-----|
+| `ConfirmModalComponent` | Timer de countdown (botón confirm quedaba disabled en E2E) |
+| `GET purchase-settings/policies` | Aprobadores con `order:approve` pueden leer matriz ACL |
+| `GET warehouses?contractId=` | Filtra por contrato de la OC también para roles USER |
+
+---
+
+## 3b. E2E smoke legacy
+
+El smoke inicial `e2e/tests/compras-pbac.spec.ts` fue reemplazado por la suite modular anterior.
 
 ---
 
@@ -126,4 +177,4 @@ Recomendación QA: correr `simulate:compras-pbac -- --flow` antes del E2E para d
 | Seed personas | `backend/prisma/seed-compras-pbac-personas.ts` |
 | Simulador API | `backend/scripts/simulate-compras-pbac.mjs` |
 | Scripts npm | `backend/package.json` → `seed:compras-pbac-personas`, `simulate:compras-pbac` |
-| E2E Playwright | `e2e/tests/compras-pbac.spec.ts`, `e2e/helpers/auth.ts` |
+| E2E Playwright | `e2e/tests/compras/*.spec.ts`, `e2e/helpers/`, `e2e/fixtures/` |

@@ -8,12 +8,26 @@ export const PBAC_USERS = {
   vacio: 'pbac-compras-vacio@test.com',
   solicitante: 'pbac-compras-solicitante@test.com',
   comprador: 'pbac-compras-comprador@test.com',
-  enAclSinApprove: 'pbac-compras-en-acl-sin-approve@test.com',
+  aprobador1: 'pbac-compras-aprobador1@test.com',
+  aprobador2: 'pbac-compras-aprobador2@test.com',
+  bodega: 'pbac-compras-bodega@test.com',
+  tesoreria: 'pbac-compras-tesoreria@test.com',
+  config: 'pbac-compras-config@test.com',
   lectura: 'pbac-compras-lectura@test.com',
+  enAclSinApprove: 'pbac-compras-en-acl-sin-approve@test.com',
+  approveFueraAcl: 'pbac-compras-approve-fuera-acl@test.com',
+  sinContrato: 'pbac-compras-sin-contrato@test.com',
+  adminCompras: 'pbac-compras-admin-compras@test.com',
 } as const;
 
-async function fetchCaptcha() {
+async function fetchCaptcha(attempt = 0) {
+  if (attempt > 0) {
+    await new Promise((r) => setTimeout(r, 3000 * attempt));
+  }
   const res = await fetch(`${API_BASE}/auth/captcha`);
+  if (res.status === 429 && attempt < 6) {
+    return fetchCaptcha(attempt + 1);
+  }
   if (!res.ok) throw new Error(`CAPTCHA HTTP ${res.status}`);
   const data = (await res.json()) as { challengeId: string; question: string };
   const m = String(data.question).match(/(\d+)\s*\+\s*(\d+)/);
@@ -28,7 +42,10 @@ function decodeJwtPermissions(token: string): string[] {
   return Array.isArray(payload.permissions) ? payload.permissions : [];
 }
 
-export async function apiLogin(email: string) {
+export async function apiLogin(email: string, attempt = 0) {
+  if (attempt > 0) {
+    await new Promise((r) => setTimeout(r, 4000 * attempt));
+  }
   const captcha = await fetchCaptcha();
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
@@ -53,6 +70,9 @@ export async function apiLogin(email: string) {
     };
     message?: string;
   };
+  if (res.status === 429 && attempt < 6) {
+    return apiLogin(email, attempt + 1);
+  }
   if (!res.ok) {
     throw new Error(`Login ${email}: ${res.status} ${JSON.stringify(body)}`);
   }
@@ -62,8 +82,12 @@ export async function apiLogin(email: string) {
   return { token, user, permissions: decodeJwtPermissions(token) };
 }
 
+async function loginWithRetry(email: string) {
+  return apiLogin(email);
+}
+
 export async function seedBrowserSession(page: Page, email: string) {
-  const { token, user, permissions } = await apiLogin(email);
+  const { token, user, permissions } = await loginWithRetry(email);
   const userWithPermissions = { ...user, permissions };
   let contractId = 'ALL';
   if (
