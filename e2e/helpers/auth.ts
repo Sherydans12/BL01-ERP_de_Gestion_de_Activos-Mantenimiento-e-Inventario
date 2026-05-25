@@ -31,6 +31,11 @@ export const INVENTARIO_USERS = {
   w2wDestino: 'pbac-inventario-w2w-destino@test.com',
 } as const;
 
+export const OPERACIONES_USERS = {
+  planificador: 'pbac-operaciones-planificador@test.com',
+  mecanico: 'pbac-operaciones-mecanico@test.com',
+} as const;
+
 /** Sesión con contrato activo explícito (p. ej. operador destino W2W). */
 export async function seedBrowserSessionWithContract(
   page: Page,

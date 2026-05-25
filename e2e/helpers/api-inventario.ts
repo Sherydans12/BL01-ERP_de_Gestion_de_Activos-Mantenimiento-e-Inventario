@@ -36,6 +36,8 @@ export type WarehouseRow = {
 export type StockRow = {
   itemId: string;
   quantity: number;
+  reservedQuantity?: number;
+  availableQuantity?: number;
   item?: { id: string; partNumber?: string; name?: string; inventoryCode?: string };
 };
 

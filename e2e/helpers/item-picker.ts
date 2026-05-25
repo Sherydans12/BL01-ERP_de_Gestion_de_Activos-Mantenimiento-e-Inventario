@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 
 /** Abre el picker global, busca y elige la primera fila con resultados. */
 export async function pickCatalogItem(page: Page, searchHint: string) {
-  const dialog = page.locator('dialog.app-global-item-picker-dialog');
+  const dialog = page.locator('dialog.app-global-item-picker-dialog[open]').first();
   await expect(dialog).toBeVisible({ timeout: 10_000 });
 
   const search = dialog.getByPlaceholder(/Cód\. inventario|QR|nombre/i);

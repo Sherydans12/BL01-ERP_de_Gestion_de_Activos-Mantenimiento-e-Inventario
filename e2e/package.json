@@ -9,6 +9,8 @@
     "test:compras-pbac": "playwright test tests/compras/01-pbac-navigation.spec.ts",
     "test:inventario": "playwright test tests/inventario",
     "test:inventario:w2w": "playwright test tests/inventario/02-w2w-lifecycle.spec.ts",
+    "test:operaciones": "playwright test tests/operaciones",
+    "test:operaciones:ot-inventory": "playwright test tests/operaciones/cross-module-ot-inventory.spec.ts",
     "test:ui": "playwright test --ui",
     "install:browsers": "playwright install chromium"
   },

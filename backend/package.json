@@ -30,6 +30,7 @@
     "simulate:compras-pbac": "node scripts/simulate-compras-pbac.mjs",
     "seed:inventario-pbac-personas": "node scripts/seed-inventario-pbac-personas.mjs",
     "simulate:inventario-pbac": "node scripts/simulate-inventario-pbac.mjs",
+    "seed:operaciones-pbac-personas": "node scripts/seed-operaciones-pbac-personas.mjs",
     "seed:catalog-masters": "ts-node prisma/seed-catalog-masters.ts",
     "seed:super-admin": "node scripts/seed-super-admin.mjs",
     "seed:load-test-items": "ts-node prisma/seed-load-test-items.ts",

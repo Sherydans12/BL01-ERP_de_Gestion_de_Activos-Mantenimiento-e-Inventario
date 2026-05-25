@@ -40,6 +40,18 @@ function truncateForDb(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max);
 }
 
+function resolveWorkOrderPartNumber(inv: {
+  partNumber?: string | null;
+  inventoryCode?: string | null;
+  name: string;
+}): string {
+  const pn = inv.partNumber?.trim();
+  if (pn) return truncateForDb(pn, 50);
+  const code = inv.inventoryCode?.trim();
+  if (code) return truncateForDb(code, 50);
+  return truncateForDb(inv.name, 50);
+}
+
 /** Alineado a `frontend/.../pm-interval.ts` para KPI de próximo PM en dashboard. */
 function intervalFromHeuristicBackend(
   type: string,
@@ -688,7 +700,7 @@ export class WorkOrdersService {
             }
             const inv = await tx.inventoryItem.findFirst({
               where: { id: invItemId, tenantId },
-              select: { id: true, partNumber: true, name: true },
+              select: { id: true, partNumber: true, inventoryCode: true, name: true },
             });
             if (!inv) {
               throw new BadRequestException(
@@ -697,7 +709,7 @@ export class WorkOrdersService {
             }
             partsData.push({
               workOrderId: workOrder.id,
-              partNumber: inv.partNumber,
+              partNumber: resolveWorkOrderPartNumber(inv),
               description: truncateForDb(inv.name, 100),
               quantity: Number(p.quantity),
               inventoryItemId: inv.id,
@@ -1538,7 +1550,7 @@ export class WorkOrdersService {
               }
               const inv = await tx.inventoryItem.findFirst({
                 where: { id: invItemId, tenantId },
-                select: { id: true, partNumber: true, name: true },
+                select: { id: true, partNumber: true, inventoryCode: true, name: true },
               });
               if (!inv) {
                 throw new BadRequestException(
@@ -1547,7 +1559,7 @@ export class WorkOrdersService {
               }
               partsData.push({
                 workOrderId: id,
-                partNumber: inv.partNumber,
+                partNumber: resolveWorkOrderPartNumber(inv),
                 description: truncateForDb(inv.name, 100),
                 quantity: Number(p.quantity),
                 inventoryItemId: inv.id,
