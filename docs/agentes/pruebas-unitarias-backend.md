@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **282 tests** en **13** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **300 tests** en **14** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -23,7 +23,9 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~90 % | 30 | CRUD factura + 3-way + pago (§4) |
-| **Mantenimiento — OT cierre** | ~92 % cierre + backlog | 23 | CLOSED (PBAC + reglas negocio), `IN_PROGRESS`, `promoteBacklogItem` (§3.6) |
+| **Compras — NC** | ~95 % create/remove + neto 3-way | 13 | NC en ecuación `inv − NC`; `remove` vs OC cerrada (§4.5) |
+| **Mantenimiento — OT** | ~80 % ciclo + reservas | 32 | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
+| **Users — asignables OT** | ~90 % `findAssignableForOt` | 5 | Permisos JSON PBAC (`operations:work-order:*`) (§3.7) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -97,10 +99,17 @@ npm run test:domain:watch
 - **`PurchaseInvoicesService`** (+5): `recordPayment` (ref obligatoria, solo MATCHED, PAID); `remove` (bloquea PAID, delete).
 - **`WorkOrdersService.promoteBacklogItem`** (+3): rechaza no PENDING; `TO_TASK`; `TO_NEW_OT`.
 
-### Siguiente paso recomendado (iteración N+19)
+### Iteración N+19 (2026-05-24) — hecho
 
-1. **`work-orders.update`**: reservas de stock al cambiar repuestos.
-2. **`purchase-credit-notes`**: flujo create/apply contra factura.
+- **`WorkOrdersService`** (+9): `create` (tenant, equipo/contrato, horómetro); `update` (reservas repuestos, PBAC `IN_PROGRESS`, OT cerrada).
+- **`UsersService.findAssignableForOt`** (+4): query `tenantRole.permissions` con `array_contains` (`execute` / `assign` / `update`); flags `canExecuteOt` / `canSuperviseOt`; sin filtro legacy `MECHANIC`/`SUPERVISOR`.
+- **`purchase-credit-notes`** (+5): conciliación 3-way vía `PurchaseInvoicesService` real (neto factura − NC); `remove` con OC `CLOSED` (comportamiento actual documentado).
+- **`test:domain`**: incluye `users.service.spec` (14 suites, **300** tests).
+
+### Siguiente paso recomendado (iteración N+20)
+
+1. **`work-orders.update`**: validar stock físico insuficiente al editar repuestos (si producto lo exige).
+2. **`purchase-credit-notes.remove`**: bloquear NC si OC `CLOSED` (regla de negocio pendiente en servicio).
 3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
@@ -158,19 +167,19 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
 | `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **17** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
-| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **23** | `updateStatus` CLOSED/IN_PROGRESS + backlog (§3.6) |
-| `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **8** | `create`/`remove`, P2002, revalidación 3-way (§4) |
+| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **32** | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
+| `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **13** | `create`/`remove`, neto 3-way, OC cerrada (§4.5) |
+| `features/users/users.service.spec.ts` | **Users — OT asignables** | **5** | `findAssignableForOt` PBAC JSON (§3.7) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
 | `features/auth/auth.service.spec.ts` | Auth | 1 | Smoke (`should be defined`) |
 | `features/auth/auth.controller.spec.ts` | Auth controller | — | Smoke |
-| `features/users/users.service.spec.ts` | Users | 1 | Smoke |
 | `features/users/users.controller.spec.ts` | Users controller | — | Smoke |
 | `features/sites/sites.service.spec.ts` | Sites | 1 | Smoke |
 | `features/sites/sites.controller.spec.ts` | Sites controller | — | Smoke |
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-24):** 282 tests passed (inventario 105 + compras 154 + OT 23).
+**Suite dominio crítico (2026-05-24):** 300 tests passed (inventario 105 + compras 159 + OT 32 + users 5).
 
 ---
 
@@ -258,10 +267,12 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.6 Spec: `work-orders.service.spec.ts`
 
-**Última ejecución:** 23 passed (2026-05-24).
+**Última ejecución:** 32 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
+| `create` | `tenantId` en equipo; equipo inexistente; contrato fuera de alcance; `initialMeter` + `detentionInitialMeter` |
+| `update (repuestos y reservas)` | OT cerrada → error; `IN_PROGRESS` sin `operations:work-order:plan` → `ForbiddenException`; reemplazo `stockReservation.createMany`; sin bodega no reserva; repuesto sin `inventoryItemId` |
 | `updateStatus` CLOSED / IN_PROGRESS | Cierre con `USER`+permisos PBAC; reglas negocio (downtime, stock, medidor, garantía); `IN_PROGRESS` |
 | `promoteBacklogItem` | `TO_TASK`, `TO_NEW_OT`, validación PENDING |
 
@@ -269,7 +280,17 @@ Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock
 
 #### Pendiente (mantenimiento)
 
-- [ ] `update` con reemplazo de repuestos y `stockReservation`
+- [ ] Validar stock físico insuficiente en `update` (hoy solo reservas; el cierre mueve kardex)
+
+### 3.7 Spec: `users.service.spec.ts`
+
+**Última ejecución:** 5 passed (2026-05-24). Incluido en `npm run test:domain`.
+
+| Bloque | Casos |
+|--------|-------|
+| `findAssignableForOt` | `tenantId` vacío → `[]`; `user.findMany` con `OR` + `permissions array_contains` (`execute`, `assign`, `update`); flags derivados; **sin** `role IN (MECHANIC, SUPERVISOR)` en el `where` |
+
+Nota: el alcance por contrato en OT se valida en otros flujos (`create` OT, listados); este método filtra solo por tenant + permisos del `TenantRole`.
 
 ---
 
@@ -380,13 +401,15 @@ Mocks: `jest.mock('./purchase-contract-access.util')`; `AuditService.log`; servi
 
 ### 4.5 Spec: `purchase-credit-notes.service.spec.ts`
 
-**Última ejecución:** 8 passed (2026-05-22).
+**Última ejecución:** 13 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
 | `create` | Monto/fecha inválidos; OC/factura; `P2002` → `ConflictException`; audit + `validateInvoiceMatch` × N facturas activas |
 | `remove` | Not found; delete + revalidación |
 | `findByPurchaseOrder` | Listado con acceso a contrato |
+| `conciliación 3-way (monto neto facturas − NC)` | `PurchaseInvoicesService` real: MATCHED sin NC; MATCHED con neto 10000−3000=7000 vs OC 7000; DISCREPANCY neto &gt; recepción |
+| `remove — OC cerrada` | Elimina NC aunque OC `CLOSED` (sin guard en servicio; documentado) |
 
 ### 4.6 Spec: `signature.util.spec.ts`
 
