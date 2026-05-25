@@ -10,7 +10,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **300 tests** en **14** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **313 tests** en **17** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -23,7 +23,10 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~90 % | 30 | CRUD factura + 3-way + pago (§4) |
-| **Compras — NC** | ~95 % create/remove + neto 3-way | 13 | NC en ecuación `inv − NC`; `remove` vs OC cerrada (§4.5) |
+| **Compras — NC** | ~98 % create/remove + neto 3-way | 14 | Bloqueo `remove` si OC `CLOSED` (§4.5) |
+| **Flota — equipos** | ~70 % create/update/bulk | 6 | ABAC contrato + `bulkSyncMeterReadings` (§3.8) |
+| **Auth — login JWT** | ~40 % login PBAC | 3 | Permisos TenantRole + lockout (§5.1) |
+| **Flota — ajustes medidor** | ~80 % `create` | 3 | Reinicio con justificación motor (§3.9) |
 | **Mantenimiento — OT** | ~80 % ciclo + reservas | 32 | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
 | **Users — asignables OT** | ~90 % `findAssignableForOt` | 5 | Permisos JSON PBAC (`operations:work-order:*`) (§3.7) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
@@ -106,10 +109,18 @@ npm run test:domain:watch
 - **`purchase-credit-notes`** (+5): conciliación 3-way vía `PurchaseInvoicesService` real (neto factura − NC); `remove` con OC `CLOSED` (comportamiento actual documentado).
 - **`test:domain`**: incluye `users.service.spec` (14 suites, **300** tests).
 
-### Siguiente paso recomendado (iteración N+20)
+### Iteración N+20 / N+21 (2026-05-24) — hecho
+
+- **`PurchaseCreditNotesService.remove`**: bloquea si OC `CLOSED` (+2 tests).
+- **`EquipmentsService`**: ABAC en `create`/`update`; spec `bulkSyncMeterReadings` 50+2 (+6 tests).
+- **`AuthService.login`**: JWT con `permissions` PBAC; lockout 423 (+3 tests).
+- **`MeterAdjustmentsService.create`**: lectura &lt; actual exige justificación motor ≥15 chars (+3 tests).
+- **`test:domain`**: 17 suites, **313** tests.
+
+### Siguiente paso recomendado (iteración N+22)
 
 1. **`work-orders.update`**: validar stock físico insuficiente al editar repuestos (si producto lo exige).
-2. **`purchase-credit-notes.remove`**: bloquear NC si OC `CLOSED` (regla de negocio pendiente en servicio).
+2. **`equipments.findAll` / `remove`**: alcance contrato y borrado con OT asociadas.
 3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
@@ -168,10 +179,12 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
 | `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **17** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
 | `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **32** | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
-| `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **13** | `create`/`remove`, neto 3-way, OC cerrada (§4.5) |
+| `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **14** | `remove` bloqueado si OC `CLOSED`; neto 3-way (§4.5) |
 | `features/users/users.service.spec.ts` | **Users — OT asignables** | **5** | `findAssignableForOt` PBAC JSON (§3.7) |
+| `features/equipments/equipments.service.spec.ts` | **Flota — equipos** | **6** | `create`/`update` ABAC; bulk 50+2 (§3.8) |
+| `features/auth/auth.service.spec.ts` | **Auth — login** | **3** | JWT permissions + lockout (§5.1) |
+| `features/meter-adjustments/meter-adjustments.service.spec.ts` | **Flota — ajustes** | **3** | Reinicio medidor con motivo (§3.9) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
-| `features/auth/auth.service.spec.ts` | Auth | 1 | Smoke (`should be defined`) |
 | `features/auth/auth.controller.spec.ts` | Auth controller | — | Smoke |
 | `features/users/users.controller.spec.ts` | Users controller | — | Smoke |
 | `features/sites/sites.service.spec.ts` | Sites | 1 | Smoke |
@@ -179,7 +192,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-24):** 300 tests passed (inventario 105 + compras 159 + OT 32 + users 5).
+**Suite dominio crítico (2026-05-24):** 313 tests passed (inventario 105 + compras 160 + OT 32 + users 5 + flota 9 + auth 3).
 
 ---
 
@@ -292,6 +305,26 @@ Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock
 
 Nota: el alcance por contrato en OT se valida en otros flujos (`create` OT, listados); este método filtra solo por tenant + permisos del `TenantRole`.
 
+### 3.8 Spec: `equipments.service.spec.ts`
+
+**Última ejecución:** 6 passed (2026-05-24).
+
+| Bloque | Casos |
+|--------|-------|
+| `create` | USER sin `allowedContracts` → error; alta OK con contrato permitido |
+| `update` | Equipo fuera de alcance; patch permitido |
+| `bulkSyncMeterReadings` | 50 OK + 2 `READING_LOWER_THAN_CURRENT`; `EQUIPMENT_NOT_FOUND_OR_FORBIDDEN` sin abortar lote |
+
+Mock: `equipment-meter-sync.applyCurrentMeterChange`.
+
+### 3.9 Spec: `meter-adjustments.service.spec.ts`
+
+**Última ejecución:** 3 passed (2026-05-24).
+
+| Bloque | Casos |
+|--------|-------|
+| `create` | `newValue` &lt; `currentMeter` sin motivo → error; reinicio con justificación ≥15 chars + `meterAdjustment` en BD; equipo inexistente |
+
 ---
 
 ## 4. Compras: gobernanza y aprobaciones
@@ -401,7 +434,7 @@ Mocks: `jest.mock('./purchase-contract-access.util')`; `AuditService.log`; servi
 
 ### 4.5 Spec: `purchase-credit-notes.service.spec.ts`
 
-**Última ejecución:** 13 passed (2026-05-24).
+**Última ejecución:** 14 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
@@ -409,7 +442,7 @@ Mocks: `jest.mock('./purchase-contract-access.util')`; `AuditService.log`; servi
 | `remove` | Not found; delete + revalidación |
 | `findByPurchaseOrder` | Listado con acceso a contrato |
 | `conciliación 3-way (monto neto facturas − NC)` | `PurchaseInvoicesService` real: MATCHED sin NC; MATCHED con neto 10000−3000=7000 vs OC 7000; DISCREPANCY neto &gt; recepción |
-| `remove — OC cerrada` | Elimina NC aunque OC `CLOSED` (sin guard en servicio; documentado) |
+| `remove — OC cerrada` | Rechaza si OC `CLOSED`; permite delete si OC activa |
 
 ### 4.6 Spec: `signature.util.spec.ts`
 
@@ -483,7 +516,21 @@ Mocks: `purchase-quotation-status-sync.util`, `purchase-requisition-reconciliati
 
 ---
 
-## 5. Checklist al añadir un spec nuevo
+## 5. Auth y seguridad
+
+### 5.1 Spec: `auth.service.spec.ts`
+
+**Última ejecución:** 3 passed (2026-05-24). Incluido en `npm run test:domain`.
+
+| Bloque | Casos |
+|--------|-------|
+| `login` | JWT con `permissions` desde `TenantRole` (kebab-case); sin rol legacy en payload; lockout 423; fallo de contraseña sin token |
+
+Mock: `bcrypt.compare`, `AuthAuditService`, `CaptchaService`, `UserSessionService`.
+
+---
+
+## 6. Checklist al añadir un spec nuevo
 
 1. Crear `*.service.spec.ts` junto al servicio (o `*.util.spec.ts` para funciones puras).
 2. Registrar el archivo en la tabla §2 de este documento.

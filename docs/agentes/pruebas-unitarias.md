@@ -56,7 +56,7 @@ Prioridad de ejecución: **archivo tocado** → **`test:domain`** → suite comp
 
 ## 4. Estado actual (dominio crítico)
 
-**300 tests** en **14 archivos**, sin DB real (`npm run test:domain`).
+**313 tests** en **17 archivos**, sin DB real (`npm run test:domain`).
 
 ```bash
 cd backend
