@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
@@ -787,5 +787,318 @@ describe('WorkOrdersService — promoteBacklogItem', () => {
       }),
     );
     createSpy.mockRestore();
+  });
+});
+
+describe('WorkOrdersService — create', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const woId = '22222222-2222-2222-2222-222222222222';
+  const equipId = '33333333-3333-3333-3333-333333333333';
+  const warehouseId = '44444444-4444-4444-4444-444444444444';
+  const contractId = '77777777-7777-7777-7777-777777777777';
+  const itemId = '55555555-5555-5555-5555-555555555555';
+  const catalogSystemId = '88888888-8888-8888-8888-888888888888';
+  const userId = '66666666-6666-6666-6666-666666666666';
+
+  const adminUser = { id: userId, tenantId, role: 'ADMIN' };
+
+  const validCreateDto = () => ({
+    equipmentId: equipId,
+    warehouseId,
+    affectsAvailability: 'NO' as const,
+    systems: [catalogSystemId],
+    symptomsText: 'Pérdida de presión hidráulica',
+    workPerformedDescription: 'Revisión y reparación de manguera',
+    detentionInitialMeter: 1200,
+    initialMeter: 1200,
+  });
+
+  const equipmentRow = {
+    id: equipId,
+    tenantId,
+    contractId,
+    subcontractId: null,
+    currentMeter: 1200,
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    mockGetPolicyThresholds.mockResolvedValue({ minStock: 0, maxStock: 0 });
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(WorkOrdersService);
+
+    prisma.equipment.findFirst.mockResolvedValue(equipmentRow as never);
+    prisma.warehouse.findFirst.mockResolvedValue({
+      id: warehouseId,
+      tenantId,
+      contractId,
+    } as never);
+    prisma.workOrder.count.mockResolvedValue(2);
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+    tx.workOrder.create.mockResolvedValue({
+      id: woId,
+      tenantId,
+      correlative: 'OT-2026-003',
+      status: 'OPEN',
+      initialMeter: 1200,
+    } as never);
+    tx.workOrder.findUnique.mockResolvedValue({
+      id: woId,
+      equipment: equipmentRow,
+      warehouse: { id: warehouseId },
+      systems: [],
+      parts: [],
+    } as never);
+  });
+
+  it('rechaza equipo inexistente o fuera del tenant', async () => {
+    prisma.equipment.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create(adminUser, validCreateDto()),
+    ).rejects.toThrow(/equipo especificado no existe/);
+    expect(prisma.equipment.findFirst).toHaveBeenCalledWith({
+      where: { id: equipId, tenantId },
+    });
+  });
+
+  it('rechaza bodega que no pertenece al contrato del equipo', async () => {
+    prisma.warehouse.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create(adminUser, validCreateDto()),
+    ).rejects.toThrow(/bodega seleccionada no es válida/);
+    expect(prisma.warehouse.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: warehouseId,
+          tenantId,
+          contractId,
+        }),
+      }),
+    );
+  });
+
+  it('inicializa horómetro y crea OT en transacción con correlativo por tenant', async () => {
+    const result = await service.create(adminUser, validCreateDto());
+
+    expect(prisma.workOrder.count).toHaveBeenCalledWith({
+      where: { tenantId },
+    });
+    expect(tx.workOrder.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId,
+        equipmentId: equipId,
+        status: 'OPEN',
+        initialMeter: 1200,
+        detentionInitialMeter: 1200,
+        warehouseId,
+        createdByUserId: userId,
+      }),
+    });
+    expect(result).toEqual(expect.objectContaining({ id: woId }));
+  });
+
+  it('crea reservas de stock al incluir repuestos y bodega', async () => {
+    tx.inventoryItem.findFirst.mockResolvedValue({
+      id: itemId,
+      partNumber: 'PN-01',
+      name: 'Filtro',
+    } as never);
+
+    await service.create(adminUser, {
+      ...validCreateDto(),
+      parts: [{ partNumber: 'PN-01', description: 'Filtro', quantity: 3, inventoryItemId: itemId }],
+    });
+
+    expect(tx.stockReservation.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          workOrderId: woId,
+          itemId,
+          warehouseId,
+          quantity: 3,
+        },
+      ],
+    });
+  });
+});
+
+describe('WorkOrdersService — update (repuestos y reservas)', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const woId = '22222222-2222-2222-2222-222222222222';
+  const warehouseId = '44444444-4444-4444-4444-444444444444';
+  const itemId = '55555555-5555-5555-5555-555555555555';
+  const userId = '66666666-6666-6666-6666-666666666666';
+
+  const plannerUser = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    permissions: [SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE],
+  };
+
+  const fieldUser = {
+    id: '99999999-9999-9999-9999-999999999999',
+    tenantId,
+    role: 'USER',
+    permissions: [SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE],
+  };
+
+  const openWo = {
+    id: woId,
+    tenantId,
+    status: 'OPEN',
+    shiftSupervisorUserId: null,
+    warehouseId: null,
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(WorkOrdersService);
+    prisma.workOrder.findFirst.mockResolvedValue(openWo as never);
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+    tx.workOrder.findUnique.mockResolvedValue({ id: woId, warehouseId } as never);
+    tx.workOrder.findFirst.mockResolvedValue({
+      id: woId,
+      subcontract: null,
+      equipment: { contract: null, subcontract: null },
+      warehouse: true,
+      systems: [],
+      fluids: [],
+      fluidCompartments: [],
+      tasks: [],
+      parts: [],
+      fluidSamples: [],
+      backlogItems: [],
+      stockReservations: [],
+      purchaseRequisitions: [],
+      purchaseOrders: [],
+    } as never);
+    tx.inventoryItem.findFirst.mockResolvedValue({
+      id: itemId,
+      partNumber: 'PN-REP',
+      name: 'Repuesto',
+    } as never);
+  });
+
+  it('rechaza edición de OT cerrada', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue({
+      ...openWo,
+      status: 'CLOSED',
+    } as never);
+
+    await expect(
+      service.update(plannerUser, woId, { symptomsText: 'Cambio' }),
+    ).rejects.toThrow(/OT cerrada/);
+  });
+
+  it('rechaza edición en IN_PROGRESS sin permiso de planificación ni supervisión', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue({
+      ...openWo,
+      status: 'IN_PROGRESS',
+      shiftSupervisorUserId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    } as never);
+
+    await expect(
+      service.update(fieldUser, woId, { symptomsText: 'Intento' }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('reemplaza reservas al actualizar repuestos con bodega asignada', async () => {
+    await service.update(plannerUser, woId, {
+      parts: [
+        {
+          partNumber: 'PN-REP',
+          description: 'Repuesto',
+          quantity: 4,
+          inventoryItemId: itemId,
+        },
+      ],
+    });
+
+    expect(tx.stockReservation.deleteMany).toHaveBeenCalledWith({
+      where: { workOrderId: woId },
+    });
+    expect(tx.workOrderPart.deleteMany).toHaveBeenCalledWith({
+      where: { workOrderId: woId },
+    });
+    expect(tx.stockReservation.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          workOrderId: woId,
+          itemId,
+          warehouseId,
+          quantity: 4,
+        },
+      ],
+    });
+  });
+
+  it('no crea reservas si la OT no tiene bodega efectiva', async () => {
+    tx.workOrder.findUnique.mockResolvedValue({ id: woId, warehouseId: null } as never);
+
+    await service.update(plannerUser, woId, {
+      parts: [
+        {
+          partNumber: 'PN-REP',
+          description: 'Repuesto',
+          quantity: 2,
+          inventoryItemId: itemId,
+        },
+      ],
+    });
+
+    expect(tx.stockReservation.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rechaza repuesto sin vínculo al catálogo de inventario', async () => {
+    await expect(
+      service.update(plannerUser, woId, {
+        parts: [
+          {
+            partNumber: 'X',
+            description: 'Sin catálogo',
+            quantity: 1,
+            inventoryItemId: '',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/vinculada a un ítem del inventario/);
   });
 });
