@@ -8,7 +8,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MeterLogSource, Prisma } from '@prisma/client';
 import { pickEquipmentWritablePayload } from './equipment-write-keys';
 import { applyCurrentMeterChange } from './equipment-meter-sync';
-import { buildEquipmentContractAccessOr } from '../../common/contract-scope.util';
+import {
+  buildEquipmentContractAccessOr,
+  userCanAccessContractId,
+} from '../../common/contract-scope.util';
 
 @Injectable()
 export class EquipmentsService {
@@ -113,6 +116,12 @@ export class EquipmentsService {
 
     if (!data.contractId) {
       throw new BadRequestException('Debe indicar el contrato principal.');
+    }
+
+    if (!userCanAccessContractId(user, data.contractId)) {
+      throw new BadRequestException(
+        'Equipo no encontrado o sin permisos sobre el contrato indicado.',
+      );
     }
 
     // Aseguramos que si no hay subcontrato, pase null (no un string vacío)
@@ -474,6 +483,10 @@ export class EquipmentsService {
           : existing.subcontractId;
       if (nextSubId === '') nextSubId = null;
 
+      if (nextContractId && !userCanAccessContractId(user, nextContractId)) {
+        throw new BadRequestException('Equipo no encontrado o sin permisos');
+      }
+
       if (nextContractId) {
         const subsCount = await this.prisma.subcontract.count({
           where: { contractId: nextContractId },
@@ -558,6 +571,9 @@ export class EquipmentsService {
         },
       });
     } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
