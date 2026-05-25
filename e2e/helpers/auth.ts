@@ -20,6 +20,38 @@ export const PBAC_USERS = {
   adminCompras: 'pbac-compras-admin-compras@test.com',
 } as const;
 
+export const INVENTARIO_USERS = {
+  admin: 'pbac-inventario-admin@test.com',
+  bodega: 'pbac-inventario-bodega@test.com',
+  vacio: 'pbac-inventario-vacio@test.com',
+  sinContrato: 'pbac-inventario-sin-contrato@test.com',
+  lectura: 'pbac-inventario-lectura@test.com',
+  gestor: 'pbac-inventario-gestor@test.com',
+  w2wOrigen: 'pbac-inventario-w2w-origen@test.com',
+  w2wDestino: 'pbac-inventario-w2w-destino@test.com',
+} as const;
+
+/** Sesión con contrato activo explícito (p. ej. operador destino W2W). */
+export async function seedBrowserSessionWithContract(
+  page: Page,
+  email: string,
+  contractId: string,
+) {
+  const { token, user, permissions } = await apiLogin(email);
+  const userWithPermissions = { ...user, permissions };
+  await page.goto('/auth/login');
+  await page.evaluate(
+    ({ token: t, userJson, cid }) => {
+      localStorage.setItem('tpm_token', t);
+      localStorage.setItem('tpm_user', userJson);
+      localStorage.setItem('tpm_contract_id', cid);
+    },
+    { token, userJson: JSON.stringify(userWithPermissions), cid: contractId },
+  );
+  await page.goto('/app/dashboard');
+  await page.waitForURL(/\/app\//, { timeout: 30_000 });
+}
+
 async function fetchCaptcha(attempt = 0) {
   if (attempt > 0) {
     await new Promise((r) => setTimeout(r, 3000 * attempt));

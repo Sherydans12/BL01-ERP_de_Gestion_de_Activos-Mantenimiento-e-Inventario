@@ -39,6 +39,29 @@ export async function selectFirstNonEmptyOption(page: Page, selectLocator: Retur
   if (value) await selectLocator.selectOption(value);
 }
 
+/** Espera a que un `<select>` esté habilitado y contenga la opción indicada. */
+export async function selectOptionWhenReady(
+  selectLocator: ReturnType<Page['locator']>,
+  value: string,
+  timeout = 25_000,
+) {
+  await expect(selectLocator).toBeEnabled({ timeout });
+  await expect
+    .poll(async () => selectLocator.locator(`option[value="${value}"]`).count(), { timeout })
+    .toBeGreaterThan(0);
+  await selectLocator.selectOption(value);
+}
+
+/** Select de bodega en Control de Stock (label "Bodega" sin `for=`). */
+export function stockDashboardWarehouseSelect(page: Page) {
+  return page
+    .locator('label')
+    .filter({ hasText: /^Bodega$/i })
+    .locator('xpath=..')
+    .locator('select')
+    .first();
+}
+
 export function uniqueLabel(prefix: string) {
   return `${prefix} E2E ${Date.now()}`;
 }

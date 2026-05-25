@@ -119,6 +119,33 @@ const PERSONAS = [
     description: 'Las 15 llaves core de inventario (incl. view_cost).',
     permissions: [...INVENTORY_CORE_ALL],
   },
+  {
+    email: 'pbac-inventario-w2w-origen@test.com',
+    name: 'PBAC · W2W Origen',
+    roleName: 'PBAC · W2W Origen',
+    description: 'Despacho W2W desde bodega origen (sin approve).',
+    permissions: [
+      P.INVENTORY_ITEM_READ,
+      P.INVENTORY_WAREHOUSE_READ,
+      P.INVENTORY_STOCK_READ,
+      P.INVENTORY_TRANSFER_READ,
+      P.INVENTORY_TRANSFER_CREATE,
+    ],
+    singleContractOnly: true,
+  },
+  {
+    email: 'pbac-inventario-w2w-destino@test.com',
+    name: 'PBAC · W2W Destino',
+    roleName: 'PBAC · W2W Destino',
+    description: 'Confirmación de recepción W2W en bodega destino.',
+    permissions: [
+      P.INVENTORY_WAREHOUSE_READ,
+      P.INVENTORY_STOCK_READ,
+      P.INVENTORY_TRANSFER_READ,
+      P.INVENTORY_TRANSFER_APPROVE,
+    ],
+    singleContractOnly: true,
+  },
 ];
 
 async function upsertTenantRole(tenantId, spec) {
