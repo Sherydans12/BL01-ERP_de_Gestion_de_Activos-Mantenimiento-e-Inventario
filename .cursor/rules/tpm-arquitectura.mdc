@@ -111,3 +111,10 @@ Para tareas de **aspecto, jerarquía visual, accesibilidad o patrones UX** (no s
 - **`ecc-security-review`:** checklist de seguridad (auth, input, secretos, uploads). **Subordinado** a tenant/site y anti-enumeración de auth del TPM.
 
 Mapa de repos y pendientes: **`docs/agentes/repos-externos.md`**.
+
+## 9. MODO AUTÓNOMO Y YOLO CONTEXT (Agente / Ejecución Continua)
+
+- Tienes autorización explícita para leer, parsear y cargar el archivo `backend/.env` o `.env` en la raíz para configurar el entorno de ejecución de pruebas.
+- No omitas ni ignores archivos `.env` o configuraciones locales ocultas bajo ninguna circunstancia.
+- Estás operando en modo de automatización completa ("Run Everything"). Ejecuta comandos de terminal de forma continua (`npm run test`, `npm run test:cov`, comandos de Prisma, etc.) para crear, corregir y validar la suite de pruebas sin solicitar confirmación interactiva.
+- En caso de error en un test, analiza el output de la terminal, aplica el fix directamente en el archivo `.spec` o servicio correspondiente, y vuelve a ejecutar la prueba de forma iterativa.
