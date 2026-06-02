@@ -4,16 +4,17 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-05-24
+**Última actualización:** 2026-06-02
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **321 tests** en **18** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **342 tests** en **19** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
+| **Disponibilidad operativa diaria** | ~90 % núcleo `create` + `findUnreported` | 13 | `create` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado (§3.11 — nuevo) |
 | **Lubricantes — reporte consumo** | ~90 % núcleo `createReport` | 8 | Happy path, stock negativo, horómetro, bodega/equipo (§3.10) |
 | **Inventario — stock/kardex** | ~88 % del núcleo | 41 | Stock, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |

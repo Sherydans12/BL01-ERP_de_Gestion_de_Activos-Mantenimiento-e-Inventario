@@ -121,6 +121,11 @@ export enum SystemPermissions {
   OPERATIONS_LUBE_REPORT_READ = 'operations:lube-report:read',
   OPERATIONS_LUBE_REPORT_CREATE = 'operations:lube-report:create',
 
+  // —— Operaciones: disponibilidad operativa diaria ——
+  OPERATIONS_AVAILABILITY_READ = 'operations:availability:read',
+  OPERATIONS_AVAILABILITY_CREATE = 'operations:availability:create',
+  OPERATIONS_AVAILABILITY_MONITOR = 'operations:availability:monitor',
+
   // —— Administración: usuarios ——
   ADMIN_USER_READ = 'admin:user:read',
   ADMIN_USER_CREATE = 'admin:user:create',

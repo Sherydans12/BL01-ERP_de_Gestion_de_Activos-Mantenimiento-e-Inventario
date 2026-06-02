@@ -7,6 +7,7 @@ import { O } from './core/constants/operations-permissions';
 import { A } from './core/constants/admin-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 import { lubeReportCanDeactivate } from './features/operations/lube-reports/lube-report-can-deactivate.guard';
+import { availabilityFormCanDeactivate } from './features/operations/availability/availability-form-can-deactivate.guard';
 
 export const routes: Routes = [
   {
@@ -187,6 +188,26 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
+          ),
+      },
+      // ── Módulo: Disponibilidad Operativa Diaria ───────────────────────────
+      {
+        path: 'operaciones/disponibilidad/nuevo',
+        canActivate: [permissionGuard],
+        canDeactivate: [availabilityFormCanDeactivate],
+        data: { permissions: O.AVAILABILITY_CREATE, pageTitle: 'Reporte de Disponibilidad' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-form.component').then(
+            (m) => m.AvailabilityFormComponent,
+          ),
+      },
+      {
+        path: 'operaciones/disponibilidad/monitor',
+        canActivate: [permissionGuard],
+        data: { permissions: O.AVAILABILITY_MONITOR, pageTitle: 'Monitor de Flota' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-monitor.component').then(
+            (m) => m.AvailabilityMonitorComponent,
           ),
       },
       // ── Mantenimiento (pautas PM) ─────────────────────────────────────────

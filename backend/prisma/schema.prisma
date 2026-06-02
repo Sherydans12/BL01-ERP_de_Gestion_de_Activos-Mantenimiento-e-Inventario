@@ -74,6 +74,7 @@ model Equipment {
   purchaseOrders        PurchaseOrder[]       @relation("OrderEquipment")
   assetCostRecords      AssetCostRecord[]
   lubeReports           LubeReport[]
+  availabilities        EquipmentAvailability[]
 
   @@unique([tenantId, internalId])
   @@unique([tenantId, plate])
@@ -583,6 +584,7 @@ model User {
   purchaseInvoiceThreeWayOverrules PurchaseInvoice[] @relation("PurchaseInvoiceThreeWayOverruleApprover")
   userNotificationSettings UserNotificationSetting[]
   lubeReports              LubeReport[]
+  equipmentAvailabilities  EquipmentAvailability[] @relation("AvailabilityReportedBy")
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -647,6 +649,7 @@ model Tenant {
   tenantNotificationSettings TenantNotificationSetting[]
   userNotificationSettings   UserNotificationSetting[]
   lubeReports                LubeReport[]
+  equipmentAvailabilities    EquipmentAvailability[]
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -701,9 +704,10 @@ model Contract {
   maintenanceKits MaintenanceKit[]
   warehouses      Warehouse[]
 
-  purchaseRequisitions PurchaseRequisition[]
-  purchaseOrders       PurchaseOrder[]
-  lubeReports          LubeReport[]
+  purchaseRequisitions  PurchaseRequisition[]
+  purchaseOrders        PurchaseOrder[]
+  lubeReports           LubeReport[]
+  equipmentAvailabilities EquipmentAvailability[]
 
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
@@ -1048,6 +1052,7 @@ enum MeterLogSource {
   OT
   MANUAL
   TELEMETRY
+  AVAILABILITY_REPORT
 }
 
 model EquipmentMeterLog {
@@ -1096,6 +1101,21 @@ enum AssetCostType {
   PURCHASE
   WORK_ORDER
   LUBE_DISPATCH
+}
+
+/// Turno operativo: Día o Noche.
+enum ShiftType {
+  DAY
+  NIGHT
+}
+
+/// Estado declarado del equipo en el reporte de disponibilidad del turno.
+enum OperationalStatus {
+  OPERATIONAL          // Operativo
+  STANDBY              // Standby
+  RESERVE_NO_OPERATOR  // Reserva sin operador
+  DOWN_FAILURE         // Detenido por Falla
+  DOWN_MAINTENANCE     // Detenido por Mantención
 }
 
 enum WarehouseType {
@@ -1771,4 +1791,42 @@ model LubeReportLine {
   item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
   @@map("lube_report_lines")
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: DISPONIBILIDAD OPERATIVA DIARIA
+// ---------------------------------------------------------------------
+
+/// Reporte de estado por turno (Día/Noche) para cada equipo de la flota.
+/// Restricción: un equipo no puede tener más de un reporte por fecha y turno.
+/// Si `meterReading` supera `equipment.currentMeter`, se actualiza el horómetro
+/// vía `applyCurrentMeterChange` con source `AVAILABILITY_REPORT`.
+model EquipmentAvailability {
+  id           String            @id @default(uuid()) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  contractId   String?           @map("contract_id") @db.Uuid
+  equipmentId  String            @map("equipment_id") @db.Uuid
+  reportedById String            @map("reported_by_id") @db.Uuid
+
+  /// Fecha del turno (solo fecha, sin componente horaria).
+  reportDate   DateTime          @map("report_date") @db.Date
+  shift        ShiftType
+  status       OperationalStatus
+  /// Horómetro declarado por el supervisor. Si supera el actual del equipo, se actualiza.
+  meterReading Int?              @map("meter_reading")
+  comments     String?           @db.VarChar(500)
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy User      @relation("AvailabilityReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+
+  /// Un equipo solo puede tener un reporte por fecha y turno dentro del mismo tenant.
+  @@unique([tenantId, equipmentId, reportDate, shift])
+  @@index([tenantId, reportDate, shift])
+  @@index([tenantId, equipmentId])
+  @@map("equipment_availabilities")
 }

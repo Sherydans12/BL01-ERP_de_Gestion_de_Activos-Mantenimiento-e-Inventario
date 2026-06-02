@@ -390,6 +390,25 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 
 ---
 
+### Disponibilidad operativa diaria (`availability`)
+
+> **Módulo:** `EquipmentAvailabilityModule` — Tabla `equipment_availabilities`. Permite registrar el estado de cada equipo por turno (Día/Noche) y detectar equipos sin reporte en el turno activo.
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:availability:read` | `GET /api/equipment-availability`<br>`GET /api/equipment-availability/:id` | Consultar el historial de reportes de disponibilidad. Disponible para supervisores y administradores; el scope de datos se limita a los contratos del JWT. |
+| ✅ | `operations:availability:create` | `POST /api/equipment-availability` | Registrar el estado de un equipo para el turno actual (Operativo, Standby, Reserva sin operador, Detenido por Falla, Detenido por Mantención). Si `meterReading` supera el `currentMeter` del equipo, actualiza el horómetro con `source = AVAILABILITY_REPORT`. Restricción única `(tenantId, equipmentId, reportDate, shift)` — un equipo no puede tener dos reportes para el mismo turno. |
+| ✅ | `operations:availability:monitor` | `GET /api/equipment-availability/unreported`<br>`GET /api/equipment-availability/summary` | Acceder al panel de alerta de omisiones: lista los equipos activos del Maestro de Flota que **no tienen reporte** en el turno/fecha consultados. Solo roles gerenciales (Jefe de turno, Admin). |
+
+> **Roles por defecto sugeridos:**
+> - `MECHANIC` / Supervisor de turno: `read` + `create`
+> - `SUPERVISOR` / Jefe de turno: `read` + `create` + `monitor`
+> - `ADMIN`: todos los permisos del grupo
+>
+> **Regla anti-limbo:** el endpoint `unreported` cruza el Maestro de Flota (`equipments WHERE isOperational = true`) con los registros de `equipment_availabilities` para el turno solicitado. Equipos ya fuera de servicio por OT activa (`isOperational = false`) no generan alerta de omisión.
+
+---
+
 ## Módulo: Administración (`admin`)
 
 ### Usuarios (`user`)

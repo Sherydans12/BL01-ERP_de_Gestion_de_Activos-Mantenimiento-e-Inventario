@@ -30,6 +30,7 @@ import { PlatformDataAdminModule } from './features/platform-data-admin/platform
 import { EmailModule } from './common/email/email.module';
 import { NotificationSettingsModule } from './features/notification-settings/notification-settings.module';
 import { LubeReportsModule } from './features/lube-reports/lube-reports.module';
+import { EquipmentAvailabilityModule } from './features/equipment-availability/equipment-availability.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { LubeReportsModule } from './features/lube-reports/lube-reports.module';
     EmailModule,
     NotificationSettingsModule,
     LubeReportsModule,
+    EquipmentAvailabilityModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -174,6 +174,18 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ICONS.droplet,
         permissions: O.LUBE_REPORT_READ,
       },
+      {
+        label: 'Reporte de Disponibilidad',
+        route: '/app/operaciones/disponibilidad/nuevo',
+        icon: ICONS.clipboard,
+        permissions: O.AVAILABILITY_CREATE,
+      },
+      {
+        label: 'Monitor de Flota',
+        route: '/app/operaciones/disponibilidad/monitor',
+        icon: ICONS.chartBar,
+        permissions: O.AVAILABILITY_MONITOR,
+      },
     ],
   },
   {

@@ -38,6 +38,8 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `features/maintenance-kits/kit-list.component.spec.ts` | Componente | Smoke |
 | `features/operations/lube-reports/lube-report-list.component.spec.ts` | Componente | Smoke |
 | `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke |
+| `features/operations/availability/availability-form.component.spec.ts` | Componente | Smoke |
+| `features/operations/availability/availability-monitor.component.spec.ts` | Componente | Smoke |
 
 ---
 

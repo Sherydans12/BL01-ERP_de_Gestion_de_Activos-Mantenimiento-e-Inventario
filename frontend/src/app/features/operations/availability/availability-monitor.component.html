@@ -1,0 +1,150 @@
+<div class="min-h-screen bg-dark p-4 lg:p-6">
+
+  <!-- Encabezado -->
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-main">Monitor de Flota</h1>
+    <p class="text-muted text-sm mt-1">Equipos sin reporte de disponibilidad para el turno seleccionado.</p>
+  </div>
+
+  <!-- Panel de filtros -->
+  <div class="bg-surface border border-border rounded-2xl p-5 mb-6">
+    <div class="flex flex-col sm:flex-row gap-4 items-end">
+
+      <!-- Fecha -->
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Fecha</label>
+        <input
+          type="date"
+          [max]="maxDate"
+          [ngModel]="filterDate()"
+          (ngModelChange)="onDateChange($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
+      </div>
+
+      <!-- Turno -->
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Turno</label>
+        <select
+          [ngModel]="filterShift()"
+          (ngModelChange)="onShiftChange($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          @for (s of SHIFTS; track s) {
+            <option [value]="s">{{ SHIFT_LABELS[s] }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Botón consultar -->
+      <button
+        type="button"
+        (click)="query()"
+        [disabled]="isLoading()"
+        class="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold
+               bg-primary text-white hover:opacity-90 transition-opacity
+               disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+      >
+        @if (isLoading()) {
+          <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Consultando…
+        } @else {
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          Consultar
+        }
+      </button>
+    </div>
+
+    @if (lastQueried()) {
+      <p class="text-xs text-muted mt-3">
+        Última consulta: <span class="text-main font-medium">{{ lastQueried() }}</span>
+      </p>
+    }
+  </div>
+
+  <!-- Estado: cargando -->
+  @if (isLoading()) {
+    <div class="bg-surface border border-border rounded-2xl p-6 space-y-3 animate-pulse">
+      @for (i of [1,2,3]; track i) {
+        <div class="flex items-center gap-4">
+          <div class="w-24 h-4 bg-border rounded"></div>
+          <div class="w-40 h-4 bg-border rounded"></div>
+          <div class="w-20 h-4 bg-border rounded ml-auto"></div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Estado: sin resultados (todos reportados) -->
+  @else if (allReported()) {
+    <div class="bg-surface border border-green-500/30 rounded-2xl p-8 text-center">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-4">
+        <svg class="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <h2 class="text-xl font-bold text-green-400 mb-1">¡Flota al 100%!</h2>
+      <p class="text-muted text-sm">Todos los equipos del turno han sido reportados.</p>
+    </div>
+  }
+
+  <!-- Estado: equipos sin reportar -->
+  @else if (lastQueried() && unreportedCount() > 0) {
+    <div class="bg-surface border border-red-500/30 rounded-2xl overflow-hidden">
+
+      <!-- Cabecera de alerta -->
+      <div class="flex items-center gap-3 px-5 py-4 border-b border-red-500/20 bg-red-500/5">
+        <svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5C2.57 18.333 3.46 20 5 20z"/>
+        </svg>
+        <span class="text-red-400 font-semibold text-sm">
+          {{ unreportedCount() }} equipo{{ unreportedCount() > 1 ? 's' : '' }} sin reporte
+        </span>
+        <span class="ml-auto text-xs text-muted">{{ lastQueried() }}</span>
+      </div>
+
+      <!-- Tabla -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="text-left px-5 py-3 text-muted font-medium text-xs uppercase tracking-wide">Código</th>
+              <th class="text-left px-5 py-3 text-muted font-medium text-xs uppercase tracking-wide">Equipo</th>
+              <th class="text-left px-5 py-3 text-muted font-medium text-xs uppercase tracking-wide">Patente</th>
+              <th class="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            @for (eq of unreported(); track eq.id) {
+              <tr class="hover:bg-dark/50 transition-colors">
+                <td class="px-5 py-3 font-mono text-xs text-main">{{ eq.internalId }}</td>
+                <td class="px-5 py-3 text-main">{{ eq.brand }} {{ eq.model }}</td>
+                <td class="px-5 py-3 text-muted">{{ eq.plate ?? '—' }}</td>
+                <td class="px-5 py-3 text-right">
+                  <a
+                    routerLink="/app/operaciones/disponibilidad/nuevo"
+                    class="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                  >
+                    Reportar
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                  </a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- Estado inicial: no se ha consultado aún -->
+  @else if (!lastQueried() && !isLoading()) {
+    <div class="bg-surface border border-border rounded-2xl p-8 text-center">
+      <svg class="w-12 h-12 text-muted mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      <p class="text-muted text-sm">Selecciona fecha y turno, luego presiona <strong class="text-main">Consultar</strong>.</p>
+    </div>
+  }
+
+</div>

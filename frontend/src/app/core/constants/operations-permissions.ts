@@ -25,6 +25,10 @@ export const O = {
 
   LUBE_REPORT_READ: 'operations:lube-report:read',
   LUBE_REPORT_CREATE: 'operations:lube-report:create',
+
+  AVAILABILITY_READ: 'operations:availability:read',
+  AVAILABILITY_CREATE: 'operations:availability:create',
+  AVAILABILITY_MONITOR: 'operations:availability:monitor',
 } as const;
 
 /** Mutación de OT en formulario (planificación, asignación o ejecución). */
