@@ -2,7 +2,7 @@
 
 Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El **foco actual del proyecto** está en el backend de dominio (212 tests); el frontend tiene sobre todo **smoke** (`should be created`).
 
-**Última actualización:** 2026-05-22
+**Última actualización:** 2026-06-02
 
 ---
 
@@ -36,6 +36,8 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `features/warehouses/warehouse-list.component.spec.ts` | Componente | Smoke |
 | `features/maintenance-kits/kit-form.component.spec.ts` | Componente | Smoke |
 | `features/maintenance-kits/kit-list.component.spec.ts` | Componente | Smoke |
+| `features/operations/lube-reports/lube-report-list.component.spec.ts` | Componente | Smoke |
+| `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke |
 
 ---
 

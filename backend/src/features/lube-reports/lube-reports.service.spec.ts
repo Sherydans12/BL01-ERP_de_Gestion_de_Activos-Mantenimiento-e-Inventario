@@ -327,3 +327,193 @@ describe('LubeReportsService — createReport', () => {
     ).rejects.toThrow(/equipo no existe/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: findAll
+// ─────────────────────────────────────────────────────────────────────────────
+describe('LubeReportsService — findAll', () => {
+  let service: LubeReportsService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let sequenceService: { getNextCorrelative: jest.Mock };
+
+  const rowStub = {
+    id: reportId,
+    tenantId,
+    contractId,
+    equipmentId,
+    warehouseId,
+    userId,
+    correlative: 'RCL-00001',
+    dispatchDate: new Date('2026-06-02T10:00:00Z'),
+    meterReading: 1050,
+    notes: null,
+    createdAt: new Date(),
+    equipment: { id: equipmentId, internalId: 'EQ-001', name: 'Camión 1', licensePlate: 'ABC-123' },
+    warehouse: { id: warehouseId, code: 'BOD-01', name: 'Bodega Central' },
+    user: { id: userId, name: 'Técnico A' },
+    _count: { lines: 2 },
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    sequenceService = { getNextCorrelative: jest.fn().mockResolvedValue('RCL-00001') };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LubeReportsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: sequenceService },
+      ],
+    }).compile();
+
+    service = module.get(LubeReportsService);
+  });
+
+  it('retorna estructura paginada con lineCount calculado desde _count', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([rowStub] as never);
+    prisma.lubeReport.count.mockResolvedValue(1);
+
+    const result = await service.findAll(adminUser);
+
+    expect(result).toMatchObject({ data: expect.any(Array), total: 1, page: 1, pageSize: 25 });
+    expect(result.data[0]).toMatchObject({ id: reportId, correlative: 'RCL-00001', lineCount: 2 });
+    // _count no debe exponerse en la respuesta
+    expect((result.data[0] as any)._count).toBeUndefined();
+  });
+
+  it('aplica filtro de warehouseId en el where de Prisma', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([rowStub] as never);
+    prisma.lubeReport.count.mockResolvedValue(1);
+
+    await service.findAll(adminUser, { warehouseId });
+
+    expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId, warehouseId }),
+      }),
+    );
+  });
+
+  it('aplica filtro de equipmentId en el where de Prisma', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([] as never);
+    prisma.lubeReport.count.mockResolvedValue(0);
+
+    await service.findAll(adminUser, { equipmentId });
+
+    expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId, equipmentId }),
+      }),
+    );
+  });
+
+  it('aplica rango de fechas (dateFrom y dateTo) en el where', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([] as never);
+    prisma.lubeReport.count.mockResolvedValue(0);
+
+    await service.findAll(adminUser, { dateFrom: '2026-06-01', dateTo: '2026-06-02' });
+
+    const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as any;
+    expect(callArg.where.dispatchDate).toBeDefined();
+    expect(callArg.where.dispatchDate.gte).toBeInstanceOf(Date);
+    expect(callArg.where.dispatchDate.lte).toBeInstanceOf(Date);
+  });
+
+  it('respeta la paginación: skip = (page-1) * pageSize', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([] as never);
+    prisma.lubeReport.count.mockResolvedValue(0);
+
+    await service.findAll(adminUser, { page: '3', pageSize: '10' } as any);
+
+    expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 20, take: 10 }),
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: findOne
+// ─────────────────────────────────────────────────────────────────────────────
+describe('LubeReportsService — findOne', () => {
+  let service: LubeReportsService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let sequenceService: { getNextCorrelative: jest.Mock };
+
+  const detailStub = {
+    id: reportId,
+    tenantId,
+    contractId,
+    equipmentId,
+    warehouseId,
+    userId,
+    correlative: 'RCL-00001',
+    dispatchDate: new Date('2026-06-02T10:00:00Z'),
+    meterReading: 1050,
+    notes: null,
+    createdAt: new Date(),
+    equipment: { id: equipmentId, internalId: 'EQ-001', name: 'Camión 1', licensePlate: null },
+    warehouse: { id: warehouseId, code: 'BOD-01', name: 'Bodega Central' },
+    user: { id: userId, name: 'Técnico A' },
+    lines: [
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        reportId,
+        itemId,
+        quantity: 3,
+        unitCost: new Prisma.Decimal('850.0000'),
+        item: {
+          id: itemId,
+          name: 'Aceite 15W40',
+          inventoryCode: 'IN0042',
+          partNumber: null,
+          unitOfMeasure: { id: 'uuu', name: 'Litro', abbreviation: 'L' },
+        },
+      },
+    ],
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    sequenceService = { getNextCorrelative: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LubeReportsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: sequenceService },
+      ],
+    }).compile();
+
+    service = module.get(LubeReportsService);
+  });
+
+  it('retorna el reporte con sus líneas y el detalle del artículo', async () => {
+    prisma.lubeReport.findFirst.mockResolvedValue(detailStub as never);
+
+    const result = await service.findOne(reportId, adminUser);
+
+    expect(result.id).toBe(reportId);
+    expect(result.correlative).toBe('RCL-00001');
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0].item.name).toBe('Aceite 15W40');
+  });
+
+  it('filtra por tenantId: no devuelve un reporte de otro tenant', async () => {
+    // findFirst devuelve null porque el tenantId no coincide
+    prisma.lubeReport.findFirst.mockResolvedValue(null as never);
+
+    await expect(service.findOne(reportId, adminUser)).rejects.toThrow(NotFoundException);
+  });
+
+  it('lanza NotFoundException si el id no existe', async () => {
+    prisma.lubeReport.findFirst.mockResolvedValue(null as never);
+
+    await expect(
+      service.findOne('00000000-0000-0000-0000-000000000000', adminUser),
+    ).rejects.toThrow(NotFoundException);
+
+    await expect(
+      service.findOne('00000000-0000-0000-0000-000000000000', adminUser),
+    ).rejects.toThrow(/no existe o no pertenece a este tenant/);
+  });
+});
