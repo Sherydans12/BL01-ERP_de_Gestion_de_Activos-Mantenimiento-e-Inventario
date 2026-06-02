@@ -16,6 +16,14 @@ type FileValidationPolicy = {
 const SECURITY_REJECTION_MESSAGE =
   'Tipo de archivo no permitido por políticas de seguridad';
 
+/** Archivo en memoria (Multer) validado antes de persistir. */
+type UploadedMemoryFile = {
+  size: number;
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+};
+
 const FALLBACK_MIME_BY_EXT: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -39,7 +47,9 @@ export class FileValidationInterceptor implements NestInterceptor {
     context: ExecutionContext,
     next: CallHandler,
   ): Promise<Observable<unknown>> {
-    const request = context.switchToHttp().getRequest<{ file?: any }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<{ file?: UploadedMemoryFile }>();
     const file = request.file;
     if (!file) return next.handle();
 
