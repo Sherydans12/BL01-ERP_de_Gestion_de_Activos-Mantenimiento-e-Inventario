@@ -117,6 +117,10 @@ export enum SystemPermissions {
   OPERATIONS_BACKLOG_READ = 'operations:backlog:read',
   OPERATIONS_BACKLOG_MANAGE = 'operations:backlog:manage',
 
+  // —— Operaciones: reporte de consumo de lubricantes ——
+  OPERATIONS_LUBE_REPORT_READ = 'operations:lube-report:read',
+  OPERATIONS_LUBE_REPORT_CREATE = 'operations:lube-report:create',
+
   // —— Administración: usuarios ——
   ADMIN_USER_READ = 'admin:user:read',
   ADMIN_USER_CREATE = 'admin:user:create',

@@ -10,10 +10,11 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **313 tests** en **17** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **321 tests** en **18** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
+| **Lubricantes — reporte consumo** | ~90 % núcleo `createReport` | 8 | Happy path, stock negativo, horómetro, bodega/equipo (§3.10) |
 | **Inventario — stock/kardex** | ~88 % del núcleo | 41 | Stock, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
 | **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
@@ -117,11 +118,17 @@ npm run test:domain:watch
 - **`MeterAdjustmentsService.create`**: lectura &lt; actual exige justificación motor ≥15 chars (+3 tests).
 - **`test:domain`**: 17 suites, **313** tests.
 
-### Siguiente paso recomendado (iteración N+22)
+### Iteración N+22 (2026-06-02) — hecho
 
-1. **`work-orders.update`**: validar stock físico insuficiente al editar repuestos (si producto lo exige).
-2. **`equipments.findAll` / `remove`**: alcance contrato y borrado con OT asociadas.
-3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
+- **`LubeReportsService.createReport`** (+8): happy path (stock, kardex, horómetro, assetCost); stock negativo → `isPendingRegularization`; horómetro igual/omitido → no actualiza medidor; horómetro regresivo → `BadRequestException`; bodega fuera de contrato → `BadRequestException`; bodega/equipo inexistentes → `NotFoundException`.
+- **`test:domain`**: nuevo spec en suite aislada; **321** tests totales (313 previos + 8 lubricantes).
+
+### Siguiente paso recomendado (iteración N+23)
+
+1. **`LubeReportsService`**: controlador REST + PBAC; spec de controller (smoke).
+2. **`work-orders.update`**: validar stock físico insuficiente al editar repuestos (si producto lo exige).
+3. **`equipments.findAll` / `remove`**: alcance contrato y borrado con OT asociadas.
+4. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
 
@@ -184,6 +191,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/equipments/equipments.service.spec.ts` | **Flota — equipos** | **6** | `create`/`update` ABAC; bulk 50+2 (§3.8) |
 | `features/auth/auth.service.spec.ts` | **Auth — login** | **3** | JWT permissions + lockout (§5.1) |
 | `features/meter-adjustments/meter-adjustments.service.spec.ts` | **Flota — ajustes** | **3** | Reinicio medidor con motivo (§3.9) |
+| `features/lube-reports/lube-reports.service.spec.ts` | **Lubricantes — reporte consumo** | **8** | `createReport`: happy path, stock negativo, horómetro, bodega, equipo (§3.10) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
 | `features/auth/auth.controller.spec.ts` | Auth controller | — | Smoke |
 | `features/users/users.controller.spec.ts` | Users controller | — | Smoke |
@@ -324,6 +332,23 @@ Mock: `equipment-meter-sync.applyCurrentMeterChange`.
 | Bloque | Casos |
 |--------|-------|
 | `create` | `newValue` &lt; `currentMeter` sin motivo → error; reinicio con justificación ≥15 chars + `meterAdjustment` en BD; equipo inexistente |
+
+### 3.10 Spec: `lube-reports.service.spec.ts`
+
+**Última ejecución:** 8 passed (2026-06-02).
+
+Mocks: `jest.mock('../equipments/equipment-meter-sync')` → `applyCurrentMeterChange`; `SequenceService.getNextCorrelative` stub.
+
+| Bloque | Casos |
+|--------|-------|
+| `createReport` — happy path | Crea reporte + descuenta stock (10→7) + kardex `OUT / LUBE_DISPATCH` + `applyCurrentMeterChange` + `assetCostRecord LUBE_DISPATCH` |
+| `createReport` — horómetro igual | `meterReading === currentMeter` → no llama `applyCurrentMeterChange` |
+| `createReport` — sin horómetro | `meterReading` omitido → no llama `applyCurrentMeterChange` |
+| `createReport` — stock negativo | Despacho > stock → `isPendingRegularization: true` en la transacción |
+| `createReport` — horómetro regresivo | `meterReading < currentMeter` → `BadRequestException` + rollback total (no tocar stock ni kardex) |
+| `createReport` — bodega fuera del contrato | `warehouse.contractId ≠ dto.contractId` → `BadRequestException` antes de consultar equipo |
+| `createReport` — bodega no existe | `warehouse.findFirst` → null → `NotFoundException` |
+| `createReport` — equipo no existe | `equipment.findFirst` → null → `NotFoundException` |
 
 ---
 

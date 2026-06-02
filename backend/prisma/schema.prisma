@@ -73,6 +73,7 @@ model Equipment {
   purchaseRequisitions  PurchaseRequisition[] @relation("RequisitionEquipment")
   purchaseOrders        PurchaseOrder[]       @relation("OrderEquipment")
   assetCostRecords      AssetCostRecord[]
+  lubeReports           LubeReport[]
 
   @@unique([tenantId, internalId])
   @@unique([tenantId, plate])
@@ -581,6 +582,7 @@ model User {
   workOrdersSupervised     WorkOrder[]           @relation("WorkOrderShiftSupervisor")
   purchaseInvoiceThreeWayOverrules PurchaseInvoice[] @relation("PurchaseInvoiceThreeWayOverruleApprover")
   userNotificationSettings UserNotificationSetting[]
+  lubeReports              LubeReport[]
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -644,6 +646,7 @@ model Tenant {
   purchaseCreditNotes   PurchaseCreditNote[]
   tenantNotificationSettings TenantNotificationSetting[]
   userNotificationSettings   UserNotificationSetting[]
+  lubeReports                LubeReport[]
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -700,6 +703,7 @@ model Contract {
 
   purchaseRequisitions PurchaseRequisition[]
   purchaseOrders       PurchaseOrder[]
+  lubeReports          LubeReport[]
 
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
@@ -835,6 +839,7 @@ model Warehouse {
   outboundTransfers  InventoryTransfer[] @relation("InventoryTransferOrigin")
   inboundTransfers   InventoryTransfer[] @relation("InventoryTransferDestination")
   inventoryItemsAsPolicyTarget InventoryItem[] @relation("InventoryItemPolicyTargetWarehouse")
+  lubeReports                  LubeReport[]
 
   @@unique([tenantId, code])
   @@map("warehouses")
@@ -886,6 +891,7 @@ model InventoryItem {
   purchaseOrderItems PurchaseOrderItem[]
   attachments        InventoryItemAttachment[]
   inventoryTransferLines InventoryTransferLine[]
+  lubeReportLines    LubeReportLine[]
 
   @@unique([tenantId, partNumber])
   @@unique([tenantId, qrCode])
@@ -1089,6 +1095,7 @@ model AssetCostRecord {
 enum AssetCostType {
   PURCHASE
   WORK_ORDER
+  LUBE_DISPATCH
 }
 
 enum WarehouseType {
@@ -1722,4 +1729,46 @@ model UserNotificationSetting {
   @@index([tenantId, eventKey])
   @@index([userId])
   @@map("user_notification_settings")
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: CONSUMO DE LUBRICANTES
+// ---------------------------------------------------------------------
+
+model LubeReport {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  contractId   String    @map("contract_id") @db.Uuid
+  equipmentId  String    @map("equipment_id") @db.Uuid
+  warehouseId  String    @map("warehouse_id") @db.Uuid  // Bodega origen (Fija o Virtual/Camión)
+  userId       String    @map("user_id") @db.Uuid
+  correlative  String    @db.VarChar(30)                // Ej: RCL-0001
+  dispatchDate DateTime  @map("dispatch_date")
+  meterReading Int?      @map("meter_reading")          // Horómetro capturado (opcional)
+  notes        String?   @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract  Contract  @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  lines     LubeReportLine[]
+
+  @@index([tenantId, dispatchDate])
+  @@index([tenantId, equipmentId])
+  @@map("lube_reports")
+}
+
+model LubeReportLine {
+  id        String     @id @default(uuid()) @db.Uuid
+  reportId  String     @map("report_id") @db.Uuid
+  itemId    String     @map("item_id") @db.Uuid
+  quantity  Float
+  unitCost  Decimal    @map("unit_cost") @db.Decimal(18, 4) // CPP congelado al momento del despacho
+
+  report LubeReport    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@map("lube_report_lines")
 }

@@ -150,6 +150,15 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'operaciones/lubricantes',
+        canActivate: [permissionGuard],
+        data: { permissions: O.LUBE_REPORT_READ, pageTitle: 'Despacho de Lubricantes' },
+        loadComponent: () =>
+          import('./features/operations/lube-reports/lube-report-form.component').then(
+            (m) => m.LubeReportFormComponent,
+          ),
+      },
+      {
         path: 'ots/:id',
         canActivate: [permissionGuard],
         data: { permissions: O.WORK_ORDER_READ, pageTitle: 'Orden de trabajo' },

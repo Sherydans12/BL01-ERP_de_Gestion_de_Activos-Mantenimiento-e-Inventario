@@ -83,7 +83,7 @@ Guía: [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md).
 
 ## 5. Suite completa (`npm test`)
 
-Desde 2026-05-22 la suite completa pasa (~220 tests): smoke auth/users/sites con mocks de dependencias y `backend/test/jest-setup.ts` (mock ESM de `file-type`). CI en GitHub ejecuta `test:domain` + `npm test` — ver [entornos-git-despliegue.md](entornos-git-despliegue.md) §3.
+Desde 2026-05-22 la suite completa pasa (~220 tests): smoke auth/users/sites con mocks de dependencias y `backend/test/jest-setup.ts` (mock ESM de `file-type`). **CI en GitHub** (`.github/workflows/ci.yml`): lint + build backend/frontend + **`npm run test:domain`** (313 tests) — ver [entornos-git-despliegue.md](entornos-git-despliegue.md) §3.
 
 ---
 

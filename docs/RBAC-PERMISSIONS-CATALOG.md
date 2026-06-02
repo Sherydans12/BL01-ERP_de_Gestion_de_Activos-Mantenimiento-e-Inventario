@@ -379,6 +379,17 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 
 ---
 
+### Reporte de consumo de lubricantes (`lube-report`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:lube-report:read` | `GET /api/lube-reports`<br>`GET /api/lube-reports/:id` | Consultar historial de despachos de aceites/grasas (reservado para implementación futura). |
+| ✅ | `operations:lube-report:create` | `POST /api/lube-reports` | Registrar un despacho de lubricante: descuenta stock físico de la bodega origen (fija o virtual/camión), actualiza horómetro del equipo (opcional) e inyecta el movimiento `OUT / LUBE_DISPATCH` en el kardex inmutable. Genera `AssetCostRecord` tipo `LUBE_DISPATCH` para imputar el costo directo al activo. |
+
+> **Multi-tenant y ABAC en servicio:** el `tenantId` es extraído exclusivamente del JWT. El servicio valida que la bodega origen pertenece al tenant y al `contractId` del DTO — un usuario del tenant A no puede despachar desde bodega del tenant B aunque envíe su UUID en el payload.
+
+---
+
 ## Módulo: Administración (`admin`)
 
 ### Usuarios (`user`)

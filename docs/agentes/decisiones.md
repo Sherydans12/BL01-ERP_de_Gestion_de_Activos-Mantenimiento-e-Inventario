@@ -9,6 +9,12 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-02 — Módulo de Consumo de Lubricantes (Integración Flota/Kardex)
+
+- **Contexto**: Necesidad de trazar el despacho en terreno de aceites/grasas asociando el costo directo al equipo y controlando el Kardex de forma inmutable.
+- **Decisión**: Se implementó una arquitectura en 3 capas. 1) Bodegas Móviles (`Warehouse type=VIRTUAL`) como origen de suministro (camión lubricador). 2) Transacción atómica `Prisma.$transaction(Serializable)` que rebaja stock (`InventoryTransaction type=OUT, referenceType=LUBE_DISPATCH`) usando el CPP congelado al momento del despacho, actualiza el horómetro del equipo vía `applyCurrentMeterChange` e imputa el costo en `AssetCostRecord (LUBE_DISPATCH)`. 3) Frontend Angular 18 standalone usando Signals, servicio HTTP tipado y `GlobalItemPicker` filtrado por familia "Lubricantes" (`lockedFamilyId`). Correlativo `RCL-XXXXX` generado por `SequenceService`. Protección PBAC con `operations:lube-report:read/create`.
+- **Consecuencias**: El sistema cruza automáticamente Operaciones (Flota/Horómetros) con Inventario (stock W2W, Kardex inmutable) y Finanzas (imputación de costo directo al activo). Se añadieron los permisos `OPERATIONS_LUBE_REPORT_READ` y `OPERATIONS_LUBE_REPORT_CREATE` (backend `permissions.enum.ts` + frontend `operations-permissions.ts`). Nuevos modelos Prisma: `LubeReport`, `LubeReportLine`; nuevo valor enum `AssetCostType.LUBE_DISPATCH`. Suite de 8 tests unitarios en `lube-reports.service.spec.ts` sin DB real (`jest-mock-extended`).
+
 ## 2026-05-24 — Compras PBAC: simulador API + E2E Playwright
 
 - **Contexto:** Tras Fase 3 PBAC faltaba verificación automatizada end-to-end del módulo P2P (43 permisos `purchases:*`, ACL firmas, menú UI).

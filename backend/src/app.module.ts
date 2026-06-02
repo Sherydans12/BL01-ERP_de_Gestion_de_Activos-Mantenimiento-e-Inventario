@@ -29,6 +29,7 @@ import { SecurityAdminModule } from './features/security-admin/security-admin.mo
 import { PlatformDataAdminModule } from './features/platform-data-admin/platform-data-admin.module';
 import { EmailModule } from './common/email/email.module';
 import { NotificationSettingsModule } from './features/notification-settings/notification-settings.module';
+import { LubeReportsModule } from './features/lube-reports/lube-reports.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { NotificationSettingsModule } from './features/notification-settings/not
     PlatformDataAdminModule,
     EmailModule,
     NotificationSettingsModule,
+    LubeReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
