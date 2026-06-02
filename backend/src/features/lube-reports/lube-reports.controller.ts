@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -11,7 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
-import { LubeReportsService } from './lube-reports.service';
+import { LubeReportsService, ListLubeReportsQuery } from './lube-reports.service';
 import { CreateLubeReportDto } from './dto/create-lube-report.dto';
 
 /**
@@ -42,12 +45,34 @@ export class LubeReportsController {
    *
    * El `tenantId` y `userId` se obtienen del JWT — el cliente no puede inyectarlos.
    */
+  /**
+   * GET /api/lube-reports
+   * Listado paginado. Filtros opcionales: warehouseId, equipmentId, dateFrom, dateTo.
+   */
+  @Get()
+  @RequirePermissions(SystemPermissions.OPERATIONS_LUBE_REPORT_READ)
+  findAll(@Req() req: any, @Query() query: ListLubeReportsQuery) {
+    return this.lubeReportsService.findAll(req.user, query);
+  }
+
+  /**
+   * GET /api/lube-reports/:id
+   * Detalle completo: encabezado + líneas + artículo de cada línea.
+   */
+  @Get(':id')
+  @RequirePermissions(SystemPermissions.OPERATIONS_LUBE_REPORT_READ)
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.lubeReportsService.findOne(id, req.user);
+  }
+
+  /**
+   * POST /api/lube-reports
+   * Registra un despacho de lubricante desde una bodega origen (fija o virtual/camión).
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions(SystemPermissions.OPERATIONS_LUBE_REPORT_CREATE)
   create(@Body() dto: CreateLubeReportDto, @Req() req: any) {
-    // req.user es poblado por JwtAuthGuard desde el token verificado.
-    // El servicio extrae tenantId y userId exclusivamente de este objeto.
     return this.lubeReportsService.createReport(dto, req.user);
   }
 }

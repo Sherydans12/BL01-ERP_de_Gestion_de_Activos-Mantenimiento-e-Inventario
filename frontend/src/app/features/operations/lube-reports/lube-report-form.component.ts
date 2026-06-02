@@ -7,8 +7,8 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { RouterLink } from '@angular/router';
+import { Observable, Subject } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
@@ -19,6 +19,7 @@ import {
   CreateLubeReportPayload,
 } from '../../../core/services/lube-reports/lube-reports.service';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
+import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { O } from '../../../core/constants/operations-permissions';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
@@ -40,7 +41,9 @@ interface DraftLine {
   imports: [
     CommonModule,
     FormsModule,
+    RouterLink,
     GlobalItemPickerComponent,
+    ConfirmModalComponent,
     HasPermissionDirective,
   ],
   templateUrl: './lube-report-form.component.html',
@@ -75,6 +78,10 @@ export class LubeReportFormComponent implements OnInit {
   isSubmitting    = signal(false);
   warehousLoading = signal(true);
   equipLoading    = signal(false);
+
+  // ── CanDeactivate: modal de confirmación de salida ────────────────────────
+  leaveConfirmOpen   = signal(false);
+  private leaveResult$ = new Subject<boolean>();
 
   /** Equipos filtrados por texto de búsqueda (computed para reactividad). */
   filteredEquipments = computed(() => {
@@ -254,4 +261,24 @@ export class LubeReportFormComponent implements OnInit {
     const plate = eq.licensePlate ? ` — ${eq.licensePlate}` : '';
     return `${eq.internalId ?? ''} ${eq.name ?? ''}${plate}`.trim();
   });
+
+  // ── CanDeactivate ─────────────────────────────────────────────────────────
+
+  /** Llamado por el guard. Si hay líneas sin guardar, muestra el modal y devuelve Observable. */
+  confirmLeaveIfDirty(): Observable<boolean> | boolean {
+    if (this.lines().length === 0) return true;
+    this.leaveConfirmOpen.set(true);
+    // El modal emitirá en leaveResult$ al confirmar o cancelar.
+    return this.leaveResult$.asObservable();
+  }
+
+  onLeaveConfirmed(): void {
+    this.leaveConfirmOpen.set(false);
+    this.leaveResult$.next(true);
+  }
+
+  onLeaveCancelled(): void {
+    this.leaveConfirmOpen.set(false);
+    this.leaveResult$.next(false);
+  }
 }

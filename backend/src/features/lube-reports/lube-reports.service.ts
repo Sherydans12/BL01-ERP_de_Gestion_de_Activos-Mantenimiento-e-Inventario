@@ -10,6 +10,15 @@ import { SequenceService } from '../../common/sequence/sequence.service';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import { CreateLubeReportDto } from './dto/create-lube-report.dto';
 
+export interface ListLubeReportsQuery {
+  page?: string;
+  pageSize?: string;
+  warehouseId?: string;
+  equipmentId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 /** Tipo de referencia inyectado en InventoryTransaction para despachos de lubricante. */
 const LUBE_DISPATCH_REFERENCE_TYPE = 'LUBE_DISPATCH';
 
@@ -200,5 +209,100 @@ export class LubeReportsService {
         timeout: 30_000,
       },
     );
+  }
+
+  // ── Includes reutilizables ──────────────────────────────────────────────
+
+  private readonly listInclude = {
+    equipment: { select: { id: true, internalId: true, name: true, licensePlate: true } },
+    warehouse: { select: { id: true, code: true, name: true } },
+    user: { select: { id: true, name: true } },
+    _count: { select: { lines: true } },
+  } as const;
+
+  private readonly detailInclude = {
+    equipment: { select: { id: true, internalId: true, name: true, licensePlate: true } },
+    warehouse: { select: { id: true, code: true, name: true } },
+    user: { select: { id: true, name: true } },
+    lines: {
+      include: {
+        item: {
+          select: {
+            id: true,
+            name: true,
+            inventoryCode: true,
+            partNumber: true,
+            unitOfMeasure: { select: { id: true, name: true, abbreviation: true } },
+          },
+        },
+      },
+    },
+  } as const;
+
+  // ── Listado paginado ────────────────────────────────────────────────────
+
+  async findAll(user: any, query: ListLubeReportsQuery = {}) {
+    const tenantId = user.tenantId as string;
+
+    const page = Math.max(1, parseInt(String(query.page ?? '1'), 10) || 1);
+    const pageSizeRaw = parseInt(String(query.pageSize ?? '25'), 10) || 25;
+    const pageSize = Math.min(100, Math.max(1, pageSizeRaw));
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.LubeReportWhereInput = { tenantId };
+
+    if (query.warehouseId?.trim()) {
+      where.warehouseId = query.warehouseId.trim();
+    }
+    if (query.equipmentId?.trim()) {
+      where.equipmentId = query.equipmentId.trim();
+    }
+    if (query.dateFrom || query.dateTo) {
+      where.dispatchDate = {};
+      if (query.dateFrom) {
+        where.dispatchDate.gte = new Date(query.dateFrom);
+      }
+      if (query.dateTo) {
+        // Inclusive end: tomar hasta el fin del día indicado.
+        const to = new Date(query.dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.dispatchDate.lte = to;
+      }
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.lubeReport.findMany({
+        where,
+        include: this.listInclude,
+        orderBy: { dispatchDate: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.lubeReport.count({ where }),
+    ]);
+
+    const data = rows.map(({ _count, ...rest }) => ({
+      ...rest,
+      lineCount: _count.lines,
+    }));
+
+    return { data, total, page, pageSize };
+  }
+
+  // ── Detalle con líneas ──────────────────────────────────────────────────
+
+  async findOne(id: string, user: any) {
+    const tenantId = user.tenantId as string;
+
+    const report = await this.prisma.lubeReport.findFirst({
+      where: { id, tenantId },
+      include: this.detailInclude,
+    });
+
+    if (!report) {
+      throw new NotFoundException('El reporte de lubricante no existe o no pertenece a este tenant.');
+    }
+
+    return report;
   }
 }

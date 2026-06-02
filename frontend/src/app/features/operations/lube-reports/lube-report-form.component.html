@@ -1,5 +1,20 @@
 <div class="min-h-screen bg-dark px-4 py-8 sm:px-6 lg:px-10">
 
+  <!-- ── Breadcrumb ─────────────────────────────────────────────────── -->
+  <nav class="mb-5 flex items-center gap-2 text-sm text-muted">
+    <a routerLink="/app/operaciones/lubricantes"
+       class="flex items-center gap-1 transition hover:text-primary">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Historial de despachos
+    </a>
+    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+    </svg>
+    <span class="text-main">Nuevo despacho</span>
+  </nav>
+
   <!-- ── Encabezado ─────────────────────────────────────────────────── -->
   <header class="mb-8 flex items-center gap-3">
     <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
@@ -286,6 +301,11 @@
 
       <!-- ── Acciones ──────────────────────────────────────────────── -->
       <div class="flex items-center justify-end gap-3">
+        <a
+          routerLink="/app/operaciones/lubricantes"
+          class="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-muted transition hover:border-primary/50 hover:text-main">
+          ← Historial
+        </a>
         <button
           type="button"
           (click)="resetForm()"
@@ -316,6 +336,19 @@
     </form>
   </div>
 </div>
+
+<!-- ── Modal: confirmar salida con datos sin guardar ──────────────── -->
+<app-confirm-modal
+  [isOpen]="leaveConfirmOpen()"
+  title="¿Salir sin guardar?"
+  message="Tienes lubricantes agregados al despacho. Si salís ahora, perderás los datos cargados."
+  consequenceSummary="Las líneas de este despacho NO se registrarán ni descontarán del stock."
+  confirmText="Salir de todos modos"
+  cancelText="Quedarme aquí"
+  riskLevel="warning"
+  (confirm)="onLeaveConfirmed()"
+  (cancel)="onLeaveCancelled()">
+</app-confirm-modal>
 
 <!-- ── GlobalItemPicker (dialog nativo, sobre todo el layout) ──────── -->
 <app-global-item-picker

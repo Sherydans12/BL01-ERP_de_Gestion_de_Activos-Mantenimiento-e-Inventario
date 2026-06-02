@@ -6,6 +6,7 @@ import { I } from './core/constants/inventory-permissions';
 import { O } from './core/constants/operations-permissions';
 import { A } from './core/constants/admin-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
+import { lubeReportCanDeactivate } from './features/operations/lube-reports/lube-report-can-deactivate.guard';
 
 export const routes: Routes = [
   {
@@ -149,10 +150,21 @@ export const routes: Routes = [
             (m) => m.WorkOrderAnalyticsDashboardComponent,
           ),
       },
+      // ── Módulo: Despacho de Lubricantes ──────────────────────────────────
       {
         path: 'operaciones/lubricantes',
         canActivate: [permissionGuard],
-        data: { permissions: O.LUBE_REPORT_READ, pageTitle: 'Despacho de Lubricantes' },
+        data: { permissions: O.LUBE_REPORT_READ, pageTitle: 'Despachos de Lubricantes' },
+        loadComponent: () =>
+          import('./features/operations/lube-reports/lube-report-list.component').then(
+            (m) => m.LubeReportListComponent,
+          ),
+      },
+      {
+        path: 'operaciones/lubricantes/nuevo',
+        canActivate: [permissionGuard],
+        canDeactivate: [lubeReportCanDeactivate],
+        data: { permissions: O.LUBE_REPORT_CREATE, pageTitle: 'Nuevo Despacho de Lubricante' },
         loadComponent: () =>
           import('./features/operations/lube-reports/lube-report-form.component').then(
             (m) => m.LubeReportFormComponent,
