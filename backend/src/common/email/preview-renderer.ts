@@ -56,7 +56,8 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
   },
   {
     file: '05-codigo-verificacion-super-admin.html',
-    title: 'Código de verificación (2FA por correo — Super Admin, login inusual)',
+    title:
+      'Código de verificación (2FA por correo — Super Admin, login inusual)',
     build: () =>
       buildMailSuperAdminStepUp({
         name: 'Operador de plataforma',
@@ -139,10 +140,7 @@ ${links.join('\n')}
 }
 
 function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 run();

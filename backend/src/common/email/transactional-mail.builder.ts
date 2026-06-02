@@ -135,7 +135,10 @@ export function buildMailRequisitionDraftCreated(params: {
       </p>
       <p style="margin:0;">Este borrador aún no ha sido emitido formalmente. Puedes revisarlo y coordinar con el solicitante si es necesario.</p>
     `,
-    cta: { href: `${params.appUrl}/app/compras/requerimientos`, label: 'Ver Requerimientos' },
+    cta: {
+      href: `${params.appUrl}/app/compras/requerimientos`,
+      label: 'Ver Requerimientos',
+    },
   });
 }
 
@@ -176,7 +179,10 @@ export function buildMailRequisitionSubmitted(params: {
       </p>
       <p style="margin:0;">Revisa y procesa el requerimiento desde el módulo de Compras.</p>
     `,
-    cta: { href: `${params.appUrl}/app/compras/requerimientos`, label: 'Gestionar Requerimiento' },
+    cta: {
+      href: `${params.appUrl}/app/compras/requerimientos`,
+      label: 'Gestionar Requerimiento',
+    },
   });
 }
 
@@ -206,7 +212,9 @@ export function buildMailInventoryItemCreated(params: {
       <td style="padding:7px 0;color:#e4e4e7;font-size:12.5px;${mono ? 'font-family:ui-monospace,monospace;color:#00e5ff;font-weight:600;' : ''}">${escapeHtml(value)}</td>
     </tr>`;
 
-  const pnRow = params.partNumber ? metaRow('Part Number', params.partNumber, true) : '';
+  const pnRow = params.partNumber
+    ? metaRow('Part Number', params.partNumber, true)
+    : '';
 
   return buildTpmEmailHtml({
     headline: 'Nuevo artículo en catálogo',

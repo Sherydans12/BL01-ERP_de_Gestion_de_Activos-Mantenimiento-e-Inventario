@@ -37,8 +37,8 @@ describe('signature.util', () => {
 
   it('verifySignatureIntegrity devuelve false con hash alterado', () => {
     const hash = generateSignatureHash(payload);
-    expect(
-      verifySignatureIntegrity(`${hash.slice(0, -1)}0`, payload),
-    ).toBe(false);
+    expect(verifySignatureIntegrity(`${hash.slice(0, -1)}0`, payload)).toBe(
+      false,
+    );
   });
 });
