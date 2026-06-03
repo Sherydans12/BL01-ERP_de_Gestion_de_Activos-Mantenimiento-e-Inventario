@@ -8,6 +8,7 @@ import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { FaultReportsService } from '../../../core/services/fault-reports/fault-reports.service';
 import { EquipmentAvailabilityService } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { LubeReportsService } from '../../../core/services/lube-reports/lube-reports.service';
+import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 
 // ── Stubs ──────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ const fleetSpy       = jasmine.createSpyObj<FleetService>('FleetService',       
 const faultSpy       = jasmine.createSpyObj<FaultReportsService>('FaultReportsService',       { getReports: of({ data: [], total: 0, page: 1, pageSize: 1 }) });
 const availSpy       = jasmine.createSpyObj<EquipmentAvailabilityService>('EquipmentAvailabilityService', { getAll: of({ data: [], total: 0, page: 1, pageSize: 1 }) });
 const lubeSpy        = jasmine.createSpyObj<LubeReportsService>('LubeReportsService',         { getReports: of({ data: [], total: 0, page: 1, pageSize: 5 }) });
+const workOrdersSpy  = jasmine.createSpyObj<WorkOrdersService>('WorkOrdersService',           { getWorkOrdersFiltered: of({ data: [], total: 0 }) });
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ describe('EquipmentDetailModalComponent', () => {
         { provide: FaultReportsService,             useValue: faultSpy },
         { provide: EquipmentAvailabilityService,    useValue: availSpy },
         { provide: LubeReportsService,              useValue: lubeSpy },
+        { provide: WorkOrdersService,               useValue: workOrdersSpy },
       ],
     }).compileComponents();
 
@@ -117,5 +120,32 @@ describe('EquipmentDetailModalComponent', () => {
 
   it('lubeReports inicia vacío hasta que se carga la pestaña de consumos', () => {
     expect(component.lubeReports()).toEqual([]);
+  });
+
+  it('la pestaña "ots" existe en la lista de tabs', () => {
+    const ids = component.tabs.map((t) => t.id);
+    expect(ids).toContain('ots');
+  });
+
+  it('allOts inicia vacío antes de abrir la pestaña de OTs', () => {
+    expect(component.allOts()).toEqual([]);
+  });
+
+  it('selectTab("ots") activa la pestaña de Órdenes de Trabajo', () => {
+    component.selectTab('ots');
+    expect(component.activeTab()).toBe('ots');
+  });
+
+  it('openOtDetail abre el modal de OT embebido sin perder el contexto', () => {
+    component.openOtDetail('ot-uuid-123');
+    expect(component.selectedOtId()).toBe('ot-uuid-123');
+    expect(component.showOtDetail()).toBeTrue();
+  });
+
+  it('closeOtDetail cierra el modal de OT embebido', () => {
+    component.openOtDetail('ot-uuid-123');
+    component.closeOtDetail();
+    expect(component.showOtDetail()).toBeFalse();
+    expect(component.selectedOtId()).toBeNull();
   });
 });

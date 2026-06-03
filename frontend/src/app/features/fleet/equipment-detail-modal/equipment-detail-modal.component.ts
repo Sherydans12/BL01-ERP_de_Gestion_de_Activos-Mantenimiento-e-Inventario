@@ -15,12 +15,15 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import {
   AssetCostRecord,
   Equipment,
   EquipmentAnalytics,
   EquipmentMeterLog,
   MeterType,
+  WorkOrder,
 } from '../../../core/models/types';
 import {
   FaultReportsService,
@@ -45,7 +48,14 @@ import {
   EquipmentMeterHistoryRow,
 } from '../components/equipment-meter-history-table/equipment-meter-history-table.component';
 
-type TabId = 'ficha' | 'salud' | 'consumos' | 'docs' | 'historial' | 'medidores';
+type TabId =
+  | 'ficha'
+  | 'salud'
+  | 'consumos'
+  | 'ots'
+  | 'docs'
+  | 'historial'
+  | 'medidores';
 
 type TimelineEventType = 'OT' | 'METER_ADJ' | 'PURCHASE';
 
@@ -73,7 +83,12 @@ interface TimelineEvent {
 @Component({
   selector: 'app-equipment-detail-modal',
   standalone: true,
-  imports: [CommonModule, DatePipe, EquipmentMeterHistoryTableComponent],
+  imports: [
+    CommonModule,
+    DatePipe,
+    EquipmentMeterHistoryTableComponent,
+    WorkOrderDetailModalComponent,
+  ],
   templateUrl: './equipment-detail-modal.component.html',
   styles: [
     `
@@ -95,6 +110,7 @@ export class EquipmentDetailModalComponent {
   private faultService = inject(FaultReportsService);
   private availabilityService = inject(EquipmentAvailabilityService);
   private lubeService = inject(LubeReportsService);
+  private workOrdersService = inject(WorkOrdersService);
 
   // Mapas de etiquetas/tokens (espejo backend) expuestos a la plantilla.
   protected readonly criticalityMeta = CRITICALITY_META;
@@ -122,6 +138,15 @@ export class EquipmentDetailModalComponent {
   consumosLoading = signal(false);
   private healthLoadedFor: string | null = null;
   private consumosLoadedFor: string | null = null;
+
+  // ── Pestaña «Órdenes de Trabajo»: OTs en todos los estados del equipo ──
+  allOts = signal<WorkOrder[]>([]);
+  otsLoading = signal(false);
+  private otsLoadedFor: string | null = null;
+
+  // Modal de detalle de OT embebido (no se pierde el contexto del equipo).
+  showOtDetail = signal(false);
+  selectedOtId = signal<string | null>(null);
 
   equipment = computed(() => this.analytics()?.equipment ?? null);
   workOrders = computed(() => this.analytics()?.workOrders ?? []);
@@ -376,11 +401,40 @@ export class EquipmentDetailModalComponent {
   tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'ficha', label: 'Información Base', icon: 'cpu' },
     { id: 'salud', label: 'Salud y Operación', icon: 'heart-pulse' },
+    { id: 'ots', label: 'Órdenes de Trabajo', icon: 'wrench' },
     { id: 'consumos', label: 'Consumos', icon: 'droplet' },
     { id: 'medidores', label: 'Historial de Medidores', icon: 'gauge' },
     { id: 'docs', label: 'Documentación', icon: 'file-text' },
     { id: 'historial', label: 'Historial', icon: 'activity' },
   ];
+
+  /** Etiqueta + token de color para el estado de una OT (espejo backend OtStatus). */
+  otStatusMeta(status: string): { label: string; cls: string } {
+    switch (status) {
+      case 'OPEN':
+        return {
+          label: 'Abierta',
+          cls: 'text-primary bg-primary/10 border-primary/20',
+        };
+      case 'IN_PROGRESS':
+        return {
+          label: 'En progreso',
+          cls: 'text-warning bg-warning/10 border-warning/20',
+        };
+      case 'ON_HOLD':
+        return {
+          label: 'En espera',
+          cls: 'text-muted bg-dark border-border',
+        };
+      case 'CLOSED':
+        return {
+          label: 'Cerrada',
+          cls: 'text-success bg-success/10 border-success/20',
+        };
+      default:
+        return { label: status, cls: 'text-muted bg-dark border-border' };
+    }
+  }
 
   private formatMeterSourceLabel(log: EquipmentMeterLog): string {
     switch (log.source) {
@@ -449,9 +503,39 @@ export class EquipmentDetailModalComponent {
     this.activeTab.set(tab);
     const id = this.equipmentId();
     if (!id) return;
-    // Carga perezosa al abrir las pestañas transversales (M1/M2/M3).
+    // Carga perezosa al abrir las pestañas transversales (M1/M2/M3 + OTs).
     if (tab === 'salud') this.loadHealth(id);
     if (tab === 'consumos') this.loadConsumos(id);
+    if (tab === 'ots') this.loadOts(id);
+  }
+
+  /** Pestaña «Órdenes de Trabajo»: OTs del equipo en todos los estados (no solo cerradas). */
+  private loadOts(id: string): void {
+    if (this.otsLoadedFor === id) return;
+    this.otsLoadedFor = id;
+    this.otsLoading.set(true);
+
+    this.workOrdersService
+      .getWorkOrdersFiltered({ equipmentId: id, limit: 20 })
+      .pipe(catchError(() => of(null)))
+      .subscribe({
+        next: (res) => {
+          this.allOts.set((res?.data ?? []) as WorkOrder[]);
+          this.otsLoading.set(false);
+        },
+        error: () => this.otsLoading.set(false),
+      });
+  }
+
+  /** Abre el detalle de la OT sin cerrar el modal del equipo (contexto preservado). */
+  openOtDetail(otId: string): void {
+    this.selectedOtId.set(otId);
+    this.showOtDetail.set(true);
+  }
+
+  closeOtDetail(): void {
+    this.showOtDetail.set(false);
+    this.selectedOtId.set(null);
   }
 
   /** Pestaña 2 «Salud y Operación»: última falla (M3) + último parte de disponibilidad (M2). */
@@ -503,6 +587,12 @@ export class EquipmentDetailModalComponent {
     this.lubeReports.set([]);
     this.healthLoading.set(false);
     this.consumosLoading.set(false);
+    // OTs
+    this.otsLoadedFor = null;
+    this.allOts.set([]);
+    this.otsLoading.set(false);
+    this.showOtDetail.set(false);
+    this.selectedOtId.set(null);
   }
 
   onBackdropClick(event: MouseEvent): void {

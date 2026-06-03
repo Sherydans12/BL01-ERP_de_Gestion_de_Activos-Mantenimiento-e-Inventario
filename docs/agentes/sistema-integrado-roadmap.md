@@ -29,7 +29,11 @@
 
 ### Prioridad 1: Conexiones faltantes visibles (alto impacto en UX)
 
-#### 1.1 · Dashboard unificado con KPIs cruzados
+#### 1.1 · Dashboard unificado con KPIs cruzados — PARCIAL (Sprint 1, 2026-06-03)
+
+> **Hecho:** tiles de Equipos detenidos (`isOperational=false`), Fallas sin OT (`FaultReport.status=OPEN`) y Sin reporte de turno (`/equipment-availability/unreported` + `ShiftService`). Indicador de turno activo + reloj en el header (`ShiftBadgeComponent`). Métricas backend en `getStats()`.
+> **Pendiente:** semáforo de PMs próximas como tile dedicado (la lógica ya existe en `pmDueSoon`), alertas de abastecimiento como tile, widget de OTs `IN_PROGRESS` por equipo.
+
 El dashboard actual no cruza módulos. Objetivo: una pantalla con "estado del sistema" real.
 
 **Conexiones a implementar:**
@@ -43,11 +47,11 @@ El dashboard actual no cruza módulos. Objetivo: una pantalla con "estado del si
 - `frontend/src/app/features/dashboard/` (ruta `/app/dashboard`)
 - Backend: reutilizar endpoints existentes; agregar un posible `GET /api/dashboard-summary` si se optimiza.
 
-#### 1.2 · Pestaña "Historial OTs" en el modal de detalle de equipo
-El modal de `equipment-detail-modal` tiene un historial de actividad pero mezcla OTs, ajustes y costos en una timeline genérica. Se debería agregar:
-- Una **pestaña "OTs" dedicada**: listado de OTs del equipo con estado, tipo y horómetros (ya disponible en `analytics.workOrders`).
-- **Link a la OT**: click en el correlativo navega a `/app/ots/:id`.
-- Esto completa el círculo M3 → OT → cierre → Flota.
+#### 1.2 · Pestaña "OTs" en el modal de detalle de equipo — HECHO (Sprint 1, 2026-06-03)
+
+> Nueva pestaña «Órdenes de Trabajo» con carga perezosa vía `getWorkOrdersFiltered({ equipmentId, limit:20 })`: tabla con TODOS los estados (no solo cerradas como el timeline). Click en correlativo abre `WorkOrderDetailModalComponent` **embebido** (no navega, preserva el contexto del equipo). Decisión de UX confirmada con el usuario: modal interno en vez de navegar a `/app/ots/:id`.
+
+El modal de `equipment-detail-modal` tenía un historial de actividad que mezclaba OTs cerradas, ajustes y costos en una timeline genérica. Ahora la pestaña OTs dedicada completa el círculo M3 → OT → cierre → Flota.
 
 #### 1.3 · Banner/indicador en el formulario de OT cuando el equipo tiene fallas OPEN
 Cuando el planificador crea una OT manualmente y selecciona un equipo:

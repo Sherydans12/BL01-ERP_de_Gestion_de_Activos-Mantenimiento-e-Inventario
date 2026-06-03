@@ -9,6 +9,19 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-03 — Sprint 1 Sistema Integrado: Dashboard KPIs + indicador de Turno + tab OTs
+
+- **Contexto:** Tras la integración transversal M1·M2·M3↔Flota, el roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md) priorizó cerrar conexiones visibles de alto impacto (Prioridad 1.1 y 1.2). Faltaban dos métricas de salud de flota (equipos fuera de servicio reales y fallas de terreno sin OT) que no existían en `GET /work-orders/stats`, y el modal de equipo no permitía ver OTs activas (solo el timeline con cerradas).
+- **Decisión:**
+  - **Backend:** `getStats()` (`work-orders.service.ts`) sumó dos counts al `Promise.all`: `equiposDetenidos` (`Equipment.isOperational=false` con scope tenant/contrato) y `faultReportsOpen` (`FaultReport.status='OPEN'` por equipo accesible). +2 specs en `work-orders.service.spec.ts` (suite dominio 344).
+  - **Turno activo:** nuevo `ShiftService` (`core/services/shift/`) autodetecta DÍA (08:00–20:00) / NOCHE por hora local con tick de 1 min vía `toSignal(interval)`. `ShiftBadgeComponent` (`core/components/shift-badge/`) muestra turno + reloj en `.app-shell-header` (oculto en móvil, fondo opaco sin blur por regla §5.1). Si se requiere config manual de rangos → crear módulo dedicado; `ShiftService` es el único punto a tocar.
+  - **Dashboard:** 3 tiles nuevos clicables (Equipos detenidos→`/app/flota`, Fallas sin OT→`/app/operaciones/fallas`, Sin reporte de turno→`/app/operaciones/disponibilidad/monitor`); franja a `lg:grid-cols-4` (8 tiles en 2 filas). `loadUnreported()` hace una 2ª llamada no crítica a `/equipment-availability/unreported` con la fecha/turno de `ShiftService`. `DashboardUiModel` ahora exige `equiposDetenidos`, `faultReportsOpen`, `unreportedCount`.
+  - **Modal de equipo:** nueva pestaña «Órdenes de Trabajo» (`TabId += 'ots'`) con carga perezosa vía `getWorkOrdersFiltered({ equipmentId, limit:20 })` — tabla con TODOS los estados (no solo cerradas como el timeline). Click en correlativo abre `WorkOrderDetailModalComponent` **embebido** (`showOtDetail`/`selectedOtId`), preservando el contexto del equipo. +5 specs.
+- **Consecuencias:**
+  - Suites: frontend **104** (+5), backend dominio **344** (+2); `ng build` y lint verdes.
+  - El dashboard pasa a cruzar M3/Flota (detenidos), M3 (fallas OPEN) y M2 (sin reporte de turno) en un golpe de vista.
+  - Pendiente del roadmap: Prioridad 1.3 (banner fallas OPEN en form de OT) y Sprint 2+.
+
 ## 2026-06-03 — Integración Transversal de Operaciones (M1·M2·M3 ↔ Flota) — INTEGRACIÓN COMPLETA
 
 - **Contexto:** M1 (Lubricantes), M2 (Disponibilidad) y M3 (Fallas) quedaron al 100% en backend pero operaban como silos en la UI. Las acciones en terreno no se reflejaban en el Maestro de Flota ni en el modal de detalle de equipo, rompiendo la noción de fuente única de verdad (SSOT) sobre `Equipment`.

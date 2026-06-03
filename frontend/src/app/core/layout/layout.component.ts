@@ -38,6 +38,7 @@ import {
 } from '../services/inventory-analytics/inventory-analytics.service';
 import { QuickViewService } from '../../shared/components/quick-view/quick-view.service';
 import { AvatarComponent } from '../../shared/components/avatar/avatar.component';
+import { ShiftBadgeComponent } from '../components/shift-badge/shift-badge.component';
 import { P } from '../constants/purchases-permissions';
 
 @Component({
@@ -49,6 +50,7 @@ import { P } from '../constants/purchases-permissions';
     RouterLinkActive,
     NgClass,
     AvatarComponent,
+    ShiftBadgeComponent,
   ],
   templateUrl: './layout.component.html',
 })

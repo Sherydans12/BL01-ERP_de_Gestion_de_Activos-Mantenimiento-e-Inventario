@@ -1185,3 +1185,76 @@ describe('WorkOrdersService — update (repuestos y reservas)', () => {
     ).rejects.toThrow(/vinculada a un ítem del inventario/);
   });
 });
+
+describe('WorkOrdersService — getStats (integración transversal)', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const userId = '66666666-6666-6666-6666-666666666666';
+  const adminUser = { id: userId, tenantId, role: 'ADMIN' };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get(WorkOrdersService);
+
+    // El orden refleja la secuencia del Promise.all en getStats().
+    // workOrder.count: OPEN, IN_PROGRESS, ON_HOLD, CLOSED
+    prisma.workOrder.count
+      .mockResolvedValueOnce(2) // OPEN
+      .mockResolvedValueOnce(1) // IN_PROGRESS
+      .mockResolvedValueOnce(0) // ON_HOLD
+      .mockResolvedValueOnce(5); // CLOSED
+    // equipment.count: expiredDocs, totalEquipments, equiposDetenidos
+    prisma.equipment.count
+      .mockResolvedValueOnce(3) // expiredDocs
+      .mockResolvedValueOnce(10) // totalEquipments
+      .mockResolvedValueOnce(4); // equiposDetenidos (isOperational=false)
+    prisma.workOrder.groupBy.mockResolvedValue([] as never);
+    prisma.workOrder.findMany
+      .mockResolvedValueOnce([] as never) // lastClosed
+      .mockResolvedValueOnce([] as never); // openOtsHot
+    prisma.equipment.findMany
+      .mockResolvedValueOnce([] as never) // topAlertsData
+      .mockResolvedValueOnce([] as never); // equipmentForPm
+    prisma.purchaseRequisition.findMany.mockResolvedValue([] as never);
+    prisma.purchaseOrder.findMany.mockResolvedValue([] as never);
+    prisma.purchaseRequisition.count.mockResolvedValue(0);
+    prisma.purchaseOrder.count.mockResolvedValue(0);
+    prisma.itemStock.findMany.mockResolvedValue([] as never);
+    prisma.faultReport.count.mockResolvedValue(7); // faultReportsOpen
+  });
+
+  it('devuelve equiposDetenidos contando equipos con isOperational=false', async () => {
+    const stats = await service.getStats(adminUser);
+
+    expect(stats.equiposDetenidos).toBe(4);
+    expect(prisma.equipment.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isOperational: false }),
+      }),
+    );
+  });
+
+  it('devuelve faultReportsOpen contando fallas en estado OPEN', async () => {
+    const stats = await service.getStats(adminUser);
+
+    expect(stats.faultReportsOpen).toBe(7);
+    expect(prisma.faultReport.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId, status: 'OPEN' }),
+      }),
+    );
+  });
+});

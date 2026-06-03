@@ -31,7 +31,7 @@
     </header>
 
     <!-- KPIs compactos (no saturar: solo lo operativo) -->
-    <section class="grid grid-cols-2 lg:grid-cols-5 gap-3" aria-label="Indicadores clave">
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Indicadores clave">
       <div class="dash-kpi-tile">
         <span class="dash-kpi-tile__label">Disponibilidad flota</span>
         <span class="dash-kpi-tile__value text-primary">{{ s.disponibilidad }}%</span>
@@ -39,6 +39,39 @@
           >{{ s.totalEquipments - s.equiposEnMantenimiento }}/{{ s.totalEquipments }} activos</span
         >
       </div>
+      <a routerLink="/app/flota" class="dash-kpi-tile dash-kpi-tile--link">
+        <span class="dash-kpi-tile__label">Equipos detenidos</span>
+        <span
+          class="dash-kpi-tile__value"
+          [class.text-error]="s.equiposDetenidos > 0"
+          [class.text-main]="s.equiposDetenidos === 0"
+          >{{ s.equiposDetenidos }}</span
+        >
+        <span class="dash-kpi-tile__hint">Fuera de servicio (M3 · OT)</span>
+      </a>
+      <a routerLink="/app/operaciones/fallas" class="dash-kpi-tile dash-kpi-tile--link">
+        <span class="dash-kpi-tile__label">Fallas sin OT</span>
+        <span
+          class="dash-kpi-tile__value"
+          [class.text-warning]="s.faultReportsOpen > 0"
+          [class.text-main]="s.faultReportsOpen === 0"
+          >{{ s.faultReportsOpen }}</span
+        >
+        <span class="dash-kpi-tile__hint">Reportes de terreno abiertos</span>
+      </a>
+      <a
+        routerLink="/app/operaciones/disponibilidad/monitor"
+        class="dash-kpi-tile dash-kpi-tile--link"
+      >
+        <span class="dash-kpi-tile__label">Sin reporte de turno</span>
+        <span
+          class="dash-kpi-tile__value"
+          [class.text-warning]="s.unreportedCount > 0"
+          [class.text-main]="s.unreportedCount === 0"
+          >{{ s.unreportedCount }}</span
+        >
+        <span class="dash-kpi-tile__hint">{{ shiftService.shiftLabel() }} en curso</span>
+      </a>
       <div class="dash-kpi-tile">
         <span class="dash-kpi-tile__label">OTs en curso</span>
         <span class="dash-kpi-tile__value">{{ s.kpiStrip.activeOts }}</span>
@@ -65,7 +98,7 @@
         >
         <span class="dash-kpi-tile__hint">Líneas bodega activa</span>
       </div>
-      <div class="dash-kpi-tile col-span-2 lg:col-span-1">
+      <div class="dash-kpi-tile">
         <span class="dash-kpi-tile__label">Compras</span>
         <span class="dash-kpi-tile__value text-sm font-mono leading-tight">
           {{ s.kpiStrip.requisitionsPipeline }} SRC · {{ s.kpiStrip.purchaseOrdersInbound }} OC

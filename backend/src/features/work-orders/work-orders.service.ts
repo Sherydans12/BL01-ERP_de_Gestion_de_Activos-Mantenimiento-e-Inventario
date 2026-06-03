@@ -934,6 +934,8 @@ export class WorkOrdersService {
       requisitionPipelineCount,
       poAwaitingInboundCount,
       itemStockCandidates,
+      equiposDetenidos,
+      faultReportsOpen,
     ] = await Promise.all([
       this.prisma.workOrder.count({
         where: { ...whereBaseWO, status: 'OPEN' },
@@ -1102,6 +1104,19 @@ export class WorkOrdersService {
         },
         take: 150,
       }),
+      // Equipos fuera de servicio (isOperational=false) — distinto de "en mantenimiento"
+      // (que es proxy por OT abierta). Lo mutan fallas ALTAS (M3) y OTs.
+      this.prisma.equipment.count({
+        where: { ...whereBaseEq, isOperational: false },
+      }),
+      // Fallas de terreno (M3) sin OT vinculada todavía — pendientes de planificación.
+      this.prisma.faultReport.count({
+        where: {
+          tenantId,
+          status: 'OPEN',
+          equipment: { AND: filterEqConditions },
+        },
+      }),
     ]);
 
     const equiposEnMantenimientoCount = activeOts.length;
@@ -1193,6 +1208,8 @@ export class WorkOrdersService {
       purchaseRequisitionsAttention: requisitionsAttention,
       purchaseOrdersInbound,
       lowStocks,
+      equiposDetenidos,
+      faultReportsOpen,
     };
   }
 

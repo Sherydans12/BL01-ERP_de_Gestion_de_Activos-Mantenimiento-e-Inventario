@@ -316,8 +316,11 @@
         }
       </div>
 
-      <!-- Right: theme toggle + logout -->
+      <!-- Right: turno + theme toggle + logout -->
       <div class="flex items-center gap-2">
+        <div class="hidden md:block">
+          <app-shift-badge />
+        </div>
         <button
           type="button"
           (click)="openCommandPalette()"
