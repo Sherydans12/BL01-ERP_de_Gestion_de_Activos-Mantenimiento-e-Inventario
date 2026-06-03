@@ -7,6 +7,7 @@ import {
   EquipmentAnalytics,
   EquipmentMeterSnapshot,
   MeterCaptureBoardResponse,
+  MeterBulkSyncItem,
   MeterBulkSyncResponse,
 } from '../../models/types';
 
@@ -144,7 +145,7 @@ export class FleetService {
   }
 
   bulkSyncMeterReadings(
-    body: { items: { equipmentId: string; newReading: number }[] },
+    body: { items: MeterBulkSyncItem[] },
     options?: { contractId?: string | null },
   ): Observable<MeterBulkSyncResponse> {
     let headers = new HttpHeaders();

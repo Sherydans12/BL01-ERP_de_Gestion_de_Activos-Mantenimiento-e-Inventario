@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { BulkSyncMeterReadingsDto } from './dto/bulk-sync-meter-readings.dto';
 
 @Controller('equipments')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -88,7 +89,7 @@ export class EquipmentsController {
   @RequirePermissions(SystemPermissions.OPERATIONS_METER_READING_CREATE)
   bulkSyncMeterReadings(
     @Req() req: any,
-    @Body() body: { items: { equipmentId: string; newReading: number }[] },
+    @Body() body: BulkSyncMeterReadingsDto,
     @Headers('x-site-id') siteId?: string,
     @Headers('x-contract-id') contractId?: string,
   ) {

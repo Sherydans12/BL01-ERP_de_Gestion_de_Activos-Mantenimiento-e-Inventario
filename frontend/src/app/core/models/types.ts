@@ -159,13 +159,22 @@ export interface MeterCaptureBoardResponse {
 
 export type MeterBulkSyncErrorCode =
   | 'READING_LOWER_THAN_CURRENT'
-  | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN';
+  | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN'
+  | 'READING_JUMP_REQUIRES_CONFIRMATION';
 
 export interface MeterBulkSyncErrorItem {
   equipmentId: string;
   error: MeterBulkSyncErrorCode;
-  /** Medidor actual en BD cuando `error === READING_LOWER_THAN_CURRENT`. */
+  /** Medidor actual en BD en conflictos de lectura o salto. */
   serverValue?: number;
+  /** Delta calculado cuando `error === READING_JUMP_REQUIRES_CONFIRMATION`. */
+  delta?: number;
+}
+
+export interface MeterBulkSyncItem {
+  equipmentId: string;
+  newReading: number;
+  confirmedLargeJump?: boolean;
 }
 
 export interface MeterBulkSyncAppliedItem {

@@ -8,6 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MeterLogSource, Prisma } from '@prisma/client';
 import { pickEquipmentWritablePayload } from './equipment-write-keys';
 import { applyCurrentMeterChange } from './equipment-meter-sync';
+import { BulkSyncMeterReadingsDto } from './dto/bulk-sync-meter-readings.dto';
+import { getMeterJumpLimit } from './meter-jump-limits.util';
 import {
   buildEquipmentContractAccessOr,
   userCanAccessContractId,
@@ -704,7 +706,7 @@ export class EquipmentsService {
   async bulkSyncMeterReadings(
     user: any,
     siteHeader: string | undefined,
-    body: { items?: { equipmentId: string; newReading: number }[] },
+    body: BulkSyncMeterReadingsDto,
   ) {
     const tenantId = user.tenantId;
     const userId = user.id || user.sub;
@@ -721,7 +723,10 @@ export class EquipmentsService {
       throw new BadRequestException('Máximo 500 lecturas por solicitud.');
     }
 
-    const merged = new Map<string, number>();
+    const merged = new Map<
+      string,
+      { newReading: number; confirmedLargeJump?: boolean }
+    >();
     for (const it of rawItems) {
       if (!it?.equipmentId || typeof it.newReading !== 'number') {
         throw new BadRequestException('Formato de ítem inválido.');
@@ -731,12 +736,18 @@ export class EquipmentsService {
           'Cada lectura debe ser un entero mayor o igual a cero.',
         );
       }
-      merged.set(it.equipmentId, it.newReading);
+      merged.set(it.equipmentId, {
+        newReading: it.newReading,
+        confirmedLargeJump: it.confirmedLargeJump === true,
+      });
     }
-    const items = [...merged.entries()].map(([equipmentId, newReading]) => ({
-      equipmentId,
-      newReading,
-    }));
+    const items = [...merged.entries()].map(
+      ([equipmentId, { newReading, confirmedLargeJump }]) => ({
+        equipmentId,
+        newReading,
+        confirmedLargeJump,
+      }),
+    );
 
     const whereBase: Prisma.EquipmentWhereInput = { tenantId };
     const andConditions: Prisma.EquipmentWhereInput[] = [];
@@ -748,8 +759,12 @@ export class EquipmentsService {
 
     type BulkErrorRow = {
       equipmentId: string;
-      error: 'READING_LOWER_THAN_CURRENT' | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN';
+      error:
+        | 'READING_LOWER_THAN_CURRENT'
+        | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN'
+        | 'READING_JUMP_REQUIRES_CONFIRMATION';
       serverValue?: number;
+      delta?: number;
     };
 
     try {
@@ -763,7 +778,11 @@ export class EquipmentsService {
           from: number;
           to: number;
         }[] = [];
-        for (const { equipmentId, newReading } of items) {
+        for (const {
+          equipmentId,
+          newReading,
+          confirmedLargeJump,
+        } of items) {
           const equipment = await tx.equipment.findFirst({
             where: {
               ...whereBase,
@@ -787,6 +806,17 @@ export class EquipmentsService {
           }
           if (newReading === equipment.currentMeter) {
             unchangedCount += 1;
+            continue;
+          }
+          const delta = newReading - equipment.currentMeter;
+          const jumpLimit = getMeterJumpLimit(equipment.meterType);
+          if (delta > jumpLimit && !confirmedLargeJump) {
+            errors.push({
+              equipmentId,
+              error: 'READING_JUMP_REQUIRES_CONFIRMATION',
+              serverValue: equipment.currentMeter,
+              delta,
+            });
             continue;
           }
           await applyCurrentMeterChange(tx, {

@@ -222,9 +222,9 @@ describe('EquipmentsService', () => {
       const items = [
         {
           equipmentId: 'dddddddd-dddd-4ddd-8ddd-dddddddd0004',
-          newReading: 2000,
+          newReading: 1010,
         },
-        { equipmentId: missingId, newReading: 2100 },
+        { equipmentId: missingId, newReading: 1010 },
       ];
 
       prisma.$transaction.mockImplementation(async (fn) => {
@@ -254,6 +254,79 @@ describe('EquipmentsService', () => {
           error: 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN',
         },
       ]);
+    });
+
+    it('retiene salto de 25 h sin confirmedLargeJump con READING_JUMP_REQUIRES_CONFIRMATION', async () => {
+      const equipmentId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeee0005';
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.equipment.findFirst.mockResolvedValue({
+          id: equipmentId,
+          tenantId,
+          internalId: 'INT-JUMP',
+          currentMeter: 1000,
+          meterType: 'HOURS',
+        } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      const result = await service.bulkSyncMeterReadings(
+        { id: userId, tenantId, role: 'ADMIN' },
+        undefined,
+        {
+          items: [{ equipmentId, newReading: 1025 }],
+        },
+      );
+
+      expect(result.successCount).toBe(0);
+      expect(result.errors).toEqual([
+        {
+          equipmentId,
+          error: 'READING_JUMP_REQUIRES_CONFIRMATION',
+          serverValue: 1000,
+          delta: 25,
+        },
+      ]);
+      expect(mockApplyMeterChange).not.toHaveBeenCalled();
+    });
+
+    it('procesa salto de 25 h cuando confirmedLargeJump es true', async () => {
+      const equipmentId = 'ffffffff-ffff-4fff-8fff-ffffffff0006';
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.equipment.findFirst.mockResolvedValue({
+          id: equipmentId,
+          tenantId,
+          internalId: 'INT-JUMP-OK',
+          currentMeter: 1000,
+          meterType: 'HOURS',
+        } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      const result = await service.bulkSyncMeterReadings(
+        { id: userId, tenantId, role: 'ADMIN' },
+        undefined,
+        {
+          items: [
+            {
+              equipmentId,
+              newReading: 1025,
+              confirmedLargeJump: true,
+            },
+          ],
+        },
+      );
+
+      expect(result.successCount).toBe(1);
+      expect(result.errors).toHaveLength(0);
+      expect(mockApplyMeterChange).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          equipmentId,
+          oldMeter: 1000,
+          newMeter: 1025,
+          source: MeterLogSource.MANUAL,
+        }),
+      );
     });
   });
 
