@@ -14,9 +14,13 @@ import {
   OtType,
   Prisma,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
+import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
+import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-events';
+import { buildMailEquipmentDown } from '../../common/email/transactional-mail.builder';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import { CreateFaultReportDto } from './dto/create-fault-report.dto';
 
@@ -49,6 +53,8 @@ export class FaultReportsService {
     private readonly prisma: PrismaService,
     private readonly sequenceService: SequenceService,
     private readonly storageService: StorageService,
+    private readonly notificationDispatcher: NotificationDispatcherService,
+    private readonly config: ConfigService,
   ) {}
 
   // ── Includes reutilizables ──────────────────────────────────────────────────
@@ -116,7 +122,7 @@ export class FaultReportsService {
     const tenantId = user.tenantId as string;
     const userId = (user.id ?? user.sub) as string;
 
-    return this.prisma.$transaction(
+    const result = await this.prisma.$transaction(
       async (tx) => {
         // ── 1. Validar equipo ─────────────────────────────────────────────────
         const equipment = await tx.equipment.findFirst({
@@ -250,6 +256,136 @@ export class FaultReportsService {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         maxWait: 10_000,
         timeout: 30_000,
+      },
+    );
+
+    // ── 6. Notificar «Equipo fuera de servicio» (fuera de la transacción) ──────
+    // Solo fallas ALTAS dejan el equipo detenido (isOperational=false).
+    // Fire-and-forget: no bloquea ni revierte la respuesta si el push/correo falla.
+    if (dto.criticality === FaultCriticality.HIGH) {
+      this.notifyEquipmentDown(tenantId, result).catch(() => {
+        /* fallo silencioso */
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Resuelve los IDs de usuarios candidatos a recibir el aviso de equipo
+   * detenido: ADMIN activos del tenant + usuarios con acceso al contrato del
+   * equipo (`UserContract`). El dispatcher filtra por opt-in estricto
+   * (`UserNotificationSetting`), así que aquí solo se arma el pool de candidatos.
+   */
+  private async resolveEquipmentDownRecipients(
+    tenantId: string,
+    contractId: string,
+  ): Promise<string[]> {
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        OR: [
+          { role: 'ADMIN' },
+          { contractAccess: { some: { contractId } } },
+        ],
+      },
+      select: { id: true },
+    });
+    return users.map((u) => u.id);
+  }
+
+  /**
+   * Despacha el evento `EQUIPMENT_DOWN` (correo + Web Push opt-in) cuando una
+   * falla ALTA dejó el equipo fuera de servicio. Enriquece el reporte con datos
+   * de equipo, contrato, reportante y OT generada para el cuerpo del mensaje.
+   */
+  private async notifyEquipmentDown(
+    tenantId: string,
+    report: {
+      id: string;
+      correlative: string;
+      equipmentId: string;
+      contractId: string;
+      reportedById: string;
+      workOrderId: string | null;
+      affectedSystem: string;
+      symptomDescription: string;
+      eventDate: Date;
+    },
+  ): Promise<void> {
+    const [equipment, reporter, workOrder] = await Promise.all([
+      this.prisma.equipment.findUnique({
+        where: { id: report.equipmentId },
+        select: {
+          internalId: true,
+          brand: true,
+          model: true,
+          contract: { select: { name: true } },
+        },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: report.reportedById },
+        select: { name: true, email: true },
+      }),
+      report.workOrderId
+        ? this.prisma.workOrder.findUnique({
+            where: { id: report.workOrderId },
+            select: { correlative: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (!equipment) {
+      return;
+    }
+
+    const recipients = await this.resolveEquipmentDownRecipients(
+      tenantId,
+      report.contractId,
+    );
+    if (!recipients.length) {
+      return;
+    }
+
+    const appUrl = this.config.get<string>('FRONTEND_URL') ?? '';
+    const equipmentLabel =
+      `${equipment.internalId} — ${equipment.brand} ${equipment.model}`.trim();
+    const reportedBy = reporter?.name ?? reporter?.email ?? 'Operador';
+    const eventDateLabel = report.eventDate.toLocaleString('es-CL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    await this.notificationDispatcher.dispatch(
+      NOTIFICATION_EVENTS.EQUIPMENT_DOWN,
+      tenantId,
+      {
+        userIds: recipients,
+        subject: `Equipo fuera de servicio: ${equipmentLabel} (${report.correlative})`,
+        html: buildMailEquipmentDown({
+          faultCorrelative: report.correlative,
+          equipmentLabel,
+          affectedSystem: String(report.affectedSystem),
+          symptom: report.symptomDescription,
+          reportedBy,
+          eventDate: eventDateLabel,
+          workOrderCorrelative: workOrder?.correlative ?? null,
+          contractName: equipment.contract?.name ?? null,
+          appUrl,
+        }),
+        pushPayload: {
+          title: 'Equipo fuera de servicio',
+          body: `${equipmentLabel} · ${report.correlative}`,
+          data: {
+            type: 'EQUIPMENT_DOWN',
+            faultReportId: report.id,
+            equipmentId: report.equipmentId,
+          },
+        },
       },
     );
   }

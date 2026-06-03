@@ -38,6 +38,10 @@ export const NOTIFICATION_EVENTS = {
   /** OT cerrada con marca de posible garantía; notifica lista de correos externa. */
   OT_WARRANTY_NOTIFY: 'OT_WARRANTY_NOTIFY',
 
+  // ── Operaciones / Flota ───────────────────────────────────────────────────
+  /** Falla de criticidad ALTA dejó un equipo fuera de servicio (isOperational=false). */
+  EQUIPMENT_DOWN: 'EQUIPMENT_DOWN',
+
   // ── Inventario ────────────────────────────────────────────────────────────
   /** Stock de un artículo alcanzó o cayó bajo el mínimo definido. */
   INVENTORY_STOCK_MIN: 'INVENTORY_STOCK_MIN',

@@ -7,6 +7,7 @@ import {
   buildMailUnusualLogin,
   buildMailSuperAdminStepUp,
   buildMailInventoryItemCreated,
+  buildMailEquipmentDown,
 } from './transactional-mail.builder';
 
 const SAMPLE_BASE = 'https://tpm.ejemplo.cl';
@@ -79,6 +80,22 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
         createdAt: '18-05-26, 10:14 a. m.',
         appUrl: SAMPLE_BASE,
         partNumber: 'N74B681',
+      }),
+  },
+  {
+    file: '07-equipo-fuera-de-servicio.html',
+    title: 'Equipo fuera de servicio (EQUIPMENT_DOWN)',
+    build: () =>
+      buildMailEquipmentDown({
+        faultCorrelative: 'RF-00042',
+        equipmentLabel: 'EC-3005 — Caterpillar 980G',
+        affectedSystem: 'Motor',
+        symptom: 'Pérdida de potencia y humo negro persistente en pendiente.',
+        reportedBy: 'Juan Operador',
+        eventDate: '03-06-26, 09:40 a. m.',
+        workOrderCorrelative: 'OT-2026-018',
+        contractName: 'Contrato Minera Norte',
+        appUrl: SAMPLE_BASE,
       }),
   },
 ];

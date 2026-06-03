@@ -97,6 +97,8 @@ Al agregar repuestos a una OT, mostrar el stock disponible en bodega para cada �
 - Usar `NotificationDispatcherService` con nuevo `eventKey: 'EQUIPMENT_DOWN'`.
 - Registrar en `docs/agentes/notificaciones-sistema.md`.
 
+**3.1 · Push cuando equipo queda fuera de servicio — HECHO (Sprint 4, 2026-06-03)**
+
 #### 3.2 · Push cuando se acerca la PM
 `currentMeter >= nextServiceAt - 50 hrs` (configurable por `pmIntervalOverride`). Disparar alerta al planificador.
 - Punto de disparo: cada vez que `applyCurrentMeterChange` avanza el medidor (en M1, M2, M3 y OT).

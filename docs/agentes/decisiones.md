@@ -292,3 +292,20 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Contexto:** Usuario quería feedback inmediato al ingresar cantidades y poder consultar el catálogo sin salir de la vista.
 - **Decisión:** Columna "Estado" con badge coloreado por fila (`sin ingresar`, `parcial: X de Y`, `✓ completo`). Click en nombre del artículo abre un modal con datos del catálogo y tabla de cantidades en contexto.
 - **Consecuencias:** Clases CSS con `/` (Tailwind) no se pueden usar en `[class.xxx]` de Angular; se definieron `.row-qty-complete` / `.row-qty-partial` en `styles.scss` y se usa `[ngClass]`.
+
+## 2026-06-03 - Sprint 4 Sistema Integrado: EQUIPMENT_DOWN push + correo (3.1)
+
+- **Contexto:** Sprint 4 del roadmap de integracion transversal. Los Sprints 1-3 implementaron UI cruzada; Sprint 4 cierra el ciclo con notificaciones salientes cuando un equipo queda fuera de servicio.
+- **Decision:**
+  - Nuevo evento NOTIFICATION_EVENTS.EQUIPMENT_DOWN en el catalogo.
+  - FaultReportsService.create dispara (fire-and-forget, fuera de la transaccion Serializable) 
+otifyEquipmentDown() cuando criticality === HIGH.
+  - Pool de destinatarios: ole = ADMIN activos + usuarios con UserContract al contrato del equipo (misma logica de acceso que el modulo de compras).
+  - Motor omnicanal NotificationDispatcherService: EMAIL (opt-in) + WEB_PUSH (opt-in) + ccEmails del tenant.
+  - Plantilla uildMailEquipmentDown en 	ransactional-mail.builder.ts; preview en docs/email-previews/07-equipo-fuera-de-servicio.html.
+  - Frontend: parsePushNotificationData refactorizado a PushNavAction; clic en push de EQUIPMENT_DOWN navega a /app/operaciones/fallas.
+  - ault-reports.service.spec.ts sumado a 	est:domain (20 suites, 360 tests).
+- **Consecuencias:**
+  - Sin cambios de schema. No requiere nueva migracion.
+  - Los modulos existentes (M1, M2, OT) solo actualizan isOperational=true cuando corresponde; la notificacion EQUIPMENT_DOWN es exclusiva de M3 falla ALTA.
+  - Sprint 4.2 (PM proxima) pendiente de confirmacion de diseno (requiere campo anti-spam en schema).

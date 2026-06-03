@@ -11,10 +11,16 @@ import {
   FaultReportStatus,
   Prisma,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
+import { StorageService } from '../../common/storage/storage.service';
+import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
 import { FaultReportsService } from './fault-reports.service';
 import { CreateFaultReportDto } from './dto/create-fault-report.dto';
+
+/** Espera a que se vacíen las microtareas pendientes (dispatch fire-and-forget). */
+const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
 
 // ── Mock del helper de horómetro (patrón estándar del proyecto) ──────────────
 jest.mock('../equipments/equipment-meter-sync', () => ({
@@ -110,6 +116,7 @@ describe('FaultReportsService — create', () => {
   let prisma: DeepMockProxy<PrismaService>;
   let tx: DeepMockProxy<Prisma.TransactionClient>;
   let sequenceService: { getNextCorrelative: jest.Mock };
+  let dispatcher: { dispatch: jest.Mock };
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -119,6 +126,10 @@ describe('FaultReportsService — create', () => {
     sequenceService = {
       getNextCorrelative: jest.fn().mockResolvedValue('RF-00001'),
     };
+    dispatcher = { dispatch: jest.fn().mockResolvedValue(undefined) };
+
+    // Por defecto, sin equipo enriquecido → notifyEquipmentDown retorna temprano.
+    prisma.equipment.findUnique.mockResolvedValue(null as never);
 
     // Patrón estándar: $transaction delega al callback con el tx mock
     prisma.$transaction.mockImplementation(async (fn) =>
@@ -130,6 +141,9 @@ describe('FaultReportsService — create', () => {
         FaultReportsService,
         { provide: PrismaService, useValue: prisma },
         { provide: SequenceService, useValue: sequenceService },
+        { provide: StorageService, useValue: mockDeep<StorageService>() },
+        { provide: NotificationDispatcherService, useValue: dispatcher },
+        { provide: ConfigService, useValue: { get: jest.fn(() => '') } },
       ],
     }).compile();
 
@@ -323,6 +337,81 @@ describe('FaultReportsService — create', () => {
       }),
     );
   });
+
+  // ── TEST 9: Dispatch EQUIPMENT_DOWN — se llama para falla ALTA ──
+
+  it('falla ALTA: dispara EQUIPMENT_DOWN (fire-and-forget) al completar la transacción', async () => {
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.faultReport.create.mockResolvedValue({
+      ...createdReport,
+      criticality: FaultCriticality.HIGH,
+    } as never);
+    tx.workOrder.count.mockResolvedValue(0 as never);
+    tx.workOrder.create.mockResolvedValue(createdWorkOrder as never);
+    tx.faultReport.update.mockResolvedValue({
+      ...linkedReport,
+      criticality: FaultCriticality.HIGH,
+    } as never);
+    tx.equipment.update.mockResolvedValue({} as never);
+
+    // Enriquecimiento post-transacción: equipo + reporter
+    prisma.equipment.findUnique.mockResolvedValue({
+      internalId: 'EC-3005',
+      brand: 'Caterpillar',
+      model: '980G',
+      contract: { name: 'Contrato Norte' },
+    } as never);
+    prisma.user.findUnique.mockResolvedValue({ name: 'Juan', email: 'juan@tpm.cl', isActive: true } as never);
+    prisma.workOrder.findUnique.mockResolvedValue({ correlative: 'OT-2026-001' } as never);
+    prisma.user.findMany.mockResolvedValue([{ id: userId }] as never);
+
+    await service.create(
+      buildDto({ criticality: FaultCriticality.HIGH }),
+      operatorUser,
+    );
+    await flushAsync();
+
+    expect(dispatcher.dispatch).toHaveBeenCalledWith(
+      'EQUIPMENT_DOWN',
+      tenantId,
+      expect.objectContaining({
+        pushPayload: expect.objectContaining({ data: expect.objectContaining({ type: 'EQUIPMENT_DOWN' }) }),
+      }),
+    );
+  });
+
+  // ── TEST 10: Dispatch EQUIPMENT_DOWN — NO se llama para MEDIA ──
+
+  it('falla MEDIA: no dispara EQUIPMENT_DOWN', async () => {
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.faultReport.create.mockResolvedValue({
+      ...createdReport,
+      criticality: FaultCriticality.MEDIUM,
+    } as never);
+    tx.workOrder.count.mockResolvedValue(0 as never);
+    tx.workOrder.create.mockResolvedValue(createdWorkOrder as never);
+    tx.faultReport.update.mockResolvedValue(linkedReport as never);
+
+    await service.create(
+      buildDto({ criticality: FaultCriticality.MEDIUM }),
+      operatorUser,
+    );
+    await flushAsync();
+
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
+  });
+
+  // ── TEST 11: Dispatch EQUIPMENT_DOWN — NO se llama para BAJA ──
+
+  it('falla BAJA: no dispara EQUIPMENT_DOWN', async () => {
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.faultReport.create.mockResolvedValue(createdReport as never);
+
+    await service.create(buildDto({ criticality: FaultCriticality.LOW }), operatorUser);
+    await flushAsync();
+
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -333,6 +422,7 @@ describe('FaultReportsService — createWorkOrderFromReport', () => {
   let prisma: DeepMockProxy<PrismaService>;
   let tx: DeepMockProxy<Prisma.TransactionClient>;
   let sequenceService: { getNextCorrelative: jest.Mock };
+  let dispatcher: { dispatch: jest.Mock };
 
   const openLowReport = {
     id: reportId,
@@ -350,6 +440,7 @@ describe('FaultReportsService — createWorkOrderFromReport', () => {
     tx = mockDeep<Prisma.TransactionClient>();
 
     sequenceService = { getNextCorrelative: jest.fn() };
+    dispatcher = { dispatch: jest.fn().mockResolvedValue(undefined) };
 
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
@@ -360,6 +451,9 @@ describe('FaultReportsService — createWorkOrderFromReport', () => {
         FaultReportsService,
         { provide: PrismaService, useValue: prisma },
         { provide: SequenceService, useValue: sequenceService },
+        { provide: StorageService, useValue: mockDeep<StorageService>() },
+        { provide: NotificationDispatcherService, useValue: dispatcher },
+        { provide: ConfigService, useValue: { get: jest.fn(() => '') } },
       ],
     }).compile();
 
