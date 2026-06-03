@@ -286,9 +286,7 @@ describe('FaultReportsService — create', () => {
   // ── TEST 7: Error — equipo sin contrato asignado ──
 
   it('lanza BadRequestException si el equipo no tiene contrato asignado', async () => {
-    tx.equipment.findFirst.mockResolvedValue(
-      equipmentWithoutContract as never,
-    );
+    tx.equipment.findFirst.mockResolvedValue(equipmentWithoutContract as never);
 
     await expect(service.create(buildDto(), operatorUser)).rejects.toThrow(
       BadRequestException,
@@ -378,7 +376,10 @@ describe('FaultReportsService — createWorkOrderFromReport', () => {
       status: FaultReportStatus.LINKED,
     } as never);
 
-    const result = await service.createWorkOrderFromReport(reportId, operatorUser);
+    const result = await service.createWorkOrderFromReport(
+      reportId,
+      operatorUser,
+    );
 
     expect(tx.workOrder.create).toHaveBeenCalledWith(
       expect.objectContaining({

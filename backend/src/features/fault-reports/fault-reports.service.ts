@@ -24,8 +24,8 @@ const FR_DOCUMENT_TYPE = 'FAULT_REPORT';
 const FR_PREFIX = 'RF';
 
 // ── Reglas de adjuntos ────────────────────────────────────────────────────────
-const FR_ATTACHMENT_MAX_BYTES  = 10 * 1024 * 1024; // 10 MB
-const FR_ATTACHMENT_MAX_COUNT  = 3;
+const FR_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const FR_ATTACHMENT_MAX_COUNT = 3;
 const FR_ATTACHMENT_ALLOWED_MIMES = new Set([
   'image/jpeg',
   'image/png',
@@ -90,9 +90,16 @@ export class FaultReportsService {
         affectsAvailability: true,
       },
     },
-    contract:    { select: { id: true, code: true, name: true } },
+    contract: { select: { id: true, code: true, name: true } },
     attachments: {
-      select: { id: true, fileName: true, fileType: true, sizeBytes: true, storageKey: true, createdAt: true },
+      select: {
+        id: true,
+        fileName: true,
+        fileType: true,
+        sizeBytes: true,
+        storageKey: true,
+        createdAt: true,
+      },
       orderBy: { createdAt: 'asc' as const },
     },
   } as const;
@@ -288,7 +295,7 @@ export class FaultReportsService {
 
     return this.prisma.$transaction(
       async (tx) => {
-        const eq = report.equipment!;
+        const eq = report.equipment;
 
         const woCount = await tx.workOrder.count({ where: { tenantId } });
         const year = new Date().getFullYear();
