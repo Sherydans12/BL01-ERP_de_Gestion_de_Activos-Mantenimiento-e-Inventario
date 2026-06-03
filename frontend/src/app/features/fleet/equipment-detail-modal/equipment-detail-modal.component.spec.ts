@@ -9,6 +9,7 @@ import { FaultReportsService } from '../../../core/services/fault-reports/fault-
 import { EquipmentAvailabilityService } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { LubeReportsService } from '../../../core/services/lube-reports/lube-reports.service';
 import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import { EquipmentMeterLog } from '../../../core/models/types';
 
 // ── Stubs ──────────────────────────────────────────────────────────────────────
 
@@ -239,5 +240,228 @@ describe('EquipmentDetailModalComponent', () => {
     component['analytics'].set(MOCK_ANALYTICS);
     expect(component.costTotal()).toBe(0);
     expect(component.costByType()).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE 3 — Verificación del historial de horómetro en UI
+// Testa el computed `meterHistoryRows` que transforma los EquipmentMeterLog
+// crudos (con oldValue/newValue/source) en las filas procesadas que recibe
+// la tabla presentacional (deltaFromPrevious + sourceLabel en español).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('EquipmentDetailModalComponent — meterHistoryRows (Fase 3: historial UI)', () => {
+  let component: EquipmentDetailModalComponent;
+  let fixture: ComponentFixture<EquipmentDetailModalComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [EquipmentDetailModalComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: FleetService,                    useValue: fleetSpy },
+        { provide: FaultReportsService,             useValue: faultSpy },
+        { provide: EquipmentAvailabilityService,    useValue: availSpy },
+        { provide: LubeReportsService,              useValue: lubeSpy },
+        { provide: WorkOrdersService,               useValue: workOrdersSpy },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(EquipmentDetailModalComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  // Payload del caos en terreno — orden DESC (más reciente primero), como viene de la API.
+  // El computed debe sortear ASC internamente para calcular el delta correctamente.
+  const CHAOS_LOGS_DESC: EquipmentMeterLog[] = [
+    {
+      id:       'log-fault',
+      source:   'FAULT_REPORT',
+      oldValue: 5050,
+      newValue: 5100,
+      date:     '2026-06-03T12:00:00Z',
+      user:     { name: 'Juan Pérez' },
+    },
+    {
+      id:       'log-avail',
+      source:   'AVAILABILITY_REPORT',
+      oldValue: 5000,
+      newValue: 5050,
+      date:     '2026-06-03T08:00:00Z',
+      user:     { name: 'María López' },
+    },
+  ];
+
+  /** Carga logs en analytics sin alterar el resto del fixture. */
+  function loadLogs(logs: EquipmentMeterLog[]): void {
+    component['analytics'].set({ ...MOCK_ANALYTICS, meterLogs: logs } as any);
+  }
+
+  // ── Estado vacío ───────────────────────────────────────────────────────────
+
+  it('retorna array vacío cuando no hay logs de horómetro', () => {
+    component['analytics'].set(MOCK_ANALYTICS); // meterLogs: []
+    expect(component.meterHistoryRows()).toEqual([]);
+  });
+
+  // ── Cardinalidad ──────────────────────────────────────────────────────────
+
+  it('retorna exactamente 2 filas para el escenario de los 2 logs del caos en terreno', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    expect(component.meterHistoryRows().length).toBe(2);
+  });
+
+  // ── Orden de la salida ────────────────────────────────────────────────────
+
+  it('ordena la salida ASC por fecha aunque el input llegue DESC (más antiguo primero en el array)', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    const rows = component.meterHistoryRows();
+    // rows[0] debe ser el log de las 08:00 (AVAILABILITY_REPORT)
+    // rows[1] debe ser el log de las 12:00 (FAULT_REPORT)
+    expect(rows[0].id).toBe('log-avail');
+    expect(rows[1].id).toBe('log-fault');
+  });
+
+  // ── Cálculo del delta ─────────────────────────────────────────────────────
+
+  it('Δ primera entrada: usa oldValue del propio log (5050 - 5000 = +50)', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    const rows = component.meterHistoryRows();
+    // log-avail (i=0): reading=5050, prevReading=oldValue=5000 → delta=50
+    expect(rows[0].deltaFromPrevious).toBe(50);
+  });
+
+  it('Δ segunda entrada: usa newValue del log anterior (5100 - 5050 = +50)', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    const rows = component.meterHistoryRows();
+    // log-fault (i=1): reading=5100, prevReading=asc[0].newValue=5050 → delta=50
+    expect(rows[1].deltaFromPrevious).toBe(50);
+  });
+
+  it('reading de cada fila corresponde a newValue del log', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    const rows = component.meterHistoryRows();
+    expect(rows[0].reading).toBe(5050);
+    expect(rows[1].reading).toBe(5100);
+  });
+
+  it('deltaFromPrevious es null cuando el cálculo no es finito (prevención de NaN)', () => {
+    const logWithNaN: EquipmentMeterLog = {
+      id: 'log-nan', source: 'MANUAL',
+      oldValue: 'invalid' as any,
+      newValue: 'invalid' as any,
+      date: '2026-06-03T06:00:00Z',
+    };
+    loadLogs([logWithNaN]);
+    expect(component.meterHistoryRows()[0].deltaFromPrevious).toBeNull();
+  });
+
+  // ── Traducción de fuentes (sourceLabel) ───────────────────────────────────
+
+  it('FAULT_REPORT se traduce a "Reporte de falla"', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    const faultRow = component.meterHistoryRows().find(r => r.id === 'log-fault');
+    expect(faultRow?.sourceLabel).toBe('Reporte de falla');
+  });
+
+  it('AVAILABILITY_REPORT se traduce a "Reporte de disponibilidad"', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    const availRow = component.meterHistoryRows().find(r => r.id === 'log-avail');
+    expect(availRow?.sourceLabel).toBe('Reporte de disponibilidad');
+  });
+
+  it('MANUAL se traduce a "Manual / ajuste"', () => {
+    loadLogs([{
+      id: 'log-m', source: 'MANUAL',
+      oldValue: 100, newValue: 200, date: '2026-06-03T06:00:00Z',
+    }]);
+    expect(component.meterHistoryRows()[0].sourceLabel).toBe('Manual / ajuste');
+  });
+
+  it('TELEMETRY se traduce a "Telemetría"', () => {
+    loadLogs([{
+      id: 'log-t', source: 'TELEMETRY',
+      oldValue: 200, newValue: 300, date: '2026-06-03T06:00:00Z',
+    }]);
+    expect(component.meterHistoryRows()[0].sourceLabel).toBe('Telemetría');
+  });
+
+  it('OT incluye el correlativo en la etiqueta cuando está disponible', () => {
+    loadLogs([{
+      id: 'log-ot', source: 'OT',
+      oldValue: 300, newValue: 350, date: '2026-06-03T06:00:00Z',
+      workOrderCorrelative: 'OT-2026-005',
+    }]);
+    expect(component.meterHistoryRows()[0].sourceLabel).toBe('OT OT-2026-005');
+  });
+
+  it('OT sin correlativo retorna la etiqueta genérica "OT"', () => {
+    loadLogs([{
+      id: 'log-ot2', source: 'OT',
+      oldValue: 300, newValue: 350, date: '2026-06-03T06:00:00Z',
+    }]);
+    expect(component.meterHistoryRows()[0].sourceLabel).toBe('OT');
+  });
+
+  // ── userLabel ─────────────────────────────────────────────────────────────
+
+  it('userLabel usa el nombre del usuario cuando está disponible', () => {
+    loadLogs(CHAOS_LOGS_DESC);
+    expect(component.meterHistoryRows()[0].userLabel).toBe('María López');
+    expect(component.meterHistoryRows()[1].userLabel).toBe('Juan Pérez');
+  });
+
+  it('userLabel usa el email cuando no hay nombre', () => {
+    loadLogs([{
+      id: 'log-e', source: 'MANUAL',
+      oldValue: 100, newValue: 150, date: '2026-06-03T06:00:00Z',
+      user: { email: 'admin@tpm.cl' },
+    }]);
+    expect(component.meterHistoryRows()[0].userLabel).toBe('admin@tpm.cl');
+  });
+
+  it('userLabel es "—" cuando el log no tiene usuario', () => {
+    loadLogs([{
+      id: 'log-u', source: 'MANUAL',
+      oldValue: 100, newValue: 150, date: '2026-06-03T06:00:00Z',
+    }]);
+    expect(component.meterHistoryRows()[0].userLabel).toBe('—');
+  });
+
+  // ── meterHistoryPreviewRows ───────────────────────────────────────────────
+
+  it('meterHistoryPreviewRows retorna todas las filas cuando hay 8 o menos', () => {
+    loadLogs(CHAOS_LOGS_DESC); // 2 logs
+    expect(component.meterHistoryPreviewRows().length).toBe(2);
+  });
+
+  it('meterHistoryPreviewRows limita a las últimas 8 entradas cuando hay más de 8 logs', () => {
+    const manyLogs: EquipmentMeterLog[] = Array.from({ length: 12 }, (_, i) => ({
+      id:       `log-${i}`,
+      source:   'MANUAL' as const,
+      oldValue: i * 100,
+      newValue: (i + 1) * 100,
+      date:     new Date(2026, 5, 1 + i).toISOString(),
+    }));
+    loadLogs(manyLogs);
+    expect(component.meterHistoryRows().length).toBe(12);
+    expect(component.meterHistoryPreviewRows().length).toBe(8);
+  });
+
+  it('meterHistoryPreviewRows son las 8 ÚLTIMAS filas (las más recientes)', () => {
+    const manyLogs: EquipmentMeterLog[] = Array.from({ length: 12 }, (_, i) => ({
+      id:       `log-${i}`,
+      source:   'MANUAL' as const,
+      oldValue: i * 100,
+      newValue: (i + 1) * 100,
+      date:     new Date(2026, 5, 1 + i).toISOString(),
+    }));
+    loadLogs(manyLogs);
+    const preview = component.meterHistoryPreviewRows();
+    // El slice(-8) toma los últimos 8 del array ASC → los 8 más recientes
+    expect(preview[0].id).toBe('log-4');   // posición 4 en el array ASC
+    expect(preview[7].id).toBe('log-11');  // el más reciente
   });
 });

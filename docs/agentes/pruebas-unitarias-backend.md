@@ -10,11 +10,13 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **360 tests** en **20** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **376 tests** en **22** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
-| **Disponibilidad operativa diaria** | ~90 % núcleo `create` + `findUnreported` | 13 | `create` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado (§3.11 — nuevo) |
+| **Horómetro — helper `applyCurrentMeterChange`** | 100 % | 7 | Casos 1–7: happy path, silent skip (`oldMeter === newMeter`), fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL, fecha explícita, orden log→update (§3.12 — nuevo) |
+| **Horómetro — integración transversal M1/M2/M3** | 100 % | 4 | Caos en Terreno (5000→5050→5100 con M1 rechazado), lenient M2, lenient M3, doble avance secuencial (§3.13 — nuevo) |
+| **Disponibilidad operativa diaria** | ~90 % núcleo `create` + `findUnreported` | 13 | `create` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado (§3.11) |
 | **Lubricantes — reporte consumo** | ~90 % núcleo `createReport` | 8 | Happy path, stock negativo, horómetro, bodega/equipo (§3.10) |
 | **Inventario — stock/kardex** | ~88 % del núcleo | 41 | Stock, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
@@ -40,6 +42,12 @@ npm run test:domain
 # Sesión larga (agente o dev):
 npm run test:domain:watch
 ```
+
+### Iteración N+12 (2026-06-03) — hecho
+
+- **`applyCurrentMeterChange`** (+7): `equipment-meter-sync.spec.ts` nuevo. Casos: happy path Decimal, silent skip `oldMeter===newMeter`, fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL con sourceId, fecha explícita, orden log→update. 100 % del helper cubierto.
+- **Cross-Module horómetro** (+4): `operations-cross-modules.spec.ts` nuevo. Usa implementación **real** del helper (sin mock) + estado mutable compartido entre M1/M2/M3. Escenarios: "Caos en Terreno" (5000→5050→5100, M1 rechazado sin alterar estado), lenient M2, lenient M3, doble avance secuencial M2→M3. Documenta la asimetría strict/lenient entre módulos.
+- Suite dominio: **376 tests · 22 archivos**.
 
 ### Iteración N+7 (2026-05-22) — hecho
 
