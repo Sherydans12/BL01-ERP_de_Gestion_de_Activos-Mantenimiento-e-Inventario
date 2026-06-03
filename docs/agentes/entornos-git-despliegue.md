@@ -2,7 +2,7 @@
 
 Flujo **main → producción** y rama **`develop` → QA/staging** (Coolify). CI en GitHub Actions valida tests antes de merge.
 
-**Última actualización:** 2026-05-24
+**Última actualización:** 2026-06-03
 
 ---
 
@@ -62,10 +62,11 @@ Workflow: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 |------|---------|------------|
 | Instalación | `npm ci` (backend con `--legacy-peer-deps`) | Dependencias reproducibles |
 | Prisma | `npx prisma generate` | Cliente alineado al schema |
-| Lint backend | `npx eslint …` (sin `--fix`) | Estilo y reglas ESLint |
+| Lint backend | `npm run lint:ci` | ESLint + Prettier (`--max-warnings 0`, **sin** `--fix`) |
 | Build backend | `npm run build` | Compila NestJS |
-| Dominio crítico | `npm run test:domain` | **313 tests** en 17 specs (inventario, compras, OT, auth, …) |
+| Dominio crítico | `npm run test:domain` | **388 tests** en **22** specs (inventario, compras, OT, operaciones, …) |
 | Build frontend | `npm run build` | Compila Angular 18 |
+| Tests frontend | `npm run test:ci` | Karma + ChromeHeadless (`CHROMIUM_FLAGS` en CI) |
 
 **Disparadores:** `push` y `pull_request` a `main` y `develop` (sin filtro de paths).
 
@@ -107,9 +108,10 @@ Producción: [DEPLOY-COOLIFY.md](../DEPLOY-COOLIFY.md).
 
 ---
 
-## 5. Checklist antes de merge a `main`
+## 5. Checklist antes de push a `develop` o merge a `main`
 
-- [ ] `cd backend && npm run lint:ci` (mismo gate que GitHub Actions; ver abajo)
+- [ ] `cd backend && npm run lint` (auto-fix Prettier/ESLint) y luego `npm run lint:ci` (gate idéntico a CI)
+- [ ] `cd frontend && npm run build && npm run test:ci` (opcional en cambios solo backend, obligatorio si tocó `frontend/`)
 - [ ] `cd backend && npm run test:domain` (local)
 - [ ] PR con CI verde en GitHub
 - [ ] Migraciones probadas en **QA** (`develop` desplegado)
@@ -122,13 +124,18 @@ Producción: [DEPLOY-COOLIFY.md](../DEPLOY-COOLIFY.md).
 
 ```bash
 cd backend
-npm run lint:ci        # ESLint idéntico al job CI (--max-warnings 0, sin --fix)
+npm run lint           # ESLint con --fix (corregir Prettier antes del push)
+npm run lint:ci        # gate idéntico al job CI (--max-warnings 0, sin --fix)
 npm run lint:ci:report # mismo lint + resumen por regla/archivo → eslint-ci-report.json
-npm run test:domain    # gate mínimo (dominio)
+npm run test:domain    # gate mínimo (dominio, 22 suites)
 npm test               # suite completa (incluye smoke)
+
+cd ../frontend
+npm run build
+npm run test:ci        # Karma headless (mismo paso que Actions)
 ```
 
-**Lint completo (no inferir desde las ~10 anotaciones de GitHub):** el UI de Actions solo muestra un subconjunto. En local, `lint:ci` lista **todos** los errores; `lint:ci:report` ordena por regla y archivo. Auto-fix opcional: `npm run lint` (con `--fix`).
+**Lint completo (no inferir desde las ~10 anotaciones de GitHub):** el UI de Actions solo muestra un subconjunto. En local, `lint:ci` lista **todos** los errores; `lint:ci:report` ordena por regla y archivo. Tras generar specs nuevos, ejecutar **`npm run lint`** en `backend/` antes de commitear.
 
 Detalle: [pruebas-unitarias.md](pruebas-unitarias.md).
 
@@ -138,6 +145,7 @@ Detalle: [pruebas-unitarias.md](pruebas-unitarias.md).
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-06-03 | CI: formato Prettier en specs/servicios de operaciones y tenant-config; `ci.yml` documenta paridad local (`lint` + `lint:ci`); tabla CI con `test:ci` frontend y **388** tests dominio. |
 | 2026-06-02 | `npm run lint:ci` / `lint:ci:report`; ESLint alineado al repo (unsafe-* off en legado); CI verde. |
 | 2026-05-25 | CI unificado `ci.yml`: lint + build backend/frontend + `test:domain` (313 tests). |
 | 2026-05-22 | Rama `develop` creada; CI inicial; smoke Jest arreglados (`jest-setup` + mocks guards/deps). |

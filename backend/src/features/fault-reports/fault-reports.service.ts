@@ -285,10 +285,7 @@ export class FaultReportsService {
       where: {
         tenantId,
         isActive: true,
-        OR: [
-          { role: 'ADMIN' },
-          { contractAccess: { some: { contractId } } },
-        ],
+        OR: [{ role: 'ADMIN' }, { contractAccess: { some: { contractId } } }],
       },
       select: { id: true },
     });

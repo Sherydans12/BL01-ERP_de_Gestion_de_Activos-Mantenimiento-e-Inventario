@@ -361,8 +361,14 @@ describe('FaultReportsService — create', () => {
       model: '980G',
       contract: { name: 'Contrato Norte' },
     } as never);
-    prisma.user.findUnique.mockResolvedValue({ name: 'Juan', email: 'juan@tpm.cl', isActive: true } as never);
-    prisma.workOrder.findUnique.mockResolvedValue({ correlative: 'OT-2026-001' } as never);
+    prisma.user.findUnique.mockResolvedValue({
+      name: 'Juan',
+      email: 'juan@tpm.cl',
+      isActive: true,
+    } as never);
+    prisma.workOrder.findUnique.mockResolvedValue({
+      correlative: 'OT-2026-001',
+    } as never);
     prisma.user.findMany.mockResolvedValue([{ id: userId }] as never);
 
     await service.create(
@@ -375,7 +381,9 @@ describe('FaultReportsService — create', () => {
       'EQUIPMENT_DOWN',
       tenantId,
       expect.objectContaining({
-        pushPayload: expect.objectContaining({ data: expect.objectContaining({ type: 'EQUIPMENT_DOWN' }) }),
+        pushPayload: expect.objectContaining({
+          data: expect.objectContaining({ type: 'EQUIPMENT_DOWN' }),
+        }),
       }),
     );
   });
@@ -407,7 +415,10 @@ describe('FaultReportsService — create', () => {
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
     tx.faultReport.create.mockResolvedValue(createdReport as never);
 
-    await service.create(buildDto({ criticality: FaultCriticality.LOW }), operatorUser);
+    await service.create(
+      buildDto({ criticality: FaultCriticality.LOW }),
+      operatorUser,
+    );
     await flushAsync();
 
     expect(dispatcher.dispatch).not.toHaveBeenCalled();

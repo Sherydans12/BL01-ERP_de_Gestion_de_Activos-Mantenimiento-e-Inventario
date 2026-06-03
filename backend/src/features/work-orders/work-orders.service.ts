@@ -1963,7 +1963,9 @@ export class WorkOrdersService {
                 );
               }
               const delta = workOrder.finalMeter - current;
-              const jumpLimit = getMeterJumpLimit(workOrder.equipment.meterType);
+              const jumpLimit = getMeterJumpLimit(
+                workOrder.equipment.meterType,
+              );
               if (delta > jumpLimit && confirmedLargeJump !== true) {
                 throw new BadRequestException(
                   `El medidor final implica un salto atípico (+${delta} respecto al medidor actual). Confirme el cierre con confirmedLargeJump.`,

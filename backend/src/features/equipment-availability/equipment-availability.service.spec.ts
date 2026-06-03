@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { OperationalStatus, Prisma, ShiftType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -785,7 +789,11 @@ describe('EquipmentAvailabilityService — hasNightShift guard (create / findUnr
     expect(result.committed).toBe(1);
     expect(tx.equipmentAvailability.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ tenantId_equipmentId_reportDate_shift: expect.objectContaining({ shift: ShiftType.DAY }) }),
+        where: expect.objectContaining({
+          tenantId_equipmentId_reportDate_shift: expect.objectContaining({
+            shift: ShiftType.DAY,
+          }),
+        }),
       }),
     );
   });

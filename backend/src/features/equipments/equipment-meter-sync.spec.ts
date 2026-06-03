@@ -6,10 +6,10 @@ import { applyCurrentMeterChange } from './equipment-meter-sync';
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const tenantId    = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const tenantId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const equipmentId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-const userId      = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-const sourceId    = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+const userId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+const sourceId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
 const baseParams = {
   tenantId,
@@ -34,7 +34,11 @@ describe('applyCurrentMeterChange — reglas de negocio del horómetro', () => {
   // ── Caso 1: Happy Path ─────────────────────────────────────────────────────
 
   it('Caso 1 (Happy Path): registra el log y actualiza currentMeter cuando newMeter > oldMeter', async () => {
-    await applyCurrentMeterChange(tx, { ...baseParams, oldMeter: 1000, newMeter: 1050 });
+    await applyCurrentMeterChange(tx, {
+      ...baseParams,
+      oldMeter: 1000,
+      newMeter: 1050,
+    });
 
     // Debe crear exactamente un log con los Decimals correctos
     expect(tx.equipmentMeterLog.create).toHaveBeenCalledTimes(1);
@@ -64,7 +68,11 @@ describe('applyCurrentMeterChange — reglas de negocio del horómetro', () => {
   // (M1 lanza BadRequestException; M2/M3 no llaman al helper si el metro retrocede).
 
   it('Caso 2 (Silent Skip): no toca la DB cuando oldMeter === newMeter (horómetro estacionario)', async () => {
-    await applyCurrentMeterChange(tx, { ...baseParams, oldMeter: 1050, newMeter: 1050 });
+    await applyCurrentMeterChange(tx, {
+      ...baseParams,
+      oldMeter: 1050,
+      newMeter: 1050,
+    });
 
     expect(tx.equipmentMeterLog.create).not.toHaveBeenCalled();
     expect(tx.equipment.update).not.toHaveBeenCalled();
@@ -140,7 +148,11 @@ describe('applyCurrentMeterChange — reglas de negocio del horómetro', () => {
   // ── Caso 6: sourceId omitido → persiste null ──────────────────────────────
 
   it('persiste sourceId como null cuando no se provee (fuente MANUAL sin referencia documental)', async () => {
-    await applyCurrentMeterChange(tx, { ...baseParams, oldMeter: 100, newMeter: 200 });
+    await applyCurrentMeterChange(tx, {
+      ...baseParams,
+      oldMeter: 100,
+      newMeter: 200,
+    });
 
     expect(tx.equipmentMeterLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ sourceId: null }),
@@ -161,7 +173,11 @@ describe('applyCurrentMeterChange — reglas de negocio del horómetro', () => {
       return {} as never;
     });
 
-    await applyCurrentMeterChange(tx, { ...baseParams, oldMeter: 400, newMeter: 450 });
+    await applyCurrentMeterChange(tx, {
+      ...baseParams,
+      oldMeter: 400,
+      newMeter: 450,
+    });
 
     expect(callOrder).toEqual(['log', 'update']);
   });

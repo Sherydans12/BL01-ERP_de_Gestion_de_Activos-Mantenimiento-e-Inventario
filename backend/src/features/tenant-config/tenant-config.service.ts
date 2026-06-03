@@ -170,10 +170,16 @@ export class TenantConfigService {
    * Retorna la configuración operativa del tenant.
    * Si no existe fila persistida devuelve los defaults del sistema (sin crear la fila).
    */
-  async getOperationalConfig(tenantId: string): Promise<TenantOperationalConfigShape> {
+  async getOperationalConfig(
+    tenantId: string,
+  ): Promise<TenantOperationalConfigShape> {
     const config = await this.prisma.tenantOperationalConfig.findUnique({
       where: { tenantId },
-      select: { hasNightShift: true, dayShiftStartTime: true, nightShiftStartTime: true },
+      select: {
+        hasNightShift: true,
+        dayShiftStartTime: true,
+        nightShiftStartTime: true,
+      },
     });
     return config ?? { ...OPERATIONAL_CONFIG_DEFAULTS };
   }
@@ -190,16 +196,31 @@ export class TenantConfigService {
       where: { tenantId },
       create: {
         tenantId,
-        hasNightShift: dto.hasNightShift ?? OPERATIONAL_CONFIG_DEFAULTS.hasNightShift,
-        dayShiftStartTime: dto.dayShiftStartTime ?? OPERATIONAL_CONFIG_DEFAULTS.dayShiftStartTime,
-        nightShiftStartTime: dto.nightShiftStartTime ?? OPERATIONAL_CONFIG_DEFAULTS.nightShiftStartTime,
+        hasNightShift:
+          dto.hasNightShift ?? OPERATIONAL_CONFIG_DEFAULTS.hasNightShift,
+        dayShiftStartTime:
+          dto.dayShiftStartTime ??
+          OPERATIONAL_CONFIG_DEFAULTS.dayShiftStartTime,
+        nightShiftStartTime:
+          dto.nightShiftStartTime ??
+          OPERATIONAL_CONFIG_DEFAULTS.nightShiftStartTime,
       },
       update: {
-        ...(dto.hasNightShift !== undefined && { hasNightShift: dto.hasNightShift }),
-        ...(dto.dayShiftStartTime !== undefined && { dayShiftStartTime: dto.dayShiftStartTime }),
-        ...(dto.nightShiftStartTime !== undefined && { nightShiftStartTime: dto.nightShiftStartTime }),
+        ...(dto.hasNightShift !== undefined && {
+          hasNightShift: dto.hasNightShift,
+        }),
+        ...(dto.dayShiftStartTime !== undefined && {
+          dayShiftStartTime: dto.dayShiftStartTime,
+        }),
+        ...(dto.nightShiftStartTime !== undefined && {
+          nightShiftStartTime: dto.nightShiftStartTime,
+        }),
       },
-      select: { hasNightShift: true, dayShiftStartTime: true, nightShiftStartTime: true },
+      select: {
+        hasNightShift: true,
+        dayShiftStartTime: true,
+        nightShiftStartTime: true,
+      },
     });
   }
 

@@ -1,5 +1,10 @@
-# CI — lint, build y suite de dominio (sin PostgreSQL).
+# CI — lint, build y suites unitarias (sin PostgreSQL).
 # Push/PR a main y develop.
+#
+# Paridad local antes de push (evita fallos prettier en Actions):
+#   cd backend  && npm run lint && npm run lint:ci && npm run test:domain
+#   cd frontend && npm run build && npm run test:ci
+# `npm run lint` aplica --fix; `lint:ci` es el gate estricto (sin --fix).
 name: CI
 
 on:
@@ -49,7 +54,7 @@ jobs:
         working-directory: backend
         run: npx prisma generate
 
-      - name: Lint backend
+      - name: Lint backend (eslint + prettier, max-warnings 0)
         working-directory: backend
         run: npm run lint:ci
 
@@ -80,7 +85,7 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Run frontend unit tests
+      - name: Run frontend unit tests (ChromeHeadless)
         working-directory: frontend
         run: npm run test:ci
         env:

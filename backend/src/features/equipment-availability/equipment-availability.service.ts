@@ -171,7 +171,7 @@ function parseMeterValue(raw: unknown): number | null {
     normalized = normalized.replace(/,/g, '');
   } else {
     // Remove any remaining commas/dots (mixed format safety net)
-    normalized = normalized.replace(/[,\.]/g, '');
+    normalized = normalized.replace(/[,.]/g, '');
   }
   const num = Number(normalized);
   if (!isFinite(num) || isNaN(num)) return null;
@@ -241,10 +241,16 @@ export class EquipmentAvailabilityService {
    * Reads the tenant's operational config from DB.
    * Returns system defaults if no row has been persisted yet (lazy-creation pattern).
    */
-  private async getOperationalConfig(tenantId: string): Promise<OperationalConfigShape> {
+  private async getOperationalConfig(
+    tenantId: string,
+  ): Promise<OperationalConfigShape> {
     const config = await this.prisma.tenantOperationalConfig.findUnique({
       where: { tenantId },
-      select: { hasNightShift: true, dayShiftStartTime: true, nightShiftStartTime: true },
+      select: {
+        hasNightShift: true,
+        dayShiftStartTime: true,
+        nightShiftStartTime: true,
+      },
     });
     return config ?? { ...OPERATIONAL_DEFAULTS };
   }
@@ -254,7 +260,10 @@ export class EquipmentAvailabilityService {
    *  - defaults to DAY when not provided.
    *  - throws BadRequestException when NIGHT is requested and the tenant has it disabled.
    */
-  private async resolveShift(tenantId: string, provided?: ShiftType | null): Promise<ShiftType> {
+  private async resolveShift(
+    tenantId: string,
+    provided?: ShiftType | null,
+  ): Promise<ShiftType> {
     const shift = provided ?? ShiftType.DAY;
     if (shift === ShiftType.NIGHT) {
       const config = await this.getOperationalConfig(tenantId);
@@ -583,10 +592,15 @@ export class EquipmentAvailabilityService {
 
     const shiftLabel = effectiveShift === 'DAY' ? 'Día' : 'Noche';
     const shiftStartTime =
-      effectiveShift === 'DAY' ? opConfig.dayShiftStartTime : opConfig.nightShiftStartTime;
-    const ws = workbook.addWorksheet(`Disponibilidad ${shiftLabel} (${shiftStartTime})`, {
-      pageSetup: { paperSize: 9, orientation: 'landscape' },
-    });
+      effectiveShift === 'DAY'
+        ? opConfig.dayShiftStartTime
+        : opConfig.nightShiftStartTime;
+    const ws = workbook.addWorksheet(
+      `Disponibilidad ${shiftLabel} (${shiftStartTime})`,
+      {
+        pageSetup: { paperSize: 9, orientation: 'landscape' },
+      },
+    );
 
     // ── 2a. Column widths ────────────────────────────────────────────────────
     ws.columns = [
@@ -936,13 +950,12 @@ export class EquipmentAvailabilityService {
         : null;
       const statusLabelMatch =
         statusNormalized != null
-          ? (EXCEL_STATUS_MAP[statusNormalized] != null
-              ? statusNormalized
-              : // Case-insensitive fallback
-                Object.keys(EXCEL_STATUS_MAP).find(
-                  (k) =>
-                    k.toLowerCase() === statusNormalized.toLowerCase(),
-                ) ?? null)
+          ? EXCEL_STATUS_MAP[statusNormalized] != null
+            ? statusNormalized
+            : // Case-insensitive fallback
+              (Object.keys(EXCEL_STATUS_MAP).find(
+                (k) => k.toLowerCase() === statusNormalized.toLowerCase(),
+              ) ?? null)
           : null;
 
       const rawCommentsStr = cellStr(rawComments).trim();
@@ -953,9 +966,7 @@ export class EquipmentAvailabilityService {
       // Detect if cell had text that is not a valid number (non-blank, parse failed)
       const rawMeterStr = rawMeter != null ? cellStr(rawMeter).trim() : '';
       const meterHadText =
-        rawMeterStr !== '' &&
-        meterReading === null &&
-        rawMeter != null;
+        rawMeterStr !== '' && meterReading === null && rawMeter != null;
 
       const equipment = fleetMap.get(equipmentId);
       const currentMeterInDb = equipment?.currentMeter ?? null;

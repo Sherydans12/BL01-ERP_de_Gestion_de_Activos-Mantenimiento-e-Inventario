@@ -801,11 +801,7 @@ export class EquipmentsService {
           from: number;
           to: number;
         }[] = [];
-        for (const {
-          equipmentId,
-          newReading,
-          confirmedLargeJump,
-        } of items) {
+        for (const { equipmentId, newReading, confirmedLargeJump } of items) {
           const equipment = await tx.equipment.findFirst({
             where: {
               ...whereBase,

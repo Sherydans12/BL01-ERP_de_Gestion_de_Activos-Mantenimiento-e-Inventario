@@ -125,6 +125,9 @@ export class TenantConfigController {
     @Req() req: any,
     @Body() dto: UpdateTenantOperationalConfigDto,
   ) {
-    return this.tenantConfigService.upsertOperationalConfig(req.user.tenantId, dto);
+    return this.tenantConfigService.upsertOperationalConfig(
+      req.user.tenantId,
+      dto,
+    );
   }
 }

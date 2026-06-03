@@ -38,14 +38,19 @@ import { FaultReportsService } from '../fault-reports/fault-reports.service';
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const tenantId    = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-const contractId  = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+const tenantId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const contractId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const equipmentId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 const warehouseId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-const itemId      = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
-const userId      = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+const itemId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+const userId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 
-const adminUser    = { id: userId, tenantId, role: 'ADMIN', allowedContracts: [] as string[] };
+const adminUser = {
+  id: userId,
+  tenantId,
+  role: 'ADMIN',
+  allowedContracts: [] as string[],
+};
 const operatorUser = { id: userId, tenantId, role: 'USER' };
 
 // Estado mutable que simula la fila en DB entre transacciones
@@ -96,10 +101,12 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     capturedLogs = [];
 
     prisma = mockDeep<PrismaService>();
-    tx    = mockDeep<Prisma.TransactionClient>();
+    tx = mockDeep<Prisma.TransactionClient>();
 
-    sequenceService = { getNextCorrelative: jest.fn().mockResolvedValue('RF-00001') };
-    dispatcher      = { dispatch: jest.fn().mockResolvedValue(undefined) };
+    sequenceService = {
+      getNextCorrelative: jest.fn().mockResolvedValue('RF-00001'),
+    };
+    dispatcher = { dispatch: jest.fn().mockResolvedValue(undefined) };
 
     // Patrón estándar de transacción: todos los servicios comparten el mismo tx
     prisma.$transaction.mockImplementation(async (fn) =>
@@ -109,14 +116,17 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     // ── Interceptores de estado del equipo ────────────────────────────────────
 
     // Devuelve siempre un snapshot del estado mutable actual
-    tx.equipment.findFirst.mockImplementation(async () =>
-      ({ ...equipmentState }) as never,
+    tx.equipment.findFirst.mockImplementation(
+      async () => ({ ...equipmentState }) as never,
     );
 
     // Captura actualizaciones de currentMeter (applyCurrentMeterChange)
     // e isOperational (FaultReportsService para criticidad ALTA)
     tx.equipment.update.mockImplementation(async (args: any) => {
-      const data = args.data as { currentMeter?: number; isOperational?: boolean };
+      const data = args.data as {
+        currentMeter?: number;
+        isOperational?: boolean;
+      };
       if (data.currentMeter !== undefined) {
         equipmentState.currentMeter = data.currentMeter;
       }
@@ -131,7 +141,7 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       capturedLogs.push({
         oldValue: args.data.oldValue as Prisma.Decimal,
         newValue: args.data.newValue as Prisma.Decimal,
-        source:   args.data.source   as MeterLogSource,
+        source: args.data.source as MeterLogSource,
       });
       return { id: 'meter-log-id', ...args.data } as never;
     });
@@ -144,10 +154,10 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       equipmentId,
       reportedById: userId,
       reportDate: new Date('2026-06-03'),
-      shift:       ShiftType.DAY,
-      status:      OperationalStatus.OPERATIONAL,
+      shift: ShiftType.DAY,
+      status: OperationalStatus.OPERATIONAL,
       meterReading: 5050,
-      comments:  null,
+      comments: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never);
@@ -168,7 +178,7 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       quantity: 50,
       unitCost: new Prisma.Decimal('850.00'),
       minStock: 5,
-      maxStock:  100,
+      maxStock: 100,
     } as never);
     tx.itemStock.upsert.mockResolvedValue({ quantity: 47 } as never);
     tx.inventoryTransaction.create.mockResolvedValue({} as never);
@@ -190,45 +200,45 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
 
     // ── Mocks M3: FaultReports ────────────────────────────────────────────────
     tx.faultReport.create.mockResolvedValue({
-      id:                   'fault-report-001',
+      id: 'fault-report-001',
       tenantId,
       contractId,
       equipmentId,
-      reportedById:         userId,
-      correlative:          'RF-00001',
-      eventDate:            new Date('2026-06-03T14:00:00Z'),
-      meterAtFault:         5100,
-      affectedSystem:       AffectedSystem.MOTOR,
-      criticality:          FaultCriticality.HIGH,
-      symptomDescription:   'Motor con humo negro y pérdida de potencia.',
-      status:               FaultReportStatus.OPEN,
-      workOrderId:          null,
+      reportedById: userId,
+      correlative: 'RF-00001',
+      eventDate: new Date('2026-06-03T14:00:00Z'),
+      meterAtFault: 5100,
+      affectedSystem: AffectedSystem.MOTOR,
+      criticality: FaultCriticality.HIGH,
+      symptomDescription: 'Motor con humo negro y pérdida de potencia.',
+      status: FaultReportStatus.OPEN,
+      workOrderId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never);
     tx.workOrder.count.mockResolvedValue(10 as never);
     tx.workOrder.create.mockResolvedValue({
-      id:           'work-order-001',
+      id: 'work-order-001',
       tenantId,
-      correlative:  'OT-2026-011',
+      correlative: 'OT-2026-011',
       equipmentId,
-      status:       'OPEN',
-      category:     'NO_PROGRAMADA_REACTIVA',
+      status: 'OPEN',
+      category: 'NO_PROGRAMADA_REACTIVA',
     } as never);
     tx.faultReport.update.mockResolvedValue({
-      id:                 'fault-report-001',
+      id: 'fault-report-001',
       tenantId,
       contractId,
       equipmentId,
-      reportedById:       userId,
-      correlative:        'RF-00001',
-      eventDate:          new Date('2026-06-03T14:00:00Z'),
-      meterAtFault:       5100,
-      affectedSystem:     AffectedSystem.MOTOR,
-      criticality:        FaultCriticality.HIGH,
+      reportedById: userId,
+      correlative: 'RF-00001',
+      eventDate: new Date('2026-06-03T14:00:00Z'),
+      meterAtFault: 5100,
+      affectedSystem: AffectedSystem.MOTOR,
+      criticality: FaultCriticality.HIGH,
       symptomDescription: 'Motor con humo negro y pérdida de potencia.',
-      workOrderId:        'work-order-001',
-      status:             FaultReportStatus.LINKED,
+      workOrderId: 'work-order-001',
+      status: FaultReportStatus.LINKED,
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never);
@@ -248,25 +258,25 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       Test.createTestingModule({
         providers: [
           LubeReportsService,
-          { provide: PrismaService,   useValue: prisma },
+          { provide: PrismaService, useValue: prisma },
           { provide: SequenceService, useValue: sequenceService },
         ],
       }).compile(),
       Test.createTestingModule({
         providers: [
           FaultReportsService,
-          { provide: PrismaService,                  useValue: prisma },
-          { provide: SequenceService,                useValue: sequenceService },
-          { provide: StorageService,                 useValue: mockDeep<StorageService>() },
-          { provide: NotificationDispatcherService,  useValue: dispatcher },
-          { provide: ConfigService,                  useValue: { get: jest.fn(() => '') } },
+          { provide: PrismaService, useValue: prisma },
+          { provide: SequenceService, useValue: sequenceService },
+          { provide: StorageService, useValue: mockDeep<StorageService>() },
+          { provide: NotificationDispatcherService, useValue: dispatcher },
+          { provide: ConfigService, useValue: { get: jest.fn(() => '') } },
         ],
       }).compile(),
     ]);
 
     availabilityService = m2Module.get(EquipmentAvailabilityService);
-    lubeService         = m1Module.get(LubeReportsService);
-    faultService        = m3Module.get(FaultReportsService);
+    lubeService = m1Module.get(LubeReportsService);
+    faultService = m3Module.get(FaultReportsService);
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -279,8 +289,8 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       {
         equipmentId,
         reportDate: '2026-06-03',
-        shift:      ShiftType.DAY,
-        status:     OperationalStatus.OPERATIONAL,
+        shift: ShiftType.DAY,
+        status: OperationalStatus.OPERATIONAL,
         meterReading: 5050,
       },
       adminUser,
@@ -295,7 +305,7 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     expect(capturedLogs[0]).toMatchObject({
       oldValue: new Prisma.Decimal(5000),
       newValue: new Prisma.Decimal(5050),
-      source:   MeterLogSource.AVAILABILITY_REPORT,
+      source: MeterLogSource.AVAILABILITY_REPORT,
     });
 
     // ── Paso b) Carga de Aceite (M1): operario anota 5040 hrs por error ───────
@@ -312,8 +322,8 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
           contractId,
           equipmentId,
           warehouseId,
-          dispatchDate:  '2026-06-03T09:00:00Z',
-          meterReading:  5040, // ← lectura errónea: 5040 < currentMeter (5050)
+          dispatchDate: '2026-06-03T09:00:00Z',
+          meterReading: 5040, // ← lectura errónea: 5040 < currentMeter (5050)
           lines: [{ itemId, quantity: 3 }],
         },
         adminUser,
@@ -321,19 +331,19 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     ).rejects.toThrow(BadRequestException);
 
     // El rechazo de M1 es limpio: ni el medidor ni la operatividad se modificaron
-    expect(equipmentState.currentMeter).toBe(5050);   // sin cambios
-    expect(equipmentState.isOperational).toBe(true);  // sin cambios
-    expect(capturedLogs).toHaveLength(1);             // ningún log adicional
+    expect(equipmentState.currentMeter).toBe(5050); // sin cambios
+    expect(equipmentState.isOperational).toBe(true); // sin cambios
+    expect(capturedLogs).toHaveLength(1); // ningún log adicional
 
     // ── Paso c) Falla ALTA (M3): operario reporta falla crítica a 5100 hrs ────
     await faultService.create(
       {
         equipmentId,
-        eventDate:          '2026-06-03T14:00:00Z',
-        affectedSystem:     AffectedSystem.MOTOR,
-        criticality:        FaultCriticality.HIGH,
+        eventDate: '2026-06-03T14:00:00Z',
+        affectedSystem: AffectedSystem.MOTOR,
+        criticality: FaultCriticality.HIGH,
         symptomDescription: 'Motor con humo negro y pérdida de potencia.',
-        meterAtFault:       5100,
+        meterAtFault: 5100,
       },
       operatorUser,
     );
@@ -355,14 +365,14 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     expect(capturedLogs[0]).toMatchObject({
       oldValue: new Prisma.Decimal(5000),
       newValue: new Prisma.Decimal(5050),
-      source:   MeterLogSource.AVAILABILITY_REPORT,
+      source: MeterLogSource.AVAILABILITY_REPORT,
     });
 
     // Log 2 (M3): segundo avance, registrado junto a la falla crítica
     expect(capturedLogs[1]).toMatchObject({
       oldValue: new Prisma.Decimal(5050),
       newValue: new Prisma.Decimal(5100),
-      source:   MeterLogSource.FAULT_REPORT,
+      source: MeterLogSource.FAULT_REPORT,
     });
   });
 
@@ -378,9 +388,9 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     const result = await availabilityService.create(
       {
         equipmentId,
-        reportDate:   '2026-06-03',
-        shift:        ShiftType.NIGHT,
-        status:       OperationalStatus.STANDBY,
+        reportDate: '2026-06-03',
+        shift: ShiftType.NIGHT,
+        status: OperationalStatus.STANDBY,
         meterReading: 5050, // ← retrocede, pero M2 no lanza excepción
       },
       adminUser,
@@ -405,19 +415,19 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     // Usar criticidad LOW para que no haya OT ni efecto en isOperational,
     // y retornar el report con criticality LOW para no disparar notificación.
     tx.faultReport.create.mockResolvedValueOnce({
-      id:                   'fault-report-001',
+      id: 'fault-report-001',
       tenantId,
       contractId,
       equipmentId,
-      reportedById:         userId,
-      correlative:          'RF-00001',
-      eventDate:            new Date('2026-06-03T16:00:00Z'),
-      meterAtFault:         5300,
-      affectedSystem:       AffectedSystem.ELECTRICAL,
-      criticality:          FaultCriticality.LOW,
-      symptomDescription:   'Falla en sistema eléctrico.',
-      status:               FaultReportStatus.OPEN,
-      workOrderId:          null,
+      reportedById: userId,
+      correlative: 'RF-00001',
+      eventDate: new Date('2026-06-03T16:00:00Z'),
+      meterAtFault: 5300,
+      affectedSystem: AffectedSystem.ELECTRICAL,
+      criticality: FaultCriticality.LOW,
+      symptomDescription: 'Falla en sistema eléctrico.',
+      status: FaultReportStatus.OPEN,
+      workOrderId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never);
@@ -426,11 +436,11 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     const result = await faultService.create(
       {
         equipmentId,
-        eventDate:          '2026-06-03T16:00:00Z',
-        affectedSystem:     AffectedSystem.ELECTRICAL,
-        criticality:        FaultCriticality.LOW,
+        eventDate: '2026-06-03T16:00:00Z',
+        affectedSystem: AffectedSystem.ELECTRICAL,
+        criticality: FaultCriticality.LOW,
         symptomDescription: 'Falla en sistema eléctrico.',
-        meterAtFault:       5300, // ← retrocede, pero M3 no lanza excepción
+        meterAtFault: 5300, // ← retrocede, pero M3 no lanza excepción
       },
       operatorUser,
     );
@@ -458,10 +468,10 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       equipmentId,
       reportedById: userId,
       reportDate: new Date('2026-06-03'),
-      shift:       ShiftType.DAY,
-      status:      OperationalStatus.OPERATIONAL,
+      shift: ShiftType.DAY,
+      status: OperationalStatus.OPERATIONAL,
       meterReading: 5200,
-      comments:  null,
+      comments: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } as never);
@@ -469,9 +479,9 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     await availabilityService.create(
       {
         equipmentId,
-        reportDate:   '2026-06-03',
-        shift:        ShiftType.DAY,
-        status:       OperationalStatus.OPERATIONAL,
+        reportDate: '2026-06-03',
+        shift: ShiftType.DAY,
+        status: OperationalStatus.OPERATIONAL,
         meterReading: 5200,
       },
       adminUser,
@@ -483,11 +493,11 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     await faultService.create(
       {
         equipmentId,
-        eventDate:          '2026-06-03T20:00:00Z',
-        affectedSystem:     AffectedSystem.HYDRAULIC,
-        criticality:        FaultCriticality.HIGH,
+        eventDate: '2026-06-03T20:00:00Z',
+        affectedSystem: AffectedSystem.HYDRAULIC,
+        criticality: FaultCriticality.HIGH,
         symptomDescription: 'Pérdida de presión hidráulica.',
-        meterAtFault:       5350,
+        meterAtFault: 5350,
       },
       operatorUser,
     );
@@ -500,12 +510,12 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
     expect(capturedLogs[0]).toMatchObject({
       oldValue: new Prisma.Decimal(5000),
       newValue: new Prisma.Decimal(5200),
-      source:   MeterLogSource.AVAILABILITY_REPORT,
+      source: MeterLogSource.AVAILABILITY_REPORT,
     });
     expect(capturedLogs[1]).toMatchObject({
       oldValue: new Prisma.Decimal(5200),
       newValue: new Prisma.Decimal(5350),
-      source:   MeterLogSource.FAULT_REPORT,
+      source: MeterLogSource.FAULT_REPORT,
     });
   });
 });
