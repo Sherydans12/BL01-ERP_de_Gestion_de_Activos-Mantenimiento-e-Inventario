@@ -74,12 +74,18 @@ En la pestaña "Consumos" del modal de detalle, actualmente solo aparecen lubric
 - **Repuestos usados en OTs**: piezas despachadas desde el kardex al cerrar OTs (`WORK_ORDER_ISSUE`). La data existe en `analytics.workOrders` → `parts`.
 - Unificar lubricantes + repuestos en una vista "Consumos del activo" agrupada por período.
 
-#### 2.2 · Costos directos en el equipo (lifecycle cost)
+#### 2.2 · Costos directos en el equipo (lifecycle cost) — HECHO (Sprint 3, 2026-06-03)
+
+> Nuevo tab «Costos» en el modal de equipo: KPI de costo de ciclo de vida acumulado (`costTotal`) + desglose con barras por `AssetCostType` (`costByType`, % de participación) + tabla de imputaciones con origen (OT/OC/recepción). Todo derivado de `analytics.assetCostRecords` ya cargado — **sin backend nuevo**. Se corrigió de paso el timeline del tab «Historial», que etiquetaba todos los cost records como «Compra externa» (ahora distingue WORK_ORDER / LUBE_DISPATCH / PURCHASE). El tipo FE `AssetCostType` se alineó con el enum real (`PURCHASE | WORK_ORDER | LUBE_DISPATCH`). +4 specs.
+
 `AssetCostRecord` ya se imputa desde OTs y lubricantes. Falta:
 - **Widget de costo acumulado** en el modal (tab "Costos"): suma de `AssetCostRecord.amount` agrupado por `AssetCostType` (`WORK_ORDER`, `LUBE_DISPATCH`, `EXTERNAL_PURCHASE`).
 - Esto convierte el modal en un centro de lifecycle cost completo.
 
-#### 2.3 · Estado del abastecimiento en el formulario de OT
+#### 2.3 · Estado del abastecimiento en el formulario de OT — HECHO (Sprint 3, 2026-06-03)
+
+> En el form de OT, cada línea de repuesto vinculada a un ítem muestra el **stock disponible** (físico − reservado) de la bodega de consumo (`stockForItem`, lee `warehouseStocks` ya cargado al elegir bodega). Si el pedido supera el disponible o el stock es 0, la línea se marca en rojo y aparece un **aviso** en la sección («el descuento al cerrar puede quedar pendiente de regularización»). Helpers `partRowHasShortage` / `anyPartStockShortage`. **Sin backend nuevo.** +5 specs.
+
 Al agregar repuestos a una OT, mostrar el stock disponible en bodega para cada ítem seleccionado. El `InventoryStockService` ya expone el stock por bodega. Reducir fricciones: si stock=0, advertir antes de cerrar.
 
 ---

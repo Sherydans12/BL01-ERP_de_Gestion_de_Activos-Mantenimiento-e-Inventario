@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
+  AbstractControl,
   FormBuilder,
   FormGroup,
   FormArray,
@@ -1272,6 +1273,40 @@ export class WorkOrderFormComponent implements OnInit {
     const wh = this.warehouses().find((w: { id: string }) => w.id === id);
     if (wh) return `${wh.code} — ${wh.name}`;
     return id;
+  }
+
+  /**
+   * Stock disponible (físico − reservado) del ítem en la bodega de consumo (Sprint 2.3).
+   * `null` si no hay bodega seleccionada o el ítem no figura en el stock de esa bodega.
+   */
+  stockForItem(itemId: string | null | undefined): number | null {
+    if (!itemId || !this.pickerWarehouseId()) return null;
+    const row = this.warehouseStocks().find(
+      (s: { itemId?: string }) => s.itemId === itemId,
+    );
+    if (!row) return null;
+    const avail = (row as { availableQuantity?: number; quantity?: number })
+      .availableQuantity;
+    const qty =
+      avail != null
+        ? avail
+        : ((row as { quantity?: number }).quantity ?? 0);
+    return Number(qty) || 0;
+  }
+
+  /** True si la línea tiene ítem vinculado y la cantidad pedida supera el stock disponible. */
+  partRowHasShortage(ctrl: AbstractControl): boolean {
+    const itemId = ctrl.get('inventoryItemId')?.value as string | null;
+    if (!itemId) return false;
+    const available = this.stockForItem(itemId);
+    if (available == null) return false;
+    const requested = Number(ctrl.get('quantity')?.value) || 0;
+    return requested > available;
+  }
+
+  /** True si alguna línea de repuesto vinculada no tiene stock suficiente en la bodega. */
+  anyPartStockShortage(): boolean {
+    return this.partsArray.controls.some((c) => this.partRowHasShortage(c));
   }
 
   applyKit(event: Event) {

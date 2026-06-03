@@ -200,4 +200,44 @@ describe('EquipmentDetailModalComponent', () => {
     expect(component.partsConsumed()).toEqual([]);
     expect(component.partsTotalCost()).toBe(0);
   });
+
+  // ── Sprint 2.2: Lifecycle cost (tab Costos) ──
+  it('la pestaña "costos" existe en la lista de tabs', () => {
+    expect(component.tabs.map((t) => t.id)).toContain('costos');
+  });
+
+  it('costTotal suma todos los AssetCostRecord y costByType desglosa por tipo', () => {
+    component['analytics'].set({
+      ...MOCK_ANALYTICS,
+      assetCostRecords: [
+        { id: 'c1', type: 'WORK_ORDER', amount: 30000, recordedAt: '2026-05-03T10:00:00Z', workOrder: { correlative: 'OT-1' } },
+        { id: 'c2', type: 'PURCHASE',   amount: 50000, recordedAt: '2026-05-02T10:00:00Z', purchaseOrder: { correlative: 'OC-1' } },
+        { id: 'c3', type: 'LUBE_DISPATCH', amount: 20000, recordedAt: '2026-05-01T10:00:00Z' },
+      ],
+    } as any);
+
+    expect(component.costTotal()).toBe(100000);
+
+    const byType = component.costByType();
+    // Ordenado por monto desc: PURCHASE(50k) > WORK_ORDER(30k) > LUBE(20k).
+    expect(byType.map((r) => r.type)).toEqual(['PURCHASE', 'WORK_ORDER', 'LUBE_DISPATCH']);
+    expect(byType[0].pct).toBe(50);
+  });
+
+  it('costRecordsSorted ordena las imputaciones por fecha desc', () => {
+    component['analytics'].set({
+      ...MOCK_ANALYTICS,
+      assetCostRecords: [
+        { id: 'c1', type: 'WORK_ORDER', amount: 1, recordedAt: '2026-05-01T10:00:00Z' },
+        { id: 'c2', type: 'PURCHASE',   amount: 1, recordedAt: '2026-05-10T10:00:00Z' },
+      ],
+    } as any);
+    expect(component.costRecordsSorted().map((r) => r.id)).toEqual(['c2', 'c1']);
+  });
+
+  it('costTotal es 0 y costByType vacío sin registros de costo', () => {
+    component['analytics'].set(MOCK_ANALYTICS);
+    expect(component.costTotal()).toBe(0);
+    expect(component.costByType()).toEqual([]);
+  });
 });

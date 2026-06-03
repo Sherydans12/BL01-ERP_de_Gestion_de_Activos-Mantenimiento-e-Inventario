@@ -9,6 +9,16 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-03 — Sprint 3 Sistema Integrado: lifecycle cost en modal (2.2) + stock en form de OT (2.3)
+
+- **Contexto:** Prioridades 2.2 y 2.3 del roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md). El modal de equipo no mostraba el costo acumulado del activo (los `AssetCostRecord` existían pero solo aparecían mal etiquetados en el timeline), y el form de OT no daba visibilidad del stock disponible al agregar repuestos.
+- **Decisión:**
+  - **2.2 — Tab «Costos» (frontend, sin backend):** `AssetCostType` FE alineado al enum real (`PURCHASE | WORK_ORDER | LUBE_DISPATCH`); `AssetCostRecord` suma `workOrder?.correlative`. Nuevos `computed`: `costTotal`, `costByType` (subtotal + % por tipo, orden desc), `costRecordsSorted`; helper `assetCostTypeMeta` (label + color de barra/texto) y `formatMoney` reutilizado. El tab muestra KPI total + barras por tipo + tabla de imputaciones con origen (OT/OC/recepción). **Fix colateral:** el timeline del tab «Historial» etiquetaba *todos* los cost records como «Compra externa»; ahora distingue los tres tipos. +4 specs.
+  - **2.3 — Stock en repuestos del form de OT (frontend, sin backend):** `stockForItem(itemId)` lee `warehouseStocks` (ya cargado al elegir bodega de consumo) y devuelve `availableQuantity` (físico − reservado). Cada línea de repuesto vinculada muestra «Stock disponible: X» (verde) o «Sin stock» (rojo); `partRowHasShortage` marca en rojo si la cantidad supera el disponible y `anyPartStockShortage` dispara un aviso en la sección. No bloquea el guardado (consistente con la regla de regularización pendiente al cerrar OT). +5 specs.
+- **Consecuencias:**
+  - Suites: frontend **120** (+9: 4 costos + 5 stock OT); backend dominio **345** (sin cambios — Sprint 3 es 100% frontend); `ng build` y lint verdes.
+  - El modal de equipo queda como **centro de lifecycle cost** (consumo + costo por tipo) y el planificador ve el abastecimiento antes de comprometer repuestos. **Sprint 3 CERRADO** → quedan solo las extensiones push de Prioridad 3 (3.1 EQUIPMENT_DOWN, 3.2 PM próxima).
+
 ## 2026-06-03 — Sprint 2 Sistema Integrado: Consumos unificados (lubricantes + repuestos) en modal de equipo
 
 - **Contexto:** Prioridad 2.1 del roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md). El tab «Consumos» del `equipment-detail-modal` solo mostraba lubricantes (M1); los repuestos despachados a OTs no eran visibles en la ficha del activo, rompiendo la vista de «consumo del activo». La relación `WorkOrderPart` (con `unitCost` CPP, `partNumber`, `quantity`, `inventoryItemId`) ya existía pero `getAnalytics` no la incluía.

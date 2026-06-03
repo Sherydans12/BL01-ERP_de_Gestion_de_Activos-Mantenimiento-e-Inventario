@@ -209,16 +209,19 @@ export interface MeterAdjustment {
   user?: { name: string; email: string };
 }
 
-/** Costos imputados al activo desde recepciones de OC (compras externas). */
+export type AssetCostType = 'PURCHASE' | 'WORK_ORDER' | 'LUBE_DISPATCH';
+
+/** Costos imputados al activo (compras externas, repuestos/fluidos de OT, lubricantes). */
 export interface AssetCostRecord {
   id: string;
   equipmentId: string;
   amount: string | number;
-  type: 'PURCHASE';
-  referenceId: string;
+  type: AssetCostType;
+  referenceId?: string;
   warehouseReceiptId?: string | null;
   recordedAt: string;
-  purchaseOrder?: { correlative: string };
+  purchaseOrder?: { correlative: string } | null;
+  workOrder?: { correlative: string } | null;
   warehouseReceipt?: { correlative: string } | null;
 }
 

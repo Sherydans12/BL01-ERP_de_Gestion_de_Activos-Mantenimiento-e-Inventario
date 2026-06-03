@@ -160,4 +160,46 @@ describe('WorkOrderFormComponent — banner fallas OPEN (1.3)', () => {
     component.otForm.get('equipmentId')?.setValue('eq-inexistente');
     expect(component.openFaults()).toEqual([]);
   });
+
+  // ── Sprint 2.3: stock disponible al agregar repuestos ──
+  describe('stock de repuestos', () => {
+    beforeEach(() => {
+      // Setear bodega (dispara getStockByWarehouse → []) y luego cargar stock manual.
+      component.otForm.get('warehouseId')?.setValue('wh-1');
+      component.warehouseStocks.set([
+        { itemId: 'item-A', availableQuantity: 10, quantity: 12 },
+        { itemId: 'item-B', availableQuantity: 0, quantity: 0 },
+      ]);
+    });
+
+    it('stockForItem devuelve el disponible del ítem en la bodega de consumo', () => {
+      expect(component.stockForItem('item-A')).toBe(10);
+      expect(component.stockForItem('item-B')).toBe(0);
+    });
+
+    it('stockForItem devuelve null sin bodega seleccionada', () => {
+      component.otForm.get('warehouseId')?.setValue('');
+      expect(component.stockForItem('item-A')).toBeNull();
+    });
+
+    it('partRowHasShortage es true cuando la cantidad supera el stock', () => {
+      component.addPartRow();
+      const ctrl = component.partsArray.at(0);
+      ctrl.patchValue({ inventoryItemId: 'item-A', quantity: 15 });
+      expect(component.partRowHasShortage(ctrl)).toBeTrue();
+    });
+
+    it('partRowHasShortage es false cuando hay stock suficiente', () => {
+      component.addPartRow();
+      const ctrl = component.partsArray.at(0);
+      ctrl.patchValue({ inventoryItemId: 'item-A', quantity: 5 });
+      expect(component.partRowHasShortage(ctrl)).toBeFalse();
+    });
+
+    it('anyPartStockShortage detecta faltante en alguna línea (stock 0)', () => {
+      component.addPartRow();
+      component.partsArray.at(0).patchValue({ inventoryItemId: 'item-B', quantity: 1 });
+      expect(component.anyPartStockShortage()).toBeTrue();
+    });
+  });
 });

@@ -19,6 +19,7 @@ import { WorkOrdersService } from '../../../core/services/work-orders/work-order
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import {
   AssetCostRecord,
+  AssetCostType,
   Equipment,
   EquipmentAnalytics,
   EquipmentMeterLog,
@@ -52,6 +53,7 @@ type TabId =
   | 'ficha'
   | 'salud'
   | 'consumos'
+  | 'costos'
   | 'ots'
   | 'docs'
   | 'historial'
@@ -67,6 +69,13 @@ interface DocItem {
   daysLeft: number;
   status: 'VIGENTE' | 'PRÓXIMO' | 'VENCIDO' | 'N/A';
   progress: number;
+}
+
+/** Desglose de costo del activo por tipo (lifecycle cost, Sprint 2.2). */
+interface CostTypeBreakdown {
+  type: AssetCostType;
+  amount: number;
+  pct: number;
 }
 
 /** Fila de repuesto consumido en una OT cerrada (Consumos del activo, Sprint 2.1). */
@@ -201,6 +210,44 @@ export class EquipmentDetailModalComponent {
 
   partsTotalCost = computed(() =>
     this.partsConsumed().reduce((sum, r) => sum + (r.lineCost ?? 0), 0),
+  );
+
+  /**
+   * Costo de ciclo de vida del activo (Sprint 2.2): suma de `assetCostRecords`
+   * (PURCHASE + WORK_ORDER + LUBE_DISPATCH) ya cargados en analytics.
+   */
+  costTotal = computed(() =>
+    this.assetCostRecords().reduce(
+      (sum, r) => sum + (Number(r.amount) || 0),
+      0,
+    ),
+  );
+
+  /** Desglose por `AssetCostType` con subtotal y participación (%), ordenado desc. */
+  costByType = computed<CostTypeBreakdown[]>(() => {
+    const total = this.costTotal();
+    const acc = new Map<AssetCostType, number>();
+    for (const r of this.assetCostRecords()) {
+      const amount = Number(r.amount) || 0;
+      acc.set(r.type, (acc.get(r.type) ?? 0) + amount);
+    }
+    const rows: CostTypeBreakdown[] = [];
+    for (const [type, amount] of acc) {
+      rows.push({
+        type,
+        amount,
+        pct: total > 0 ? (amount / total) * 100 : 0,
+      });
+    }
+    return rows.sort((a, b) => b.amount - a.amount);
+  });
+
+  /** Registros de costo ordenados por fecha desc (para el listado del tab). */
+  costRecordsSorted = computed(() =>
+    [...this.assetCostRecords()].sort(
+      (a, b) =>
+        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    ),
   );
 
   meterHistoryRows = computed<EquipmentMeterHistoryRow[]>(() => {
@@ -424,14 +471,27 @@ export class EquipmentDetailModalComponent {
     for (const rec of costs) {
       const oc = rec.purchaseOrder?.correlative;
       const wr = rec.warehouseReceipt?.correlative;
+      const ot = rec.workOrder?.correlative;
+      let title: string;
+      let subtitle: string;
+      if (rec.type === 'WORK_ORDER') {
+        title = ot ? `Repuestos/fluidos (OT ${ot})` : 'Repuestos y fluidos de OT';
+        subtitle = 'Consumibles imputados al cierre de la orden de trabajo';
+      } else if (rec.type === 'LUBE_DISPATCH') {
+        title = 'Despacho de lubricantes';
+        subtitle = 'Costo de lubricantes imputado al activo';
+      } else {
+        title = oc ? `Compra externa (OC ${oc})` : 'Compra externa imputada';
+        subtitle = wr
+          ? `Recepción de bodega ${wr} — costo proporcional a lo recibido`
+          : 'Recepción de bodega — costo proporcional a lo recibido';
+      }
       events.push({
         id: rec.id,
         type: 'PURCHASE',
         date: rec.recordedAt,
-        title: oc ? `Compra externa (OC ${oc})` : 'Compra externa imputada',
-        subtitle: wr
-          ? `Recepción de bodega ${wr} — costo proporcional a lo recibido`
-          : 'Recepción de bodega — costo proporcional a lo recibido',
+        title,
+        subtitle,
         icon: 'purchase',
         color: 'text-emerald-400',
         meta: this.formatPurchaseCostMeta(rec),
@@ -450,10 +510,40 @@ export class EquipmentDetailModalComponent {
     { id: 'salud', label: 'Salud y Operación', icon: 'heart-pulse' },
     { id: 'ots', label: 'Órdenes de Trabajo', icon: 'wrench' },
     { id: 'consumos', label: 'Consumos', icon: 'droplet' },
+    { id: 'costos', label: 'Costos', icon: 'banknotes' },
     { id: 'medidores', label: 'Historial de Medidores', icon: 'gauge' },
     { id: 'docs', label: 'Documentación', icon: 'file-text' },
     { id: 'historial', label: 'Historial', icon: 'activity' },
   ];
+
+  /** Etiqueta, color de barra y de texto para cada tipo de costo del activo. */
+  assetCostTypeMeta(type: AssetCostType): {
+    label: string;
+    bar: string;
+    text: string;
+  } {
+    switch (type) {
+      case 'WORK_ORDER':
+        return {
+          label: 'Repuestos y fluidos (OT)',
+          bar: 'bg-warning',
+          text: 'text-warning',
+        };
+      case 'LUBE_DISPATCH':
+        return {
+          label: 'Lubricantes',
+          bar: 'bg-primary',
+          text: 'text-primary',
+        };
+      case 'PURCHASE':
+      default:
+        return {
+          label: 'Compras externas (OC)',
+          bar: 'bg-emerald-400',
+          text: 'text-emerald-400',
+        };
+    }
+  }
 
   /** Etiqueta + token de color para el estado de una OT (espejo backend OtStatus). */
   otStatusMeta(status: string): { label: string; cls: string } {
