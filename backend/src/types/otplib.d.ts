@@ -12,11 +12,7 @@ declare module 'otplib' {
       crypto?: { createHmac: (...args: unknown[]) => unknown };
     };
     generateSecret(byteLength?: number): string;
-    keyuri(
-      user: string,
-      service: string,
-      secret: string,
-    ): string;
+    keyuri(user: string, service: string, secret: string): string;
     verify(options: { token: string; secret: string }): boolean;
   }
 
