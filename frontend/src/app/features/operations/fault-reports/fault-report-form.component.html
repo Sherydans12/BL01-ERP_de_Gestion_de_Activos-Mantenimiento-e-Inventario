@@ -36,6 +36,19 @@
           <button type="button" (click)="onSelectEquipment('')"
             class="text-xs text-muted hover:text-red-400 transition-colors">Cambiar</button>
         </div>
+        @if (meterSnapshotLoading()) {
+          <p class="mt-3 text-xs text-muted flex items-center gap-2" role="status">
+            <span
+              class="inline-block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"
+            ></span>
+            Cargando referencia de lectura…
+          </p>
+        } @else {
+          <app-meter-reference-banner
+            class="block mt-3"
+            [snapshot]="meterSnapshot()"
+          />
+        }
       } @else {
         <!-- Buscador -->
         <div class="relative">
@@ -99,8 +112,13 @@
             [ngModel]="meterAtFault()"
             (ngModelChange)="meterAtFault.set($event ? +$event : null)"
             class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-muted"
+            [class.border-amber-500]="meterAtFaultBelowCurrent()"
           />
-          <p class="mt-1 text-xs text-muted">Si es mayor al actual, actualiza el horómetro del equipo.</p>
+          @if (meterAtFaultRegressiveMessage(); as warn) {
+            <p class="mt-1 text-xs text-amber-400 font-medium" role="alert">{{ warn }}</p>
+          } @else {
+            <p class="mt-1 text-xs text-muted">Si es mayor al actual, actualiza el horómetro del equipo.</p>
+          }
         </div>
       </div>
     </div>

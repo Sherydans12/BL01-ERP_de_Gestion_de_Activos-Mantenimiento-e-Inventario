@@ -145,60 +145,6 @@
         }
       </section>
 
-      @if (selectedEquipment()) {
-        <section
-          class="bg-surface border border-border rounded-xl p-6 shadow-lg border-primary/20"
-          aria-label="Última medición del equipo"
-        >
-          <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2 mb-4">
-            Última medición
-          </h3>
-          @if (meterSnapshotLoading()) {
-            <div class="flex items-center gap-3 text-sm text-muted">
-              <div
-                class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"
-              ></div>
-              Sincronizando medidor…
-            </div>
-          } @else {
-            @if (meterSnapshot(); as snap) {
-              <div class="flex flex-wrap items-end gap-4 justify-between">
-                <div>
-                  <p class="text-[10px] uppercase text-muted tracking-wider mb-1">
-                    Medidor actual ({{ snap.meterType === "KILOMETERS" ? "km" : "hrs" }})
-                  </p>
-                  <p class="text-3xl font-mono font-bold text-primary tabular-nums">
-                    {{ snap.currentMeter | number }}
-                  </p>
-                </div>
-                <div class="flex flex-col items-start gap-2 min-w-0">
-                  @if (snap.lastLog) {
-                    <span class="text-xs text-muted font-mono">
-                      Último registro:
-                      {{ snap.lastLog.date | date: "yyyy-MM-dd HH:mm" }}
-                    </span>
-                    @if (snap.lastLog.userName) {
-                      <span class="text-[11px] text-muted"
-                        >Usuario: {{ snap.lastLog.userName }}</span
-                      >
-                    }
-                  } @else {
-                    <span class="text-xs text-muted">Sin entradas en bitácora aún.</span>
-                  }
-                  <span
-                    class="inline-flex items-center rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-mono font-semibold text-primary"
-                  >
-                    {{ meterSourceBadge() }}
-                  </span>
-                </div>
-              </div>
-            } @else {
-              <p class="text-sm text-muted">No se pudo cargar el snapshot del medidor.</p>
-            }
-          }
-        </section>
-      }
-
       <!-- Panel PM opcional -->
       @if (selectedEquipment(); as eq) {
         <div class="rounded-xl border border-border bg-dark/40 overflow-hidden">
@@ -308,6 +254,23 @@
           Tiempos y detención del equipo
         </h3>
         <p class="text-[11px] text-muted font-mono">Detención real</p>
+
+        @if (selectedEquipment()) {
+          @if (meterSnapshotLoading()) {
+            <div class="flex items-center gap-3 text-sm text-muted mb-3" role="status">
+              <div
+                class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"
+              ></div>
+              Cargando referencia de lectura…
+            </div>
+          } @else {
+            <app-meter-reference-banner
+              class="block mb-4"
+              [snapshot]="meterSnapshot()"
+            />
+          }
+        }
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs text-muted mb-1">Inicio (fecha y hora)</label>
@@ -319,11 +282,36 @@
           </div>
           <div>
             <label class="block text-xs text-muted mb-1">{{ meterLabel() }} inicial <span class="text-red-400">*</span></label>
-            <input type="number" formControlName="detentionInitialMeter" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+            <input
+              type="number"
+              formControlName="detentionInitialMeter"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
+            />
+            @if (initialMeterContextHint(); as hint) {
+              <p class="mt-1 text-xs text-muted">{{ hint }}</p>
+            }
           </div>
           <div>
             <label class="block text-xs text-muted mb-1">{{ meterLabel() }} final <span class="text-muted text-[10px] font-normal">(opcional)</span></label>
-            <input type="number" formControlName="detentionFinalMeter" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+            <input
+              type="number"
+              formControlName="detentionFinalMeter"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
+              [ngClass]="detentionMeterInputNgClass('detentionFinalMeter')"
+            />
+            @if (detentionFinalMeterInvalid()) {
+              <p class="mt-1 text-xs text-error" role="alert">
+                No puede ser menor al medidor inicial de la OT ni al medidor actual del equipo
+                @if (effectiveEquipmentCurrentMeter() !== null) {
+                  ({{ effectiveEquipmentCurrentMeter() | number }}
+                  {{ meterLabel() === 'Kilometraje' ? 'km' : 'hrs' }}).
+                }
+              </p>
+            } @else if (detentionFinalNeedsJumpConfirm()) {
+              <p class="mt-1 text-xs text-amber-400 font-medium" role="alert">
+                Salto alto respecto al medidor actual; se pedirá confirmación al cerrar.
+              </p>
+            }
           </div>
         </div>
 
@@ -707,12 +695,19 @@
           <button type="submit" [disabled]="otForm.invalid" class="ot-btn-primary">
             {{ mode === "CREATING" ? "Registrar OT" : "Guardar cambios" }}
           </button>
-          @if (canCloseOt() && otId) {
+          @if (showCloseOtButton()) {
             <button
               type="button"
               (click)="openCloseOperationalDialog()"
               class="ot-btn-outline"
-              [attr.title]="!closeAllowed() ? 'Registre el inicio de detención antes de cerrar' : null"
+              [disabled]="!canCloseOt()"
+              [attr.title]="
+                detentionFinalMeterInvalid()
+                  ? 'Corrija el medidor final antes de cerrar'
+                  : !closeAllowed()
+                    ? 'Registre el inicio de detención antes de cerrar'
+                    : null
+              "
             >
               Firmar y cerrar OT
             </button>
@@ -1013,6 +1008,17 @@
       </div>
     </div>
   </dialog>
+
+<app-confirm-modal
+  [isOpen]="showLargeJumpCloseModal()"
+  title="Confirmar salto de medidor al cerrar"
+  [message]="largeJumpCloseModalMessage()"
+  confirmText="Confirmar y continuar"
+  cancelText="Revisar medidor"
+  riskLevel="warning"
+  (confirm)="onLargeJumpCloseConfirmed()"
+  (cancel)="onLargeJumpCloseCancelled()"
+></app-confirm-modal>
 
   <dialog
     #closeOtDialog

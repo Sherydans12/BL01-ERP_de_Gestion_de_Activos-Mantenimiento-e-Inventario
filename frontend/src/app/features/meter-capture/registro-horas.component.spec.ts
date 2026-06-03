@@ -25,6 +25,7 @@ const boardRow: MeterCaptureBoardRow = {
   currentMeter: 1000,
   meterType: MeterType.HOURS,
   lastReadingAt: null,
+  lastReadingSource: null,
   contractCode: 'C1',
   subcontractCode: null,
 };
@@ -59,10 +60,12 @@ const contractsSpy = jasmine.createSpyObj<ContractsService>('ContractsService', 
   findAll: of([]),
 });
 
-const authSpy = jasmine.createSpyObj<AuthService>('AuthService', {
-  hasPermission: true,
-  userPermissions: jasmine.createSpy('userPermissions').and.returnValue([]),
-});
+const authSpy = jasmine.createSpyObj<AuthService>('AuthService', [
+  'hasPermission',
+  'userPermissions',
+]);
+authSpy.hasPermission.and.returnValue(true);
+authSpy.userPermissions.and.returnValue([]);
 Object.defineProperty(authSpy, 'currentUser', {
   value: signal({ id: 'user-1', role: 'MECHANIC' }),
 });

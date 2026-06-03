@@ -93,7 +93,7 @@
               <select
                 id="equipmentId"
                 [ngModel]="selectedEquipmentId()"
-                (ngModelChange)="selectedEquipmentId.set($event)"
+                (ngModelChange)="onEquipmentChange($event)"
                 name="equipmentId"
                 required
                 size="4"
@@ -120,6 +120,22 @@
           </div>
 
         </div>
+
+        @if (selectedEquipmentId()) {
+          @if (meterSnapshotLoading()) {
+            <p class="mt-4 text-sm text-muted flex items-center gap-2" role="status">
+              <span
+                class="inline-block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"
+              ></span>
+              Cargando referencia de lectura…
+            </p>
+          } @else {
+            <app-meter-reference-banner
+              class="block mt-4"
+              [snapshot]="meterSnapshot()"
+            />
+          }
+        }
       </section>
 
       <!-- Bloque 2: Datos del despacho -->
@@ -163,14 +179,20 @@
               min="0"
               step="1"
               placeholder="Ej: 4500"
-              class="min-h-[48px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-            @if (currentEquipmentMeter() !== null) {
-              <p class="text-xs text-muted">
-                Última lectura registrada:
-                <span class="font-mono font-medium">{{ currentEquipmentMeter() | number }} hrs</span>
+              class="min-h-[48px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              [class.border-error]="meterReadingInvalid()"
+              [class.text-error]="meterReadingInvalid()" />
+            @if (meterReadingInvalid()) {
+              <p class="text-xs text-error" role="alert">
+                No puede ser menor al medidor actual del equipo
+                @if (effectiveCurrentMeter() !== null) {
+                  ({{ effectiveCurrentMeter() | number }}).
+                }
               </p>
-            } @else {
-              <p class="text-xs text-muted">Debe ser ≥ al valor actual del equipo.</p>
+            } @else if (effectiveCurrentMeter() !== null) {
+              <p class="text-xs text-muted">
+                Debe ser mayor o igual al medidor actual del equipo.
+              </p>
             }
           </div>
 
@@ -324,7 +346,7 @@
           type="button"
           *appHasPermission="O.LUBE_REPORT_CREATE"
           (click)="submit(true)"
-          [disabled]="!isFormValid() || isSubmittingAndKeep() || isSubmitting()"
+          [disabled]="!canSubmit() || isSubmittingAndKeep() || isSubmitting()"
           class="inline-flex min-h-[48px] min-w-[12rem] items-center justify-center gap-2 rounded-lg border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40">
           @if (isSubmittingAndKeep()) {
             <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -344,7 +366,7 @@
         <button
           type="submit"
           *appHasPermission="O.LUBE_REPORT_CREATE"
-          [disabled]="!isFormValid() || isSubmitting() || isSubmittingAndKeep()"
+          [disabled]="!canSubmit() || isSubmitting() || isSubmittingAndKeep()"
           class="inline-flex min-h-[48px] min-w-[10rem] items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
           @if (isSubmitting()) {
             <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">

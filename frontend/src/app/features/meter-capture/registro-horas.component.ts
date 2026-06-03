@@ -19,6 +19,7 @@ import { AuthService } from '../../core/services/auth/auth.service';
 import { DeviceService } from '../../core/services/device/device.service';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
 import { ConfirmModalComponent } from '../../shared/components/confirm-modal/confirm-modal.component';
+import { MeterReferenceBannerComponent } from '../../shared/components/meter-reference-banner/meter-reference-banner.component';
 import { O } from '../../core/constants/operations-permissions';
 import { NotificationService } from '../../core/services/notification/notification.service';
 import { MeterType } from '../../core/models/types';
@@ -57,6 +58,7 @@ export interface LargeJumpPreviewRow {
     FormsModule,
     HasPermissionDirective,
     ConfirmModalComponent,
+    MeterReferenceBannerComponent,
   ],
   templateUrl: './registro-horas.component.html',
   styleUrl: './registro-horas.component.scss',
@@ -263,6 +265,17 @@ export class RegistroHorasComponent implements OnInit, OnDestroy {
     return {
       'meter-cap-card--invalid': this.rowHasInvalidReading(row),
       'meter-cap-card--jump': this.rowNeedsJumpConfirm(row),
+    };
+  }
+
+  /** Clases del input según delta (regresivo / salto alto / OK). */
+  readingInputNgClass(row: MeterCaptureBoardRow): Record<string, boolean> {
+    const invalid = this.rowHasInvalidReading(row);
+    const jump = this.rowNeedsJumpConfirm(row);
+    return {
+      'meter-cap-num--invalid': invalid,
+      'border-error text-error': invalid,
+      'border-amber-500': jump && !invalid,
     };
   }
 

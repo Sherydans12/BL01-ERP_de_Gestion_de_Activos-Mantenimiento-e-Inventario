@@ -1,0 +1,53 @@
+@if (view(); as v) {
+  <div
+    class="border-l-4 border-primary bg-primary/10 rounded-r-lg text-main"
+    [class.p-3]="!compact()"
+    [class.p-2]="compact()"
+    role="status"
+    [attr.aria-label]="
+      v.hasPriorLog
+        ? 'Última lectura registrada'
+        : 'Sin registros previos, lectura inicial'
+    "
+  >
+    @if (!v.hasPriorLog) {
+      <p
+        class="font-medium text-main"
+        [class.text-sm]="compact()"
+        [class.text-base]="!compact()"
+      >
+        Sin registros previos — Lectura inicial
+      </p>
+      <p class="text-muted mt-0.5" [class.text-xs]="compact()" [class.text-sm]="!compact()">
+        Medidor en sistema:
+        <span class="font-mono text-primary font-semibold tabular-nums">
+          {{ v.readingValue | number }}
+        </span>
+        {{ v.unitLabel }}
+      </p>
+    } @else {
+      <p
+        class="text-main leading-snug"
+        [class.text-xs]="compact()"
+        [class.text-sm]="!compact()"
+      >
+        <span class="text-muted">Última lectura:</span>
+        <span class="font-mono text-primary font-semibold tabular-nums">
+          {{ v.readingValue | number }}
+        </span>
+        {{ v.unitLabel }}
+        <span class="text-muted mx-1" aria-hidden="true">|</span>
+        <span class="text-muted">{{ v.dateIso | date: 'dd/MM/yyyy HH:mm' }}</span>
+        @if (v.source) {
+          <span class="text-muted mx-1" aria-hidden="true">|</span>
+          <span class="text-muted">Fuente:</span>
+          <span
+            class="inline-flex items-center rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-primary align-middle ml-1"
+          >
+            {{ sourceLabel(v.source, v.otCorrelative) }}
+          </span>
+        }
+      </p>
+    }
+  </div>
+}

@@ -24,6 +24,9 @@ import {
   CRITICALITY_META,
 } from '../../../core/services/fault-reports/fault-reports.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
+import type { EquipmentMeterSnapshot } from '../../../core/models/types';
 
 // ── Constantes de validación (espejo del backend) ────────────────────────────
 const ATTACHMENT_MAX_BYTES  = 10 * 1024 * 1024; // 10 MB
@@ -35,7 +38,14 @@ const ATTACHMENT_ALLOWED_MIMES = new Set([
 @Component({
   selector: 'app-fault-report-form',
   standalone: true,
-  imports: [CommonModule, NgClass, FormsModule, RouterLink, ConfirmModalComponent],
+  imports: [
+    CommonModule,
+    NgClass,
+    FormsModule,
+    RouterLink,
+    ConfirmModalComponent,
+    MeterReferenceBannerComponent,
+  ],
   templateUrl: './fault-report-form.component.html',
 })
 export class FaultReportFormComponent implements OnInit {
@@ -48,6 +58,11 @@ export class FaultReportFormComponent implements OnInit {
   private faultService = inject(FaultReportsService);
   private fleetService = inject(FleetService);
   private notify       = inject(NotificationService);
+  private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
+
+  meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
+  meterSnapshotLoading = signal(false);
+  private lastSnapshotEquipmentId: string | null = null;
 
   // ── Catálogo de equipos ───────────────────────────────────────────────────
   equipments   = signal<any[]>([]);
@@ -91,6 +106,19 @@ export class FaultReportFormComponent implements OnInit {
       !!this.selectedCriticality() &&
       this.symptomDescription().trim().length >= 10,
   );
+
+  meterAtFaultBelowCurrent = computed(() => {
+    const v = this.meterAtFault();
+    const cur = this.meterSnapshot()?.currentMeter ?? null;
+    if (v === null || cur === null) return false;
+    return v < cur;
+  });
+
+  meterAtFaultRegressiveMessage = computed(() => {
+    if (!this.meterAtFaultBelowCurrent()) return null;
+    const cur = this.meterSnapshot()!.currentMeter;
+    return `La lectura ingresada es inferior a la última registrada (${cur.toLocaleString('es-CL')}). Por favor, verifique.`;
+  });
 
   isDirty = computed(
     () =>
@@ -137,6 +165,33 @@ export class FaultReportFormComponent implements OnInit {
   onSelectEquipment(id: string): void {
     this.selectedEquipmentId.set(id);
     this.equipSearch.set('');
+    if (!id) {
+      this.meterSnapshot.set(null);
+      this.lastSnapshotEquipmentId = null;
+      return;
+    }
+    this.loadMeterSnapshot(id);
+  }
+
+  private loadMeterSnapshot(equipmentId: string): void {
+    if (
+      equipmentId === this.lastSnapshotEquipmentId &&
+      this.meterSnapshot() !== null
+    ) {
+      return;
+    }
+    this.lastSnapshotEquipmentId = equipmentId;
+    this.meterSnapshotLoading.set(true);
+    this.equipmentMeterSnapshotService.getSnapshot(equipmentId).subscribe({
+      next: (s) => {
+        this.meterSnapshot.set(s);
+        this.meterSnapshotLoading.set(false);
+      },
+      error: () => {
+        this.meterSnapshot.set(null);
+        this.meterSnapshotLoading.set(false);
+      },
+    });
   }
 
   // ── Drag & Drop handlers ──────────────────────────────────────────────────
@@ -290,7 +345,7 @@ export class FaultReportFormComponent implements OnInit {
   }
 
   resetForm(): void {
-    this.selectedEquipmentId.set('');
+    this.onSelectEquipment('');
     this.equipSearch.set('');
     this.eventDate.set(this.nowIso());
     this.meterAtFault.set(null);

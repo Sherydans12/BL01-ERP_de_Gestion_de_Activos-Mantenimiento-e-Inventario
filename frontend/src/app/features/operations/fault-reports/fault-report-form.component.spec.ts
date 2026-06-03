@@ -11,6 +11,16 @@ import {
 } from '../../../core/services/fault-reports/fault-reports.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
+import { MeterType } from '../../../core/models/types';
+
+const METER_SNAPSHOT = {
+  equipmentId: 'eq-uuid-001',
+  currentMeter: 12500,
+  meterType: MeterType.HOURS,
+  internalId: 'EQ-001',
+  lastLog: null,
+};
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +62,11 @@ const notifySpy = jasmine.createSpyObj<NotificationService>('NotificationService
   'error',
 ]);
 
+const meterSnapSpy = jasmine.createSpyObj<EquipmentMeterSnapshotService>(
+  'EquipmentMeterSnapshotService',
+  { getSnapshot: of(METER_SNAPSHOT) },
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('FaultReportFormComponent', () => {
@@ -68,6 +83,7 @@ describe('FaultReportFormComponent', () => {
         { provide: FaultReportsService, useValue: faultServiceSpy },
         { provide: FleetService,        useValue: fleetServiceSpy },
         { provide: NotificationService, useValue: notifySpy },
+        { provide: EquipmentMeterSnapshotService, useValue: meterSnapSpy },
       ],
     }).compileComponents();
 
@@ -146,6 +162,23 @@ describe('FaultReportFormComponent', () => {
     component.onSelectEquipment('eq-uuid-001');
     expect(component.selectedEquipmentId()).toBe('eq-uuid-001');
     expect(component.equipSearch()).toBe('');
+  });
+
+  it('carga snapshot una sola vez al seleccionar equipo', () => {
+    meterSnapSpy.getSnapshot.calls.reset();
+    component.onSelectEquipment('eq-uuid-001');
+    expect(meterSnapSpy.getSnapshot).toHaveBeenCalledTimes(1);
+    component.onSelectEquipment('eq-uuid-001');
+    expect(meterSnapSpy.getSnapshot).toHaveBeenCalledTimes(1);
+    expect(component.meterSnapshot()?.currentMeter).toBe(12500);
+  });
+
+  it('muestra alerta si meterAtFault es inferior al currentMeter del snapshot', () => {
+    component.onSelectEquipment('eq-uuid-001');
+    component.meterAtFault.set(12000);
+    expect(component.meterAtFaultBelowCurrent()).toBeTrue();
+    expect(component.meterAtFaultRegressiveMessage()).toContain('12.500');
+    expect(component.meterAtFaultRegressiveMessage()).toContain('verifique');
   });
 
   it('llama a FleetService.invalidateCache al guardar una falla HIGH', () => {

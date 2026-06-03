@@ -680,6 +680,28 @@ export class EquipmentsService {
       maxDates.map((d) => [d.equipmentId, d._max.date] as const),
     );
 
+    const pairsWithDate = maxDates.filter((d) => d._max.date != null);
+    const lastLogRows =
+      pairsWithDate.length === 0
+        ? []
+        : await this.prisma.equipmentMeterLog.findMany({
+            where: {
+              tenantId,
+              OR: pairsWithDate.map((p) => ({
+                equipmentId: p.equipmentId,
+                date: p._max.date!,
+              })),
+            },
+            select: {
+              equipmentId: true,
+              date: true,
+              source: true,
+            },
+          });
+    const sourceMap = new Map(
+      lastLogRows.map((log) => [log.equipmentId, log.source] as const),
+    );
+
     return {
       limit,
       data: rows.map((r) => {
@@ -692,6 +714,7 @@ export class EquipmentsService {
           currentMeter: r.currentMeter,
           meterType: r.meterType,
           lastReadingAt: dt ? dt.toISOString() : null,
+          lastReadingSource: sourceMap.get(r.id) ?? null,
           contractCode:
             r.contract?.code ?? r.subcontract?.contract?.code ?? null,
           subcontractCode: r.subcontract?.code ?? null,

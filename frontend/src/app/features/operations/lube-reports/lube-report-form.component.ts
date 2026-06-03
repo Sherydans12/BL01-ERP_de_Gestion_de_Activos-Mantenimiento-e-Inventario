@@ -20,6 +20,9 @@ import {
 } from '../../../core/services/lube-reports/lube-reports.service';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
+import type { EquipmentMeterSnapshot } from '../../../core/models/types';
 import { O } from '../../../core/constants/operations-permissions';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
@@ -45,6 +48,7 @@ interface DraftLine {
     GlobalItemPickerComponent,
     ConfirmModalComponent,
     HasPermissionDirective,
+    MeterReferenceBannerComponent,
   ],
   templateUrl: './lube-report-form.component.html',
 })
@@ -56,6 +60,11 @@ export class LubeReportFormComponent implements OnInit {
   private fleetService   = inject(FleetService);
   private itemsService   = inject(InventoryItemsService);
   private notify         = inject(NotificationService);
+  private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
+
+  meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
+  meterSnapshotLoading = signal(false);
+  private lastSnapshotEquipmentId: string | null = null;
 
   // ── Catálogos ────────────────────────────────────────────────────────────
   warehouses  = signal<any[]>([]);
@@ -97,13 +106,19 @@ export class LubeReportFormComponent implements OnInit {
     );
   });
 
-  /**
-   * Horómetro actual del equipo seleccionado, leído del catálogo en memoria.
-   * Se muestra como hint debajo del input de horómetro.
-   */
-  currentEquipmentMeter = computed<number | null>(() => {
+  /** Medidor vigente del snapshot (SSOT); fallback al listado de flota. */
+  effectiveCurrentMeter = computed<number | null>(() => {
+    const snap = this.meterSnapshot();
+    if (snap) return snap.currentMeter;
     const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
     return eq?.currentMeter ?? null;
+  });
+
+  meterReadingInvalid = computed(() => {
+    const reading = this.meterReading();
+    const cur = this.effectiveCurrentMeter();
+    if (reading === null || cur === null) return false;
+    return reading < cur;
   });
 
   /** Habilita el picker solo cuando hay bodega seleccionada. */
@@ -117,6 +132,11 @@ export class LubeReportFormComponent implements OnInit {
       !!this.dispatchDate() &&
       this.lines().length > 0 &&
       this.lines().every((l) => l.quantity > 0),
+  );
+
+  /** Formulario listo para guardar (incluye regla de horómetro no regresivo). */
+  canSubmit = computed(
+    () => this.isFormValid() && !this.meterReadingInvalid(),
   );
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -171,6 +191,38 @@ export class LubeReportFormComponent implements OnInit {
   }
 
   // ── Handlers de form ─────────────────────────────────────────────────────
+  onEquipmentChange(equipmentId: string): void {
+    this.selectedEquipmentId.set(equipmentId);
+    if (!equipmentId) {
+      this.meterSnapshot.set(null);
+      this.lastSnapshotEquipmentId = null;
+      this.meterReading.set(null);
+      return;
+    }
+    this.loadMeterSnapshot(equipmentId);
+  }
+
+  private loadMeterSnapshot(equipmentId: string): void {
+    if (
+      equipmentId === this.lastSnapshotEquipmentId &&
+      this.meterSnapshot() !== null
+    ) {
+      return;
+    }
+    this.lastSnapshotEquipmentId = equipmentId;
+    this.meterSnapshotLoading.set(true);
+    this.equipmentMeterSnapshotService.getSnapshot(equipmentId).subscribe({
+      next: (s) => {
+        this.meterSnapshot.set(s);
+        this.meterSnapshotLoading.set(false);
+      },
+      error: () => {
+        this.meterSnapshot.set(null);
+        this.meterSnapshotLoading.set(false);
+      },
+    });
+  }
+
   onWarehouseChange(warehouseId: string): void {
     const wh = this.warehouses().find((w) => w.id === warehouseId);
     this.selectedWarehouseId.set(warehouseId);
@@ -227,7 +279,14 @@ export class LubeReportFormComponent implements OnInit {
    * despachar rápidamente al siguiente camión en la fila.
    */
   submit(keepContext = false): void {
-    if (!this.isFormValid()) return;
+    if (!this.canSubmit()) {
+      if (this.meterReadingInvalid()) {
+        this.notify.error(
+          'El horómetro ingresado no puede ser menor al medidor actual del equipo.',
+        );
+      }
+      return;
+    }
     if (keepContext ? this.isSubmittingAndKeep() : this.isSubmitting()) return;
 
     const payload: CreateLubeReportPayload = {
@@ -251,8 +310,7 @@ export class LubeReportFormComponent implements OnInit {
         this.notify.success(`Despacho ${report.correlative} registrado con éxito.`);
         if (keepContext) {
           // Solo limpia equipo, horómetro y cantidades — mantiene bodega y lubricantes.
-          this.selectedEquipmentId.set('');
-          this.meterReading.set(null);
+          this.onEquipmentChange('');
           this.equipSearch.set('');
           this.lines.update((prev) => prev.map((l) => ({ ...l, quantity: 1 })));
           this.isSubmittingAndKeep.set(false);
@@ -275,7 +333,7 @@ export class LubeReportFormComponent implements OnInit {
   resetForm(): void {
     this.selectedWarehouseId.set('');
     this.selectedContractId.set('');
-    this.selectedEquipmentId.set('');
+    this.onEquipmentChange('');
     this.dispatchDate.set(this.todayIso());
     this.meterReading.set(null);
     this.notes.set('');

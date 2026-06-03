@@ -21,6 +21,7 @@ import {
   MeterLogSource,
 } from '@prisma/client';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { getMeterJumpLimit } from '../equipments/meter-jump-limits.util';
 import {
   buildEquipmentContractAccessOr,
   buildPurchaseContractScopeFilter,
@@ -1806,11 +1807,17 @@ export class WorkOrdersService {
       status: string;
       warehouseId?: string;
       closureEquipmentOperational?: boolean;
+      confirmedLargeJump?: boolean;
     },
     activeContract?: string,
   ) {
     const tenantId = user.tenantId;
-    const { status, warehouseId, closureEquipmentOperational } = body;
+    const {
+      status,
+      warehouseId,
+      closureEquipmentOperational,
+      confirmedLargeJump,
+    } = body;
     const where = this.workOrderAccessWhere(user, id, activeContract);
 
     const userId = user.id || user.sub;
@@ -1949,10 +1956,23 @@ export class WorkOrdersService {
             });
 
             if (workOrder.finalMeter != null) {
+              const current = workOrder.equipment.currentMeter ?? 0;
+              if (workOrder.finalMeter < current) {
+                throw new BadRequestException(
+                  `El medidor final (${workOrder.finalMeter}) no puede ser menor al medidor actual del equipo (${current}).`,
+                );
+              }
+              const delta = workOrder.finalMeter - current;
+              const jumpLimit = getMeterJumpLimit(workOrder.equipment.meterType);
+              if (delta > jumpLimit && confirmedLargeJump !== true) {
+                throw new BadRequestException(
+                  `El medidor final implica un salto atípico (+${delta} respecto al medidor actual). Confirme el cierre con confirmedLargeJump.`,
+                );
+              }
               await applyCurrentMeterChange(tx, {
                 tenantId,
                 equipmentId: workOrder.equipmentId,
-                oldMeter: workOrder.equipment.currentMeter,
+                oldMeter: current,
                 newMeter: workOrder.finalMeter,
                 source: MeterLogSource.OT,
                 sourceId: workOrder.id,

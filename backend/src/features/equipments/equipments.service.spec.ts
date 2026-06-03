@@ -330,6 +330,50 @@ describe('EquipmentsService', () => {
     });
   });
 
+  describe('findMeterCaptureBoard', () => {
+    it('incluye lastReadingAt y lastReadingSource del último log por equipo', async () => {
+      const logDate = new Date('2026-06-01T15:00:00.000Z');
+      prisma.equipment.findMany.mockResolvedValue([
+        {
+          id: equipId,
+          internalId: 'EQ-BOARD',
+          brand: 'CAT',
+          model: '330',
+          type: 'Pala',
+          currentMeter: 1200,
+          meterType: 'HOURS',
+          contractId: contractAllowed,
+          contract: { code: 'C1', name: 'Contrato 1' },
+          subcontract: null,
+        },
+      ] as never);
+      prisma.equipmentMeterLog.groupBy.mockResolvedValue([
+        { equipmentId: equipId, _max: { date: logDate } },
+      ] as never);
+      prisma.equipmentMeterLog.findMany.mockResolvedValue([
+        {
+          equipmentId: equipId,
+          date: logDate,
+          source: MeterLogSource.AVAILABILITY_REPORT,
+        },
+      ] as never);
+
+      const res = await service.findMeterCaptureBoard(
+        { id: userId, tenantId, role: 'ADMIN' },
+        undefined,
+        { limit: 10 },
+      );
+
+      expect(res.data).toHaveLength(1);
+      expect(res.data[0]).toMatchObject({
+        id: equipId,
+        currentMeter: 1200,
+        lastReadingAt: logDate.toISOString(),
+        lastReadingSource: MeterLogSource.AVAILABILITY_REPORT,
+      });
+    });
+  });
+
   describe('getAnalytics', () => {
     it('incluye los repuestos (parts) de las OT cerradas y los devuelve (Sprint 2.1)', async () => {
       const equipmentMock = {

@@ -21,6 +21,21 @@ import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-
 import { CatalogService } from '../../../core/services/catalog/catalog.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { UsersService } from '../../../core/services/users/users.service';
+import { MeterType } from '../../../core/models/types';
+
+const METER_SNAPSHOT = {
+  equipmentId: 'eq-001',
+  currentMeter: 1500,
+  meterType: MeterType.HOURS,
+  internalId: 'EC-3005',
+  lastLog: {
+    date: '2026-06-01T10:00:00.000Z',
+    source: 'OT' as const,
+    sourceId: 'wo-prev',
+    otCorrelative: 'OT-2026-010',
+    userName: 'Mecánico',
+  },
+};
 
 // ── Stubs ──────────────────────────────────────────────────────────────────────
 
@@ -81,14 +96,19 @@ const kitsSpy = jasmine.createSpyObj('MaintenanceKitsService', {
   getKits: of([]),
 });
 const meterSnapSpy = jasmine.createSpyObj('EquipmentMeterSnapshotService', {
-  getSnapshot: of(null),
+  getSnapshot: of(METER_SNAPSHOT),
 });
 const catalogSpy = jasmine.createSpyObj('CatalogService', {
   loadCatalogs: of([]),
+  getAllCatalogs: () => signal([]),
+});
+Object.defineProperty(catalogSpy, 'systems', {
+  value: signal([]),
 });
 const authSpy = {
   currentUser: signal(null).asReadonly(),
   hasPermission: jasmine.createSpy('hasPermission').and.returnValue(true),
+  hasPermissionAny: jasmine.createSpy('hasPermissionAny').and.returnValue(true),
 } as unknown as AuthService;
 const usersSpy = jasmine.createSpyObj('UsersService', {
   getAssignableForOt: of([]),
@@ -201,5 +221,61 @@ describe('WorkOrderFormComponent — banner fallas OPEN (1.3)', () => {
       component.partsArray.at(0).patchValue({ inventoryItemId: 'item-B', quantity: 1 });
       expect(component.anyPartStockShortage()).toBeTrue();
     });
+  });
+});
+
+describe('WorkOrderFormComponent — banner medidor OT', () => {
+  let component: WorkOrderFormComponent;
+
+  beforeEach(async () => {
+    meterSnapSpy.getSnapshot.and.returnValue(of(METER_SNAPSHOT));
+
+    await TestBed.configureTestingModule({
+      imports: [WorkOrderFormComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ActivatedRoute, useValue: activatedRouteStub },
+        { provide: WorkOrdersService, useValue: woSpy },
+        { provide: FleetService, useValue: fleetSpy },
+        { provide: FaultReportsService, useValue: faultSpy },
+        { provide: NotificationService, useValue: notifySpy },
+        { provide: WarehousesService, useValue: warehousesSpy },
+        { provide: InventoryItemsService, useValue: invItemsSpy },
+        { provide: InventoryStockService, useValue: invStockSpy },
+        { provide: MaintenanceKitsService, useValue: kitsSpy },
+        { provide: EquipmentMeterSnapshotService, useValue: meterSnapSpy },
+        { provide: CatalogService, useValue: catalogSpy },
+        { provide: AuthService, useValue: authSpy },
+        { provide: UsersService, useValue: usersSpy },
+      ],
+    }).compileComponents();
+
+    component = TestBed.createComponent(WorkOrderFormComponent).componentInstance;
+    component.ngOnInit();
+    component.otForm.get('equipmentId')?.setValue('eq-001');
+  });
+
+  it('carga snapshot al seleccionar equipo (fuente para app-meter-reference-banner)', () => {
+    expect(meterSnapSpy.getSnapshot).toHaveBeenCalledWith('eq-001');
+    expect(component.meterSnapshot()?.currentMeter).toBe(1500);
+    expect(component.meterSnapshot()?.lastLog?.source).toBe('OT');
+  });
+
+  it('canCloseOt es false si el medidor final es regresivo', () => {
+    component.mode = 'EDITING';
+    component.otId = 'wo-1';
+    component.otForm.patchValue({
+      detentionStartedAt: '2026-06-01T08:00',
+      detentionInitialMeter: 1500,
+      detentionFinalMeter: 1400,
+    });
+    expect(component.detentionFinalMeterInvalid()).toBeTrue();
+    expect(component.canCloseOt()).toBeFalse();
+  });
+
+  it('initialMeterContextHint prioriza última OT cerrada', () => {
+    component.lastClosedOt.set({ id: 'wo-x', correlative: 'OT-2026-009' });
+    expect(component.initialMeterContextHint()).toContain('OT-2026-009');
   });
 });

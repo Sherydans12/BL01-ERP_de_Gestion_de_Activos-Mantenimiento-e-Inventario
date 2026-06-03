@@ -148,6 +148,7 @@ export interface MeterCaptureBoardRow {
   currentMeter: number;
   meterType: MeterType;
   lastReadingAt: string | null;
+  lastReadingSource: MeterLogSource | null;
   contractCode: string | null;
   subcontractCode: string | null;
 }

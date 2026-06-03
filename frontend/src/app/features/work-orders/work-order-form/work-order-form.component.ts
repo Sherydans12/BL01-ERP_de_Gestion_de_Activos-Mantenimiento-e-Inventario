@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   inject,
   signal,
   OnInit,
@@ -8,6 +9,8 @@ import {
   ElementRef,
   effect,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import {
   AbstractControl,
@@ -50,6 +53,10 @@ import {
   EquipmentMeterSnapshot,
   MeterType,
 } from '../../../core/models/types';
+import { getMeterSourceLabel } from '../../../shared/utils/meter-source-label.util';
+import { meterUnitLabel } from '../../../shared/utils/meter-reference-view.util';
+import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import {
   computePmProjection,
   pmIntervalSourceLabel,
@@ -80,6 +87,10 @@ import {
   WORK_ORDER_FORM_EDIT_ANY,
 } from '../../../core/constants/operations-permissions';
 
+/** Umbrales alineados con `getMeterJumpLimit` en backend. */
+const METER_JUMP_LIMIT_HOURS = 24;
+const METER_JUMP_LIMIT_KM = 500;
+
 function isoToDatetimeLocalValue(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -98,6 +109,8 @@ function isoToDatetimeLocalValue(iso: string): string {
     GlobalItemPickerComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective,
+    MeterReferenceBannerComponent,
+    ConfirmModalComponent,
   ],
   templateUrl: './work-order-form.component.html',
   styleUrl: './work-order-form.component.scss',
@@ -121,6 +134,7 @@ export class WorkOrderFormComponent implements OnInit {
   readonly catalogService = inject(CatalogService);
   private authService = inject(AuthService);
   private usersService = inject(UsersService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Diálogo nativo: `CatalogItem` categoría SYSTEM (catálogo global del tenant). */
   catalogSystemsDialog =
@@ -182,9 +196,80 @@ export class WorkOrderFormComponent implements OnInit {
     return this.catalogService.systems().filter((sys) => !picked.has(sys.id));
   });
 
+  /** Fuerza recomputación de validaciones de medidor al editar controles. */
+  private meterFormTick = signal(0);
+
+  showLargeJumpCloseModal = signal(false);
+
+  protected readonly getMeterSourceLabel = getMeterSourceLabel;
+
+  effectiveEquipmentCurrentMeter = computed(() => {
+    const snap = this.meterSnapshot();
+    if (snap) return snap.currentMeter;
+    return this.selectedEquipment()?.currentMeter ?? null;
+  });
+
+  initialMeterContextHint = computed(() => {
+    const lo = this.lastClosedOt();
+    if (lo) {
+      return `Referencia de cierre: OT ${lo.correlative}`;
+    }
+    const last = this.meterSnapshot()?.lastLog;
+    if (last) {
+      return `Vía: ${getMeterSourceLabel(last.source, {
+        otCorrelative: last.otCorrelative,
+      })}`;
+    }
+    return null;
+  });
+
+  detentionFinalMeterInvalid = computed(() => {
+    this.meterFormTick();
+    const fin = this.parseMeterFormValue('detentionFinalMeter');
+    if (fin === null) return false;
+    const ini = this.parseMeterFormValue('detentionInitialMeter');
+    const cur = this.effectiveEquipmentCurrentMeter();
+    if (ini !== null && fin < ini) return true;
+    if (cur !== null && fin < cur) return true;
+    return false;
+  });
+
+  detentionFinalNeedsJumpConfirm = computed(() => {
+    this.meterFormTick();
+    const fin = this.parseMeterFormValue('detentionFinalMeter');
+    const cur = this.effectiveEquipmentCurrentMeter();
+    if (fin === null || cur === null || fin <= cur) return false;
+    const mt =
+      this.meterSnapshot()?.meterType ??
+      this.selectedEquipment()?.meterType ??
+      MeterType.HOURS;
+    const limit =
+      mt === MeterType.KILOMETERS ? METER_JUMP_LIMIT_KM : METER_JUMP_LIMIT_HOURS;
+    return fin - cur > limit;
+  });
+
+  largeJumpCloseModalMessage = computed(() => {
+    const fin = this.parseMeterFormValue('detentionFinalMeter');
+    const cur = this.effectiveEquipmentCurrentMeter();
+    const mt =
+      this.meterSnapshot()?.meterType ??
+      this.selectedEquipment()?.meterType ??
+      MeterType.HOURS;
+    if (fin === null || cur === null) {
+      return '¿Confirmas el medidor final antes de cerrar la OT?';
+    }
+    const delta = fin - cur;
+    return (
+      `El medidor final (${fin} ${meterUnitLabel(mt)}) supera en +${delta} ${meterUnitLabel(mt)} ` +
+      `al medidor actual del equipo (${cur}). ¿Confirmas que es correcto antes de cerrar?`
+    );
+  });
+
   closeAllowed = computed(() => {
     const raw = this.otForm.get('detentionStartedAt')?.value;
-    return typeof raw === 'string' && raw.trim().length > 0;
+    const hasDetentionStart =
+      typeof raw === 'string' && raw.trim().length > 0;
+    return hasDetentionStart && !this.detentionFinalMeterInvalid();
   });
 
   readonly isFormReadOnly = computed(() => {
@@ -201,11 +286,15 @@ export class WorkOrderFormComponent implements OnInit {
     () => this.mode !== 'READONLY' && !this.isFormReadOnly(),
   );
 
-  readonly canCloseOt = computed(
+  readonly showCloseOtButton = computed(
     () =>
       this.mode === 'EDITING' &&
-      this.authService.hasPermission(O.WORK_ORDER_CLOSE) &&
-      this.closeAllowed(),
+      !!this.otId &&
+      this.authService.hasPermission(O.WORK_ORDER_CLOSE),
+  );
+
+  readonly canCloseOt = computed(
+    () => this.showCloseOtButton() && this.closeAllowed(),
   );
 
   readonly canManageBacklog = computed(() =>
@@ -267,19 +356,6 @@ export class WorkOrderFormComponent implements OnInit {
 
   meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
   meterSnapshotLoading = signal(false);
-
-  meterSourceBadge = computed(() => {
-    const snap = this.meterSnapshot();
-    const last = snap?.lastLog;
-    if (!last) return 'Sin registro en bitácora';
-    if (last.source === 'OT') {
-      return last.otCorrelative
-        ? `Desde OT-${last.otCorrelative}`
-        : 'Desde OT';
-    }
-    if (last.source === 'TELEMETRY') return 'Telemetría';
-    return 'Manual / maestro';
-  });
 
   otForm: FormGroup;
 
@@ -449,6 +525,35 @@ export class WorkOrderFormComponent implements OnInit {
         this.warehouseStocks.set([]);
       }
     });
+
+    this.otForm
+      .get('detentionInitialMeter')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.meterFormTick.update((n) => n + 1));
+    this.otForm
+      .get('detentionFinalMeter')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.meterFormTick.update((n) => n + 1));
+  }
+
+  private parseMeterFormValue(controlName: string): number | null {
+    const raw = this.otForm.get(controlName)?.value;
+    if (raw === '' || raw === null || raw === undefined) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return n;
+  }
+
+  detentionMeterInputNgClass(controlName: 'detentionInitialMeter' | 'detentionFinalMeter'): Record<string, boolean> {
+    if (controlName !== 'detentionFinalMeter') {
+      return {};
+    }
+    const invalid = this.detentionFinalMeterInvalid();
+    const jump = this.detentionFinalNeedsJumpConfirm();
+    return {
+      'border-error text-error': invalid,
+      'border-amber-500': jump && !invalid,
+    };
   }
 
   private selectedEquipmentMeterHook(eq: Equipment) {
@@ -953,14 +1058,33 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   openCloseOperationalDialog() {
-    if (!this.closeAllowed()) {
+    if (!this.otForm.get('detentionStartedAt')?.value?.toString().trim()) {
       this.notificationService.error(
         'Registre el inicio de detención (inicio del trabajo) antes de cerrar la OT.',
       );
       return;
     }
+    if (this.detentionFinalMeterInvalid()) {
+      this.notificationService.error(
+        'El medidor final no puede ser menor al inicial de la OT ni al medidor actual del equipo.',
+      );
+      return;
+    }
     if (!this.otId || this.isFormReadOnly()) return;
+    if (this.detentionFinalNeedsJumpConfirm()) {
+      this.showLargeJumpCloseModal.set(true);
+      return;
+    }
     this.closeOtDialog()?.nativeElement.showModal();
+  }
+
+  onLargeJumpCloseConfirmed() {
+    this.showLargeJumpCloseModal.set(false);
+    this.closeOtDialog()?.nativeElement.showModal();
+  }
+
+  onLargeJumpCloseCancelled() {
+    this.showLargeJumpCloseModal.set(false);
   }
 
   closeCloseOperationalDialog() {
@@ -979,8 +1103,27 @@ export class WorkOrderFormComponent implements OnInit {
       return;
     }
     if (!this.otId) return;
+    if (this.detentionFinalMeterInvalid()) {
+      this.notificationService.error(
+        'Corrija el medidor final antes de cerrar la OT.',
+      );
+      return;
+    }
+    const confirmedLargeJump = this.detentionFinalNeedsJumpConfirm();
+    const payload = this.buildCreatePayload();
     this.workOrdersService
-      .updateStatus(this.otId, 'CLOSED', wh || undefined, equipmentOperational)
+      .patchWorkOrder(this.otId, payload)
+      .pipe(
+        switchMap(() =>
+          this.workOrdersService.updateStatus(
+            this.otId!,
+            'CLOSED',
+            wh || undefined,
+            equipmentOperational,
+            confirmedLargeJump,
+          ),
+        ),
+      )
       .subscribe({
         next: () => {
           this.notificationService.success('OT cerrada.');

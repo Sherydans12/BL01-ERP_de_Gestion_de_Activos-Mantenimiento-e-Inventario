@@ -9,6 +9,15 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-03 — Banner de referencia de lectura (Ojo de Seguridad) — Trinidad Operativa
+
+- **Contexto:** Errores de digitación de horómetro/odómetro en terreno alimentan `currentMeter` vía M1, M2, M3, OT y captura masiva. Se requería visibilidad de la última lectura y su fuente antes de cada ingreso.
+- **Decisión:**
+  - Componente shared `app-meter-reference-banner` (`border-l-4 border-primary bg-primary/10`) con utilidades `getMeterSourceLabel` y `resolveMeterReferenceView`; datos vía `GET /equipments/:id/meter-snapshot` (caché en `EquipmentMeterSnapshotService`) o fila enriquecida de `meter-capture-board` (sin N+1 en tablas masivas).
+  - **Puntos de entrada cubiertos:** Registro de Horas (`meter-capture-board` + validación de salto), formulario OT (detención + cierre con `confirmedLargeJump`), **M1 Lubricantes** (bloqueo guardar si lectura &lt; actual), **M3 Fallas** (alerta si lectura &lt; última registrada).
+  - Regla de oro sin bitácora: copy *«Sin registros previos — Lectura inicial»*.
+- **Consecuencias:** M2 disponibilidad (form + import Excel) y Maestro de Flota quedan como siguiente extensión opcional. Onboarding de datos masivos (Excel) puede reutilizar el mismo patrón de board enriquecido.
+
 ## 2026-06-03 — Gestión Configurable de Turnos por Tenant (TenantOperationalConfig)
 
 - **Contexto:** El sistema EAM fue diseñado con `ShiftType` (`DAY` / `NIGHT`), pero el primer cliente solo opera en Turno Día. Se requería que la configuración de turnos fuera por Tenant para no forzar a todos a ver selectores que no usan.

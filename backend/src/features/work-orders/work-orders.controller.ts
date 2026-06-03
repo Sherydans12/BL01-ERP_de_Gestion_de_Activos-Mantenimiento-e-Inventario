@@ -110,6 +110,7 @@ export class WorkOrdersController {
       status: string;
       warehouseId?: string;
       closureEquipmentOperational?: boolean;
+      confirmedLargeJump?: boolean;
     },
     @Req() req: any,
     @Headers('x-site-id') siteId?: string,

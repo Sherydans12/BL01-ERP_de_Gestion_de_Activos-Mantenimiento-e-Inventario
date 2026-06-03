@@ -100,6 +100,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [] as string[],
       equipment: {
         currentMeter: 1000,
+        meterType: 'HOURS',
         internalId: 'EQ-01',
         brand: 'Cat',
         model: 'M1',
@@ -536,8 +537,79 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     ).rejects.toThrow(/medidor final/);
   });
 
+  it('rechaza cierre si finalMeter es menor al currentMeter del equipo', async () => {
+    const wo = openWorkOrder({
+      parts: [],
+      initialMeter: 900,
+      finalMeter: 950,
+    });
+    (wo.equipment as { currentMeter: number }).currentMeter = 1000;
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(
+      service.updateStatus(adminUser, woId, {
+        status: 'CLOSED',
+        warehouseId,
+        closureEquipmentOperational: true,
+      }),
+    ).rejects.toThrow(/no puede ser menor al medidor actual/);
+    expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
+  });
+
+  it('exige confirmedLargeJump al cerrar con salto atípico de medidor', async () => {
+    const wo = openWorkOrder({
+      parts: [],
+      finalMeter: 1030,
+    });
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(
+      service.updateStatus(adminUser, woId, {
+        status: 'CLOSED',
+        warehouseId,
+        closureEquipmentOperational: true,
+      }),
+    ).rejects.toThrow(/salto atípico/);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant' } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+      confirmedLargeJump: true,
+    });
+
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ newMeter: 1030 }),
+    );
+  });
+
   it('sincroniza medidor del equipo al cerrar con finalMeter', async () => {
-    const wo = openWorkOrder({ parts: [], finalMeter: 1500 });
+    const wo = openWorkOrder({ parts: [], finalMeter: 1015 });
 
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
@@ -570,7 +642,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         tenantId,
         equipmentId: equipId,
         oldMeter: 1000,
-        newMeter: 1500,
+        newMeter: 1015,
         sourceId: woId,
       }),
     );

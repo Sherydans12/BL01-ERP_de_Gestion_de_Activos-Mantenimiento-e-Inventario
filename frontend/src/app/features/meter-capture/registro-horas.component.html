@@ -163,31 +163,10 @@
               </span>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 mb-3 text-sm">
-              <div>
-                <p class="text-xs text-muted uppercase tracking-wide mb-0.5">
-                  Medidor en BD
-                </p>
-                <p class="tabular-nums text-lg font-semibold text-main">
-                  {{ row.currentMeter }}
-                  <span class="text-sm font-normal text-muted">{{
-                    meterUnitShort(row.meterType)
-                  }}</span>
-                </p>
-              </div>
-              <div>
-                <p class="text-xs text-muted uppercase tracking-wide mb-0.5">
-                  Última lectura
-                </p>
-                <p class="text-muted text-sm">
-                  @if (row.lastReadingAt) {
-                    {{ row.lastReadingAt | date: 'short' }}
-                  } @else {
-                    —
-                  }
-                </p>
-              </div>
-            </div>
+            <app-meter-reference-banner
+              class="block mb-3"
+              [boardRow]="row"
+            />
 
             <label class="block text-xs text-muted uppercase tracking-wide mb-1">
               Nueva lectura ({{ meterUnitShort(row.meterType) }})
@@ -202,7 +181,7 @@
                 class="meter-cap-num min-h-[48px] text-lg flex-1 min-w-[8rem]"
                 [ngModel]="readingFor(row.id)"
                 (ngModelChange)="updateReading(row.id, $event)"
-                [ngClass]="{ 'meter-cap-num--invalid': rowHasInvalidReading(row) }"
+                [ngClass]="readingInputNgClass(row)"
               />
               @if (delta !== null && delta > 0 && !rowHasInvalidReading(row)) {
                 <span
@@ -241,8 +220,6 @@
               <th>Nombre</th>
               <th>Medidor</th>
               <th>Contrato</th>
-              <th>Última lectura</th>
-              <th>Medidor actual (BD)</th>
               <th>Nueva lectura</th>
             </tr>
           </thead>
@@ -264,19 +241,13 @@
                     <span> / {{ row.subcontractCode }}</span>
                   }
                 </td>
-                <td class="text-muted whitespace-nowrap">
-                  @if (row.lastReadingAt) {
-                    {{ row.lastReadingAt | date: 'short' }}
-                  } @else {
-                    —
-                  }
-                </td>
-                <td class="tabular-nums text-muted">
-                  {{ row.currentMeter }}
-                  <span class="text-xs">{{ meterUnitShort(row.meterType) }}</span>
-                </td>
                 <td>
                   <div class="meter-cap-reading-cell">
+                    <app-meter-reference-banner
+                      class="block mb-2 max-w-md"
+                      [boardRow]="row"
+                      [compact]="true"
+                    />
                     <div class="flex flex-wrap items-center gap-2">
                       <input
                         [id]="'meter-reading-' + row.id"
@@ -287,9 +258,7 @@
                         class="meter-cap-num min-h-[48px] text-lg"
                         [ngModel]="readingFor(row.id)"
                         (ngModelChange)="updateReading(row.id, $event)"
-                        [ngClass]="{
-                          'meter-cap-num--invalid': rowHasInvalidReading(row)
-                        }"
+                        [ngClass]="readingInputNgClass(row)"
                       />
                       @if (
                         delta !== null && delta > 0 && !rowHasInvalidReading(row)
