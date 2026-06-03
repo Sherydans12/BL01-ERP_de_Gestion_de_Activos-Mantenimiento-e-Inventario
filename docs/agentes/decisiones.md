@@ -9,6 +9,18 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-03 — Sprint 2 Sistema Integrado: Consumos unificados (lubricantes + repuestos) en modal de equipo
+
+- **Contexto:** Prioridad 2.1 del roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md). El tab «Consumos» del `equipment-detail-modal` solo mostraba lubricantes (M1); los repuestos despachados a OTs no eran visibles en la ficha del activo, rompiendo la vista de «consumo del activo». La relación `WorkOrderPart` (con `unitCost` CPP, `partNumber`, `quantity`, `inventoryItemId`) ya existía pero `getAnalytics` no la incluía.
+- **Decisión:**
+  - **Backend (`equipments.service.ts` `getAnalytics`):** se agregó `include: { parts: { select: ... } }` a la query de `workOrders` (últimas 50 OT CERRADAS). Cambio aditivo y mínimo — **sin endpoint nuevo** (regla del roadmap: el modal ya carga analytics al abrir). +1 spec en `equipments.service.spec.ts` (verifica el `include` y el passthrough de `parts`).
+  - **Frontend types (`types.ts`):** `WorkOrderPart` ahora expone `unitCost?: number | null` e `inventoryItemId?: string | null`.
+  - **Modal (`equipment-detail-modal`):** `computed partsConsumed` aplana `analytics.workOrders[].parts` en filas `{ otId, otCorrelative, date, partNumber, description, quantity, unitCost, lineCost }` (orden por fecha desc); `computed partsTotalCost` suma solo líneas con costo conocido; helper `formatMoney` (CLP). El tab «Consumos» se reestructuró en **dos secciones** (Lubricantes + Repuestos usados en OTs); cada repuesto linkea al `WorkOrderDetailModal` embebido reusando `openOtDetail` del Sprint 1. **Decisión de UX confirmada con el usuario:** dos secciones (no tabla cronológica unificada) y fuente analytics (no endpoint dedicado). +3 specs frontend.
+- **Consecuencias:**
+  - Suites: frontend **111** (+3), backend dominio **345** (+1); `ng build` y lint verdes.
+  - El activo pasa a tener trazabilidad de consumo real: lubricantes (M1) + repuestos/costo de OTs en un solo lugar, con navegación a la OT origen.
+  - Limitación conocida: los repuestos provienen de las **últimas 50 OT cerradas** (mismo alcance que el resto de analytics); si se requiere histórico completo o agrupación por período → endpoint dedicado (Sprint futuro).
+
 ## 2026-06-03 — Sprint 1 Sistema Integrado: Dashboard KPIs + indicador de Turno + tab OTs
 
 - **Contexto:** Tras la integración transversal M1·M2·M3↔Flota, el roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md) priorizó cerrar conexiones visibles de alto impacto (Prioridad 1.1 y 1.2). Faltaban dos métricas de salud de flota (equipos fuera de servicio reales y fallas de terreno sin OT) que no existían en `GET /work-orders/stats`, y el modal de equipo no permitía ver OTs activas (solo el timeline con cerradas).

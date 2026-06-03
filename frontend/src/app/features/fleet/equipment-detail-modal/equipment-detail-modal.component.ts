@@ -69,6 +69,19 @@ interface DocItem {
   progress: number;
 }
 
+/** Fila de repuesto consumido en una OT cerrada (Consumos del activo, Sprint 2.1). */
+interface PartConsumptionRow {
+  key: string;
+  otId: string;
+  otCorrelative: string;
+  date: string;
+  partNumber: string;
+  description: string;
+  quantity: number;
+  unitCost: number | null;
+  lineCost: number | null;
+}
+
 interface TimelineEvent {
   id: string;
   type: TimelineEventType;
@@ -155,6 +168,40 @@ export class EquipmentDetailModalComponent {
     () => this.analytics()?.assetCostRecords ?? [],
   );
   meterLogs = computed(() => this.analytics()?.meterLogs ?? []);
+
+  /**
+   * Repuestos consumidos en las OT cerradas del equipo (Sprint 2.1).
+   * Se deriva de `analytics.workOrders[].parts` ya cargado al abrir el modal —
+   * no requiere fetch adicional. Ordenado por fecha de la OT (desc).
+   */
+  partsConsumed = computed<PartConsumptionRow[]>(() => {
+    const rows: PartConsumptionRow[] = [];
+    for (const wo of this.workOrders()) {
+      const date = wo.closedAt ?? wo.createdAt;
+      for (const p of wo.parts ?? []) {
+        const quantity = Number(p.quantity) || 0;
+        const unitCost = p.unitCost != null ? Number(p.unitCost) : null;
+        rows.push({
+          key: p.id ?? `${wo.id}-${p.partNumber}`,
+          otId: wo.id,
+          otCorrelative: wo.correlative,
+          date,
+          partNumber: p.partNumber,
+          description: p.description,
+          quantity,
+          unitCost,
+          lineCost: unitCost != null ? unitCost * quantity : null,
+        });
+      }
+    }
+    return rows.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+  });
+
+  partsTotalCost = computed(() =>
+    this.partsConsumed().reduce((sum, r) => sum + (r.lineCost ?? 0), 0),
+  );
 
   meterHistoryRows = computed<EquipmentMeterHistoryRow[]>(() => {
     const logs = this.meterLogs();
@@ -629,6 +676,15 @@ export class EquipmentDetailModalComponent {
 
   formatNumber(value: number): string {
     return value.toLocaleString('es-CL');
+  }
+
+  formatMoney(value: number | null): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      maximumFractionDigits: 0,
+    }).format(value);
   }
 
   private formatPurchaseCostMeta(rec: AssetCostRecord): string {

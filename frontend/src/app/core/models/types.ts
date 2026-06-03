@@ -92,6 +92,10 @@ export interface WorkOrderPart {
   partNumber: string;
   description: string;
   quantity: number;
+  /** Costo unitario imputado (CPP al despachar). Puede faltar en repuestos manuales. */
+  unitCost?: number | null;
+  /** Artículo de inventario vinculado, si el repuesto salió del kardex. */
+  inventoryItemId?: string | null;
 }
 
 export interface WorkOrder {

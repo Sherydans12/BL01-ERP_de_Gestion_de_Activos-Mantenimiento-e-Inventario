@@ -66,7 +66,10 @@ Cuando el planificador crea una OT manualmente y selecciona un equipo:
 
 ### Prioridad 2: Trazabilidad bidireccional (valor medio, no urgente)
 
-#### 2.1 · Consumo de inventario en el modal de equipo
+#### 2.1 · Consumo de inventario en el modal de equipo — HECHO (Sprint 2, 2026-06-03)
+
+> El tab «Consumos» del modal ahora muestra **dos secciones**: «Lubricantes» (M1, últimos 5 despachos — sin cambios) y «Repuestos usados en OTs» (nuevo). Los repuestos se derivan de `analytics.workOrders[].parts` (`computed partsConsumed`) — el backend ahora incluye `parts` (`partNumber`, `description`, `quantity`, `unitCost`, `inventoryItemId`) en `getAnalytics`. Cada fila linkea al `WorkOrderDetailModal` embebido (reusa `openOtDetail` del Sprint 1) y muestra costo de línea (`quantity × unitCost`); subtotal de repuestos en el encabezado vía `partsTotalCost`. Sin endpoint nuevo (regla del roadmap). Specs: +1 backend (`getAnalytics` incluye parts), +3 frontend (`partsConsumed`/`partsTotalCost`).
+
 En la pestaña "Consumos" del modal de detalle, actualmente solo aparecen lubricantes (M1). Ampliar con:
 - **Repuestos usados en OTs**: piezas despachadas desde el kardex al cerrar OTs (`WORK_ORDER_ISSUE`). La data existe en `analytics.workOrders` → `parts`.
 - Unificar lubricantes + repuestos en una vista "Consumos del activo" agrupada por período.

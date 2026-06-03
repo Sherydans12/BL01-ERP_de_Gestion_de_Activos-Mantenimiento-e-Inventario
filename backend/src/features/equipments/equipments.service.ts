@@ -297,6 +297,19 @@ export class EquipmentsService {
         where: { equipmentId: id, tenantId, status: 'CLOSED' },
         orderBy: { closedAt: 'desc' },
         take: 50,
+        include: {
+          // Repuestos despachados a la OT (Consumos del activo, Sprint 2.1).
+          parts: {
+            select: {
+              id: true,
+              partNumber: true,
+              description: true,
+              quantity: true,
+              unitCost: true,
+              inventoryItemId: true,
+            },
+          },
+        },
       }),
       this.prisma.meterAdjustment.findMany({
         where: { equipmentId: id },

@@ -43,7 +43,7 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `features/operations/fault-reports/fault-report-form.component.spec.ts` | Componente | Smoke + `invalidateCache` HIGH/LOW (14 tests) |
 | `features/operations/fault-reports/fault-report-list.component.spec.ts` | Componente | Smoke |
 | `features/fleet/fleet-master/fleet-master.component.spec.ts` | Componente | Smoke — `openDetail`, `fleet()`, `currentPage` (7 tests) |
-| `features/fleet/equipment-detail-modal/equipment-detail-modal.component.spec.ts` | Componente | Smoke — `operationalStatus` HIGH/LOW, tabs lazy, M1/M2/M3, **tab OTs + modal OT embebido** (15 tests) |
+| `features/fleet/equipment-detail-modal/equipment-detail-modal.component.spec.ts` | Componente | Smoke — `operationalStatus` HIGH/LOW, tabs lazy, M1/M2/M3, **tab OTs + modal OT embebido**, **consumos: `partsConsumed`/`partsTotalCost`** (18 tests) |
 | `features/work-orders/work-order-form/work-order-form.component.spec.ts` | Componente | Banner de fallas `OPEN` al seleccionar equipo (`openFaults`); sin render de template (componente grande), se invoca `ngOnInit()` y se prueba la lógica (4 tests) |
 
 ---

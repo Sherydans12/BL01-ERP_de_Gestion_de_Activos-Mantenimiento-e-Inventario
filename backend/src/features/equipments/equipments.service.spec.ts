@@ -256,4 +256,62 @@ describe('EquipmentsService', () => {
       ]);
     });
   });
+
+  describe('getAnalytics', () => {
+    it('incluye los repuestos (parts) de las OT cerradas y los devuelve (Sprint 2.1)', async () => {
+      const equipmentMock = {
+        id: equipId,
+        tenantId,
+        internalId: 'EC-1',
+      };
+      const woMock = {
+        id: 'wo-1',
+        correlative: 'OT-100',
+        status: 'CLOSED',
+        closedAt: new Date(),
+        parts: [
+          {
+            id: 'p1',
+            partNumber: 'FIL-01',
+            description: 'Filtro de aceite',
+            quantity: 2,
+            unitCost: 5000,
+            inventoryItemId: null,
+          },
+        ],
+      };
+
+      // $transaction en forma de array → resolvemos los 5 resultados.
+      // meterLogs vacío para evitar el findMany de enriquecimiento (woMap).
+      prisma.$transaction.mockResolvedValue([
+        equipmentMock,
+        [woMock],
+        [],
+        [],
+        [],
+      ] as never);
+
+      const res = await service.getAnalytics(userScoped, equipId);
+
+      expect(prisma.workOrder.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            equipmentId: equipId,
+            status: 'CLOSED',
+          }),
+          include: expect.objectContaining({
+            parts: expect.objectContaining({
+              select: expect.objectContaining({
+                partNumber: true,
+                unitCost: true,
+                quantity: true,
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(res.workOrders[0].parts[0].partNumber).toBe('FIL-01');
+      expect(res.workOrders[0].parts[0].unitCost).toBe(5000);
+    });
+  });
 });

@@ -148,4 +148,56 @@ describe('EquipmentDetailModalComponent', () => {
     expect(component.showOtDetail()).toBeFalse();
     expect(component.selectedOtId()).toBeNull();
   });
+
+  // ── Sprint 2.1: Consumos unificados (repuestos de OTs) ──
+  it('partsConsumed aplana los repuestos de las OT y calcula el costo de línea', () => {
+    component['analytics'].set({
+      ...MOCK_ANALYTICS,
+      workOrders: [
+        {
+          id: 'wo-1',
+          correlative: 'OT-100',
+          status: 'CLOSED',
+          closedAt: '2026-05-01T10:00:00.000Z',
+          createdAt: '2026-04-30T10:00:00.000Z',
+          parts: [
+            { id: 'p1', partNumber: 'FIL-01', description: 'Filtro', quantity: 2, unitCost: 5000 },
+            { id: 'p2', partNumber: 'ACE-10', description: 'Aceite', quantity: 1, unitCost: null },
+          ],
+        },
+      ],
+    } as any);
+
+    const rows = component.partsConsumed();
+    expect(rows.length).toBe(2);
+    const filtro = rows.find((r) => r.partNumber === 'FIL-01');
+    expect(filtro?.otCorrelative).toBe('OT-100');
+    expect(filtro?.lineCost).toBe(10000);
+    // Repuesto sin costo unitario → lineCost null (no rompe el total).
+    expect(rows.find((r) => r.partNumber === 'ACE-10')?.lineCost).toBeNull();
+  });
+
+  it('partsTotalCost suma solo las líneas con costo conocido', () => {
+    component['analytics'].set({
+      ...MOCK_ANALYTICS,
+      workOrders: [
+        {
+          id: 'wo-1', correlative: 'OT-100', status: 'CLOSED',
+          closedAt: '2026-05-01T10:00:00.000Z', createdAt: '2026-04-30T10:00:00.000Z',
+          parts: [
+            { id: 'p1', partNumber: 'FIL-01', description: 'Filtro', quantity: 2, unitCost: 5000 },
+            { id: 'p2', partNumber: 'ACE-10', description: 'Aceite', quantity: 1, unitCost: null },
+          ],
+        },
+      ],
+    } as any);
+
+    expect(component.partsTotalCost()).toBe(10000);
+  });
+
+  it('partsConsumed queda vacío cuando no hay OTs con repuestos', () => {
+    component['analytics'].set(MOCK_ANALYTICS);
+    expect(component.partsConsumed()).toEqual([]);
+    expect(component.partsTotalCost()).toBe(0);
+  });
 });

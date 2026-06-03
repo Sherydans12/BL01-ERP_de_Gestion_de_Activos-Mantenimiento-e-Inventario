@@ -189,7 +189,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **32** | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
 | `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **14** | `remove` bloqueado si OC `CLOSED`; neto 3-way (§4.5) |
 | `features/users/users.service.spec.ts` | **Users — OT asignables** | **5** | `findAssignableForOt` PBAC JSON (§3.7) |
-| `features/equipments/equipments.service.spec.ts` | **Flota — equipos** | **6** | `create`/`update` ABAC; bulk 50+2 (§3.8) |
+| `features/equipments/equipments.service.spec.ts` | **Flota — equipos** | **7** | `create`/`update` ABAC; bulk 50+2 (§3.8); `getAnalytics` incluye `parts` (Sprint 2.1) |
 | `features/auth/auth.service.spec.ts` | **Auth — login** | **3** | JWT permissions + lockout (§5.1) |
 | `features/meter-adjustments/meter-adjustments.service.spec.ts` | **Flota — ajustes** | **3** | Reinicio medidor con motivo (§3.9) |
 | `features/lube-reports/lube-reports.service.spec.ts` | **Lubricantes — reporte consumo** | **8** | `createReport`: happy path, stock negativo, horómetro, bodega, equipo (§3.10) |
