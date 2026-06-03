@@ -202,9 +202,17 @@ export class FleetMasterComponent implements OnInit {
         this.loadFleet();
       });
 
+    // Recarga reactiva: ante cambio de contrato global o invalidación externa de caché
+    // (p. ej. tras reportar una falla crítica en /fallas) la lista se vuelve a pedir.
+    // El primer disparo se omite; la carga inicial la hace ngOnInit con cache-bust.
     effect(
       () => {
-        const contractId = this.authService.currentContractId();
+        this.authService.currentContractId();
+        this.fleetService.listVersion();
+        if (!this.scopeInitialized) {
+          this.scopeInitialized = true;
+          return;
+        }
         this.currentPage.set(1);
         this.loadFleet();
       },
@@ -212,7 +220,13 @@ export class FleetMasterComponent implements OnInit {
     );
   }
 
+  /** Evita doble carga: el effect reactivo omite su primera ejecución. */
+  private scopeInitialized = false;
+
   ngOnInit() {
+    // Refetch al entrar a la vista (anti-stale: si venimos de /fallas, vemos el
+    // equipo detenido de inmediato). El componente se recrea en cada navegación.
+    this.loadFleet();
     this.loadContracts();
     this.catalogService.loadCatalogs().subscribe({
       error: () => undefined,
@@ -257,6 +271,7 @@ export class FleetMasterComponent implements OnInit {
       search: this.searchQuery() || undefined,
       type: this.filterType() || undefined,
       brand: this.filterBrand() || undefined,
+      noCache: true,
     };
 
     this.fleetService.getEquipments(params).subscribe({

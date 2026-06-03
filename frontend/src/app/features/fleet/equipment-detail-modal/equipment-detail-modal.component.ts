@@ -12,6 +12,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import {
   AssetCostRecord,
@@ -21,11 +23,29 @@ import {
   MeterType,
 } from '../../../core/models/types';
 import {
+  FaultReportsService,
+  FaultReportRow,
+  CRITICALITY_META,
+  SYSTEM_LABELS,
+  STATUS_META as FAULT_STATUS_META,
+} from '../../../core/services/fault-reports/fault-reports.service';
+import {
+  EquipmentAvailabilityService,
+  AvailabilityRecord,
+  SHIFT_LABELS,
+  STATUS_LABELS as AVAILABILITY_STATUS_LABELS,
+  STATUS_COLORS as AVAILABILITY_STATUS_COLORS,
+} from '../../../core/services/equipment-availability/equipment-availability.service';
+import {
+  LubeReportsService,
+  LubeReportRow,
+} from '../../../core/services/lube-reports/lube-reports.service';
+import {
   EquipmentMeterHistoryTableComponent,
   EquipmentMeterHistoryRow,
 } from '../components/equipment-meter-history-table/equipment-meter-history-table.component';
 
-type TabId = 'ficha' | 'docs' | 'historial' | 'medidores';
+type TabId = 'ficha' | 'salud' | 'consumos' | 'docs' | 'historial' | 'medidores';
 
 type TimelineEventType = 'OT' | 'METER_ADJ' | 'PURCHASE';
 
@@ -71,6 +91,18 @@ interface TimelineEvent {
 export class EquipmentDetailModalComponent {
   private injector = inject(Injector);
   private fleetService = inject(FleetService);
+  // ── Servicios transversales de Operaciones (M1·M2·M3) ──
+  private faultService = inject(FaultReportsService);
+  private availabilityService = inject(EquipmentAvailabilityService);
+  private lubeService = inject(LubeReportsService);
+
+  // Mapas de etiquetas/tokens (espejo backend) expuestos a la plantilla.
+  protected readonly criticalityMeta = CRITICALITY_META;
+  protected readonly systemLabels = SYSTEM_LABELS;
+  protected readonly faultStatusMeta = FAULT_STATUS_META;
+  protected readonly shiftLabels = SHIFT_LABELS;
+  protected readonly availabilityStatusLabels = AVAILABILITY_STATUS_LABELS;
+  protected readonly availabilityStatusColors = AVAILABILITY_STATUS_COLORS;
 
   detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
 
@@ -81,6 +113,15 @@ export class EquipmentDetailModalComponent {
   activeTab = signal<TabId>('ficha');
   loading = signal(false);
   analytics = signal<EquipmentAnalytics | null>(null);
+
+  // ── Estado de las pestañas transversales (carga perezosa por equipo) ──
+  lastFault = signal<FaultReportRow | null>(null);
+  lastAvailability = signal<AvailabilityRecord | null>(null);
+  lubeReports = signal<LubeReportRow[]>([]);
+  healthLoading = signal(false);
+  consumosLoading = signal(false);
+  private healthLoadedFor: string | null = null;
+  private consumosLoadedFor: string | null = null;
 
   equipment = computed(() => this.analytics()?.equipment ?? null);
   workOrders = computed(() => this.analytics()?.workOrders ?? []);
@@ -228,8 +269,11 @@ export class EquipmentDetailModalComponent {
 
   operationalStatus = computed(() => {
     const eq = this.equipment();
-    if (!eq) return { label: 'Sin datos', color: 'text-muted', bgColor: 'bg-dark' };
-    return { label: 'OPERATIVO', color: 'text-success', bgColor: 'bg-success/10' };
+    if (!eq)
+      return { label: 'Sin datos', color: 'text-muted', bgColor: 'bg-dark' };
+    return eq.isOperational === false
+      ? { label: 'FUERA DE SERVICIO', color: 'text-error', bgColor: 'bg-error/10' }
+      : { label: 'OPERATIVO', color: 'text-success', bgColor: 'bg-success/10' };
   });
 
   documentItems = computed<DocItem[]>(() => {
@@ -330,7 +374,9 @@ export class EquipmentDetailModalComponent {
   });
 
   tabs: { id: TabId; label: string; icon: string }[] = [
-    { id: 'ficha', label: 'Ficha Técnica', icon: 'cpu' },
+    { id: 'ficha', label: 'Información Base', icon: 'cpu' },
+    { id: 'salud', label: 'Salud y Operación', icon: 'heart-pulse' },
+    { id: 'consumos', label: 'Consumos', icon: 'droplet' },
     { id: 'medidores', label: 'Historial de Medidores', icon: 'gauge' },
     { id: 'docs', label: 'Documentación', icon: 'file-text' },
     { id: 'historial', label: 'Historial', icon: 'activity' },
@@ -346,6 +392,10 @@ export class EquipmentDetailModalComponent {
         return 'Telemetría';
       case 'MANUAL':
         return 'Manual / ajuste';
+      case 'AVAILABILITY_REPORT':
+        return 'Reporte de disponibilidad';
+      case 'FAULT_REPORT':
+        return 'Reporte de falla';
       default:
         return String(log.source);
     }
@@ -358,9 +408,13 @@ export class EquipmentDetailModalComponent {
         const open = this.isOpen();
         if (id && open) {
           this.loadAnalytics(id);
+          // Reinicia el estado de las pestañas transversales para el nuevo equipo.
+          this.activeTab.set('ficha');
+          this.resetCrossModuleState();
         } else {
           this.analytics.set(null);
           this.activeTab.set('ficha');
+          this.resetCrossModuleState();
         }
       },
       { allowSignalWrites: true },
@@ -393,6 +447,62 @@ export class EquipmentDetailModalComponent {
 
   selectTab(tab: TabId): void {
     this.activeTab.set(tab);
+    const id = this.equipmentId();
+    if (!id) return;
+    // Carga perezosa al abrir las pestañas transversales (M1/M2/M3).
+    if (tab === 'salud') this.loadHealth(id);
+    if (tab === 'consumos') this.loadConsumos(id);
+  }
+
+  /** Pestaña 2 «Salud y Operación»: última falla (M3) + último parte de disponibilidad (M2). */
+  private loadHealth(id: string): void {
+    if (this.healthLoadedFor === id) return;
+    this.healthLoadedFor = id;
+    this.healthLoading.set(true);
+
+    forkJoin({
+      fault: this.faultService
+        .getReports({ equipmentId: id, pageSize: 1 })
+        .pipe(catchError(() => of(null))),
+      availability: this.availabilityService
+        .getAll({ equipmentId: id, pageSize: 1 })
+        .pipe(catchError(() => of(null))),
+    }).subscribe({
+      next: ({ fault, availability }) => {
+        this.lastFault.set(fault?.data?.[0] ?? null);
+        this.lastAvailability.set(availability?.data?.[0] ?? null);
+        this.healthLoading.set(false);
+      },
+      error: () => this.healthLoading.set(false),
+    });
+  }
+
+  /** Pestaña 3 «Consumos»: últimos 5 despachos de lubricantes (M1) del equipo. */
+  private loadConsumos(id: string): void {
+    if (this.consumosLoadedFor === id) return;
+    this.consumosLoadedFor = id;
+    this.consumosLoading.set(true);
+
+    this.lubeService
+      .getReports({ equipmentId: id, pageSize: 5 })
+      .pipe(catchError(() => of(null)))
+      .subscribe({
+        next: (res) => {
+          this.lubeReports.set(res?.data ?? []);
+          this.consumosLoading.set(false);
+        },
+        error: () => this.consumosLoading.set(false),
+      });
+  }
+
+  private resetCrossModuleState(): void {
+    this.healthLoadedFor = null;
+    this.consumosLoadedFor = null;
+    this.lastFault.set(null);
+    this.lastAvailability.set(null);
+    this.lubeReports.set([]);
+    this.healthLoading.set(false);
+    this.consumosLoading.set(false);
   }
 
   onBackdropClick(event: MouseEvent): void {

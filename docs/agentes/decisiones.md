@@ -9,6 +9,32 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-03 — Integración Transversal de Operaciones (M1·M2·M3 ↔ Flota) — INTEGRACIÓN COMPLETA
+
+- **Contexto:** M1 (Lubricantes), M2 (Disponibilidad) y M3 (Fallas) quedaron al 100% en backend pero operaban como silos en la UI. Las acciones en terreno no se reflejaban en el Maestro de Flota ni en el modal de detalle de equipo, rompiendo la noción de fuente única de verdad (SSOT) sobre `Equipment`.
+
+- **Decisión (Fase 1 — Documentación):**
+  1. **SSOT formalizada** en `MASTER-CONTEXT.md` §2.4 «Ecosistema de Operaciones y Flota»: tablas de alimentación de `currentMeter` (4 fuentes × `MeterLogSource`) y control de `isOperational` (quién lo escribe vs. quién solo lo lee). Diagramas Mermaid. Actualizado §1.2 con referencia cruzada.
+  2. **Glosario ampliado** (`glosario.md`): 7 nuevos términos — `currentMeter`, `isOperational`, Disponibilidad (M2), `OperationalStatus`, Falla/M3, Falla Crítica/ALTA, M1/M2/M3.
+
+- **Decisión (Fase 2 — Refactor UI):**
+  3. **Maestro de Flota — alerta visual crítica:** Filas con `isOperational === false` reciben borde rojo grueso + fondo rojizo + badge `animate-pulse` «FUERA DE SERVICIO». El `currentMeter` ya se mostraba en la columna «Medidor».
+  4. **`FleetService` — mecanismo de frescura:** Signal `_listVersion` (readonly) + `invalidateCache()` + `refetch()`. `getEquipments` acepta `noCache:true` que agrega `_ts=Date.now()` como cache-bust HTTP.
+  5. **`FleetMasterComponent` — doble garantía anti-stale:** `ngOnInit` hace refetch con cache-bust (el componente se recrea en cada navegación de ruta); `effect()` reactivo escucha `listVersion()` para invalidaciones push desde otras rutas.
+  6. **`EquipmentDetailModalComponent` — Centro de Mando Operacional:** Dos nuevas pestañas con fetch perezoso (carga al abrir la pestaña, no repite si el equipo no cambia):
+     - **«Salud y Operación»**: `forkJoin(faultService.getReports({pageSize:1}), availabilityService.getAll({pageSize:1}))` con `catchError`. Badge gigante real de `isOperational` (antes estaba hardcodeado a «OPERATIVO»). Tarjeta Última Falla (M3) y Último Reporte de Turno (M2).
+     - **«Consumos»**: `lubeService.getReports({pageSize:5})`. Mini-tabla con folio, fecha, bodega, líneas y medidor.
+  7. **Fix tipo `MeterLogSource`** en `types.ts`: añadidos `'AVAILABILITY_REPORT' | 'FAULT_REPORT'` (faltaban y causaban error TS en compilación). Etiquetas legibles añadidas al historial de medidores.
+
+- **Decisión (Fase 3 — Invalidación push desde M3):**
+  8. **`FaultReportFormComponent.onSubmitSuccess`** llama `fleetService.invalidateCache()` cuando la criticidad es `HIGH` o `MEDIUM`. `HIGH` muta `isOperational=false` en la transacción del backend; `MEDIUM` puede avanzar el horómetro. La señal `listVersion` cambia y el `effect()` del Maestro de Flota dispara la recarga aunque el componente ya esté activo. `FleetService` ya estaba inyectado en el formulario; solo se activó la llamada.
+
+- **Consecuencias:**
+  - Build Angular: `exit 0` — *Application bundle generation complete*. Sin cambios de schema, backend ni migraciones.
+  - `FleetMasterComponent` y `EquipmentDetailModalComponent` son el **Centro de Mando Operacional** del EAM: consumen M1, M2 y M3 reactivamente sin acoplamiento directo entre módulos de Operaciones.
+  - Doble garantía de frescura: refetch en entrada a ruta **+** invalidación push desde el formulario de fallas.
+  - El ecosistema M1·M2·M3 está **100% integrado en la UI**.
+
 ## 2026-06-02 — Módulo 3: Registro de Fallas (FaultReport) — Persistencia y Seguridad
 
 - **Contexto**: Requerimiento de capturar eventos correctivos imprevistos en terreno, actualizando el estado del equipo y alimentando la cola de trabajo del planificador. El sistema debe discriminar por criticidad para decidir el impacto automático sobre disponibilidad y mantenimiento.

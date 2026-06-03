@@ -44,6 +44,7 @@ const faultServiceSpy = jasmine.createSpyObj<FaultReportsService>(
 
 const fleetServiceSpy = jasmine.createSpyObj<FleetService>('FleetService', {
   getEquipments: of({ data: [], total: 0, page: 1, limit: 300 }),
+  invalidateCache: undefined,
 });
 
 const notifySpy = jasmine.createSpyObj<NotificationService>('NotificationService', [
@@ -145,6 +146,32 @@ describe('FaultReportFormComponent', () => {
     component.onSelectEquipment('eq-uuid-001');
     expect(component.selectedEquipmentId()).toBe('eq-uuid-001');
     expect(component.equipSearch()).toBe('');
+  });
+
+  it('llama a FleetService.invalidateCache al guardar una falla HIGH', () => {
+    const highReport: FaultReportRow = { ...MOCK_REPORT, criticality: 'HIGH', status: 'LINKED' };
+    faultServiceSpy.create.and.returnValue(of(highReport));
+
+    component.onSelectEquipment('eq-uuid-001');
+    component.selectedSystem.set('MOTOR');
+    component.selectedCriticality.set('HIGH');
+    component.symptomDescription.set('Motor fundido — equipo detenido de urgencia');
+    component.submit();
+
+    expect(fleetServiceSpy.invalidateCache).toHaveBeenCalled();
+  });
+
+  it('NO llama a FleetService.invalidateCache al guardar una falla LOW', () => {
+    fleetServiceSpy.invalidateCache.calls.reset();
+    faultServiceSpy.create.and.returnValue(of(MOCK_REPORT)); // LOW por defecto
+
+    component.onSelectEquipment('eq-uuid-001');
+    component.selectedSystem.set('TIRES_TRACKS');
+    component.selectedCriticality.set('LOW');
+    component.symptomDescription.set('Pequeña fuga de aire en neumático trasero derecho');
+    component.submit();
+
+    expect(fleetServiceSpy.invalidateCache).not.toHaveBeenCalled();
   });
 
   it('resetForm limpia todos los signals al estado vacío', () => {

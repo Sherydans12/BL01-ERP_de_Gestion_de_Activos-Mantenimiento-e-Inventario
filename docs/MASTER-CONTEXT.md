@@ -2,8 +2,8 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-05-24 |
-| **Versión documento** | 1.0 |
+| **Última modificación** | 2026-06-03 |
+| **Versión documento** | 1.1 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
 > Documento maestro de arquitectura funcional, lógica de negocio y estructura de datos.  
@@ -79,7 +79,7 @@ API de contratos: [`SitesController`](../backend/src/features/sites/sites.contro
 | `EquipmentMeterLog` | `equipment_meter_logs` | N→1 `Tenant`, `Equipment`, `User` (fuente: `OT`, `MANUAL`, `TELEMETRY`) |
 | `AssetCostRecord` | `asset_cost_records` | N→1 `Equipment`; opcional `PurchaseOrder`, `WorkOrder`, `WarehouseReceipt` |
 
-**Reglas de datos:** `@@unique([tenantId, internalId])`, placas y VIN únicos por tenant. `isOperational` y `cumulativeDowntimeHours` reflejan indisponibilidad por OT.
+**Reglas de datos:** `@@unique([tenantId, internalId])`, placas y VIN únicos por tenant. `isOperational` y `cumulativeDowntimeHours` reflejan indisponibilidad por OT y por **fallas ALTAS** (M3). `currentMeter` es alimentado por OT, M1 (lubricantes), M2 (disponibilidad) y M3 (fallas) vía `applyCurrentMeterChange` — ver §2.4 «Ecosistema de Operaciones y Flota».
 
 Código: [`equipments`](../backend/src/features/equipments/), [`meter-adjustments`](../backend/src/features/meter-adjustments/).
 
@@ -335,6 +335,70 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
 | Payloads SRC (mirror frontend) | purchases | [`purchases.interface.ts`](../frontend/src/app/core/models/purchases.interface.ts) |
 | `CreateTenantRoleDto` / `UpdateTenantRoleDto` | tenant-roles | [`dto/`](../backend/src/features/tenant-roles/dto/) |
 | Notificaciones | notification-settings | [`dto/`](../backend/src/features/notification-settings/dto/) |
+
+### 2.4 Ecosistema de Operaciones y Flota (M1 · M2 · M3 ↔ `Equipment`)
+
+Los tres módulos de Operaciones en terreno —**M1 Consumo de Lubricantes**, **M2 Disponibilidad Operativa Diaria** y **M3 Registro e Informe de Fallas**— **no son silos**: convergen sobre la entidad [`Equipment`](../backend/prisma/schema.prisma) y comparten dos señales transversales que el resto del sistema (Maestro de Flota, modales de detalle, OTs, costeo) consume como **fuente única de verdad (SSOT)**:
+
+1. **`currentMeter`** — horómetro/odómetro vigente del equipo.
+2. **`isOperational`** — bandera booleana de estado operativo (en servicio / fuera de servicio).
+
+Código backend: [`lube-reports`](../backend/src/features/lube-reports/), [`equipment-availability`](../backend/src/features/equipment-availability/), [`fault-reports`](../backend/src/features/fault-reports/), [`equipments`](../backend/src/features/equipments/), [`work-orders`](../backend/src/features/work-orders/).
+
+#### A) Alimentación de `currentMeter` (helper único)
+
+Todo avance de medidor pasa por el helper atómico **[`applyCurrentMeterChange`](../backend/src/features/equipments/equipment-meter-sync.ts)**, que escribe en `EquipmentMeterLog` (auditoría inmutable) y actualiza `Equipment.currentMeter` dentro de la misma transacción. **Regla universal: el medidor nunca retrocede.** Cada módulo aporta una `MeterLogSource` distinta:
+
+| Módulo | Disparador | Condición | `MeterLogSource` | Si retrocede |
+|--------|-----------|-----------|------------------|--------------|
+| **M1 Lubricantes** | `LubeReportsService.create` (`meterReading`) | `> currentMeter` | `MANUAL` | **Rechaza** (`BadRequestException`) |
+| **M2 Disponibilidad** | `EquipmentAvailabilityService.create` (`meterReading`) | `> currentMeter` | `AVAILABILITY_REPORT` | Silent ignore (lectura tardía) |
+| **M3 Fallas** | `FaultReportsService.create` (`meterAtFault`) | `> currentMeter` | `FAULT_REPORT` | Silent ignore |
+| OT (cierre) | `WorkOrdersService` (`finalMeter`) | `≥ initialMeter` | `OT` | Validación de cierre |
+
+Consecuencia transversal: cualquier reporte en terreno (un despacho de aceite, un parte de disponibilidad o una falla) **mantiene vivo el horómetro** que usan las proyecciones PM y el Maestro de Flota, sin requerir un registro manual de horas aparte.
+
+#### B) Control de `isOperational` (quién lo mueve)
+
+`isOperational` es **mutado únicamente** por el ciclo de OT y por fallas ALTAS; M1 y M2 **no lo escriben** (M2 solo lo *lee*):
+
+| Origen | Evento | Efecto sobre `isOperational` |
+|--------|--------|------------------------------|
+| **M3 Falla ALTA (`HIGH`)** | `FaultReportsService.create` | `false` + crea `WorkOrder(NO_PROGRAMADA_REACTIVA, affectsAvailability=SI, detentionStartedAt=eventDate)` en la misma `$transaction` Serializable |
+| **M3 Falla MEDIA (`MEDIUM`)** | `FaultReportsService.create` | **Sin cambio** — crea `WorkOrder(NO_PROGRAMADA_CORRECTIVA, affectsAvailability=NO)` |
+| **M3 Falla BAJA (`LOW`)** | `FaultReportsService.create` | **Sin cambio** — solo registra el reporte (`OPEN`) |
+| **OT** | `updateStatus → IN_PROGRESS` con `affectsAvailability=SI` | `false` |
+| **OT** | `updateStatus → CLOSED` | `isOperational = closureEquipmentOperational` (booleano obligatorio); si `affectsAvailability=SI` acumula `cumulativeDowntimeHours += metricHm` |
+| **M2 Disponibilidad** | `EquipmentAvailabilityService` | **Solo lectura** — `GET /unreported` filtra `isOperational: true` para no exigir parte a equipos ya detenidos |
+
+**Relación M3 ↔ M2 (ortogonal):** una falla ALTA marca `isOperational=false` de forma imperativa (señal del sistema), mientras que `EquipmentAvailability` es **declarativo** (lo confirma el supervisor por turno). M2 *lee* `isOperational` pero no lo sincroniza de vuelta. Ver decisión [2026-06-02 — Módulo 3](agentes/decisiones.md).
+
+```mermaid
+flowchart TD
+  subgraph Terreno
+    M1[M1 · Lube Report]
+    M2[M2 · Disponibilidad]
+    M3[M3 · Fault Report]
+  end
+  M1 -->|meterReading MANUAL| MC[applyCurrentMeterChange]
+  M2 -->|meterReading AVAILABILITY_REPORT| MC
+  M3 -->|meterAtFault FAULT_REPORT| MC
+  MC --> EQ[(Equipment.currentMeter)]
+  M3 -->|HIGH| OPF[isOperational = false]
+  M3 -->|HIGH/MEDIUM| OT[WorkOrder no programada]
+  OT -->|IN_PROGRESS affectsAvailability=SI| OPF
+  OT -->|CLOSED closureEquipmentOperational| EQOP[(Equipment.isOperational)]
+  OPF --> EQOP
+  M2 -.lee.-> EQOP
+```
+
+#### C) Costeo e inventario (M1)
+
+M1 además cruza con Inventario y Finanzas en su transacción Serializable: descuenta `ItemStock` desde una bodega `VIRTUAL` (camión lubricador), genera `InventoryTransaction(type=OUT, referenceType=LUBE_DISPATCH)` con CPP congelado e imputa `AssetCostRecord(LUBE_DISPATCH)` al equipo. Ver decisión [2026-06-02 — Lubricantes](agentes/decisiones.md).
+
+#### D) Implicancia para la UI (SSOT en frontend)
+
+El Maestro de Flota y el modal de detalle de equipo deben **reaccionar centralizadamente** a `isOperational` (destacar equipos `false` como "fuera de servicio") y mostrar `currentMeter` actualizado. Como estas señales cambian desde rutas distintas (`/fallas`, `/operaciones/disponibilidad`, `/operaciones/lubricantes`, `/ots`), la lista de equipos debe **invalidar caché / refetch** al re-entrar a `/flota`. Ver decisión [2026-06-03 — Integración Transversal de Operaciones](agentes/decisiones.md).
 
 ---
 

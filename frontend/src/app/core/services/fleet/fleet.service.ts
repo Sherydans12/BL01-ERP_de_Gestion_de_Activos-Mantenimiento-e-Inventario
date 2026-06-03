@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
@@ -25,8 +25,28 @@ export class FleetService {
   private apiUrl = `${environment.apiUrl}/equipments`;
 
   /**
+   * Versión incremental de la caché de listados de flota.
+   * Otros módulos (p. ej. Registro de Fallas) llaman `invalidateCache()` para que las
+   * vistas abiertas que la observan vía `effect()` vuelvan a pedir datos al backend.
+   * Ver §2.4 «Ecosistema de Operaciones y Flota» en docs/MASTER-CONTEXT.md.
+   */
+  private readonly _listVersion = signal(0);
+  readonly listVersion = this._listVersion.asReadonly();
+
+  /**
+   * Marca la lista de equipos como obsoleta. La señal `listVersion` cambia y cualquier
+   * componente que la lea dentro de un `effect()` (p. ej. `FleetMasterComponent`) recargará.
+   */
+  invalidateCache(): void {
+    this._listVersion.update((v) => v + 1);
+  }
+
+  /**
    * Lista equipos. Si se pasa `contractId`, se envía `x-contract-id` para filtrar por ese contrato
    * (el interceptor no lo sobrescribe si ya viene fijado).
+   *
+   * `noCache` agrega un sello temporal (`_ts`) para defender la frescura ante cualquier
+   * caché HTTP/proxy/SW intermedio (estado `isOperational` recién mutado por una falla).
    */
   getEquipments(
     params?: {
@@ -37,6 +57,8 @@ export class FleetService {
       brand?: string;
       /** Alcance por contrato (header `x-contract-id`; no se envía como query). */
       contractId?: string;
+      /** Cache-bust: agrega `_ts` para evitar respuestas cacheadas. */
+      noCache?: boolean;
     },
     options?: { contractId?: string },
   ): Observable<PaginatedEquipments> {
@@ -49,6 +71,8 @@ export class FleetService {
       if (params.search) httpParams = httpParams.set('search', params.search);
       if (params.type) httpParams = httpParams.set('type', params.type);
       if (params.brand) httpParams = httpParams.set('brand', params.brand);
+      if (params.noCache)
+        httpParams = httpParams.set('_ts', String(Date.now()));
     }
 
     const contractHeader = options?.contractId ?? params?.contractId;
@@ -61,6 +85,24 @@ export class FleetService {
       params: httpParams,
       headers,
     });
+  }
+
+  /**
+   * Refetch explícito de la lista, forzando cache-bust HTTP. Alias semántico de
+   * `getEquipments({ ...params, noCache: true })` para usar al re-entrar a `/flota`.
+   */
+  refetch(
+    params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      type?: string;
+      brand?: string;
+      contractId?: string;
+    },
+    options?: { contractId?: string },
+  ): Observable<PaginatedEquipments> {
+    return this.getEquipments({ ...(params ?? {}), noCache: true }, options);
   }
 
   getEquipmentById(id: string): Observable<Equipment> {

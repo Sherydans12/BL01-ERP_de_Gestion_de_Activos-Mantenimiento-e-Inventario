@@ -114,7 +114,12 @@ export interface WorkOrder {
   systems?: any[];
 }
 
-export type MeterLogSource = 'OT' | 'MANUAL' | 'TELEMETRY';
+export type MeterLogSource =
+  | 'OT'
+  | 'MANUAL'
+  | 'TELEMETRY'
+  | 'AVAILABILITY_REPORT'
+  | 'FAULT_REPORT';
 
 /** Historial unificado de lecturas / cambios de medidor (maestro + OT + telemetría). */
 export interface EquipmentMeterLog {

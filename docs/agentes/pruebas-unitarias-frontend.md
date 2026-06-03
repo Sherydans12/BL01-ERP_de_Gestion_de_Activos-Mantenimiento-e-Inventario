@@ -2,7 +2,7 @@
 
 Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El **foco actual del proyecto** está en el backend de dominio (212 tests); el frontend tiene sobre todo **smoke** (`should be created`).
 
-**Última actualización:** 2026-06-03
+**Última actualización:** 2026-06-03 (v2 — integración M1·M2·M3)
 
 ---
 
@@ -40,8 +40,10 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke |
 | `features/operations/availability/availability-form.component.spec.ts` | Componente | Smoke |
 | `features/operations/availability/availability-monitor.component.spec.ts` | Componente | Smoke |
-| `features/operations/fault-reports/fault-report-form.component.spec.ts` | Componente | Smoke |
+| `features/operations/fault-reports/fault-report-form.component.spec.ts` | Componente | Smoke + `invalidateCache` HIGH/LOW (14 tests) |
 | `features/operations/fault-reports/fault-report-list.component.spec.ts` | Componente | Smoke |
+| `features/fleet/fleet-master/fleet-master.component.spec.ts` | Componente | Smoke — `openDetail`, `fleet()`, `currentPage` (7 tests) |
+| `features/fleet/equipment-detail-modal/equipment-detail-modal.component.spec.ts` | Componente | Smoke — `operationalStatus` HIGH/LOW, tabs lazy, M1/M2/M3 signals (10 tests) |
 
 ---
 

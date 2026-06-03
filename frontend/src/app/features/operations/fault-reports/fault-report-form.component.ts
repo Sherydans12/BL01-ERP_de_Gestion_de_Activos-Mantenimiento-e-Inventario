@@ -275,6 +275,15 @@ export class FaultReportFormComponent implements OnInit {
       ? ' Se generó automáticamente una OT correctiva.'
       : '';
     this.notify.success(`Falla ${report.correlative} registrada.${woMsg}`);
+
+    // Invalida la caché del Maestro de Flota para que `isOperational` y `currentMeter`
+    // aparezcan actualizados al navegar a /flota, sin esperar a la re-creación del componente.
+    // HIGH muta isOperational=false; MEDIUM puede afectar el horómetro si se reportó meterAtFault.
+    // Ver MASTER-CONTEXT.md §2.4 y docs/agentes/decisiones.md «Integración Transversal».
+    if (criticality === 'HIGH' || criticality === 'MEDIUM') {
+      this.fleetService.invalidateCache();
+    }
+
     this.resetForm();
     this.isSubmitting.set(false);
     this.uploadProgress.set(null);
