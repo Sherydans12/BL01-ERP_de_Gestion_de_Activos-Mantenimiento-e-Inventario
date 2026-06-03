@@ -5,6 +5,7 @@ import { OperationalStatus, Prisma, ShiftType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EquipmentAvailabilityService } from './equipment-availability.service';
 import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availability.dto';
+import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
 
 // ── Mock del helper de horómetro (mismo patrón que lube-reports.service.spec) ──
 jest.mock('../equipments/equipment-meter-sync', () => ({
@@ -437,5 +438,163 @@ describe('EquipmentAvailabilityService — findAll', () => {
         where: expect.objectContaining({ tenantId, shift: ShiftType.NIGHT }),
       }),
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: commitImport
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EquipmentAvailabilityService — commitImport', () => {
+  let service: EquipmentAvailabilityService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  const upsertedRecord = {
+    id: availabilityId,
+    tenantId,
+    contractId,
+    equipmentId,
+    reportedById: userId,
+    reportDate: new Date('2026-06-02'),
+    shift: ShiftType.DAY,
+    status: OperationalStatus.OPERATIONAL,
+    meterReading: null,
+    comments: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const baseDtoTwoRows: ImportAvailabilityCommitDto = {
+    reportDate: '2026-06-02',
+    shift: ShiftType.DAY,
+    rows: [
+      { equipmentId, status: OperationalStatus.OPERATIONAL },
+      { equipmentId: eq2Id, status: OperationalStatus.STANDBY },
+    ],
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    mockApplyCurrentMeterChange.mockClear();
+
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EquipmentAvailabilityService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+
+    service = module.get(EquipmentAvailabilityService);
+  });
+
+  it('happy path: guarda todas las filas y retorna committed=2 con errores vacíos', async () => {
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.equipmentAvailability.upsert.mockResolvedValue(upsertedRecord as never);
+
+    const result = await service.commitImport(baseDtoTwoRows, adminUser);
+
+    expect(result.committed).toBe(2);
+    expect(result.errors).toHaveLength(0);
+    expect(tx.equipmentAvailability.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('éxito parcial: guarda la primera fila y reporta el error de la segunda sin abortar el lote', async () => {
+    // Primera fila válida, segunda con equipo inexistente
+    tx.equipment.findFirst
+      .mockResolvedValueOnce(validEquipment as never)
+      .mockResolvedValueOnce(null as never);
+    tx.equipmentAvailability.upsert.mockResolvedValue(upsertedRecord as never);
+
+    const result = await service.commitImport(baseDtoTwoRows, adminUser);
+
+    expect(result.committed).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].equipmentId).toBe(eq2Id);
+    expect(result.errors[0].reason).toMatch(
+      /no existe o no pertenece a este tenant/,
+    );
+  });
+
+  it('avanza el horómetro vía AVAILABILITY_REPORT cuando meterReading > currentMeter', async () => {
+    tx.equipment.findFirst.mockResolvedValue({
+      ...validEquipment,
+      currentMeter: 1000,
+    } as never);
+    tx.equipmentAvailability.upsert.mockResolvedValue({
+      ...upsertedRecord,
+      meterReading: 1350,
+    } as never);
+
+    await service.commitImport(
+      {
+        reportDate: '2026-06-02',
+        shift: ShiftType.DAY,
+        rows: [
+          {
+            equipmentId,
+            status: OperationalStatus.OPERATIONAL,
+            meterReading: 1350,
+          },
+        ],
+      },
+      adminUser,
+    );
+
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        tenantId,
+        equipmentId,
+        oldMeter: 1000,
+        newMeter: 1350,
+        source: 'AVAILABILITY_REPORT',
+      }),
+    );
+  });
+
+  it('silent-skip: NO llama a applyCurrentMeterChange cuando meterReading <= currentMeter', async () => {
+    tx.equipment.findFirst.mockResolvedValue({
+      ...validEquipment,
+      currentMeter: 1500,
+    } as never);
+    tx.equipmentAvailability.upsert.mockResolvedValue({
+      ...upsertedRecord,
+      meterReading: 900,
+    } as never);
+
+    const result = await service.commitImport(
+      {
+        reportDate: '2026-06-02',
+        shift: ShiftType.DAY,
+        rows: [
+          {
+            equipmentId,
+            status: OperationalStatus.OPERATIONAL,
+            meterReading: 900,
+          },
+        ],
+      },
+      adminUser,
+    );
+
+    expect(result.committed).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
+  });
+
+  it('retorna committed=0 y todos como errores cuando ningún equipo pertenece al tenant', async () => {
+    tx.equipment.findFirst.mockResolvedValue(null as never);
+
+    const result = await service.commitImport(baseDtoTwoRows, adminUser);
+
+    expect(result.committed).toBe(0);
+    expect(result.errors).toHaveLength(2);
+    expect(tx.equipmentAvailability.upsert).not.toHaveBeenCalled();
+    expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
   });
 });

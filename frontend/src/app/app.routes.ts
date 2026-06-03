@@ -211,6 +211,15 @@ export const routes: Routes = [
             (m) => m.AvailabilityMonitorComponent,
           ),
       },
+      {
+        path: 'operaciones/disponibilidad/importar',
+        canActivate: [permissionGuard],
+        data: { permissions: O.AVAILABILITY_CREATE, pageTitle: 'Importar Disponibilidad (Excel)' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-import.component').then(
+            (m) => m.AvailabilityImportComponent,
+          ),
+      },
       // ── Operaciones: Registro de Fallas ──────────────────────────────────
       {
         path: 'operaciones/fallas',
