@@ -170,12 +170,84 @@
                   </span>
                 </td>
 
-                <!-- Estado -->
+                <!-- Estado: mini-stepper REGISTRADA → OT GENERADA → CERRADA -->
                 <td class="px-4 py-3">
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                    [class]="STATUS_META[row.status].badgeClass">
-                    {{ STATUS_META[row.status].label }}
-                  </span>
+                  <div class="flex flex-col gap-1">
+                    <!-- Stepper horizontal -->
+                    <div class="flex items-center">
+                      <!-- Paso 1: Registrada -->
+                      <div class="flex flex-col items-center gap-0.5" title="Registrada">
+                        <div class="h-2.5 w-2.5 rounded-full border-2 transition-colors"
+                          [ngClass]="{
+                            'border-slate-400 bg-slate-400':  row.status === 'OPEN',
+                            'border-primary bg-primary':      row.status === 'LINKED',
+                            'border-green-500 bg-green-500':  row.status === 'CLOSED'
+                          }">
+                        </div>
+                        <span class="text-[9px] font-medium leading-none"
+                          [ngClass]="{
+                            'text-slate-400': row.status === 'OPEN',
+                            'text-primary':   row.status === 'LINKED',
+                            'text-green-500': row.status === 'CLOSED'
+                          }">Reg.</span>
+                      </div>
+
+                      <!-- Conector 1 → 2 -->
+                      <div class="mb-3.5 h-px w-5 transition-colors"
+                        [ngClass]="{
+                          'bg-border':    row.status === 'OPEN',
+                          'bg-primary':   row.status === 'LINKED',
+                          'bg-green-500': row.status === 'CLOSED'
+                        }">
+                      </div>
+
+                      <!-- Paso 2: OT Generada -->
+                      <div class="flex flex-col items-center gap-0.5" title="OT Generada">
+                        <div class="h-2.5 w-2.5 rounded-full border-2 transition-colors"
+                          [ngClass]="{
+                            'border-border bg-transparent': row.status === 'OPEN',
+                            'border-primary bg-primary':    row.status === 'LINKED',
+                            'border-green-500 bg-green-500':row.status === 'CLOSED'
+                          }">
+                        </div>
+                        <span class="text-[9px] font-medium leading-none"
+                          [ngClass]="{
+                            'text-border':    row.status === 'OPEN',
+                            'text-primary':   row.status === 'LINKED',
+                            'text-green-500': row.status === 'CLOSED'
+                          }">OT</span>
+                      </div>
+
+                      <!-- Conector 2 → 3 -->
+                      <div class="mb-3.5 h-px w-5 transition-colors"
+                        [ngClass]="{
+                          'bg-border':    row.status !== 'CLOSED',
+                          'bg-green-500': row.status === 'CLOSED'
+                        }">
+                      </div>
+
+                      <!-- Paso 3: Cerrada -->
+                      <div class="flex flex-col items-center gap-0.5" title="Cerrada">
+                        <div class="h-2.5 w-2.5 rounded-full border-2 transition-colors"
+                          [ngClass]="{
+                            'border-border bg-transparent':  row.status !== 'CLOSED',
+                            'border-green-500 bg-green-500': row.status === 'CLOSED'
+                          }">
+                        </div>
+                        <span class="text-[9px] font-medium leading-none"
+                          [ngClass]="{
+                            'text-border':    row.status !== 'CLOSED',
+                            'text-green-500': row.status === 'CLOSED'
+                          }">Cerr.</span>
+                      </div>
+                    </div>
+
+                    <!-- Label del estado actual -->
+                    <span class="inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                      [class]="STATUS_META[row.status].badgeClass">
+                      {{ STATUS_META[row.status].label }}
+                    </span>
+                  </div>
                 </td>
 
                 <!-- OT vinculada -->
@@ -195,18 +267,19 @@
                       type="button"
                       [disabled]="generatingOtForId() === row.id"
                       (click)="generateWorkOrder(row)"
-                      class="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                      class="inline-flex min-h-[48px] items-center gap-1.5 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-xs font-semibold text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       @if (generatingOtForId() === row.id) {
-                        <svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                         </svg>
-                        Generando…
+                        <span class="leading-tight">Generando<br>OT…</span>
                       } @else {
-                        <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75m-7.5-7.5h15M3 3h18M3 21h18"/>
+                        <svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
                         </svg>
-                        Generar OT
+                        <span class="leading-tight text-left">Generar<br>OT</span>
                       }
                     </button>
                   } @else {

@@ -16,11 +16,22 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import { CreateFaultReportDto } from './dto/create-fault-report.dto';
 
 const FR_DOCUMENT_TYPE = 'FAULT_REPORT';
 const FR_PREFIX = 'RF';
+
+// ── Reglas de adjuntos ────────────────────────────────────────────────────────
+const FR_ATTACHMENT_MAX_BYTES  = 10 * 1024 * 1024; // 10 MB
+const FR_ATTACHMENT_MAX_COUNT  = 3;
+const FR_ATTACHMENT_ALLOWED_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+]);
 
 export interface ListFaultReportsQuery {
   page?: string;
@@ -37,6 +48,7 @@ export class FaultReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequenceService: SequenceService,
+    private readonly storageService: StorageService,
   ) {}
 
   // ── Includes reutilizables ──────────────────────────────────────────────────
@@ -78,7 +90,11 @@ export class FaultReportsService {
         affectsAvailability: true,
       },
     },
-    contract: { select: { id: true, code: true, name: true } },
+    contract:    { select: { id: true, code: true, name: true } },
+    attachments: {
+      select: { id: true, fileName: true, fileType: true, sizeBytes: true, storageKey: true, createdAt: true },
+      orderBy: { createdAt: 'asc' as const },
+    },
   } as const;
 
   /**
@@ -377,5 +393,76 @@ export class FaultReportsService {
     }
 
     return report;
+  }
+
+  // ── Adjuntos multimedia ──────────────────────────────────────────────────────
+
+  /**
+   * Sube un archivo de evidencia (foto/video) y persiste el registro.
+   *
+   * Reglas de negocio:
+   *   - MIME permitidos: image/jpeg, image/png, image/webp, video/mp4.
+   *   - Tamaño máximo: 10 MB por archivo.
+   *   - Límite: 3 adjuntos por reporte.
+   *   - El reporte debe pertenecer al tenant del usuario autenticado.
+   */
+  async uploadAttachment(
+    id: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+    user: any,
+  ) {
+    const tenantId = user.tenantId as string;
+
+    // ── Validar MIME (defense in depth; multer ya limita tamaño) ─────────────
+    if (!FR_ATTACHMENT_ALLOWED_MIMES.has(file.mimetype)) {
+      throw new BadRequestException(
+        'Tipo de archivo no permitido. Solo se aceptan JPG, PNG, WEBP y MP4.',
+      );
+    }
+
+    // ── Validar tamaño explícito (segunda capa) ───────────────────────────────
+    if (file.buffer.length > FR_ATTACHMENT_MAX_BYTES) {
+      throw new BadRequestException(
+        'El archivo supera el máximo de 10 MB permitido por reporte de falla.',
+      );
+    }
+
+    // ── Validar que el reporte existe y pertenece al tenant ───────────────────
+    const report = await this.prisma.faultReport.findFirst({
+      where: { id, tenantId },
+      select: { id: true },
+    });
+    if (!report) {
+      throw new NotFoundException(
+        'El reporte de falla no existe o no pertenece a este tenant.',
+      );
+    }
+
+    // ── Validar límite de adjuntos ────────────────────────────────────────────
+    const existingCount = await this.prisma.faultReportAttachment.count({
+      where: { faultReportId: id },
+    });
+    if (existingCount >= FR_ATTACHMENT_MAX_COUNT) {
+      throw new ConflictException(
+        `El reporte ya tiene el máximo de ${FR_ATTACHMENT_MAX_COUNT} adjuntos permitidos.`,
+      );
+    }
+
+    // ── Subir al proveedor de storage ─────────────────────────────────────────
+    const storageKey = await this.storageService.uploadFile(
+      file,
+      `fault-reports/${tenantId}/${id}`,
+    );
+
+    // ── Persistir registro ────────────────────────────────────────────────────
+    return this.prisma.faultReportAttachment.create({
+      data: {
+        faultReportId: id,
+        storageKey,
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        sizeBytes: file.buffer.length,
+      },
+    });
   }
 }

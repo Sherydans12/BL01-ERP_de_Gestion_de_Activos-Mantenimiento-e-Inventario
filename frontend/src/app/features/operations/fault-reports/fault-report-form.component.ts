@@ -8,7 +8,7 @@ import {
 import { CommonModule, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, from, concatMap, catchError, of, tap } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
@@ -17,12 +17,20 @@ import {
   CreateFaultReportPayload,
   AffectedSystem,
   FaultCriticality,
+  FaultReportRow,
   AFFECTED_SYSTEMS,
   FAULT_CRITICALITIES,
   SYSTEM_LABELS,
   CRITICALITY_META,
 } from '../../../core/services/fault-reports/fault-reports.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+
+// ── Constantes de validación (espejo del backend) ────────────────────────────
+const ATTACHMENT_MAX_BYTES  = 10 * 1024 * 1024; // 10 MB
+const ATTACHMENT_MAX_COUNT  = 3;
+const ATTACHMENT_ALLOWED_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'video/mp4',
+]);
 
 @Component({
   selector: 'app-fault-report-form',
@@ -31,10 +39,11 @@ import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/
   templateUrl: './fault-report-form.component.html',
 })
 export class FaultReportFormComponent implements OnInit {
-  protected readonly AFFECTED_SYSTEMS   = AFFECTED_SYSTEMS;
+  protected readonly AFFECTED_SYSTEMS    = AFFECTED_SYSTEMS;
   protected readonly FAULT_CRITICALITIES = FAULT_CRITICALITIES;
-  protected readonly SYSTEM_LABELS      = SYSTEM_LABELS;
-  protected readonly CRITICALITY_META   = CRITICALITY_META;
+  protected readonly SYSTEM_LABELS       = SYSTEM_LABELS;
+  protected readonly CRITICALITY_META    = CRITICALITY_META;
+  protected readonly ATTACHMENT_MAX_COUNT = ATTACHMENT_MAX_COUNT;
 
   private faultService = inject(FaultReportsService);
   private fleetService = inject(FleetService);
@@ -88,15 +97,28 @@ export class FaultReportFormComponent implements OnInit {
       !!this.selectedEquipmentId() ||
       !!this.selectedSystem() ||
       !!this.selectedCriticality() ||
-      this.symptomDescription().trim().length > 0,
+      this.symptomDescription().trim().length > 0 ||
+      this.attachedFiles().length > 0,
   );
+
+  // ── Adjuntos multimedia ───────────────────────────────────────────────────
+  attachedFiles  = signal<File[]>([]);
+  isDragOver     = signal(false);
+  uploadProgress = signal<{ done: number; total: number } | null>(null);
+
+  /** Texto del botón/spinner durante la subida. */
+  uploadStatusText = computed(() => {
+    const p = this.uploadProgress();
+    if (!p) return '';
+    return `Subiendo foto ${p.done + 1} de ${p.total}…`;
+  });
 
   // ── CanDeactivate ─────────────────────────────────────────────────────────
   leaveConfirmOpen = signal(false);
   private leaveResult$ = new Subject<boolean>();
 
   get maxDate(): string {
-    return new Date().toISOString().slice(0, 16); // datetime-local max
+    return new Date().toISOString().slice(0, 16);
   }
 
   ngOnInit(): void {
@@ -117,6 +139,87 @@ export class FaultReportFormComponent implements OnInit {
     this.equipSearch.set('');
   }
 
+  // ── Drag & Drop handlers ──────────────────────────────────────────────────
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(true);
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    this.isDragOver.set(false);
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(false);
+    const files = event.dataTransfer?.files;
+    if (files) this.addFiles(files);
+  }
+
+  onFileInputChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files) this.addFiles(input.files);
+    input.value = '';
+  }
+
+  private addFiles(fileList: FileList): void {
+    const current = this.attachedFiles();
+    const slots   = ATTACHMENT_MAX_COUNT - current.length;
+
+    if (slots <= 0) {
+      this.notify.error(`Límite de ${ATTACHMENT_MAX_COUNT} archivos alcanzado.`);
+      return;
+    }
+
+    const incoming = Array.from(fileList).slice(0, slots);
+    const valid: File[] = [];
+
+    for (const file of incoming) {
+      const err = this.validateFile(file);
+      if (err) {
+        this.notify.error(`"${file.name}": ${err}`);
+        continue;
+      }
+      valid.push(file);
+    }
+
+    if (valid.length) {
+      this.attachedFiles.set([...current, ...valid]);
+    }
+  }
+
+  private validateFile(file: File): string | null {
+    if (!ATTACHMENT_ALLOWED_MIMES.has(file.type)) {
+      return 'Formato no permitido. Usá JPG, PNG, WEBP o MP4.';
+    }
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      return 'El archivo supera el máximo de 10 MB.';
+    }
+    return null;
+  }
+
+  removeAttachment(index: number): void {
+    const files = [...this.attachedFiles()];
+    files.splice(index, 1);
+    this.attachedFiles.set(files);
+  }
+
+  formatBytes(bytes: number): string {
+    if (bytes < 1024)        return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  isVideoFile(file: File): boolean {
+    return file.type === 'video/mp4';
+  }
+
+  // ── Submit (reporte → adjuntos secuenciales) ──────────────────────────────
+
   submit(): void {
     if (!this.isFormValid() || this.isSubmitting()) return;
 
@@ -129,16 +232,34 @@ export class FaultReportFormComponent implements OnInit {
       ...(this.meterAtFault() != null ? { meterAtFault: this.meterAtFault()! } : {}),
     };
 
+    const files = this.attachedFiles();
     this.isSubmitting.set(true);
+    this.uploadProgress.set(null);
+
     this.faultService.create(payload).subscribe({
       next: (report) => {
-        const criticality = this.selectedCriticality() as FaultCriticality;
-        const woMsg = (criticality === 'HIGH' || criticality === 'MEDIUM')
-          ? ' Se generó automáticamente una OT correctiva.'
-          : '';
-        this.notify.success(`Falla ${report.correlative} registrada.${woMsg}`);
-        this.resetForm();
-        this.isSubmitting.set(false);
+        if (files.length === 0) {
+          this.onSubmitSuccess(report);
+          return;
+        }
+
+        // Subida secuencial: si falla una, continuamos con las demás
+        this.uploadProgress.set({ done: 0, total: files.length });
+
+        from(files).pipe(
+          concatMap((file, idx) =>
+            this.faultService.uploadAttachment(report.id, file).pipe(
+              tap(() => this.uploadProgress.set({ done: idx + 1, total: files.length })),
+              catchError((err) => {
+                const msg: string = err?.error?.message ?? `Error al subir "${file.name}".`;
+                this.notify.error(msg);
+                return of(null);
+              }),
+            ),
+          ),
+        ).subscribe({
+          complete: () => this.onSubmitSuccess(report),
+        });
       },
       error: (err) => {
         const msg: string = err?.error?.message ?? 'Ocurrió un error al registrar la falla.';
@@ -146,6 +267,17 @@ export class FaultReportFormComponent implements OnInit {
         this.isSubmitting.set(false);
       },
     });
+  }
+
+  private onSubmitSuccess(report: FaultReportRow): void {
+    const criticality = this.selectedCriticality() as FaultCriticality;
+    const woMsg = (criticality === 'HIGH' || criticality === 'MEDIUM')
+      ? ' Se generó automáticamente una OT correctiva.'
+      : '';
+    this.notify.success(`Falla ${report.correlative} registrada.${woMsg}`);
+    this.resetForm();
+    this.isSubmitting.set(false);
+    this.uploadProgress.set(null);
   }
 
   resetForm(): void {
@@ -156,10 +288,11 @@ export class FaultReportFormComponent implements OnInit {
     this.selectedSystem.set('');
     this.selectedCriticality.set('');
     this.symptomDescription.set('');
+    this.attachedFiles.set([]);
+    this.uploadProgress.set(null);
   }
 
   private nowIso(): string {
-    // datetime-local requiere formato YYYY-MM-DDTHH:mm
     const d = new Date();
     return d.toISOString().slice(0, 16);
   }

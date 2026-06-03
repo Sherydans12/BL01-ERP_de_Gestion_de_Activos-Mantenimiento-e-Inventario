@@ -1891,15 +1891,34 @@ model FaultReport {
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
 
-  tenant     Tenant     @relation(fields: [tenantId],    references: [id], onDelete: Cascade)
-  contract   Contract   @relation(fields: [contractId],  references: [id], onDelete: Restrict)
-  equipment  Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
-  reportedBy User       @relation("FaultReportedBy",     fields: [reportedById], references: [id], onDelete: Restrict)
-  workOrder  WorkOrder? @relation("FaultReportWorkOrder", fields: [workOrderId],  references: [id], onDelete: SetNull)
+  tenant      Tenant                    @relation(fields: [tenantId],    references: [id], onDelete: Cascade)
+  contract    Contract                  @relation(fields: [contractId],  references: [id], onDelete: Restrict)
+  equipment   Equipment                 @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy  User                      @relation("FaultReportedBy",     fields: [reportedById], references: [id], onDelete: Restrict)
+  workOrder   WorkOrder?                @relation("FaultReportWorkOrder", fields: [workOrderId],  references: [id], onDelete: SetNull)
+  attachments FaultReportAttachment[]
 
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])
   @@index([tenantId, criticality, status])
   @@index([tenantId, eventDate])
   @@map("fault_reports")
+}
+
+/// Evidencia multimedia adjunta a un reporte de falla (fotos / videos).
+/// Límite: 3 archivos por reporte, 10 MB cada uno.
+/// Tipos permitidos: image/jpeg, image/png, image/webp, video/mp4.
+model FaultReportAttachment {
+  id            String      @id @default(uuid()) @db.Uuid
+  faultReportId String      @map("fault_report_id") @db.Uuid
+  storageKey    String      @map("storage_key") @db.VarChar(500)
+  fileName      String      @map("file_name") @db.VarChar(255)
+  fileType      String      @map("file_type") @db.VarChar(100)
+  sizeBytes     Int         @map("size_bytes")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  faultReport   FaultReport @relation(fields: [faultReportId], references: [id], onDelete: Cascade)
+
+  @@index([faultReportId])
+  @@map("fault_report_attachments")
 }

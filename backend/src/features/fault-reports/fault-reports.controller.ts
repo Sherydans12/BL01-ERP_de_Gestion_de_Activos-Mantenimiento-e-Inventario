@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -8,8 +9,11 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -17,6 +21,9 @@ import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { FaultReportsService } from './fault-reports.service';
 import type { ListFaultReportsQuery } from './fault-reports.service';
 import { CreateFaultReportDto } from './dto/create-fault-report.dto';
+
+/** Multer limita el tamaño en el borde (10 MB = límite de adjuntos de falla). */
+const FR_ATTACHMENT_FILE_LIMITS = { limits: { fileSize: 10 * 1024 * 1024 } };
 
 /**
  * API del Módulo de Registro de Fallas.
@@ -83,5 +90,32 @@ export class FaultReportsController {
   @RequirePermissions(SystemPermissions.OPERATIONS_FAULT_REPORT_MANAGE)
   createWorkOrder(@Param('id') id: string, @Req() req: any) {
     return this.faultReportsService.createWorkOrderFromReport(id, req.user);
+  }
+
+  /**
+   * POST /api/fault-reports/:id/attachments
+   *
+   * Adjunta evidencia multimedia (foto/video) a un reporte de falla existente.
+   *
+   * Reglas de negocio (validadas en servicio):
+   *   - MIME: image/jpeg | image/png | image/webp | video/mp4.
+   *   - Tamaño máximo: 10 MB (multer + doble validación en servicio).
+   *   - Límite: 3 adjuntos por reporte.
+   *
+   * Form field name: `file`.
+   */
+  @Post(':id/attachments')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(SystemPermissions.OPERATIONS_FAULT_REPORT_CREATE)
+  @UseInterceptors(FileInterceptor('file', FR_ATTACHMENT_FILE_LIMITS))
+  uploadAttachment(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+    @Req() req: any,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debe adjuntar un archivo.');
+    }
+    return this.faultReportsService.uploadAttachment(id, file, req.user);
   }
 }

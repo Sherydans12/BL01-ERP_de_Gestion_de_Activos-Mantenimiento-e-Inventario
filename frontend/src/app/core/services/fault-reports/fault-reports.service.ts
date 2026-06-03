@@ -87,6 +87,16 @@ export interface CreateFaultReportPayload {
 
 // ── Interfaces de respuesta ───────────────────────────────────────────────────
 
+export interface FaultReportAttachment {
+  id: string;
+  faultReportId: string;
+  storageKey: string;
+  fileName: string;
+  fileType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface FaultEquipmentRef {
   id: string;
   internalId: string;
@@ -165,5 +175,19 @@ export class FaultReportsService {
   /** Escala un reporte BAJA a OT correctiva (requiere FAULT_REPORT_MANAGE). */
   createWorkOrder(id: string): Observable<FaultReportRow> {
     return this.http.post<FaultReportRow>(`${this.apiUrl}/${id}/create-work-order`, {});
+  }
+
+  /**
+   * Adjunta un archivo de evidencia (foto/video) a un reporte existente.
+   * Form field name del backend: `file`.
+   * Reglas: MIME jpeg/png/webp/mp4, máx 10 MB, máx 3 por reporte.
+   */
+  uploadAttachment(faultReportId: string, file: File): Observable<FaultReportAttachment> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<FaultReportAttachment>(
+      `${this.apiUrl}/${faultReportId}/attachments`,
+      formData,
+    );
   }
 }

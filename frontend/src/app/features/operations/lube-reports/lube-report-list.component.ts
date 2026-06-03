@@ -17,6 +17,7 @@ import {
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { DeviceService } from '../../../core/services/device/device.service';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { O } from '../../../core/constants/operations-permissions';
 
@@ -35,6 +36,7 @@ export class LubeReportListComponent implements OnInit {
   private warehousesSvc  = inject(WarehousesService);
   private fleetSvc       = inject(FleetService);
   private notify         = inject(NotificationService);
+  protected deviceService = inject(DeviceService);
 
   // ── Catálogos para filtros ────────────────────────────────────────────
   warehouses = signal<any[]>([]);
@@ -114,7 +116,7 @@ export class LubeReportListComponent implements OnInit {
 
   equipmentLabel(row: LubeReportRow): string {
     const e = row.equipment;
-    const parts = [e.internalId, e.name].filter(Boolean).join(' — ');
-    return e.licensePlate ? `${parts} (${e.licensePlate})` : parts;
+    const parts = [e.internalId, `${e.brand} ${e.model}`].filter(Boolean).join(' — ');
+    return e.plate ? `${parts} (${e.plate})` : parts;
   }
 }

@@ -74,10 +74,11 @@ export class LubeReportFormComponent implements OnInit {
   notes               = signal<string>('');
   lines               = signal<DraftLine[]>([]);
 
-  pickerOpen      = signal(false);
-  isSubmitting    = signal(false);
-  warehousLoading = signal(true);
-  equipLoading    = signal(false);
+  pickerOpen         = signal(false);
+  isSubmitting       = signal(false);
+  isSubmittingAndKeep = signal(false);
+  warehousLoading    = signal(true);
+  equipLoading       = signal(false);
 
   // ── CanDeactivate: modal de confirmación de salida ────────────────────────
   leaveConfirmOpen   = signal(false);
@@ -90,9 +91,19 @@ export class LubeReportFormComponent implements OnInit {
     return this.equipments().filter(
       (e) =>
         e.internalId?.toLowerCase().includes(q) ||
-        e.name?.toLowerCase().includes(q) ||
-        e.licensePlate?.toLowerCase().includes(q),
+        e.brand?.toLowerCase().includes(q) ||
+        e.model?.toLowerCase().includes(q) ||
+        e.plate?.toLowerCase().includes(q),
     );
+  });
+
+  /**
+   * Horómetro actual del equipo seleccionado, leído del catálogo en memoria.
+   * Se muestra como hint debajo del input de horómetro.
+   */
+  currentEquipmentMeter = computed<number | null>(() => {
+    const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
+    return eq?.currentMeter ?? null;
   });
 
   /** Habilita el picker solo cuando hay bodega seleccionada. */
@@ -209,8 +220,15 @@ export class LubeReportFormComponent implements OnInit {
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
-  submit(): void {
-    if (!this.isFormValid() || this.isSubmitting()) return;
+
+  /**
+   * @param keepContext Si es `true`, tras el POST exitoso solo limpia equipo,
+   * horómetro y cantidades de líneas — mantiene bodega y lubricantes para
+   * despachar rápidamente al siguiente camión en la fila.
+   */
+  submit(keepContext = false): void {
+    if (!this.isFormValid()) return;
+    if (keepContext ? this.isSubmittingAndKeep() : this.isSubmitting()) return;
 
     const payload: CreateLubeReportPayload = {
       contractId: this.selectedContractId(),
@@ -222,18 +240,33 @@ export class LubeReportFormComponent implements OnInit {
       lines: this.lines().map((l) => ({ itemId: l.itemId, quantity: l.quantity })),
     };
 
-    this.isSubmitting.set(true);
+    if (keepContext) {
+      this.isSubmittingAndKeep.set(true);
+    } else {
+      this.isSubmitting.set(true);
+    }
+
     this.lubeService.createReport(payload).subscribe({
       next: (report) => {
         this.notify.success(`Despacho ${report.correlative} registrado con éxito.`);
-        this.resetForm();
-        this.isSubmitting.set(false);
+        if (keepContext) {
+          // Solo limpia equipo, horómetro y cantidades — mantiene bodega y lubricantes.
+          this.selectedEquipmentId.set('');
+          this.meterReading.set(null);
+          this.equipSearch.set('');
+          this.lines.update((prev) => prev.map((l) => ({ ...l, quantity: 1 })));
+          this.isSubmittingAndKeep.set(false);
+        } else {
+          this.resetForm();
+          this.isSubmitting.set(false);
+        }
       },
       error: (err) => {
         const msg: string =
           err?.error?.message ?? 'Ocurrió un error al registrar el despacho.';
         this.notify.error(msg);
         this.isSubmitting.set(false);
+        this.isSubmittingAndKeep.set(false);
       },
     });
   }
@@ -258,8 +291,8 @@ export class LubeReportFormComponent implements OnInit {
   selectedEquipmentLabel = computed(() => {
     const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
     if (!eq) return '';
-    const plate = eq.licensePlate ? ` — ${eq.licensePlate}` : '';
-    return `${eq.internalId ?? ''} ${eq.name ?? ''}${plate}`.trim();
+    const plate = eq.plate ? ` — ${eq.plate}` : '';
+    return `${eq.internalId ?? ''} ${eq.brand ?? ''} ${eq.model ?? ''}${plate}`.trim();
   });
 
   // ── CanDeactivate ─────────────────────────────────────────────────────────

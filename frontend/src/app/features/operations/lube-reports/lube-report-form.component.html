@@ -52,7 +52,7 @@
               Bodega / Camión lubricador <span class="text-red-400">*</span>
             </label>
             @if (warehousLoading()) {
-              <div class="h-10 animate-pulse rounded-lg bg-border"></div>
+              <div class="h-12 animate-pulse rounded-lg bg-border"></div>
             } @else {
               <select
                 id="warehouseId"
@@ -60,7 +60,7 @@
                 (ngModelChange)="onWarehouseChange($event)"
                 name="warehouseId"
                 required
-                class="form-select h-10 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                class="form-select min-h-[48px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
                 <option value="" disabled>Selecciona una bodega</option>
                 @for (wh of warehouses(); track wh.id) {
                   <option [value]="wh.id">{{ wh.code }} — {{ wh.name }}</option>
@@ -79,19 +79,17 @@
             </label>
 
             @if (equipLoading()) {
-              <div class="h-10 animate-pulse rounded-lg bg-border"></div>
+              <div class="h-12 animate-pulse rounded-lg bg-border"></div>
             } @else {
               <!-- Búsqueda de equipo -->
-              <div class="relative">
-                <input
-                  type="text"
-                  id="equipSearch"
-                  name="equipSearch"
-                  [ngModel]="equipSearch()"
-                  (ngModelChange)="equipSearch.set($event)"
-                  placeholder="Buscar por ID, nombre o placa…"
-                  class="h-10 w-full rounded-t-lg border border-border bg-dark px-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-              </div>
+              <input
+                type="text"
+                id="equipSearch"
+                name="equipSearch"
+                [ngModel]="equipSearch()"
+                (ngModelChange)="equipSearch.set($event)"
+                placeholder="Buscar por ID, nombre o placa…"
+                class="min-h-[48px] w-full rounded-t-lg border border-border bg-dark px-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
               <select
                 id="equipmentId"
                 [ngModel]="selectedEquipmentId()"
@@ -102,8 +100,8 @@
                 class="w-full rounded-b-lg border border-t-0 border-border bg-dark px-3 py-1 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
                 @for (eq of filteredEquipments(); track eq.id) {
                   <option [value]="eq.id">
-                    {{ eq.internalId }} — {{ eq.name }}
-                    @if (eq.licensePlate) { ({{ eq.licensePlate }}) }
+                    {{ eq.internalId }} — {{ eq.brand }} {{ eq.model }}
+                    @if (eq.plate) { ({{ eq.plate }}) }
                   </option>
                 }
                 @if (filteredEquipments().length === 0) {
@@ -147,7 +145,7 @@
               [ngModel]="dispatchDate()"
               (ngModelChange)="dispatchDate.set($event)"
               required
-              class="h-10 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              class="min-h-[48px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
 
           <!-- Horómetro -->
@@ -165,8 +163,15 @@
               min="0"
               step="1"
               placeholder="Ej: 4500"
-              class="h-10 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-            <p class="text-xs text-muted">Debe ser ≥ al valor actual del equipo.</p>
+              class="min-h-[48px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+            @if (currentEquipmentMeter() !== null) {
+              <p class="text-xs text-muted">
+                Última lectura registrada:
+                <span class="font-mono font-medium">{{ currentEquipmentMeter() | number }} hrs</span>
+              </p>
+            } @else {
+              <p class="text-xs text-muted">Debe ser ≥ al valor actual del equipo.</p>
+            }
           </div>
 
           <!-- Notas -->
@@ -180,9 +185,9 @@
               name="notes"
               [ngModel]="notes()"
               (ngModelChange)="notes.set($event)"
-              rows="2"
+              rows="3"
               placeholder="Observaciones del despacho…"
-              class="w-full resize-none rounded-lg border border-border bg-dark px-3 py-2 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+              class="w-full resize-none rounded-lg border border-border bg-dark px-3 py-3 text-sm text-main placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
             </textarea>
           </div>
 
@@ -207,7 +212,7 @@
             type="button"
             (click)="pickerOpen.set(true)"
             [disabled]="!canAddItems()"
-            class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+            class="inline-flex min-h-[48px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
             </svg>
@@ -278,14 +283,14 @@
                         [min]="line.allowsDecimals ? 0.001 : 1"
                         [step]="line.allowsDecimals ? 0.001 : 1"
                         required
-                        class="w-28 rounded-lg border border-border bg-dark px-3 py-1.5 text-right text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                        class="w-28 min-h-[48px] rounded-lg border border-border bg-dark px-3 py-2 text-right text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
                     </td>
                     <td class="py-3 text-right">
                       <button
                         type="button"
                         (click)="removeLine(line.itemId)"
                         title="Quitar ítem"
-                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted opacity-0 transition group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400">
+                        class="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl text-muted opacity-0 transition group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
@@ -300,24 +305,47 @@
       </section>
 
       <!-- ── Acciones ──────────────────────────────────────────────── -->
-      <div class="flex items-center justify-end gap-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <!-- Cancelar / volver al historial -->
         <a
           routerLink="/app/operaciones/lubricantes"
-          class="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-muted transition hover:border-primary/50 hover:text-main">
+          class="inline-flex min-h-[48px] items-center rounded-lg border border-border px-5 text-sm font-medium text-muted transition hover:border-primary/50 hover:text-main">
           ← Historial
         </a>
         <button
           type="button"
           (click)="resetForm()"
-          class="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-muted transition hover:border-primary/50 hover:text-main">
-          Cancelar
+          class="inline-flex min-h-[48px] items-center rounded-lg border border-border px-5 text-sm font-medium text-muted transition hover:border-primary/50 hover:text-main">
+          Limpiar
         </button>
 
+        <!-- Guardar y Agregar Otro (mantiene bodega + lubricantes) -->
+        <button
+          type="button"
+          *appHasPermission="O.LUBE_REPORT_CREATE"
+          (click)="submit(true)"
+          [disabled]="!isFormValid() || isSubmittingAndKeep() || isSubmitting()"
+          class="inline-flex min-h-[48px] min-w-[12rem] items-center justify-center gap-2 rounded-lg border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40">
+          @if (isSubmittingAndKeep()) {
+            <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Registrando…
+          } @else {
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Guardar y Agregar Otro
+          }
+        </button>
+
+        <!-- Guardar y Salir (flujo completo) -->
         <button
           type="submit"
           *appHasPermission="O.LUBE_REPORT_CREATE"
-          [disabled]="!isFormValid() || isSubmitting()"
-          class="inline-flex min-w-[10rem] items-center justify-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+          [disabled]="!isFormValid() || isSubmitting() || isSubmittingAndKeep()"
+          class="inline-flex min-h-[48px] min-w-[10rem] items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
           @if (isSubmitting()) {
             <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -328,7 +356,7 @@
             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
             </svg>
-            Registrar despacho
+            Guardar y Salir
           }
         </button>
       </div>
