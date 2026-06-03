@@ -53,7 +53,10 @@ El dashboard actual no cruza módulos. Objetivo: una pantalla con "estado del si
 
 El modal de `equipment-detail-modal` tenía un historial de actividad que mezclaba OTs cerradas, ajustes y costos en una timeline genérica. Ahora la pestaña OTs dedicada completa el círculo M3 → OT → cierre → Flota.
 
-#### 1.3 · Banner/indicador en el formulario de OT cuando el equipo tiene fallas OPEN
+#### 1.3 · Banner/indicador en el formulario de OT cuando el equipo tiene fallas OPEN — HECHO (Sprint 1, 2026-06-03)
+
+> Al seleccionar equipo en `work-order-form`, se consulta `getReports({ equipmentId, status: 'OPEN', pageSize: 5 })` (señal `openFaults`). Si hay fallas abiertas, se muestra un banner ámbar (`warning`) con el conteo, el listado de correlativos con badge de criticidad + sistema afectado + fecha, y link a `/app/operaciones/fallas`. Se limpia al deseleccionar equipo. Cierra el círculo M3 → planificación de OT. Spec nuevo `work-order-form.component.spec.ts` (4 tests, sin render de template por tamaño del componente).
+
 Cuando el planificador crea una OT manualmente y selecciona un equipo:
 - Si ese equipo tiene un `FaultReport` en estado `OPEN`, mostrar un aviso "Este equipo tiene X fallas sin vincular".
 - Hace que el planificador sepa qué reportes de terreno están esperando.

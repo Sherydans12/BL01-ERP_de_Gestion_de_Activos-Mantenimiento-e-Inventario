@@ -29,6 +29,12 @@ import {
   OtClassificationTag,
 } from '../../../core/services/work-orders/work-orders.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
+import {
+  FaultReportsService,
+  FaultReportRow,
+  CRITICALITY_META,
+  SYSTEM_LABELS,
+} from '../../../core/services/fault-reports/fault-reports.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import {
@@ -104,6 +110,7 @@ export class WorkOrderFormComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private workOrdersService = inject(WorkOrdersService);
   private fleetService = inject(FleetService);
+  private faultService = inject(FaultReportsService);
   private notificationService = inject(NotificationService);
   private warehousesService = inject(WarehousesService);
   private inventoryItemsService = inject(InventoryItemsService);
@@ -251,6 +258,11 @@ export class WorkOrderFormComponent implements OnInit {
   );
 
   lastClosedOt = signal<{ id: string; correlative: string } | null>(null);
+
+  // Fallas de terreno (M3) en estado OPEN del equipo seleccionado, para avisar al planificador.
+  openFaults = signal<FaultReportRow[]>([]);
+  protected readonly criticalityMeta = CRITICALITY_META;
+  protected readonly systemLabels = SYSTEM_LABELS;
 
   meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
   meterSnapshotLoading = signal(false);
@@ -417,10 +429,12 @@ export class WorkOrderFormComponent implements OnInit {
         this.filterKits(eq);
         this.loadLastClosedOt(eq.id);
         this.loadMeterSnapshot(eq.id);
+        this.loadOpenFaults(eq.id);
       } else {
         this.warehouses.set([]);
         this.lastClosedOt.set(null);
         this.meterSnapshot.set(null);
+        this.openFaults.set([]);
       }
     });
 
@@ -485,6 +499,16 @@ export class WorkOrderFormComponent implements OnInit {
         this.meterSnapshotLoading.set(false);
       },
     });
+  }
+
+  /** Fallas de terreno (M3) en estado OPEN del equipo: avisa al planificador qué reportes esperan OT. */
+  private loadOpenFaults(equipmentId: string) {
+    this.faultService
+      .getReports({ equipmentId, status: 'OPEN', pageSize: 5 })
+      .subscribe({
+        next: (res) => this.openFaults.set(res.data ?? []),
+        error: () => this.openFaults.set([]),
+      });
   }
 
   private loadLastClosedOt(equipmentId: string) {

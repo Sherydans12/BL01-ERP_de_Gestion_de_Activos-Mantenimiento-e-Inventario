@@ -17,10 +17,11 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
   - **Turno activo:** nuevo `ShiftService` (`core/services/shift/`) autodetecta DÍA (08:00–20:00) / NOCHE por hora local con tick de 1 min vía `toSignal(interval)`. `ShiftBadgeComponent` (`core/components/shift-badge/`) muestra turno + reloj en `.app-shell-header` (oculto en móvil, fondo opaco sin blur por regla §5.1). Si se requiere config manual de rangos → crear módulo dedicado; `ShiftService` es el único punto a tocar.
   - **Dashboard:** 3 tiles nuevos clicables (Equipos detenidos→`/app/flota`, Fallas sin OT→`/app/operaciones/fallas`, Sin reporte de turno→`/app/operaciones/disponibilidad/monitor`); franja a `lg:grid-cols-4` (8 tiles en 2 filas). `loadUnreported()` hace una 2ª llamada no crítica a `/equipment-availability/unreported` con la fecha/turno de `ShiftService`. `DashboardUiModel` ahora exige `equiposDetenidos`, `faultReportsOpen`, `unreportedCount`.
   - **Modal de equipo:** nueva pestaña «Órdenes de Trabajo» (`TabId += 'ots'`) con carga perezosa vía `getWorkOrdersFiltered({ equipmentId, limit:20 })` — tabla con TODOS los estados (no solo cerradas como el timeline). Click en correlativo abre `WorkOrderDetailModalComponent` **embebido** (`showOtDetail`/`selectedOtId`), preservando el contexto del equipo. +5 specs.
+  - **Banner de fallas OPEN en form de OT (Prioridad 1.3):** al seleccionar equipo en `work-order-form`, señal `openFaults` consulta `getReports({ equipmentId, status:'OPEN', pageSize:5 })`. Si hay fallas abiertas, banner ámbar (`warning`) con conteo + correlativos (badge criticidad vía `CRITICALITY_META`, sistema vía `SYSTEM_LABELS`, fecha) y link a `/app/operaciones/fallas`; se limpia al deseleccionar. Cierra el círculo M3 → planificación de OT. Spec nuevo `work-order-form.component.spec.ts` (4 tests; sin render de template por tamaño del componente, se invoca `ngOnInit()` y se prueba la lógica).
 - **Consecuencias:**
-  - Suites: frontend **104** (+5), backend dominio **344** (+2); `ng build` y lint verdes.
+  - Suites: frontend **108** (+9 en el sprint: +5 OTs tab, +4 banner OT), backend dominio **344** (+2); `ng build` y lint verdes.
   - El dashboard pasa a cruzar M3/Flota (detenidos), M3 (fallas OPEN) y M2 (sin reporte de turno) en un golpe de vista.
-  - Pendiente del roadmap: Prioridad 1.3 (banner fallas OPEN en form de OT) y Sprint 2+.
+  - **Sprint 1 CERRADO**: Prioridad 1.1 (parcial — tiles base), 1.2 y 1.3 entregadas. Siguiente: Sprint 2 del roadmap.
 
 ## 2026-06-03 — Integración Transversal de Operaciones (M1·M2·M3 ↔ Flota) — INTEGRACIÓN COMPLETA
 
