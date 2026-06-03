@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -54,10 +50,7 @@ describe('InventoryAdjustmentService', () => {
     };
   }
 
-  function setupWarehouseAndItem(
-    currentQty = 10,
-    unitCost = 12,
-  ): void {
+  function setupWarehouseAndItem(currentQty = 10, unitCost = 12): void {
     prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
     prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
     prisma.itemStock.findUnique.mockResolvedValue({
@@ -85,9 +78,9 @@ describe('InventoryAdjustmentService', () => {
 
   describe('create — validaciones comunes', () => {
     it('rechaza rol sin privilegio', async () => {
-      await expect(
-        service.create(baseDto(), mechanicUser),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.create(baseDto(), mechanicUser)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('rechaza comentario vacío', async () => {

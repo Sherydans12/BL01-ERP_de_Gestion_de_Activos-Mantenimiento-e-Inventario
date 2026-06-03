@@ -23,7 +23,10 @@ describe('AuthController', () => {
           },
         },
         { provide: CaptchaService, useValue: { create: jest.fn() } },
-        { provide: UserSessionService, useValue: { revokeAllForUser: jest.fn() } },
+        {
+          provide: UserSessionService,
+          useValue: { revokeAllForUser: jest.fn() },
+        },
       ],
     })
       .overrideGuard(ThrottlerGuard)

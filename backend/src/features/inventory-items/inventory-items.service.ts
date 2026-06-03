@@ -166,9 +166,9 @@ export class InventoryItemsService {
       const t = (inventoryCode ?? '').trim();
       if (!t) continue;
       const mNew = /^IN(\d{1,8})$/i.exec(t);
-      if (mNew) floor = Math.max(floor, parseInt(mNew[1]!, 10));
+      if (mNew) floor = Math.max(floor, parseInt(mNew[1], 10));
       const mOld = /^INV-(\d{1,8})$/i.exec(t);
-      if (mOld) floor = Math.max(floor, parseInt(mOld[1]!, 10));
+      if (mOld) floor = Math.max(floor, parseInt(mOld[1], 10));
     }
     return floor;
   }
@@ -879,7 +879,9 @@ export class InventoryItemsService {
       | null
       | undefined;
     const familyName: string = cat?.parentCategory?.name ?? cat?.name ?? '';
-    const subfamilyName: string = cat?.parentCategoryId ? (cat?.name ?? '') : '';
+    const subfamilyName: string = cat?.parentCategoryId
+      ? (cat?.name ?? '')
+      : '';
     const createdAtFormatted = new Date().toLocaleString('es-CL', {
       dateStyle: 'short',
       timeStyle: 'short',
@@ -1125,7 +1127,11 @@ export class InventoryItemsService {
     const mergedPn = merged.partNumber?.trim() || null;
     if (mergedPn) {
       const existingPn = await this.prisma.inventoryItem.findFirst({
-        where: { tenantId: user.tenantId, partNumber: mergedPn, id: { not: id } },
+        where: {
+          tenantId: user.tenantId,
+          partNumber: mergedPn,
+          id: { not: id },
+        },
         select: { id: true, inventoryCode: true, name: true },
       });
       if (existingPn) {
@@ -1223,7 +1229,11 @@ export class InventoryItemsService {
     const createdItem = await this.prisma
       .$transaction(
         async (tx) => {
-          await this.assertLeafCategoryWithTx(tx, dto.categoryId, user.tenantId);
+          await this.assertLeafCategoryWithTx(
+            tx,
+            dto.categoryId,
+            user.tenantId,
+          );
           await this.assertUnitOfMeasureTx(
             tx,
             dto.unitOfMeasureId,
@@ -1389,7 +1399,10 @@ export class InventoryItemsService {
     opts: { page?: number; pageSize?: number; warehouseId?: string },
   ) {
     const tenantId = user.tenantId as string;
-    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
+    const itemId = await this.resolveInventoryItemRecordId(
+      itemIdOrCode,
+      tenantId,
+    );
     const exists = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -1694,7 +1707,7 @@ export class InventoryItemsService {
       return await this.prisma.inventoryItem.delete({
         where: { id },
       });
-    } catch (error) {
+    } catch (_error) {
       throw new BadRequestException(
         'No se puede eliminar el artículo porque ya tiene historial de stock o transacciones en bodegas.',
       );
@@ -1703,7 +1716,10 @@ export class InventoryItemsService {
 
   async listAttachments(itemIdOrCode: string, user: any) {
     const tenantId = user.tenantId as string;
-    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
+    const itemId = await this.resolveInventoryItemRecordId(
+      itemIdOrCode,
+      tenantId,
+    );
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -1753,7 +1769,10 @@ export class InventoryItemsService {
       throw new BadRequestException('Usuario no identificado.');
     }
 
-    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
+    const itemId = await this.resolveInventoryItemRecordId(
+      itemIdOrCode,
+      tenantId,
+    );
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -1802,9 +1821,16 @@ export class InventoryItemsService {
     };
   }
 
-  async removeAttachment(itemIdOrCode: string, attachmentId: string, user: any) {
+  async removeAttachment(
+    itemIdOrCode: string,
+    attachmentId: string,
+    user: any,
+  ) {
     const tenantId = user.tenantId as string;
-    const itemId = await this.resolveInventoryItemRecordId(itemIdOrCode, tenantId);
+    const itemId = await this.resolveInventoryItemRecordId(
+      itemIdOrCode,
+      tenantId,
+    );
     const att = await this.prisma.inventoryItemAttachment.findFirst({
       where: { id: attachmentId, itemId, tenantId },
     });

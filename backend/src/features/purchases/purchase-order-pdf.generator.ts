@@ -79,7 +79,9 @@ const DEFAULT_OC_PDF_LEGAL_NOTICE_LINES: readonly string[] = [
   'Para pago de facturas llamar al fono 2 8988948 o al correo electrónico de don Pablo Ortiz (portiz@powertrak.cl)',
 ];
 
-function ocPdfLegalNoticeHtml(tenant: PoPdfOrder['tenant'] | null | undefined): string {
+function ocPdfLegalNoticeHtml(
+  tenant: PoPdfOrder['tenant'] | null | undefined,
+): string {
   const raw = tenant?.ocPdfLegalNotice?.trim();
   const lines = raw
     ? raw
@@ -142,7 +144,9 @@ function purchaseOrderStatusLabelEs(status: string | undefined | null): string {
  * Modificador de estilo para el badge de estado en cabecera PDF (`.doc-status--*`).
  * Colores alineados a severidad / etapa del flujo de compra.
  */
-function purchaseOrderStatusBadgeMod(status: string | undefined | null): string {
+function purchaseOrderStatusBadgeMod(
+  status: string | undefined | null,
+): string {
   const s = (status || '').trim().toUpperCase();
   const map: Record<string, string> = {
     DRAFT: 'doc-status--neutral',

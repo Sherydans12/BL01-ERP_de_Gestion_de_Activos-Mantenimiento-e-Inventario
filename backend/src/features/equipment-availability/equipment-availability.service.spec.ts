@@ -240,9 +240,30 @@ describe('EquipmentAvailabilityService — findUnreported', () => {
 
   /** Flota simulada: 3 equipos operativos del tenant */
   const fleetStub = [
-    { id: equipmentId, internalId: 'EQ-001', brand: 'CAT', model: '330', plate: 'A-001', contractId },
-    { id: eq2Id, internalId: 'EQ-002', brand: 'Komatsu', model: 'PC200', plate: 'A-002', contractId },
-    { id: eq3Id, internalId: 'EQ-003', brand: 'Volvo', model: 'EC300', plate: 'A-003', contractId },
+    {
+      id: equipmentId,
+      internalId: 'EQ-001',
+      brand: 'CAT',
+      model: '330',
+      plate: 'A-001',
+      contractId,
+    },
+    {
+      id: eq2Id,
+      internalId: 'EQ-002',
+      brand: 'Komatsu',
+      model: 'PC200',
+      plate: 'A-002',
+      contractId,
+    },
+    {
+      id: eq3Id,
+      internalId: 'EQ-003',
+      brand: 'Volvo',
+      model: 'EC300',
+      plate: 'A-003',
+      contractId,
+    },
   ];
 
   beforeEach(async () => {
@@ -365,7 +386,13 @@ describe('EquipmentAvailabilityService — findAll', () => {
     comments: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    equipment: { id: equipmentId, internalId: 'EQ-001', brand: 'CAT', model: '330', plate: 'A-001' },
+    equipment: {
+      id: equipmentId,
+      internalId: 'EQ-001',
+      brand: 'CAT',
+      model: '330',
+      plate: 'A-001',
+    },
     reportedBy: { id: userId, name: 'Supervisor Turno' },
   };
 
@@ -388,7 +415,12 @@ describe('EquipmentAvailabilityService — findAll', () => {
 
     const result = await service.findAll(adminUser);
 
-    expect(result).toMatchObject({ data: expect.any(Array), total: 1, page: 1, pageSize: 25 });
+    expect(result).toMatchObject({
+      data: expect.any(Array),
+      total: 1,
+      page: 1,
+      pageSize: 25,
+    });
     expect(result.data[0].id).toBe(availabilityId);
     // OPERATIONAL → isAvailable = true
     expect(result.data[0].isAvailable).toBe(true);

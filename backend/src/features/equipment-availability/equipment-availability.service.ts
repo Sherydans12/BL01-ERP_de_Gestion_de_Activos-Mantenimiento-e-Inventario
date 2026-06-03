@@ -143,8 +143,7 @@ export class EquipmentAvailabilityService {
    */
   async findUnreported(user: any, query: UnreportedQueryDto) {
     const tenantId = user.tenantId as string;
-    const isAdmin =
-      user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
+    const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
     const allowedContracts = user.allowedContracts as string[] | undefined;
 
     // Fecha normalizada a medianoche UTC para comparar con la columna @db.Date

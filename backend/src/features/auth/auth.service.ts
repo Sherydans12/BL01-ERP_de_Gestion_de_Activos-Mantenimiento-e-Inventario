@@ -275,14 +275,16 @@ export class AuthService {
       // Regla antigua (contextual basada en IP, o forzada global)
       const roleApplies = this.stepUpPolicy.userRoleUsesEmailStepUp(user.role);
       if (roleApplies) {
-        const globalEffective = await this.stepUpPolicy.isGlobalStepUpPolicyEffective();
+        const globalEffective =
+          await this.stepUpPolicy.isGlobalStepUpPolicyEffective();
         if (globalEffective) {
-          const isContextUnusual = await this.authAudit.shouldRequireEmailContextStepUp({
-            userId: user.id,
-            role: user.role,
-            ip,
-            country: geo.country,
-          });
+          const isContextUnusual =
+            await this.authAudit.shouldRequireEmailContextStepUp({
+              userId: user.id,
+              role: user.role,
+              ip,
+              country: geo.country,
+            });
           if (isContextUnusual) {
             requiresEmailStepUp = true;
           }
@@ -476,7 +478,11 @@ export class AuthService {
       });
       return {
         totpRequired: true,
-        preAuthToken: this.signPreTotpLoginToken(user.id, user.email, tenantCode),
+        preAuthToken: this.signPreTotpLoginToken(
+          user.id,
+          user.email,
+          tenantCode,
+        ),
         message:
           'Ingresa el código de 6 dígitos de tu aplicación de autenticación (Google Authenticator o similar).',
       };
@@ -596,7 +602,7 @@ export class AuthService {
 
     /** SUPER_ADMIN: sin tenant en JWT; contexto operativo = cabecera `x-tenant-id` (cliente). */
     const tokenTenantId =
-      user.role === 'SUPER_ADMIN' ? null : jwtTenantId ?? user.tenantId;
+      user.role === 'SUPER_ADMIN' ? null : (jwtTenantId ?? user.tenantId);
 
     const permissions = this.resolveJwtPermissions(user);
 
@@ -656,11 +662,7 @@ export class AuthService {
     let userId: string;
     let loginTc: string | undefined;
     try {
-      const p = this.jwtService.verify(body.preAuthToken) as {
-        sub: string;
-        typ?: string;
-        tc?: string;
-      };
+      const p = this.jwtService.verify(body.preAuthToken);
       if (p.typ !== 'pre_totp') {
         throw new Error('typ');
       }
@@ -706,7 +708,9 @@ export class AuthService {
     meta: LoginRequestMeta,
   ) {
     if (!body.stepUpToken?.trim() || !body.code?.length) {
-      throw new BadRequestException('Código o sesión de verificación requeridos.');
+      throw new BadRequestException(
+        'Código o sesión de verificación requeridos.',
+      );
     }
     const { userId } = await this.loginStepUp.verifyAndConsumeToken(
       body.stepUpToken,
@@ -721,10 +725,14 @@ export class AuthService {
       },
     });
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Cuenta no disponible o sesión de verificación inválida.');
+      throw new UnauthorizedException(
+        'Cuenta no disponible o sesión de verificación inválida.',
+      );
     }
     if (user.role !== 'SUPER_ADMIN') {
-      throw new UnauthorizedException('Sesión de verificación no válida para este usuario.');
+      throw new UnauthorizedException(
+        'Sesión de verificación no válida para este usuario.',
+      );
     }
     const geo = await this.authAudit.lookupGeo(meta.clientIp);
     const ip = (meta.clientIp || '').slice(0, 64);

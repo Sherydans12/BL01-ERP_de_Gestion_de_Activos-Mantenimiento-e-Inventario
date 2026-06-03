@@ -23,6 +23,10 @@ import { AuditModule } from '../../common/audit/audit.module';
     ItemCategoryBootstrapService,
     InventorySuppliersService,
   ],
-  exports: [InventoryItemsService, ItemCategoriesService, InventorySuppliersService],
+  exports: [
+    InventoryItemsService,
+    ItemCategoriesService,
+    InventorySuppliersService,
+  ],
 })
 export class InventoryItemsModule {}

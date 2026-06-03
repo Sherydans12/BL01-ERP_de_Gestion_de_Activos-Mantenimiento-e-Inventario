@@ -21,4 +21,3 @@ export class UpsertTenantNotificationSettingDto {
   @IsEmail({}, { each: true })
   ccEmails?: string[];
 }
-

@@ -458,7 +458,7 @@ export class UsersService {
       });
     }
     if (parts.length === 0) return {};
-    if (parts.length === 1) return parts[0]!;
+    if (parts.length === 1) return parts[0];
     return { AND: parts };
   }
 
@@ -551,7 +551,14 @@ export class UsersService {
   ) {
     const raw = q?.trim() ?? '';
     if (raw.length < 2) {
-      return { items: [] as { id: string; name: string; email: string; roleLabel: string }[] };
+      return {
+        items: [] as {
+          id: string;
+          name: string;
+          email: string;
+          roleLabel: string;
+        }[],
+      };
     }
     const safeLimit = Math.min(20, Math.max(1, Number(limit) || 8));
     const where = this.buildUserListWhere(tenantId, userRole, raw);
@@ -623,11 +630,20 @@ export class UsersService {
       };
       const canSuperviseOt =
         userHasGlobalRoleBypass(u.role) ||
-        userHasPermission(bearer, SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN) ||
-        userHasPermission(bearer, SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE);
+        userHasPermission(
+          bearer,
+          SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN,
+        ) ||
+        userHasPermission(
+          bearer,
+          SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE,
+        );
       const canExecuteOt =
         userHasGlobalRoleBypass(u.role) ||
-        userHasPermission(bearer, SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE) ||
+        userHasPermission(
+          bearer,
+          SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+        ) ||
         canSuperviseOt;
       return {
         ...u,
@@ -656,14 +672,8 @@ export class UsersService {
       );
     }
 
-    if (
-      requesterId &&
-      id === requesterId &&
-      data.isActive === false
-    ) {
-      throw new BadRequestException(
-        'No puede desactivar su propia cuenta.',
-      );
+    if (requesterId && id === requesterId && data.isActive === false) {
+      throw new BadRequestException('No puede desactivar su propia cuenta.');
     }
 
     try {

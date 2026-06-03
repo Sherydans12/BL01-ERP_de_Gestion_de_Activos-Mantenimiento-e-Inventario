@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -174,7 +170,9 @@ describe('PurchaseCreditNotesService', () => {
       prisma.purchaseOrder.findFirst.mockResolvedValue({
         contractId,
       } as never);
-      prisma.purchaseInvoice.findMany.mockResolvedValue([{ id: 'inv-1' }] as never);
+      prisma.purchaseInvoice.findMany.mockResolvedValue([
+        { id: 'inv-1' },
+      ] as never);
 
       await service.remove(creditNoteId, user);
 
@@ -248,7 +246,9 @@ describe('PurchaseCreditNotesService', () => {
         taxAmount: null,
       };
 
-      invoicePrisma.purchaseInvoice.findFirst.mockResolvedValue(invoice as never);
+      invoicePrisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoice as never,
+      );
       // Hermanas excluyen la factura actual; acumulado = siblings + invoice.totalAmount.
       invoicePrisma.purchaseInvoice.findMany.mockResolvedValue([] as never);
       invoicePrisma.purchaseCreditNote.findMany.mockResolvedValue(
@@ -273,15 +273,19 @@ describe('PurchaseCreditNotesService', () => {
       } as never);
       invoicePrisma.activityLog.findMany.mockResolvedValue([] as never);
       invoicePrisma.$transaction.mockImplementation(async (fn) => {
-        invoiceTx.purchaseInvoice.update.mockImplementation(async ({ data }) => ({
-          ...invoice,
-          ...data,
-          vendor: invoice.vendor,
-          purchaseOrder: invoice.purchaseOrder,
-        }));
+        invoiceTx.purchaseInvoice.update.mockImplementation(
+          async ({ data }) => ({
+            ...invoice,
+            ...data,
+            vendor: invoice.vendor,
+            purchaseOrder: invoice.purchaseOrder,
+          }),
+        );
         invoiceTx.activityLog.findMany.mockResolvedValue([]);
         invoiceTx.activityLog.create.mockResolvedValue({} as never);
-        return (fn as (client: typeof invoiceTx) => Promise<unknown>)(invoiceTx);
+        return (fn as (client: typeof invoiceTx) => Promise<unknown>)(
+          invoiceTx,
+        );
       });
     }
 
@@ -324,7 +328,9 @@ describe('PurchaseCreditNotesService', () => {
         taxAmount: null,
       };
 
-      invoicePrisma.purchaseInvoice.findFirst.mockResolvedValue(invoice as never);
+      invoicePrisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoice as never,
+      );
       // Hermanas excluyen la factura actual; acumulado = siblings + invoice.totalAmount.
       invoicePrisma.purchaseInvoice.findMany.mockResolvedValue([] as never);
       invoicePrisma.purchaseCreditNote.findMany.mockResolvedValue([
@@ -349,15 +355,19 @@ describe('PurchaseCreditNotesService', () => {
       } as never);
       invoicePrisma.activityLog.findMany.mockResolvedValue([] as never);
       invoicePrisma.$transaction.mockImplementation(async (fn) => {
-        invoiceTx.purchaseInvoice.update.mockImplementation(async ({ data }) => ({
-          ...invoice,
-          ...data,
-          vendor: invoice.vendor,
-          purchaseOrder: invoice.purchaseOrder,
-        }));
+        invoiceTx.purchaseInvoice.update.mockImplementation(
+          async ({ data }) => ({
+            ...invoice,
+            ...data,
+            vendor: invoice.vendor,
+            purchaseOrder: invoice.purchaseOrder,
+          }),
+        );
         invoiceTx.activityLog.findMany.mockResolvedValue([]);
         invoiceTx.activityLog.create.mockResolvedValue({} as never);
-        return (fn as (client: typeof invoiceTx) => Promise<unknown>)(invoiceTx);
+        return (fn as (client: typeof invoiceTx) => Promise<unknown>)(
+          invoiceTx,
+        );
       });
 
       const result = await invoicesService.validateInvoiceMatch(

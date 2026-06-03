@@ -127,7 +127,10 @@ describe('LubeReportsService — createReport', () => {
     tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
     tx.itemStock.findUnique.mockResolvedValue(currentStock as never);
-    tx.itemStock.upsert.mockResolvedValue({ ...currentStock, quantity: 7 } as never);
+    tx.itemStock.upsert.mockResolvedValue({
+      ...currentStock,
+      quantity: 7,
+    } as never);
     tx.inventoryTransaction.create.mockResolvedValue({} as never);
     tx.lubeReport.create.mockResolvedValue(createdReport as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
@@ -195,7 +198,10 @@ describe('LubeReportsService — createReport', () => {
       currentMeter: 1050,
     } as never);
     tx.itemStock.findUnique.mockResolvedValue(currentStock as never);
-    tx.itemStock.upsert.mockResolvedValue({ ...currentStock, quantity: 7 } as never);
+    tx.itemStock.upsert.mockResolvedValue({
+      ...currentStock,
+      quantity: 7,
+    } as never);
     tx.inventoryTransaction.create.mockResolvedValue({} as never);
     tx.lubeReport.create.mockResolvedValue(createdReport as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
@@ -211,16 +217,23 @@ describe('LubeReportsService — createReport', () => {
     tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
     tx.itemStock.findUnique.mockResolvedValue(currentStock as never);
-    tx.itemStock.upsert.mockResolvedValue({ ...currentStock, quantity: 7 } as never);
+    tx.itemStock.upsert.mockResolvedValue({
+      ...currentStock,
+      quantity: 7,
+    } as never);
     tx.inventoryTransaction.create.mockResolvedValue({} as never);
-    tx.lubeReport.create.mockResolvedValue(
-      { ...createdReport, meterReading: null } as never,
-    );
+    tx.lubeReport.create.mockResolvedValue({
+      ...createdReport,
+      meterReading: null,
+    } as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
     tx.assetCostRecord.create.mockResolvedValue({} as never);
 
     // Sin meterReading en el DTO
-    await service.createReport(buildDto({ meterReading: undefined }), adminUser);
+    await service.createReport(
+      buildDto({ meterReading: undefined }),
+      adminUser,
+    );
 
     expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
   });
@@ -234,13 +247,19 @@ describe('LubeReportsService — createReport', () => {
       ...currentStock,
       quantity: 1,
     } as never);
-    tx.itemStock.upsert.mockResolvedValue({ ...currentStock, quantity: -4 } as never);
+    tx.itemStock.upsert.mockResolvedValue({
+      ...currentStock,
+      quantity: -4,
+    } as never);
     tx.inventoryTransaction.create.mockResolvedValue({} as never);
     tx.lubeReport.create.mockResolvedValue(createdReport as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
     tx.assetCostRecord.create.mockResolvedValue({} as never);
 
-    await service.createReport(buildDto({ lines: [{ itemId, quantity: 5 }] }), adminUser);
+    await service.createReport(
+      buildDto({ lines: [{ itemId, quantity: 5 }] }),
+      adminUser,
+    );
 
     // La transacción de kardex debe tener isPendingRegularization en true
     expect(tx.inventoryTransaction.create).toHaveBeenCalledWith(
@@ -287,13 +306,13 @@ describe('LubeReportsService — createReport', () => {
       contractId: otroContractId,
     } as never);
 
-    await expect(
-      service.createReport(buildDto(), adminUser),
-    ).rejects.toThrow(BadRequestException);
+    await expect(service.createReport(buildDto(), adminUser)).rejects.toThrow(
+      BadRequestException,
+    );
 
-    await expect(
-      service.createReport(buildDto(), adminUser),
-    ).rejects.toThrow(/no pertenece al contrato indicado/);
+    await expect(service.createReport(buildDto(), adminUser)).rejects.toThrow(
+      /no pertenece al contrato indicado/,
+    );
 
     // No debe haberse consultado nada más
     expect(tx.equipment.findFirst).not.toHaveBeenCalled();
@@ -304,13 +323,13 @@ describe('LubeReportsService — createReport', () => {
   it('lanza NotFoundException si la bodega no existe en el tenant', async () => {
     tx.warehouse.findFirst.mockResolvedValue(null as never);
 
-    await expect(
-      service.createReport(buildDto(), adminUser),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.createReport(buildDto(), adminUser)).rejects.toThrow(
+      NotFoundException,
+    );
 
-    await expect(
-      service.createReport(buildDto(), adminUser),
-    ).rejects.toThrow(/no existe o no pertenece a este tenant/);
+    await expect(service.createReport(buildDto(), adminUser)).rejects.toThrow(
+      /no existe o no pertenece a este tenant/,
+    );
   });
 
   // ── FALLA: EQUIPO NO EXISTE EN EL TENANT ──────────────────────────────────
@@ -318,13 +337,13 @@ describe('LubeReportsService — createReport', () => {
     tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
     tx.equipment.findFirst.mockResolvedValue(null as never);
 
-    await expect(
-      service.createReport(buildDto(), adminUser),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.createReport(buildDto(), adminUser)).rejects.toThrow(
+      NotFoundException,
+    );
 
-    await expect(
-      service.createReport(buildDto(), adminUser),
-    ).rejects.toThrow(/equipo no existe/);
+    await expect(service.createReport(buildDto(), adminUser)).rejects.toThrow(
+      /equipo no existe/,
+    );
   });
 });
 
@@ -348,7 +367,12 @@ describe('LubeReportsService — findAll', () => {
     meterReading: 1050,
     notes: null,
     createdAt: new Date(),
-    equipment: { id: equipmentId, internalId: 'EQ-001', name: 'Camión 1', licensePlate: 'ABC-123' },
+    equipment: {
+      id: equipmentId,
+      internalId: 'EQ-001',
+      name: 'Camión 1',
+      licensePlate: 'ABC-123',
+    },
     warehouse: { id: warehouseId, code: 'BOD-01', name: 'Bodega Central' },
     user: { id: userId, name: 'Técnico A' },
     _count: { lines: 2 },
@@ -356,7 +380,9 @@ describe('LubeReportsService — findAll', () => {
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
-    sequenceService = { getNextCorrelative: jest.fn().mockResolvedValue('RCL-00001') };
+    sequenceService = {
+      getNextCorrelative: jest.fn().mockResolvedValue('RCL-00001'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -375,8 +401,17 @@ describe('LubeReportsService — findAll', () => {
 
     const result = await service.findAll(adminUser);
 
-    expect(result).toMatchObject({ data: expect.any(Array), total: 1, page: 1, pageSize: 25 });
-    expect(result.data[0]).toMatchObject({ id: reportId, correlative: 'RCL-00001', lineCount: 2 });
+    expect(result).toMatchObject({
+      data: expect.any(Array),
+      total: 1,
+      page: 1,
+      pageSize: 25,
+    });
+    expect(result.data[0]).toMatchObject({
+      id: reportId,
+      correlative: 'RCL-00001',
+      lineCount: 2,
+    });
     // _count no debe exponerse en la respuesta
     expect((result.data[0] as any)._count).toBeUndefined();
   });
@@ -411,7 +446,10 @@ describe('LubeReportsService — findAll', () => {
     prisma.lubeReport.findMany.mockResolvedValue([] as never);
     prisma.lubeReport.count.mockResolvedValue(0);
 
-    await service.findAll(adminUser, { dateFrom: '2026-06-01', dateTo: '2026-06-02' });
+    await service.findAll(adminUser, {
+      dateFrom: '2026-06-01',
+      dateTo: '2026-06-02',
+    });
 
     const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as any;
     expect(callArg.where.dispatchDate).toBeDefined();
@@ -451,7 +489,12 @@ describe('LubeReportsService — findOne', () => {
     meterReading: 1050,
     notes: null,
     createdAt: new Date(),
-    equipment: { id: equipmentId, internalId: 'EQ-001', name: 'Camión 1', licensePlate: null },
+    equipment: {
+      id: equipmentId,
+      internalId: 'EQ-001',
+      name: 'Camión 1',
+      licensePlate: null,
+    },
     warehouse: { id: warehouseId, code: 'BOD-01', name: 'Bodega Central' },
     user: { id: userId, name: 'Técnico A' },
     lines: [
@@ -502,7 +545,9 @@ describe('LubeReportsService — findOne', () => {
     // findFirst devuelve null porque el tenantId no coincide
     prisma.lubeReport.findFirst.mockResolvedValue(null as never);
 
-    await expect(service.findOne(reportId, adminUser)).rejects.toThrow(NotFoundException);
+    await expect(service.findOne(reportId, adminUser)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('lanza NotFoundException si el id no existe', async () => {

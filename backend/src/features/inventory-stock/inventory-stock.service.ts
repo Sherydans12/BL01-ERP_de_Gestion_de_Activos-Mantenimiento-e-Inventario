@@ -410,13 +410,10 @@ export class InventoryStockService {
     opts?: { location?: string },
   ) {
     const tenantId = user.tenantId as string;
-    const warehouse = await this.loadWarehouseForUser(warehouseId, user);
+    await this.loadWarehouseForUser(warehouseId, user);
 
     const fieldOutstandingByItem =
-      await this.mapFieldDispatchOutstandingForWarehouse(
-        tenantId,
-        warehouseId,
-      );
+      await this.mapFieldDispatchOutstandingForWarehouse(tenantId, warehouseId);
 
     const loc = opts?.location?.trim();
     const where: Prisma.ItemStockWhereInput = { warehouseId };
@@ -470,8 +467,7 @@ export class InventoryStockService {
         ...r,
         reservedQuantity,
         availableQuantity,
-        fieldDispatchOutstandingQty:
-          fieldOutstandingByItem.get(r.itemId) ?? 0,
+        fieldDispatchOutstandingQty: fieldOutstandingByItem.get(r.itemId) ?? 0,
         unitCost: this.maskCostValue(
           user,
           r.unitCost != null ? Number(r.unitCost) : null,
@@ -545,9 +541,7 @@ export class InventoryStockService {
       ...new Set(
         rows
           .filter(
-            (r) =>
-              r.referenceId &&
-              r.referenceType === 'PURCHASE_RECEIPT',
+            (r) => r.referenceId && r.referenceType === 'PURCHASE_RECEIPT',
           )
           .map((r) => r.referenceId as string),
       ),
@@ -603,8 +597,7 @@ export class InventoryStockService {
       ...new Set(
         rows
           .filter(
-            (r) =>
-              r.referenceType === 'INVENTORY_TRANSFER' && r.referenceId,
+            (r) => r.referenceType === 'INVENTORY_TRANSFER' && r.referenceId,
           )
           .map((r) => r.referenceId as string),
       ),
@@ -647,10 +640,7 @@ export class InventoryStockService {
 
     return rows.map((row) => {
       const trace: Record<string, unknown> = {};
-      if (
-        row.referenceType === 'PURCHASE_RECEIPT' &&
-        row.referenceId
-      ) {
+      if (row.referenceType === 'PURCHASE_RECEIPT' && row.referenceId) {
         const rc = receiptMap.get(row.referenceId);
         if (rc) {
           trace.warehouseReceipt = {
@@ -963,10 +953,8 @@ export class InventoryStockService {
           )
         : { minStock: 0, maxStock: 0 };
 
-      const finalMin =
-        minStock ?? current?.minStock ?? policyDefaults.minStock;
-      const finalMax =
-        maxStock ?? current?.maxStock ?? policyDefaults.maxStock;
+      const finalMin = minStock ?? current?.minStock ?? policyDefaults.minStock;
+      const finalMax = maxStock ?? current?.maxStock ?? policyDefaults.maxStock;
       if (hasMin || hasMax) {
         if (finalMax > 0 && finalMax < finalMin) {
           throw new BadRequestException(
@@ -1215,9 +1203,7 @@ export class InventoryStockService {
         const totalQty = cQ.plus(rQ);
         newUnitCost = totalQty.isZero()
           ? dto.unitCost
-          : parseFloat(
-              cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4),
-            );
+          : parseFloat(cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4));
       }
     } else if (dto.type === 'OUT') {
       newQty = previousQty - dto.quantity;

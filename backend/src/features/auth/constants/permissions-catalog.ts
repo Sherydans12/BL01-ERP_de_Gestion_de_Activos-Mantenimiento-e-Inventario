@@ -591,6 +591,29 @@ export const OPERATIONS_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           },
         ],
       },
+      {
+        name: 'Registro de fallas (correctivo imprevisto)',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_FAULT_REPORT_READ,
+            label: 'Ver reportes de fallas',
+            description:
+              'Listar y consultar el detalle de eventos de falla registrados por equipo, con filtros por criticidad, sistema afectado y estado.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_FAULT_REPORT_CREATE,
+            label: 'Registrar falla',
+            description:
+              'Crear un reporte de falla en terreno. Fallas ALTA y MEDIA generan automáticamente una OT correctiva y actualizan el horómetro del equipo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_FAULT_REPORT_MANAGE,
+            label: 'Gestionar reportes de fallas',
+            description:
+              'Cerrar reportes de falla BAJA manualmente o convertirlos en OT. Disponible para planificadores y supervisores.',
+          },
+        ],
+      },
     ],
   },
 ];

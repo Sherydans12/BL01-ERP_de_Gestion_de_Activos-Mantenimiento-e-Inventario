@@ -16,8 +16,7 @@ const DESCRIPTIONS: Record<UserRole, string> = {
     'Rol base (espejo). Asignable en matriz de firmas; equivale a SUPER_ADMIN del usuario.',
   ADMIN:
     'Rol base (espejo). Asignable en matriz de firmas; equivale a ADMIN del usuario.',
-  USER:
-    'Rol base (espejo). Sin privilegios por defecto; pizarra en blanco para permisos y menú.',
+  USER: 'Rol base (espejo). Sin privilegios por defecto; pizarra en blanco para permisos y menú.',
 };
 
 /** Roles espejo creados al provisionar un tenant (PBAC). */
@@ -71,10 +70,7 @@ export async function ensureSuperAdminMirrorRole(
  */
 export function resolveApprovalPolicyForUser<
   T extends { allowedUsers: Array<{ userId: string }> },
->(
-  policies: T[],
-  user: { id: string },
-): T | undefined {
+>(policies: T[], user: { id: string }): T | undefined {
   return policies.find((p) =>
     p.allowedUsers.some((au) => au.userId === user.id),
   );

@@ -118,10 +118,7 @@ export class InventoryAdjustmentService {
     let anyReceived = false;
     for (const it of docItems) {
       if (Number(it.quantityReceived) > 1e-9) anyReceived = true;
-      if (
-        Number(it.quantityReceived) + 1e-9 <
-        Number(it.quantityExpected)
-      ) {
+      if (Number(it.quantityReceived) + 1e-9 < Number(it.quantityExpected)) {
         allDocComplete = false;
       }
     }
@@ -302,7 +299,7 @@ export class InventoryAdjustmentService {
           receiptId: receiptId!,
           orderItem: {
             inventoryItemId: dto.itemId,
-            purchaseOrderId: poId!,
+            purchaseOrderId: poId,
           },
         },
         select: { id: true, quantityExpected: true, quantityReceived: true },
@@ -326,7 +323,7 @@ export class InventoryAdjustmentService {
       }
 
       const po = await this.prisma.purchaseOrder.findFirst({
-        where: { id: poId!, tenantId },
+        where: { id: poId, tenantId },
         select: { id: true, correlative: true },
       });
       if (!po) {

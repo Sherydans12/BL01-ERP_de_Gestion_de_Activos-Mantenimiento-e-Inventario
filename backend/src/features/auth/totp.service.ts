@@ -2,10 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { Authenticator } from 'otplib';
-import {
-  decryptTotpSecret,
-  encryptTotpSecret,
-} from './totp-secret-crypto';
+import { decryptTotpSecret, encryptTotpSecret } from './totp-secret-crypto';
 
 const TOTP_ISSUER = 'BaseLogic TPM';
 /** Ventana de pasos de 30s aceptada a cada lado (1 = ±30s desfase de reloj). */
@@ -21,10 +18,7 @@ export class TotpService {
     const raw = this.config.get<string>('TOTP_WINDOW_STEPS', '');
     const parsed = parseInt(String(raw || DEFAULT_TOTP_WINDOW_STEPS), 10);
     const window = Number.isFinite(parsed)
-      ? Math.min(
-          MAX_TOTP_WINDOW_STEPS,
-          Math.max(0, parsed),
-        )
+      ? Math.min(MAX_TOTP_WINDOW_STEPS, Math.max(0, parsed))
       : DEFAULT_TOTP_WINDOW_STEPS;
     this.authenticator.options = {
       crypto,

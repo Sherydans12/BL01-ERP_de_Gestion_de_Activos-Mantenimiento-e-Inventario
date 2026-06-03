@@ -14,10 +14,7 @@ import {
 import { EquipmentsService } from './equipments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import {
-  RequireAnyPermissions,
-  RequirePermissions,
-} from '../auth/decorators/permissions.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('equipments')

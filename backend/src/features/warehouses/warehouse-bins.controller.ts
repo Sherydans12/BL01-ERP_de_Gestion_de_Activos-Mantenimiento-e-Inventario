@@ -1,70 +1,1 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
-import { WarehouseBinsService } from './warehouse-bins.service';
-import type { CreateWarehouseBinDto } from './warehouse-bins.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import { SystemPermissions } from '../auth/constants/permissions.enum';
-
-@Controller('warehouses/:warehouseId/bins')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-export class WarehouseBinsController {
-  constructor(private readonly binsService: WarehouseBinsService) {}
-
-  @Post()
-  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_MANAGE)
-  create(
-    @Param('warehouseId') warehouseId: string,
-    @Body() dto: CreateWarehouseBinDto,
-    @Req() req: any,
-  ) {
-    return this.binsService.create(warehouseId, dto, req.user);
-  }
-
-  @Get()
-  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_READ)
-  findAll(@Param('warehouseId') warehouseId: string, @Req() req: any) {
-    return this.binsService.findAll(warehouseId, req.user);
-  }
-
-  @Get(':binId')
-  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_READ)
-  findOne(
-    @Param('warehouseId') warehouseId: string,
-    @Param('binId') binId: string,
-    @Req() req: any,
-  ) {
-    return this.binsService.findOne(warehouseId, binId, req.user);
-  }
-
-  @Put(':binId')
-  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_MANAGE)
-  update(
-    @Param('warehouseId') warehouseId: string,
-    @Param('binId') binId: string,
-    @Body() dto: CreateWarehouseBinDto,
-    @Req() req: any,
-  ) {
-    return this.binsService.update(warehouseId, binId, dto, req.user);
-  }
-
-  @Delete(':binId')
-  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_MANAGE)
-  remove(
-    @Param('warehouseId') warehouseId: string,
-    @Param('binId') binId: string,
-    @Req() req: any,
-  ) {
-    return this.binsService.remove(warehouseId, binId, req.user);
-  }
-}
+import {  Controller,  Get,  Post,  Put,  Delete,  Body,  Param,  Req,  UseGuards,} from '@nestjs/common';import { WarehouseBinsService } from './warehouse-bins.service';import type { CreateWarehouseBinDto } from './warehouse-bins.service';import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';import { PermissionsGuard } from '../auth/guards/permissions.guard';import { RequirePermissions } from '../auth/decorators/permissions.decorator';import { SystemPermissions } from '../auth/constants/permissions.enum';@Controller('warehouses/:warehouseId/bins')@UseGuards(JwtAuthGuard, PermissionsGuard)export class WarehouseBinsController {  constructor(private readonly binsService: WarehouseBinsService) {}  @Post()  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_MANAGE)  create(    @Param('warehouseId') warehouseId: string,    @Body() dto: CreateWarehouseBinDto,    @Req() req: any,  ) {    return this.binsService.create(warehouseId, dto, req.user);  }  @Get()  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_READ)  findAll(@Param('warehouseId') warehouseId: string, @Req() req: any) {    return this.binsService.findAll(warehouseId, req.user);  }  @Get(':binId')  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_READ)  findOne(    @Param('warehouseId') warehouseId: string,    @Param('binId') binId: string,    @Req() req: any,  ) {    return this.binsService.findOne(warehouseId, binId, req.user);  }  @Put(':binId')  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_MANAGE)  update(    @Param('warehouseId') warehouseId: string,    @Param('binId') binId: string,    @Body() dto: CreateWarehouseBinDto,    @Req() req: any,  ) {    return this.binsService.update(warehouseId, binId, dto, req.user);  }  @Delete(':binId')  @RequirePermissions(SystemPermissions.INVENTORY_WAREHOUSE_MANAGE)  remove(    @Param('warehouseId') warehouseId: string,    @Param('binId') binId: string,    @Req() req: any,  ) {    return this.binsService.remove(warehouseId, binId, req.user);  }}

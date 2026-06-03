@@ -42,7 +42,10 @@ export class InventoryTransferService {
     private readonly inventoryStockService: InventoryStockService,
   ) {}
 
-  private assertCanCreateTransfer(user: { role?: string; permissions?: string[] }) {
+  private assertCanCreateTransfer(user: {
+    role?: string;
+    permissions?: string[];
+  }) {
     if (!userHasPermission(user, SystemPermissions.INVENTORY_TRANSFER_CREATE)) {
       throw new ForbiddenException(
         'No tiene permisos para ejecutar transferencias entre bodegas.',
@@ -127,7 +130,9 @@ export class InventoryTransferService {
     } as const;
   }
 
-  private buildTransferListWhere(user: any): Prisma.InventoryTransferWhereInput {
+  private buildTransferListWhere(
+    user: any,
+  ): Prisma.InventoryTransferWhereInput {
     const tenantId = user.tenantId as string;
     const role = String(user?.role ?? '').toUpperCase();
     const isAdminLike = role === 'ADMIN' || role === 'SUPER_ADMIN';
@@ -209,8 +214,10 @@ export class InventoryTransferService {
       throw new NotFoundException('Transferencia no encontrada.');
     }
 
-    let reception: { at: string; user: { id: string; name: string; email: string } } | null =
-      null;
+    let reception: {
+      at: string;
+      user: { id: string; name: string; email: string };
+    } | null = null;
     if (transfer.status === 'COMPLETED') {
       const lastIn = await this.prisma.inventoryTransaction.findFirst({
         where: {
@@ -301,7 +308,9 @@ export class InventoryTransferService {
             select: {
               id: true,
               partNumber: true,
-              unitOfMeasure: { select: { abbreviation: true, allowsDecimals: true } },
+              unitOfMeasure: {
+                select: { abbreviation: true, allowsDecimals: true },
+              },
             },
           });
           if (!item) {
@@ -310,7 +319,10 @@ export class InventoryTransferService {
             );
           }
 
-          if (!item.unitOfMeasure?.allowsDecimals && !Number.isInteger(line.quantity)) {
+          if (
+            !item.unitOfMeasure?.allowsDecimals &&
+            !Number.isInteger(line.quantity)
+          ) {
             throw new BadRequestException(
               `El artículo "${item.partNumber ?? item.id}" usa unidad "${item.unitOfMeasure?.abbreviation ?? 'UN'}" que no admite fracciones. La cantidad debe ser un número entero.`,
             );

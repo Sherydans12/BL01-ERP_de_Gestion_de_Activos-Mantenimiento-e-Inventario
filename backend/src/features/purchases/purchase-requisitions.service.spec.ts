@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -15,18 +11,16 @@ import { PurchaseRequisitionsService } from './purchase-requisitions.service';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 
 jest.mock('./purchase-contract-access.util', () => {
-  const actual = jest.requireActual<typeof import('./purchase-contract-access.util')>(
-    './purchase-contract-access.util',
-  );
+  const actual = jest.requireActual<
+    typeof import('./purchase-contract-access.util')
+  >('./purchase-contract-access.util');
   return {
     ...actual,
     assertUserHasContractAccess: jest.fn(),
   };
 });
 jest.mock('./purchase-quotation-status-sync.util', () => ({
-  syncPurchaseQuotationStatusesFromLineAwards: jest
-    .fn()
-    .mockResolvedValue([]),
+  syncPurchaseQuotationStatusesFromLineAwards: jest.fn().mockResolvedValue([]),
 }));
 jest.mock('./purchase-requisition-reconciliation.util', () => ({
   buildRequisitionReconciliationSnapshot: jest.fn().mockResolvedValue({}),
@@ -51,7 +45,10 @@ describe('PurchaseRequisitionsService — saveLineAwards', () => {
   const user = { id: userId, tenantId, role: 'ADMIN' };
 
   function quotingRequisition(
-    overrides: Partial<{ status: string; awardedQuotationItemId: string | null }> = {},
+    overrides: Partial<{
+      status: string;
+      awardedQuotationItemId: string | null;
+    }> = {},
   ) {
     return {
       id: requisitionId,
@@ -65,8 +62,7 @@ describe('PurchaseRequisitionsService — saveLineAwards', () => {
           id: reqItemId,
           quantity: 2,
           inventoryItemId,
-          awardedQuotationItemId:
-            overrides.awardedQuotationItemId ?? null,
+          awardedQuotationItemId: overrides.awardedQuotationItemId ?? null,
         },
       ],
       quotations: [],
@@ -112,7 +108,9 @@ describe('PurchaseRequisitionsService — saveLineAwards', () => {
       service.saveLineAwards(
         requisitionId,
         {
-          awards: [{ requisitionItemId: reqItemId, quotationItemId: quotItemId }],
+          awards: [
+            { requisitionItemId: reqItemId, quotationItemId: quotItemId },
+          ],
         },
         user,
       ),
@@ -148,7 +146,9 @@ describe('PurchaseRequisitionsService — saveLineAwards', () => {
       service.saveLineAwards(
         requisitionId,
         {
-          awards: [{ requisitionItemId: reqItemId, quotationItemId: quotItemId }],
+          awards: [
+            { requisitionItemId: reqItemId, quotationItemId: quotItemId },
+          ],
         },
         user,
       ),
@@ -165,7 +165,9 @@ describe('PurchaseRequisitionsService — saveLineAwards', () => {
           awardedQuotationItemId: quotItemId,
         }) as never,
       );
-    prisma.quotationItem.findFirst.mockResolvedValue({ id: quotItemId } as never);
+    prisma.quotationItem.findFirst.mockResolvedValue({
+      id: quotItemId,
+    } as never);
     tx.requisitionItem.update.mockResolvedValue({} as never);
     tx.requisitionItem.findMany.mockResolvedValue([
       { awardedQuotationItemId: quotItemId },
@@ -356,7 +358,9 @@ describe('PurchaseRequisitionsService — cancel', () => {
   });
 
   it('exige motivo de anulación', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(baseReq('SUBMITTED') as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(baseReq('SUBMITTED') as never);
 
     await expect(service.cancel(requisitionId, '  ', user)).rejects.toThrow(
       /motivo de anulación/,
@@ -364,7 +368,9 @@ describe('PurchaseRequisitionsService — cancel', () => {
   });
 
   it('rechaza si ya está CANCELLED', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(baseReq('CANCELLED') as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(baseReq('CANCELLED') as never);
 
     await expect(
       service.cancel(requisitionId, 'Motivo válido', user),
@@ -372,7 +378,9 @@ describe('PurchaseRequisitionsService — cancel', () => {
   });
 
   it('rechaza si está APPROVED', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(baseReq('APPROVED') as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(baseReq('APPROVED') as never);
 
     await expect(
       service.cancel(requisitionId, 'Motivo válido', user),
@@ -380,7 +388,9 @@ describe('PurchaseRequisitionsService — cancel', () => {
   });
 
   it('rechaza si existe OC activa vinculada', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(baseReq('QUOTING') as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(baseReq('QUOTING') as never);
     prisma.purchaseOrder.findFirst.mockResolvedValue({
       correlative: 'OC-LOCK',
     } as never);
@@ -391,7 +401,9 @@ describe('PurchaseRequisitionsService — cancel', () => {
   });
 
   it('anula y audita con motivo', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(baseReq('SUBMITTED') as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(baseReq('SUBMITTED') as never);
     prisma.purchaseOrder.findFirst.mockResolvedValue(null);
     prisma.requisitionItem.findMany.mockResolvedValue([] as never);
     prisma.purchaseRequisition.update.mockResolvedValue({
@@ -399,7 +411,11 @@ describe('PurchaseRequisitionsService — cancel', () => {
       status: 'CANCELLED',
     } as never);
 
-    const result = await service.cancel(requisitionId, '  Duplicado por error  ', user);
+    const result = await service.cancel(
+      requisitionId,
+      '  Duplicado por error  ',
+      user,
+    );
 
     expect(result.status).toBe('CANCELLED');
     expect(auditLog).toHaveBeenCalledWith(
@@ -561,14 +577,21 @@ describe('PurchaseRequisitionsService — addQuotation', () => {
   });
 
   it('rechaza ítem ajeno al requerimiento', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(submittedRequisition() as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(submittedRequisition() as never);
 
     await expect(
       service.addQuotation(
         requisitionId,
         {
           ...quotationPayload,
-          items: [{ requisitionItemId: '00000000-0000-4000-8000-000000000099', unitPrice: 1 }],
+          items: [
+            {
+              requisitionItemId: '00000000-0000-4000-8000-000000000099',
+              unitPrice: 1,
+            },
+          ],
         },
         undefined,
         user,
@@ -577,7 +600,9 @@ describe('PurchaseRequisitionsService — addQuotation', () => {
   });
 
   it('rechaza total distinto a suma unitPrice × cantidad', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(submittedRequisition() as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(submittedRequisition() as never);
 
     await expect(
       service.addQuotation(
@@ -590,7 +615,9 @@ describe('PurchaseRequisitionsService — addQuotation', () => {
   });
 
   it('crea cotización y mueve SUBMITTED a QUOTING', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(submittedRequisition() as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(submittedRequisition() as never);
     tx.purchaseQuotation.create.mockResolvedValue({
       id: 'quot-1',
       totalAmount: 300,
@@ -662,7 +689,11 @@ describe('PurchaseRequisitionsService — findAll', () => {
   it('filtra por contrato explícito y excluye CLOSED por defecto', async () => {
     prisma.purchaseRequisition.count.mockResolvedValue(1);
     prisma.purchaseRequisition.findMany.mockResolvedValue([
-      { id: 'src-1', correlative: 'SRC-1', _count: { items: 2, quotations: 0 } },
+      {
+        id: 'src-1',
+        correlative: 'SRC-1',
+        _count: { items: 2, quotations: 0 },
+      },
     ] as never);
 
     await service.findAll(tenantId, { role: 'ADMIN' }, { contractId });
@@ -812,7 +843,11 @@ describe('PurchaseRequisitionsService — duplicate', () => {
   const tenantId = '11111111-1111-1111-1111-111111111111';
   const requisitionId = '22222222-2222-2222-2222-222222222222';
   const contractId = '33333333-3333-3333-3333-333333333333';
-  const user = { id: '77777777-7777-7777-7777-777777777777', tenantId, role: 'ADMIN' };
+  const user = {
+    id: '77777777-7777-7777-7777-777777777777',
+    tenantId,
+    role: 'ADMIN',
+  };
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -1021,7 +1056,9 @@ describe('PurchaseRequisitionsService — update', () => {
   const woId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const eqId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
-  function draftReq(overrides: Partial<{ status: string; requestedById: string }> = {}) {
+  function draftReq(
+    overrides: Partial<{ status: string; requestedById: string }> = {},
+  ) {
     return {
       id: requisitionId,
       tenantId,
@@ -1079,7 +1116,9 @@ describe('PurchaseRequisitionsService — update', () => {
   });
 
   it('en QUOTING solo compras puede editar', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'QUOTING' }) as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'QUOTING' }) as never);
 
     await expect(
       service.update(requisitionId, { description: 'Cambio' }, owner),
@@ -1087,7 +1126,9 @@ describe('PurchaseRequisitionsService — update', () => {
   });
 
   it('en SUBMITTED solo permite cambios de OT/equipo', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'SUBMITTED' }) as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'SUBMITTED' }) as never);
 
     await expect(
       service.update(requisitionId, { description: 'Nueva' }, owner),
@@ -1153,7 +1194,9 @@ describe('PurchaseRequisitionsService — update', () => {
   });
 
   it('impide borrar ítem referenciado en cotización', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'QUOTING' }) as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'QUOTING' }) as never);
     prisma.inventoryItem.findMany.mockResolvedValue([{ id: itemId }] as never);
     tx.quotationItem.count.mockResolvedValue(1);
 
@@ -1177,7 +1220,9 @@ describe('PurchaseRequisitionsService — update', () => {
   });
 
   it('en SUBMITTED vincula OT y equipo (solicitante)', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(draftReq({ status: 'SUBMITTED' }) as never);
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(draftReq({ status: 'SUBMITTED' }) as never);
     prisma.workOrder.findFirst.mockResolvedValue({
       id: woId,
       equipmentId: eqId,
@@ -1196,7 +1241,11 @@ describe('PurchaseRequisitionsService — update', () => {
       workOrder: { correlative: 'OT-100', description: 'Mantenimiento' },
     } as never);
 
-    const updated = await service.update(requisitionId, { workOrderId: woId }, owner);
+    const updated = await service.update(
+      requisitionId,
+      { workOrderId: woId },
+      owner,
+    );
 
     expect(updated.workOrderId).toBe(woId);
     expect(updated.equipmentId).toBe(eqId);
@@ -1212,9 +1261,11 @@ describe('PurchaseRequisitionsService — update', () => {
 
   it('en SUBMITTED solo solicitante o admin puede cambiar vínculos', async () => {
     const otherOwner = '99999999-9999-9999-9999-999999999999';
-    jest.spyOn(service, 'findById').mockResolvedValue(
-      draftReq({ status: 'SUBMITTED', requestedById: otherOwner }) as never,
-    );
+    jest
+      .spyOn(service, 'findById')
+      .mockResolvedValue(
+        draftReq({ status: 'SUBMITTED', requestedById: otherOwner }) as never,
+      );
 
     await expect(
       service.update(requisitionId, { equipmentId: eqId }, owner),

@@ -1,14 +1,18 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const POLICY_INCLUDE = {
   allowedUsers: {
     include: {
-      user: { select: { id: true, name: true, email: true, role: true, customRole: { select: { id: true, name: true } } } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          customRole: { select: { id: true, name: true } },
+        },
+      },
     },
   },
 } as const;

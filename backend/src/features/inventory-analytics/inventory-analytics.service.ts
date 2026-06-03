@@ -787,7 +787,9 @@ export class InventoryAnalyticsService {
       const ic = (item.inventoryCode ?? '')
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
-      const pn = (item.partNumber ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const pn = (item.partNumber ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
       if (normQuery.length < 2) return 0;
       if (ic && ic === normQuery) return 100;
       if (ic && ic.startsWith(normQuery)) return 85;

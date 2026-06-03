@@ -35,9 +35,7 @@ describe('PurchaseSettingsService', () => {
 
     service = module.get(PurchaseSettingsService);
 
-    prisma.purchaseSettings.findUnique.mockResolvedValue(
-      baseSettings as never,
-    );
+    prisma.purchaseSettings.findUnique.mockResolvedValue(baseSettings as never);
     prisma.user.findMany.mockResolvedValue([
       { id: userId1 },
       { id: userId2 },
@@ -152,7 +150,12 @@ describe('PurchaseSettingsService', () => {
       });
 
       const result = await service.upsertPolicies(tenantId, [
-        { level: 1, description: 'Gerencia', userIds: [userId1], minAmount: 5000 },
+        {
+          level: 1,
+          description: 'Gerencia',
+          userIds: [userId1],
+          minAmount: 5000,
+        },
       ]);
 
       expect(tx.approvalPolicyUser.deleteMany).toHaveBeenCalledWith({
@@ -182,9 +185,7 @@ describe('PurchaseSettingsService', () => {
       });
 
       await expect(
-        service.upsertPolicies(tenantId, [
-          { level: 1, userIds: [userId1] },
-        ]),
+        service.upsertPolicies(tenantId, [{ level: 1, userIds: [userId1] }]),
       ).rejects.toThrow(/No se puede quitar el nivel 2/);
     });
 

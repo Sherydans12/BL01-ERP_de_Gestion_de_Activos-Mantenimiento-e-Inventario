@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
@@ -328,11 +327,17 @@ describe('InventoryItemsService — create', () => {
 
   it('exige categoría y unidad de medida', async () => {
     await expect(
-      service.create({ name: 'X', categoryId: '', unitOfMeasureId: uomId } as never, user),
+      service.create(
+        { name: 'X', categoryId: '', unitOfMeasureId: uomId } as never,
+        user,
+      ),
     ).rejects.toThrow(/familia y subcategoría/);
 
     await expect(
-      service.create({ name: 'X', categoryId, unitOfMeasureId: '' } as never, user),
+      service.create(
+        { name: 'X', categoryId, unitOfMeasureId: '' } as never,
+        user,
+      ),
     ).rejects.toThrow(/unidad de medida/);
   });
 
@@ -467,7 +472,7 @@ describe('InventoryItemsService — quickCreate', () => {
     }).compile();
 
     service = module.get(InventoryItemsService);
-    prisma.$transaction.mockImplementation(async (fn, opts) =>
+    prisma.$transaction.mockImplementation(async (fn, _opts) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
   });
@@ -696,7 +701,11 @@ describe('InventoryItemsService — update', () => {
       description: 'Nueva descripción',
     } as never);
 
-    await service.update('IN0001', { description: 'Nueva descripción' } as never, user);
+    await service.update(
+      'IN0001',
+      { description: 'Nueva descripción' } as never,
+      user,
+    );
 
     expect(prisma.inventoryItem.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: itemId } }),

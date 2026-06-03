@@ -166,16 +166,21 @@ function sortInvoicesInMemory(
     let c = 0;
     switch (field) {
       case 'invoiceNumber':
-        c = (a.invoiceNumber || '').localeCompare(b.invoiceNumber || '', undefined, {
-          sensitivity: 'base',
-        });
+        c = (a.invoiceNumber || '').localeCompare(
+          b.invoiceNumber || '',
+          undefined,
+          {
+            sensitivity: 'base',
+          },
+        );
         break;
       case 'status':
         c = String(a.status).localeCompare(String(b.status));
         break;
       case 'emissionDate':
         c =
-          new Date(a.emissionDate).getTime() - new Date(b.emissionDate).getTime();
+          new Date(a.emissionDate).getTime() -
+          new Date(b.emissionDate).getTime();
         break;
       case 'dueDate': {
         const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
@@ -206,9 +211,13 @@ function sortInvoicesInMemory(
         );
         break;
       case 'vendorName':
-        c = (a.vendor.name || '').localeCompare(b.vendor.name || '', undefined, {
-          sensitivity: 'base',
-        });
+        c = (a.vendor.name || '').localeCompare(
+          b.vendor.name || '',
+          undefined,
+          {
+            sensitivity: 'base',
+          },
+        );
         break;
       default:
         c = 0;
@@ -525,7 +534,9 @@ export class PurchaseInvoicesService {
     return buildPurchaseContractScopeFilter(user, contractId);
   }
 
-  private invoiceListSearchOr(term: string): Prisma.PurchaseInvoiceWhereInput[] {
+  private invoiceListSearchOr(
+    term: string,
+  ): Prisma.PurchaseInvoiceWhereInput[] {
     const mode = 'insensitive' as const;
     const contains = (s: string): Prisma.StringFilter => ({
       contains: s,
@@ -685,9 +696,7 @@ export class PurchaseInvoicesService {
         discIds,
       );
       const data = await Promise.all(
-        rowsRaw.map((r) =>
-          this.attachInvoiceMeta(r, user.tenantId, reasonMap),
-        ),
+        rowsRaw.map((r) => this.attachInvoiceMeta(r, user.tenantId, reasonMap)),
       );
       return { data, total, page, pageSize };
     }
@@ -848,11 +857,12 @@ export class PurchaseInvoicesService {
           vendor: { select: { id: true, name: true, code: true } },
         },
       }))!;
-      const siblingTotalAfterRevoke = await this.computeAccumulatedInvoiceAmount(
-        invoice.purchaseOrderId,
-        tenantId,
-        invoiceId,
-      );
+      const siblingTotalAfterRevoke =
+        await this.computeAccumulatedInvoiceAmount(
+          invoice.purchaseOrderId,
+          tenantId,
+          invoiceId,
+        );
       nums = await this.computeThreeWayMatchNumbers(
         tenantId,
         invoice.purchaseOrderId,

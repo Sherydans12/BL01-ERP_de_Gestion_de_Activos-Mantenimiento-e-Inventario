@@ -27,7 +27,10 @@ describe('UsersService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn() } },
-        { provide: StorageService, useValue: { normalizeStorageKey: jest.fn() } },
+        {
+          provide: StorageService,
+          useValue: { normalizeStorageKey: jest.fn() },
+        },
         {
           provide: AuthAuditService,
           useValue: {
@@ -209,7 +212,9 @@ describe('UsersService', () => {
       const call = prisma.user.findMany.mock.calls[0]?.[0] as {
         where?: Record<string, unknown>;
       };
-      expect(JSON.stringify(call?.where ?? {})).not.toMatch(/MECHANIC|SUPERVISOR/);
+      expect(JSON.stringify(call?.where ?? {})).not.toMatch(
+        /MECHANIC|SUPERVISOR/,
+      );
     });
   });
 });

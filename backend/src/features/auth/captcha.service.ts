@@ -39,7 +39,9 @@ export class CaptchaService {
     const n =
       typeof answerRaw === 'number'
         ? answerRaw
-        : parseInt(String(answerRaw).trim(), 10);
+        : typeof answerRaw === 'string'
+          ? parseInt(answerRaw.trim(), 10)
+          : NaN;
     return Number.isFinite(n) && n === entry.answer;
   }
 

@@ -62,10 +62,7 @@ export class NotificationSettingsController {
   @Get('event')
   @UseGuards(PermissionsGuard)
   @RequirePermissions(SystemPermissions.ADMIN_NOTIFICATION_READ)
-  getEventSubscribers(
-    @Req() req: any,
-    @Query('eventKey') eventKey: string,
-  ) {
+  getEventSubscribers(@Req() req: any, @Query('eventKey') eventKey: string) {
     return this.service.findEventSubscribers(req.user.tenantId, eventKey);
   }
 
@@ -83,10 +80,6 @@ export class NotificationSettingsController {
       );
     }
 
-    return this.service.upsertUserSetting(
-      req.user.tenantId,
-      targetUserId,
-      dto,
-    );
+    return this.service.upsertUserSetting(req.user.tenantId, targetUserId, dto);
   }
 }

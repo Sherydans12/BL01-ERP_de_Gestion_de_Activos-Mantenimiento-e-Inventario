@@ -65,9 +65,8 @@ function parseRequisitionListSort(
   sort?: string,
   dir?: string,
 ): { field: RequisitionListSortField; order: 'asc' | 'desc' } {
-  const field: RequisitionListSortField = sort && isRequisitionListSortField(sort)
-    ? sort
-    : 'createdAt';
+  const field: RequisitionListSortField =
+    sort && isRequisitionListSortField(sort) ? sort : 'createdAt';
   if (dir === 'asc' || dir === 'desc') {
     return { field, order: dir };
   }
@@ -182,8 +181,7 @@ export class PurchaseRequisitionsService {
     }
     for (let i = 0; i < items.length; i++) {
       const raw = items[i].inventoryItemId;
-      const id =
-        raw === null || raw === undefined ? '' : String(raw).trim();
+      const id = raw === null || raw === undefined ? '' : String(raw).trim();
       if (!id || !isUuid(id)) {
         throw new BadRequestException(
           'Cada línea del requerimiento debe estar vinculada a un artículo del catálogo maestro (seleccione un ítem existente o cree uno nuevo).',
@@ -191,9 +189,7 @@ export class PurchaseRequisitionsService {
       }
     }
     const uniqueIds = [
-      ...new Set(
-        items.map((it) => String(it.inventoryItemId).trim()),
-      ),
+      ...new Set(items.map((it) => String(it.inventoryItemId).trim())),
     ];
     const found = await this.prisma.inventoryItem.findMany({
       where: { tenantId, id: { in: uniqueIds } },
@@ -376,7 +372,10 @@ export class PurchaseRequisitionsService {
       },
       {
         workOrder: {
-          OR: [{ correlative: contains(term) }, { description: contains(term) }],
+          OR: [
+            { correlative: contains(term) },
+            { description: contains(term) },
+          ],
         },
       },
       {
@@ -803,7 +802,8 @@ export class PurchaseRequisitionsService {
             subject: `Nuevo borrador de requerimiento: ${created.correlative}`,
             html: buildMailRequisitionDraftCreated({
               correlative: created.correlative,
-              requesterName: created.requestedBy?.name ?? user.name ?? user.email,
+              requesterName:
+                created.requestedBy?.name ?? user.name ?? user.email,
               description: created.description,
               itemsCount: created.items.length,
               appUrl,
@@ -812,7 +812,9 @@ export class PurchaseRequisitionsService {
           },
         );
       })
-      .catch(() => { /* fallo silencioso */ });
+      .catch(() => {
+        /* fallo silencioso */
+      });
 
     return created;
   }
@@ -859,7 +861,7 @@ export class PurchaseRequisitionsService {
 
     const parseOptionalUuid = (v: unknown): string | null => {
       if (v === null || v === undefined) return null;
-      const s = String(v).trim();
+      const s = typeof v === 'string' ? v.trim() : '';
       if (s === '') return null;
       return s;
     };
@@ -987,10 +989,7 @@ export class PurchaseRequisitionsService {
     }
 
     if (data.items && Array.isArray(data.items) && data.items.length > 0) {
-      await this.ensureRequisitionItemsCatalogLinked(
-        user.tenantId,
-        data.items,
-      );
+      await this.ensureRequisitionItemsCatalogLinked(user.tenantId, data.items);
       this.assertRequisitionLineQuantities(data.items);
     }
 
@@ -1239,7 +1238,10 @@ export class PurchaseRequisitionsService {
             subject: `Requerimiento emitido: ${requisition.correlative}`,
             html: buildMailRequisitionSubmitted({
               correlative: requisition.correlative,
-              requesterName: (requisition as any).requestedBy?.name ?? user.name ?? user.email,
+              requesterName:
+                (requisition as any).requestedBy?.name ??
+                user.name ??
+                user.email,
               description: requisition.description,
               itemsCount: requisition.items.length,
               priority: requisition.priority ?? 'MEDIUM',
@@ -1249,12 +1251,17 @@ export class PurchaseRequisitionsService {
             pushPayload: {
               title: `SRC ${requisition.correlative} emitido`,
               body: `${requisition.description} — ${requisition.items.length} ítem(s)`,
-              data: { type: 'PURCHASE_REQUISITION_SUBMITTED', requisitionId: id },
+              data: {
+                type: 'PURCHASE_REQUISITION_SUBMITTED',
+                requisitionId: id,
+              },
             },
           },
         );
       })
-      .catch(() => { /* fallo silencioso */ });
+      .catch(() => {
+        /* fallo silencioso */
+      });
 
     return updated;
   }
@@ -1433,7 +1440,12 @@ export class PurchaseRequisitionsService {
 
     if (data.paymentDays !== undefined && data.paymentDays !== null) {
       const pd = Number(data.paymentDays);
-      if (!Number.isFinite(pd) || !Number.isInteger(pd) || pd < 0 || pd > 3650) {
+      if (
+        !Number.isFinite(pd) ||
+        !Number.isInteger(pd) ||
+        pd < 0 ||
+        pd > 3650
+      ) {
         throw new BadRequestException(
           'Plazo de pago (días) inválido: use un entero entre 0 y 3650',
         );

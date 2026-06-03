@@ -17,7 +17,10 @@ export function encryptTotpSecret(plain: string, keyMaterial: string): string {
   return Buffer.concat([iv, tag, enc]).toString('base64');
 }
 
-export function decryptTotpSecret(payload: string, keyMaterial: string): string {
+export function decryptTotpSecret(
+  payload: string,
+  keyMaterial: string,
+): string {
   const key = deriveKey(keyMaterial);
   const buf = Buffer.from(payload, 'base64');
   if (buf.length < IV_LEN + TAG_LEN + 1) {

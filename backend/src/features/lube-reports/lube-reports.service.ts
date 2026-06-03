@@ -214,14 +214,30 @@ export class LubeReportsService {
   // ── Includes reutilizables ──────────────────────────────────────────────
 
   private readonly listInclude = {
-    equipment: { select: { id: true, internalId: true, name: true, licensePlate: true } },
+    equipment: {
+      select: {
+        id: true,
+        internalId: true,
+        brand: true,
+        model: true,
+        plate: true,
+      },
+    },
     warehouse: { select: { id: true, code: true, name: true } },
     user: { select: { id: true, name: true } },
     _count: { select: { lines: true } },
   } as const;
 
   private readonly detailInclude = {
-    equipment: { select: { id: true, internalId: true, name: true, licensePlate: true } },
+    equipment: {
+      select: {
+        id: true,
+        internalId: true,
+        brand: true,
+        model: true,
+        plate: true,
+      },
+    },
     warehouse: { select: { id: true, code: true, name: true } },
     user: { select: { id: true, name: true } },
     lines: {
@@ -232,7 +248,9 @@ export class LubeReportsService {
             name: true,
             inventoryCode: true,
             partNumber: true,
-            unitOfMeasure: { select: { id: true, name: true, abbreviation: true } },
+            unitOfMeasure: {
+              select: { id: true, name: true, abbreviation: true },
+            },
           },
         },
       },
@@ -300,7 +318,9 @@ export class LubeReportsService {
     });
 
     if (!report) {
-      throw new NotFoundException('El reporte de lubricante no existe o no pertenece a este tenant.');
+      throw new NotFoundException(
+        'El reporte de lubricante no existe o no pertenece a este tenant.',
+      );
     }
 
     return report;

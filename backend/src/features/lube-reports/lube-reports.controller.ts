@@ -14,7 +14,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
-import { LubeReportsService, ListLubeReportsQuery } from './lube-reports.service';
+import { LubeReportsService } from './lube-reports.service';
+import type { ListLubeReportsQuery } from './lube-reports.service';
 import { CreateLubeReportDto } from './dto/create-lube-report.dto';
 
 /**

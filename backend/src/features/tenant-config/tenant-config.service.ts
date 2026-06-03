@@ -90,9 +90,14 @@ export class TenantConfigService {
       logoLightPublicUrl,
       pdfLogoUrl: rawPdfLogo,
       pdfLogoPublicUrl,
-      laborRatePerHour: tenant.laborRatePerHour
-        ? Number(tenant.laborRatePerHour.toString())
-        : 0,
+      laborRatePerHour:
+        typeof tenant.laborRatePerHour === 'number'
+          ? tenant.laborRatePerHour
+          : typeof tenant.laborRatePerHour === 'object' &&
+              tenant.laborRatePerHour !== null &&
+              'toNumber' in tenant.laborRatePerHour
+            ? (tenant.laborRatePerHour as { toNumber: () => number }).toNumber()
+            : 0,
     };
   }
 
@@ -320,7 +325,10 @@ export class TenantConfigService {
       throw new NotFoundException('Tenant no encontrado');
     }
 
-    const storageKey = await this.storage.uploadFile(file, 'tenant-pdf-branding');
+    const storageKey = await this.storage.uploadFile(
+      file,
+      'tenant-pdf-branding',
+    );
 
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },

@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  HttpException,
-  HttpStatus,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
@@ -127,9 +123,7 @@ describe('AuthService — login', () => {
             recordLoginSuccess: jest
               .fn()
               .mockResolvedValue({ isSuspicious: false }),
-            shouldRequireEmailContextStepUp: jest
-              .fn()
-              .mockResolvedValue(false),
+            shouldRequireEmailContextStepUp: jest.fn().mockResolvedValue(false),
             recordPasswordChange: jest.fn(),
             recordLogout: jest.fn(),
           },

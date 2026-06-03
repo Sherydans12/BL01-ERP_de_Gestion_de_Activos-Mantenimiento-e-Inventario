@@ -27,5 +27,10 @@ temp-ecc-import/
 # Log local de hooks Cursor (memoria automática por máquina)
 docs/agentes/sesiones-auto.log.md
 
+# Salidas locales de npm run lint:ci:report
+eslint-ci-full.txt
+eslint-remaining.txt
+backend/eslint-ci-report.json
+
 # Informes locales de auditoría (npm audit JSON, trivy staging, gitleaks, psql, curl) — no versionar
 security-audit-reports/

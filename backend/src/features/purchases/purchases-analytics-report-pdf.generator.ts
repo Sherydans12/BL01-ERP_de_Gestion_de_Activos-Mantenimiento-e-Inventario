@@ -172,8 +172,7 @@ function buildPurchasesAnalyticsHtml(
     })
     .join('');
 
-  const volSum =
-    data.topVendors.reduce((s, v) => s + v.purchaseVolume, 0) || 1;
+  const volSum = data.topVendors.reduce((s, v) => s + v.purchaseVolume, 0) || 1;
   const vendorRows = data.topVendors
     .map((v) => {
       const share = volSum > 0 ? (v.purchaseVolume / volSum) * 100 : 0;

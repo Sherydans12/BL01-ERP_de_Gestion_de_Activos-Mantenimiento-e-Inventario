@@ -348,8 +348,7 @@ export class WorkOrdersService {
     equipmentLabel: string;
     tenantName?: string;
   }) {
-    const raw =
-      this.config.get<string>('WARRANTY_NOTIFY_EMAILS')?.trim() ?? '';
+    const raw = this.config.get<string>('WARRANTY_NOTIFY_EMAILS')?.trim() ?? '';
     const recipients = raw
       .split(/[,;\s]+/)
       .map((s) => s.trim())
@@ -400,7 +399,7 @@ export class WorkOrdersService {
     return where;
   }
 
-  async create(user: any, dto: CreateWorkOrderDto, activeContract?: string) {
+  async create(user: any, dto: CreateWorkOrderDto, _activeContract?: string) {
     const tenantId = user.tenantId;
 
     try {
@@ -700,7 +699,12 @@ export class WorkOrdersService {
             }
             const inv = await tx.inventoryItem.findFirst({
               where: { id: invItemId, tenantId },
-              select: { id: true, partNumber: true, inventoryCode: true, name: true },
+              select: {
+                id: true,
+                partNumber: true,
+                inventoryCode: true,
+                name: true,
+              },
             });
             if (!inv) {
               throw new BadRequestException(
@@ -886,7 +890,9 @@ export class WorkOrdersService {
       }
     } else {
       const authFilter = {
-        OR: buildEquipmentContractAccessOr(user) as Prisma.EquipmentWhereInput['OR'],
+        OR: buildEquipmentContractAccessOr(
+          user,
+        ) as Prisma.EquipmentWhereInput['OR'],
       };
       filterEqConditions.push(authFilter);
       filterWoConditions.push({ equipment: authFilter });
@@ -1259,8 +1265,14 @@ export class WorkOrdersService {
 
     if (existing.status === 'IN_PROGRESS' || existing.status === 'ON_HOLD') {
       const canEditInProgress =
-        userHasPermission(user, SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE) ||
-        userHasPermission(user, SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN) ||
+        userHasPermission(
+          user,
+          SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE,
+        ) ||
+        userHasPermission(
+          user,
+          SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN,
+        ) ||
         existing.shiftSupervisorUserId === user.id;
       if (!canEditInProgress) {
         throw new ForbiddenException(
@@ -1550,7 +1562,12 @@ export class WorkOrdersService {
               }
               const inv = await tx.inventoryItem.findFirst({
                 where: { id: invItemId, tenantId },
-                select: { id: true, partNumber: true, inventoryCode: true, name: true },
+                select: {
+                  id: true,
+                  partNumber: true,
+                  inventoryCode: true,
+                  name: true,
+                },
               });
               if (!inv) {
                 throw new BadRequestException(

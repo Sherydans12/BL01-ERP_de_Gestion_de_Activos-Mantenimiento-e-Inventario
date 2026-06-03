@@ -78,12 +78,7 @@ export class EquipmentsService {
     let company = '';
     if (hasName) {
       const rawName = data['subleaseCompanyName'];
-      company =
-        typeof rawName === 'string'
-          ? rawName.trim()
-          : rawName != null
-            ? String(rawName).trim()
-            : '';
+      company = typeof rawName === 'string' ? rawName.trim() : '';
     } else if (existing?.subleaseCompanyName) {
       company = String(existing.subleaseCompanyName).trim();
     }
@@ -452,7 +447,7 @@ export class EquipmentsService {
       const where: Prisma.EquipmentWhereInput = { id, tenantId };
       const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-      this.pushEquipmentContractScope(andConditions, user);
+      this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
       if (andConditions.length > 0) {
         where.AND = andConditions;
@@ -826,7 +821,7 @@ export class EquipmentsService {
       const where: Prisma.EquipmentWhereInput = { id, tenantId };
       const andConditions: Prisma.EquipmentWhereInput[] = [];
 
-      this.pushEquipmentContractScope(andConditions, user);
+      this.pushEquipmentContractScope(andConditions, user, siteHeader);
 
       if (andConditions.length > 0) {
         where.AND = andConditions;

@@ -51,11 +51,14 @@ export class AuthAuditService {
       if (!res.ok) return { city: '', country: '' };
       const data = (await res.json()) as Record<string, unknown>;
       if (data.error) return { city: '', country: '' };
-      const city = String(data.city ?? '').slice(0, 120);
-      const country = String(data.country_name ?? data.country ?? '').slice(
-        0,
-        120,
-      );
+      const city = typeof data.city === 'string' ? data.city.slice(0, 120) : '';
+      const countryRaw =
+        typeof data.country_name === 'string'
+          ? data.country_name
+          : typeof data.country === 'string'
+            ? data.country
+            : '';
+      const country = countryRaw.slice(0, 120);
       return { city, country };
     } catch {
       return { city: '', country: '' };

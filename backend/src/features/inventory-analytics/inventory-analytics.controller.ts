@@ -1,93 +1,1 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Req,
-  Res,
-  UseGuards,
-  BadRequestException,
-} from '@nestjs/common';
-import type { Response } from 'express';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import { SystemPermissions } from '../auth/constants/permissions.enum';
-import { InventoryAnalyticsService } from './inventory-analytics.service';
-
-@Controller('inventory-analytics')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-export class InventoryAnalyticsController {
-  constructor(
-    private readonly inventoryAnalyticsService: InventoryAnalyticsService,
-  ) {}
-
-  @Get('valuation')
-  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_READ)
-  valuation(@Req() req: { user: { tenantId: string } }) {
-    return this.inventoryAnalyticsService.getValuationByFamily(req.user);
-  }
-
-  /**
-   * Reporte maestro de valorización (cierre contable): PDF o Excel.
-   * ?format=pdf | xlsx
-   */
-  @Get('full-report')
-  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_REPORT)
-  async fullReport(
-    @Req() req: { user: { tenantId: string } },
-    @Query('format') format: string | undefined,
-    @Res({ passthrough: false }) res: Response,
-  ) {
-    const fmt = format === 'xlsx' ? 'xlsx' : 'pdf';
-    const { buffer, filename, mimeType } =
-      await this.inventoryAnalyticsService.getFullReportBuffer(req.user, fmt);
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(buffer);
-  }
-
-  @Get('vendors-performance')
-  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_READ)
-  vendorsPerformance(
-    @Req() req: { user: { tenantId: string } },
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    return this.inventoryAnalyticsService.getVendorsPerformance(
-      req.user.tenantId,
-      {
-        from,
-        to,
-      },
-    );
-  }
-
-  @Get('savings-variation')
-  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_REPORT)
-  savingsVariation(
-    @Req() req: { user: { tenantId: string } },
-    @Query('month') month?: string,
-  ) {
-    return this.inventoryAnalyticsService.getSavingsVariation(
-      req.user.tenantId,
-      month,
-    );
-  }
-
-  @Get('global-search')
-  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_READ)
-  globalSearch(
-    @Req() req: { user: { tenantId: string } },
-    @Query('q') q?: string,
-  ) {
-    const query = q?.trim();
-    if (!query) {
-      throw new BadRequestException('Debe indicar un término de búsqueda.');
-    }
-    return this.inventoryAnalyticsService.globalSearch(
-      req.user.tenantId,
-      query,
-    );
-  }
-}
-
+import {  Controller,  Get,  Query,  Req,  Res,  UseGuards,  BadRequestException,} from '@nestjs/common';import type { Response } from 'express';import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';import { PermissionsGuard } from '../auth/guards/permissions.guard';import { RequirePermissions } from '../auth/decorators/permissions.decorator';import { SystemPermissions } from '../auth/constants/permissions.enum';import { InventoryAnalyticsService } from './inventory-analytics.service';@Controller('inventory-analytics')@UseGuards(JwtAuthGuard, PermissionsGuard)export class InventoryAnalyticsController {  constructor(    private readonly inventoryAnalyticsService: InventoryAnalyticsService,  ) {}  @Get('valuation')  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_READ)  valuation(@Req() req: { user: { tenantId: string } }) {    return this.inventoryAnalyticsService.getValuationByFamily(req.user);  }  /**   * Reporte maestro de valorización (cierre contable): PDF o Excel.   * ?format=pdf | xlsx   */  @Get('full-report')  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_REPORT)  async fullReport(    @Req() req: { user: { tenantId: string } },    @Query('format') format: string | undefined,    @Res({ passthrough: false }) res: Response,  ) {    const fmt = format === 'xlsx' ? 'xlsx' : 'pdf';    const { buffer, filename, mimeType } =      await this.inventoryAnalyticsService.getFullReportBuffer(req.user, fmt);    res.setHeader('Content-Type', mimeType);    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);    res.send(buffer);  }  @Get('vendors-performance')  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_READ)  vendorsPerformance(    @Req() req: { user: { tenantId: string } },    @Query('from') from?: string,    @Query('to') to?: string,  ) {    return this.inventoryAnalyticsService.getVendorsPerformance(      req.user.tenantId,      {        from,        to,      },    );  }  @Get('savings-variation')  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_REPORT)  savingsVariation(    @Req() req: { user: { tenantId: string } },    @Query('month') month?: string,  ) {    return this.inventoryAnalyticsService.getSavingsVariation(      req.user.tenantId,      month,    );  }  @Get('global-search')  @RequirePermissions(SystemPermissions.INVENTORY_ANALYTICS_READ)  globalSearch(    @Req() req: { user: { tenantId: string } },    @Query('q') q?: string,  ) {    const query = q?.trim();    if (!query) {      throw new BadRequestException('Debe indicar un término de búsqueda.');    }    return this.inventoryAnalyticsService.globalSearch(      req.user.tenantId,      query,    );  }}

@@ -65,7 +65,10 @@ export class TenantConfigController {
     @UploadedFile()
     file: { buffer: Buffer; originalname: string; mimetype: string },
   ) {
-    return this.tenantConfigService.uploadTenantLogoLight(req.user.tenantId, file);
+    return this.tenantConfigService.uploadTenantLogoLight(
+      req.user.tenantId,
+      file,
+    );
   }
 
   @Post('pdf-logo')
@@ -80,7 +83,10 @@ export class TenantConfigController {
     @UploadedFile()
     file: { buffer: Buffer; originalname: string; mimetype: string },
   ) {
-    return this.tenantConfigService.uploadTenantPdfLogo(req.user.tenantId, file);
+    return this.tenantConfigService.uploadTenantPdfLogo(
+      req.user.tenantId,
+      file,
+    );
   }
 
   @Patch()

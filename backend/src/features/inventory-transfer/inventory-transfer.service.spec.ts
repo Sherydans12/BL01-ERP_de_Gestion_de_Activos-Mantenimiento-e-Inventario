@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -125,13 +121,17 @@ describe('InventoryTransferService', () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.warehouse.findFirst
           .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce({ id: destId, code: 'DST', tenantId } as never);
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'DST',
+            tenantId,
+          } as never);
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      await expect(
-        service.executeTransfer(baseDto, adminUser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.executeTransfer(baseDto, adminUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('rechaza origen y destino iguales', async () => {
@@ -161,8 +161,16 @@ describe('InventoryTransferService', () => {
     it('rechaza fracción cuando la UoM no admite decimales', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.warehouse.findFirst
-          .mockResolvedValueOnce({ id: originId, code: 'ORI', tenantId } as never)
-          .mockResolvedValueOnce({ id: destId, code: 'DST', tenantId } as never);
+          .mockResolvedValueOnce({
+            id: originId,
+            code: 'ORI',
+            tenantId,
+          } as never)
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'DST',
+            tenantId,
+          } as never);
         tx.inventoryTransfer.create.mockResolvedValue({
           id: transferId,
         } as never);
@@ -187,7 +195,9 @@ describe('InventoryTransferService', () => {
         tx.warehouse.findFirst
           .mockResolvedValueOnce({ id: originId, code: 'ORI' } as never)
           .mockResolvedValueOnce({ id: destId, code: 'DST' } as never);
-        tx.inventoryTransfer.create.mockResolvedValue({ id: transferId } as never);
+        tx.inventoryTransfer.create.mockResolvedValue({
+          id: transferId,
+        } as never);
         tx.inventoryItem.findFirst.mockResolvedValue({
           id: itemId,
           partNumber: 'PN-1',
@@ -200,9 +210,9 @@ describe('InventoryTransferService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      await expect(
-        service.executeTransfer(baseDto, adminUser),
-      ).rejects.toThrow(/Stock insuficiente en origen/);
+      await expect(service.executeTransfer(baseDto, adminUser)).rejects.toThrow(
+        /Stock insuficiente en origen/,
+      );
     });
 
     it('crea transferencia SHIPPED, descuenta origen y registra TRANSFER_OUT', async () => {
@@ -273,7 +283,12 @@ describe('InventoryTransferService', () => {
       id: transferId,
       tenantId,
       status: 'SHIPPED',
-      originWarehouse: { id: originId, code: 'B-ORI', name: 'Origen', contractId: 'c-ori' },
+      originWarehouse: {
+        id: originId,
+        code: 'B-ORI',
+        name: 'Origen',
+        contractId: 'c-ori',
+      },
       destinationWarehouse: {
         id: destId,
         code: 'B-DST',
@@ -395,7 +410,10 @@ describe('InventoryTransferService', () => {
           shippedTransfer as never,
         );
         tx.itemStock.findUnique.mockResolvedValue(null);
-        mockGetPolicyThresholds.mockResolvedValue({ minStock: 1, maxStock: 50 });
+        mockGetPolicyThresholds.mockResolvedValue({
+          minStock: 1,
+          maxStock: 50,
+        });
         tx.itemStock.upsert.mockResolvedValue({} as never);
         tx.inventoryTransaction.create.mockResolvedValue({} as never);
         tx.inventoryTransfer.update.mockResolvedValue({} as never);
@@ -512,7 +530,9 @@ describe('InventoryTransferService', () => {
             tenantId,
             OR: [
               { originWarehouse: { contractId: { in: [destContractId] } } },
-              { destinationWarehouse: { contractId: { in: [destContractId] } } },
+              {
+                destinationWarehouse: { contractId: { in: [destContractId] } },
+              },
             ],
           },
         }),
@@ -565,7 +585,11 @@ describe('InventoryTransferService', () => {
             tenantId,
             OR: [
               { originWarehouse: { contractId: { in: [foreignContractId] } } },
-              { destinationWarehouse: { contractId: { in: [foreignContractId] } } },
+              {
+                destinationWarehouse: {
+                  contractId: { in: [foreignContractId] },
+                },
+              },
             ],
           }),
         }),

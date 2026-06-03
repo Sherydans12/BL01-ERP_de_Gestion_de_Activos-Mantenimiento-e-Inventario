@@ -96,19 +96,6 @@ describe('InventoryStockService', () => {
     } as never);
   }
 
-  function mockPrismaWarehouse(
-    extra: Partial<{ code: string; name: string }> = {},
-  ): void {
-    prisma.warehouse.findFirst.mockResolvedValue({
-      id: warehouseId,
-      tenantId,
-      contractId,
-      code: 'WH-01',
-      name: 'Bodega test',
-      ...extra,
-    } as never);
-  }
-
   function setupExistingStock(
     quantity: number,
     unitCost = 10,
@@ -125,10 +112,7 @@ describe('InventoryStockService', () => {
     } as never);
   }
 
-  function setupUpsertResult(
-    quantity: number,
-    unitCost: number,
-  ): void {
+  function setupUpsertResult(quantity: number, unitCost: number): void {
     tx.itemStock.upsert.mockResolvedValue({
       warehouseId,
       itemId,
@@ -164,12 +148,7 @@ describe('InventoryStockService', () => {
     });
 
     it('limpia marcas de regularización pendiente cuando el saldo es ≥ 0', async () => {
-      await service.clearPendingRegularizationFlags(
-        tx,
-        warehouseId,
-        itemId,
-        0,
-      );
+      await service.clearPendingRegularizationFlags(tx, warehouseId, itemId, 0);
 
       expect(tx.inventoryTransaction.updateMany).toHaveBeenCalledWith({
         where: {
@@ -440,9 +419,9 @@ describe('InventoryStockService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      await expect(
-        service.performReturn(returnDto, adminUser),
-      ).rejects.toThrow(/No se encontraron salidas/);
+      await expect(service.performReturn(returnDto, adminUser)).rejects.toThrow(
+        /No se encontraron salidas/,
+      );
     });
 
     it('rechaza devolución que excede el consumo neto de la OT', async () => {
@@ -465,9 +444,7 @@ describe('InventoryStockService', () => {
     it('incrementa stock y registra WORK_ORDER_RETURN sin recalcular CPP', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransaction.findMany
-          .mockResolvedValueOnce([
-            { quantity: 10, type: 'OUT' },
-          ] as never)
+          .mockResolvedValueOnce([{ quantity: 10, type: 'OUT' }] as never)
           .mockResolvedValueOnce([] as never);
         setupExistingStock(4, 25);
         setupUpsertResult(6, 25);
@@ -511,7 +488,10 @@ describe('InventoryStockService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      const result = await service.performReturn(returnDto, userWithoutCostView);
+      const result = await service.performReturn(
+        returnDto,
+        userWithoutCostView,
+      );
       expect(result.unitCost).toBe(0);
     });
 
@@ -519,7 +499,9 @@ describe('InventoryStockService', () => {
       mockGetPolicyThresholds.mockResolvedValue({ minStock: 3, maxStock: 30 });
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransaction.findMany
-          .mockResolvedValueOnce([{ quantity: 4, type: 'WORK_ORDER_ISSUE' }] as never)
+          .mockResolvedValueOnce([
+            { quantity: 4, type: 'WORK_ORDER_ISSUE' },
+          ] as never)
           .mockResolvedValueOnce([] as never);
         tx.itemStock.findUnique.mockResolvedValue(null);
         setupUpsertResult(2, 0);
@@ -566,7 +548,11 @@ describe('InventoryStockService', () => {
     });
 
     it('rechaza payload vacío', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
 
       await expect(
@@ -575,7 +561,11 @@ describe('InventoryStockService', () => {
     });
 
     it('rechaza máximo menor que mínimo', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.itemStock.findUnique.mockResolvedValue({
@@ -603,7 +593,11 @@ describe('InventoryStockService', () => {
     const trId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
     it('añade trace de recepción/OC y transferencia en kardex paginado', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([
         {
           type: 'IN',
@@ -670,7 +664,11 @@ describe('InventoryStockService', () => {
     });
 
     it('marca saldoPendienteAdjust en ADJUST vinculado a recepción', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([
         {
           type: 'ADJUST',
@@ -704,7 +702,9 @@ describe('InventoryStockService', () => {
       );
 
       expect(result.data[0].trace?.saldoPendienteAdjust).toBe(true);
-      expect(result.data[0].trace?.warehouseReceipt?.correlative).toBe('GR-ADJ');
+      expect(result.data[0].trace?.warehouseReceipt?.correlative).toBe(
+        'GR-ADJ',
+      );
     });
   });
 
@@ -898,7 +898,11 @@ describe('InventoryStockService', () => {
     };
 
     function setupWarehouseAndStock(): void {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.groupBy
         .mockResolvedValueOnce([
           { itemId: stockItemId, _sum: { quantity: 10 } },
@@ -1092,7 +1096,11 @@ describe('InventoryStockService', () => {
 
   describe('getStockPosition', () => {
     it('devuelve ubicación y cantidad cuando existe posición', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.itemStock.findUnique.mockResolvedValue({
         location: '  A-01  ',
@@ -1109,7 +1117,11 @@ describe('InventoryStockService', () => {
     });
 
     it('devuelve quantityOnHand 0 si no hay fila item_stock', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId, contractId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.itemStock.findUnique.mockResolvedValue(null);
 

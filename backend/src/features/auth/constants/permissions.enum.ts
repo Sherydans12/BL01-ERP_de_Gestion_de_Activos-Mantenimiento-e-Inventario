@@ -126,6 +126,11 @@ export enum SystemPermissions {
   OPERATIONS_AVAILABILITY_CREATE = 'operations:availability:create',
   OPERATIONS_AVAILABILITY_MONITOR = 'operations:availability:monitor',
 
+  // —— Operaciones: registro de fallas (correctivo imprevisto) ——
+  OPERATIONS_FAULT_REPORT_READ = 'operations:fault-report:read',
+  OPERATIONS_FAULT_REPORT_CREATE = 'operations:fault-report:create',
+  OPERATIONS_FAULT_REPORT_MANAGE = 'operations:fault-report:manage',
+
   // —— Administración: usuarios ——
   ADMIN_USER_READ = 'admin:user:read',
   ADMIN_USER_CREATE = 'admin:user:create',

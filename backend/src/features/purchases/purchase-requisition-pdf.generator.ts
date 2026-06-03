@@ -129,10 +129,9 @@ function equipmentLine(
   return label ? `${eq.internalId} (${label})` : eq.internalId;
 }
 
-function buildItemRowDescription(
-  line: SrcPdfRequisition['items'][0],
-): string {
-  const part = line.inventoryItem?.partNumber?.trim() || line.partNumber?.trim();
+function buildItemRowDescription(line: SrcPdfRequisition['items'][0]): string {
+  const part =
+    line.inventoryItem?.partNumber?.trim() || line.partNumber?.trim();
   const name = line.inventoryItem?.name?.trim();
   const base = line.description?.trim() || '—';
   if (part && name) return `COD (${part}) ${name} — ${base}`;
@@ -175,7 +174,7 @@ function computeModalidadHtml(req: SrcPdfRequisition): string {
     return `<p><strong>Proveedor de referencia (cotización ganadora):</strong> ${escapeHtml(winnerVendor.trim())}</p>`;
   }
   if (vendorNamesFromAwards.size === 1) {
-    const v = [...vendorNamesFromAwards][0]!;
+    const v = [...vendorNamesFromAwards][0];
     return `<p><strong>Proveedor adjudicado (oferta por ítem):</strong> ${escapeHtml(v)}</p>`;
   }
   return `<p>${escapeHtml('Sin adjudicación definitiva al momento de la emisión (en proceso o pendiente de ofertas).')}</p>`;
@@ -200,7 +199,10 @@ function buildPurchaseRequisitionHtml(
     ? [req.contract.code, req.contract.name].filter(Boolean).join(' — ').trim()
     : '';
   const sLine = req.subcontract
-    ? [req.subcontract.code, req.subcontract.name].filter(Boolean).join(' — ').trim()
+    ? [req.subcontract.code, req.subcontract.name]
+        .filter(Boolean)
+        .join(' — ')
+        .trim()
     : '';
 
   const destImputacion = (() => {
@@ -225,7 +227,10 @@ function buildPurchaseRequisitionHtml(
     return parts.join('<br/>');
   })();
 
-  const requesterLine = [req.requestedBy?.name?.trim(), req.requestedBy?.email?.trim()]
+  const requesterLine = [
+    req.requestedBy?.name?.trim(),
+    req.requestedBy?.email?.trim(),
+  ]
     .filter(Boolean)
     .join(' · ');
 

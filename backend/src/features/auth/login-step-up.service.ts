@@ -77,7 +77,9 @@ export class LoginStepUpService {
     codeRaw: string,
   ): Promise<{ userId: string }> {
     if (!rawToken || !codeRaw) {
-      throw new UnauthorizedException('Código o sesión de verificación inválida.');
+      throw new UnauthorizedException(
+        'Código o sesión de verificación inválida.',
+      );
     }
     const tokenHash = crypto
       .createHash('sha256')
@@ -96,7 +98,9 @@ export class LoginStepUpService {
       },
     });
     if (!row) {
-      throw new UnauthorizedException('Código o sesión de verificación inválida o expirada.');
+      throw new UnauthorizedException(
+        'Código o sesión de verificación inválida o expirada.',
+      );
     }
     const ok = await bcrypt.compare(code, row.codeHash);
     if (!ok) {

@@ -52,7 +52,12 @@ export class PurchaseCreditNotesService {
   /** Crea una nota de crédito y re-dispara la validación 3-way de todas las facturas de la OC. */
   async create(
     dto: CreateCreditNoteDto,
-    user: { id: string; tenantId: string; role?: string; allowedContracts?: string[] },
+    user: {
+      id: string;
+      tenantId: string;
+      role?: string;
+      allowedContracts?: string[];
+    },
   ) {
     const tenantId = user.tenantId;
 
@@ -90,7 +95,9 @@ export class PurchaseCreditNotesService {
       }
     }
 
-    let creditNote: Awaited<ReturnType<typeof this.prisma.purchaseCreditNote.create>>;
+    let creditNote: Awaited<
+      ReturnType<typeof this.prisma.purchaseCreditNote.create>
+    >;
     try {
       creditNote = await this.prisma.purchaseCreditNote.create({
         data: {
@@ -139,7 +146,11 @@ export class PurchaseCreditNotesService {
     });
 
     // Re-disparar validación 3-way en todas las facturas activas de la OC.
-    await this.revalidateAllInvoicesForOrder(dto.purchaseOrderId, tenantId, user.id);
+    await this.revalidateAllInvoicesForOrder(
+      dto.purchaseOrderId,
+      tenantId,
+      user.id,
+    );
 
     return creditNote;
   }
@@ -147,12 +158,18 @@ export class PurchaseCreditNotesService {
   /** Elimina una nota de crédito y re-valida el 3-way. */
   async remove(
     id: string,
-    user: { id: string; tenantId: string; role?: string; allowedContracts?: string[] },
+    user: {
+      id: string;
+      tenantId: string;
+      role?: string;
+      allowedContracts?: string[];
+    },
   ) {
     const creditNote = await this.prisma.purchaseCreditNote.findFirst({
       where: { id, tenantId: user.tenantId },
     });
-    if (!creditNote) throw new NotFoundException('Nota de crédito no encontrada');
+    if (!creditNote)
+      throw new NotFoundException('Nota de crédito no encontrada');
 
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id: creditNote.purchaseOrderId, tenantId: user.tenantId },

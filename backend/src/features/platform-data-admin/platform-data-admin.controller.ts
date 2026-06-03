@@ -89,6 +89,10 @@ export class PlatformDataAdminController {
         `Dominio inválido. Use: ${PURGE_DOMAINS.join(', ')}`,
       );
     }
-    return this.platformData.purgeDomain(tenantId, domain, dto.confirmTenantCode);
+    return this.platformData.purgeDomain(
+      tenantId,
+      domain,
+      dto.confirmTenantCode,
+    );
   }
 }

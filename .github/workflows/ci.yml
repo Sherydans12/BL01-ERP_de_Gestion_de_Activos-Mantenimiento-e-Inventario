@@ -51,7 +51,7 @@ jobs:
 
       - name: Lint backend
         working-directory: backend
-        run: npx eslint "{src,apps,libs,test}/**/*.ts" --max-warnings 0
+        run: npm run lint:ci
 
       - name: Build backend
         working-directory: backend
@@ -79,3 +79,9 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm run test:ci
+        env:
+          CHROMIUM_FLAGS: "--no-sandbox --disable-gpu --disable-dev-shm-usage"

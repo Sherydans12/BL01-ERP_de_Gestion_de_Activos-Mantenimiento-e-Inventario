@@ -31,7 +31,7 @@ export class WarehousesService {
     const tenantWide = allowed.includes('ALL');
     const emptySentinel = '00000000-0000-0000-0000-000000000000';
 
-  // Lógica de seguridad por Contrato
+    // Lógica de seguridad por Contrato
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
       if (contractFilter) {
         where.contractId = contractFilter;
@@ -143,7 +143,7 @@ export class WarehousesService {
       return await this.prisma.warehouse.delete({
         where: { id },
       });
-    } catch (error) {
+    } catch (_error) {
       throw new BadRequestException(
         'No se puede eliminar la bodega porque ya contiene stock o transacciones registradas.',
       );

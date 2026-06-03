@@ -34,10 +34,12 @@ describe('PurchaseInvoicesService', () => {
   const poAmount = new Prisma.Decimal(10000);
   const invoiceAmount = new Prisma.Decimal(10000);
 
-  function buildInvoice(overrides: Partial<{
-    status: string;
-    totalAmount: Prisma.Decimal;
-  }> = {}) {
+  function buildInvoice(
+    overrides: Partial<{
+      status: string;
+      totalAmount: Prisma.Decimal;
+    }> = {},
+  ) {
     return {
       id: invoiceId,
       tenantId,
@@ -125,7 +127,9 @@ describe('PurchaseInvoicesService', () => {
         { provide: PrismaService, useValue: prisma },
         {
           provide: NotificationsService,
-          useValue: { sendNotification: jest.fn().mockResolvedValue(undefined) },
+          useValue: {
+            sendNotification: jest.fn().mockResolvedValue(undefined),
+          },
         },
         { provide: AuditService, useValue: { log: jest.fn() } },
         {
@@ -280,7 +284,12 @@ describe('PurchaseInvoicesService', () => {
       } as never);
       prisma.warehouseReceipt.findMany.mockResolvedValue([
         {
-          items: [{ quantityReceived: 2, orderItem: { unitCost: new Prisma.Decimal(1000) } }],
+          items: [
+            {
+              quantityReceived: 2,
+              orderItem: { unitCost: new Prisma.Decimal(1000) },
+            },
+          ],
         },
       ] as never);
       prisma.purchaseOrder.findFirst.mockResolvedValue({
@@ -479,7 +488,9 @@ describe('PurchaseInvoicesService', () => {
     });
 
     it('rechaza update sin campos', async () => {
-      prisma.purchaseInvoice.findFirst.mockResolvedValue(invoiceEntity() as never);
+      prisma.purchaseInvoice.findFirst.mockResolvedValue(
+        invoiceEntity() as never,
+      );
 
       await expect(service.update(invoiceId, {}, user)).rejects.toThrow(
         /campos para actualizar/,
@@ -569,9 +580,9 @@ describe('PurchaseInvoicesService', () => {
     };
 
     it('rechaza referencia de pago vacía', async () => {
-      await expect(service.recordPayment(invoiceId, '  ', user)).rejects.toThrow(
-        /paymentReference es obligatorio/,
-      );
+      await expect(
+        service.recordPayment(invoiceId, '  ', user),
+      ).rejects.toThrow(/paymentReference es obligatorio/);
     });
 
     it('rechaza pago si la factura no está MATCHED', async () => {

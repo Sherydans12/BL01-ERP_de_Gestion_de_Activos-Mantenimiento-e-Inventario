@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { MeterLogSource, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
