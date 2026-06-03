@@ -10,6 +10,8 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { DeviceService } from '../../../core/services/device/device.service';
 import {
   EquipmentAvailabilityService,
   UnreportedEquipment,
@@ -31,7 +33,9 @@ export class AvailabilityMonitorComponent implements OnInit {
   protected readonly SHIFT_LABELS = SHIFT_LABELS;
 
   private availabilityService = inject(EquipmentAvailabilityService);
+  private fleetService = inject(FleetService);
   private notify = inject(NotificationService);
+  protected readonly deviceService = inject(DeviceService);
 
   // ── Filtros ───────────────────────────────────────────────────────────────
   filterDate  = signal<string>(this.todayIso());
@@ -42,17 +46,31 @@ export class AvailabilityMonitorComponent implements OnInit {
   isLoading   = signal(false);
   lastQueried = signal<string | null>(null);
 
-  /** Badge con el conteo de equipos sin reportar. */
+  /** Total de equipos de la flota (desde FleetService). */
+  totalFleet = signal(0);
+
+  /** Equipos sin reportar en el turno consultado. */
   unreportedCount = computed(() => this.unreported().length);
 
-  /** Estado del panel: vacío = todos reportados; con items = alerta. */
-  allReported = computed(() => !this.isLoading() && this.unreportedCount() === 0 && this.lastQueried() != null);
+  /** Derivado: reportados = total - pendientes (solo válido tras la consulta). */
+  reportedCount = computed(() =>
+    Math.max(0, this.totalFleet() - this.unreportedCount()),
+  );
+
+  /** Todos reportados: sin cargando, lista vacía, con consulta previa. */
+  allReported = computed(
+    () => !this.isLoading() && this.unreportedCount() === 0 && this.lastQueried() != null,
+  );
 
   get maxDate(): string {
     return this.todayIso();
   }
 
   ngOnInit(): void {
+    this.fleetService.getEquipments({ limit: 1 }).subscribe({
+      next: (res) => this.totalFleet.set(res.total),
+      error: () => { /* no crítico: el summary bar simplemente no muestra total */ },
+    });
     this.query();
   }
 

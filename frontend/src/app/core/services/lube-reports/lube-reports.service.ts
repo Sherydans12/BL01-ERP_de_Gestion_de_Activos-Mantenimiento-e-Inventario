@@ -26,8 +26,9 @@ export interface CreateLubeReportPayload {
 export interface LubeReportEquipmentRef {
   id: string;
   internalId: string | null;
-  name: string;
-  licensePlate: string | null;
+  brand: string;
+  model: string;
+  plate: string | null;
 }
 
 export interface LubeReportWarehouseRef {

@@ -9,15 +9,16 @@ import {
   EquipmentAvailabilityService,
   UnreportedEquipment,
 } from '../../../core/services/equipment-availability/equipment-availability.service';
+import { FleetService, PaginatedEquipments } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 
-// ── Stubs ────────────────────────────────────────────────────────────────────
+// ── Stubs ─────────────────────────────────────────────────────────────────────
 
-/** Stub con flota vacía → simula "todos los equipos reportados" */
-const availabilityServiceEmptySpy = jasmine.createSpyObj<EquipmentAvailabilityService>(
-  'EquipmentAvailabilityService',
-  { getUnreported: of([]) },
-);
+const emptyFleet: PaginatedEquipments = { data: [], total: 5, page: 1, limit: 1 };
+
+const fleetServiceSpy = jasmine.createSpyObj<FleetService>('FleetService', {
+  getEquipments: of(emptyFleet),
+});
 
 const notifySpy = jasmine.createSpyObj<NotificationService>('NotificationService', [
   'success',
@@ -30,6 +31,11 @@ describe('AvailabilityMonitorComponent — empty state (todos reportados)', () =
   let component: AvailabilityMonitorComponent;
   let fixture: ComponentFixture<AvailabilityMonitorComponent>;
 
+  const availabilityServiceEmptySpy = jasmine.createSpyObj<EquipmentAvailabilityService>(
+    'EquipmentAvailabilityService',
+    { getUnreported: of([]) },
+  );
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AvailabilityMonitorComponent],
@@ -38,6 +44,7 @@ describe('AvailabilityMonitorComponent — empty state (todos reportados)', () =
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: EquipmentAvailabilityService, useValue: availabilityServiceEmptySpy },
+        { provide: FleetService,                 useValue: fleetServiceSpy },
         { provide: NotificationService,          useValue: notifySpy },
       ],
     }).compileComponents();
@@ -77,6 +84,14 @@ describe('AvailabilityMonitorComponent — empty state (todos reportados)', () =
   it('lastQueried no es null después de la primera consulta', () => {
     expect(component.lastQueried()).not.toBeNull();
   });
+
+  it('totalFleet se carga desde FleetService', () => {
+    expect(component.totalFleet()).toBe(5);
+  });
+
+  it('reportedCount es igual a totalFleet cuando unreportedCount es 0', () => {
+    expect(component.reportedCount()).toBe(5);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,8 +101,8 @@ describe('AvailabilityMonitorComponent — con equipos sin reportar (alerta)', (
   let fixture: ComponentFixture<AvailabilityMonitorComponent>;
 
   const twoUnreported: UnreportedEquipment[] = [
-    { id: 'eq-1', internalId: 'EQ-001', brand: 'CAT', model: '330', plate: 'A-001', contractId: 'c-1' },
-    { id: 'eq-2', internalId: 'EQ-002', brand: 'Komatsu', model: 'PC200', plate: null, contractId: 'c-1' },
+    { id: 'eq-1', internalId: 'EQ-001', brand: 'CAT',    model: '330',   plate: 'A-001', contractId: 'c-1' },
+    { id: 'eq-2', internalId: 'EQ-002', brand: 'Komatsu', model: 'PC200', plate: null,    contractId: 'c-1' },
   ];
 
   const availabilityServiceAlertSpy = jasmine.createSpyObj<EquipmentAvailabilityService>(
@@ -103,6 +118,7 @@ describe('AvailabilityMonitorComponent — con equipos sin reportar (alerta)', (
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: EquipmentAvailabilityService, useValue: availabilityServiceAlertSpy },
+        { provide: FleetService,                 useValue: fleetServiceSpy },
         { provide: NotificationService,          useValue: notifySpy },
       ],
     }).compileComponents();
@@ -138,5 +154,9 @@ describe('AvailabilityMonitorComponent — con equipos sin reportar (alerta)', (
   it('onDateChange actualiza el signal de fecha', () => {
     component.onDateChange('2026-06-01');
     expect(component.filterDate()).toBe('2026-06-01');
+  });
+
+  it('reportedCount es totalFleet menos unreportedCount', () => {
+    expect(component.reportedCount()).toBe(component.totalFleet() - 2);
   });
 });

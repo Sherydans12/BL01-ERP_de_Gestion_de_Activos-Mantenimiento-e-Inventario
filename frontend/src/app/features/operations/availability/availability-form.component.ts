@@ -8,10 +8,9 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, forkJoin } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
-import { FleetService } from '../../../core/services/fleet/fleet.service';
 import {
   EquipmentAvailabilityService,
   CreateAvailabilityPayload,
@@ -21,9 +20,24 @@ import {
   STATUS_LABELS,
   ShiftType,
   OperationalStatus,
+  UnreportedEquipment,
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { O } from '../../../core/constants/operations-permissions';
+
+export interface DraftAvailability {
+  status: OperationalStatus | null;
+  meterReading: number | null;
+  comments: string;
+}
+
+const STATUS_DOT: Record<OperationalStatus, string> = {
+  OPERATIONAL: 'bg-green-400',
+  STANDBY: 'bg-blue-400',
+  RESERVE_NO_OPERATOR: 'bg-yellow-400',
+  DOWN_FAILURE: 'bg-red-400',
+  DOWN_MAINTENANCE: 'bg-orange-400',
+};
 
 @Component({
   selector: 'app-availability-form',
@@ -37,129 +51,133 @@ export class AvailabilityFormComponent implements OnInit {
   protected readonly OPERATIONAL_STATUSES = OPERATIONAL_STATUSES;
   protected readonly SHIFT_LABELS = SHIFT_LABELS;
   protected readonly STATUS_LABELS = STATUS_LABELS;
+  protected readonly STATUS_DOT = STATUS_DOT;
 
   private availabilityService = inject(EquipmentAvailabilityService);
-  private fleetService = inject(FleetService);
   private notify = inject(NotificationService);
 
-  // ── Catálogo ─────────────────────────────────────────────────────────────
-  equipments  = signal<any[]>([]);
-  equipSearch = signal('');
-  equipLoading = signal(true);
+  // ── Filtros de turno ──────────────────────────────────────────────────────
+  reportDate = signal<string>(this.todayIso());
+  shift = signal<ShiftType>('DAY');
 
-  filteredEquipments = computed(() => {
-    const q = this.equipSearch().toLowerCase().trim();
-    if (!q) return this.equipments();
-    return this.equipments().filter(
-      (e) =>
-        e.internalId?.toLowerCase().includes(q) ||
-        e.brand?.toLowerCase().includes(q) ||
-        e.model?.toLowerCase().includes(q) ||
-        (e.plate ?? '').toLowerCase().includes(q),
-    );
-  });
+  // ── Lista de equipos pendientes ───────────────────────────────────────────
+  pendingEquipments = signal<UnreportedEquipment[]>([]);
+  isLoadingEquipments = signal(false);
 
-  // ── Estado del formulario ─────────────────────────────────────────────────
-  reportDate     = signal<string>(this.todayIso());
-  shift          = signal<ShiftType>('DAY');
-  selectedEquipmentId = signal<string>('');
-  status         = signal<OperationalStatus>('OPERATIONAL');
-  meterReading   = signal<number | null>(null);
-  comments       = signal<string>('');
+  // ── Estado bulk: Record<equipmentId, DraftAvailability> ──────────────────
+  drafts = signal<Record<string, DraftAvailability>>({});
 
+  // ── Envío ─────────────────────────────────────────────────────────────────
   isSubmitting = signal(false);
 
-  /** Etiqueta del equipo seleccionado para mostrar en el campo. */
-  selectedEquipmentLabel = computed(() => {
-    const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
-    if (!eq) return '';
-    const plate = eq.plate ? ` — ${eq.plate}` : '';
-    return `${eq.internalId ?? ''} ${eq.brand ?? ''} ${eq.model ?? ''}${plate}`.trim();
-  });
-
-  /** El formulario es válido cuando tiene equipo, fecha, turno y estado. */
-  isFormValid = computed(
-    () => !!this.selectedEquipmentId() && !!this.reportDate() && !!this.shift() && !!this.status(),
+  /** Entradas listas = tienen al menos el status seleccionado. */
+  readyToSubmit = computed(() =>
+    Object.entries(this.drafts()).filter(
+      ([, v]) => v.status !== null,
+    ) as [string, DraftAvailability & { status: OperationalStatus }][],
   );
 
-  /** Indica si el formulario tiene datos sin guardar (dirty). */
-  isDirty = computed(
-    () =>
-      !!this.selectedEquipmentId() ||
-      this.meterReading() != null ||
-      !!this.comments().trim(),
+  readyCount = computed(() => this.readyToSubmit().length);
+
+  /** Hay datos sin guardar si algún draft fue tocado. */
+  isDirty = computed(() =>
+    Object.values(this.drafts()).some(
+      (v) => v.status !== null || v.meterReading != null || !!v.comments.trim(),
+    ),
   );
 
   // ── CanDeactivate ─────────────────────────────────────────────────────────
   leaveConfirmOpen = signal(false);
   private leaveResult$ = new Subject<boolean>();
 
-  // ── Fecha máxima ──────────────────────────────────────────────────────────
   get maxDate(): string {
     return this.todayIso();
   }
 
   ngOnInit(): void {
-    this.fleetService.getEquipments({ limit: 300 }).subscribe({
-      next: (res) => {
-        this.equipments.set(res.data ?? res);
-        this.equipLoading.set(false);
-      },
-      error: () => {
-        this.notify.error('No se pudieron cargar los equipos.');
-        this.equipLoading.set(false);
-      },
+    this.loadPending();
+  }
+
+  loadPending(): void {
+    this.isLoadingEquipments.set(true);
+    this.availabilityService
+      .getUnreported({ date: this.reportDate(), shift: this.shift() })
+      .subscribe({
+        next: (list) => {
+          this.pendingEquipments.set(list);
+          const initial: Record<string, DraftAvailability> = {};
+          for (const eq of list) {
+            initial[eq.id] = { status: null, meterReading: null, comments: '' };
+          }
+          this.drafts.set(initial);
+          this.isLoadingEquipments.set(false);
+        },
+        error: () => {
+          this.notify.error('No se pudieron cargar los equipos pendientes.');
+          this.isLoadingEquipments.set(false);
+        },
+      });
+  }
+
+  onFilterChange(): void {
+    this.loadPending();
+  }
+
+  /**
+   * Actualiza un campo del borrador de un equipo de forma inmutable.
+   * Signal<Record<>> → nuevo objeto raíz → Angular detecta el cambio.
+   */
+  updateDraft(equipmentId: string, patch: Partial<DraftAvailability>): void {
+    const current = this.drafts();
+    this.drafts.set({
+      ...current,
+      [equipmentId]: { ...current[equipmentId], ...patch },
     });
   }
 
-  onSelectEquipment(id: string): void {
-    this.selectedEquipmentId.set(id);
-    this.equipSearch.set('');
-  }
+  /**
+   * Envía todos los reportes listos (status != null) en paralelo con forkJoin.
+   * Muestra un solo toast de resultado al finalizar.
+   */
+  submitAll(): void {
+    const ready = this.readyToSubmit();
+    if (!ready.length || this.isSubmitting()) return;
 
-  submit(): void {
-    if (!this.isFormValid() || this.isSubmitting()) return;
-
-    const payload: CreateAvailabilityPayload = {
-      equipmentId: this.selectedEquipmentId(),
-      reportDate: this.reportDate(),
-      shift: this.shift(),
-      status: this.status(),
-      meterReading: this.meterReading() ?? undefined,
-      comments: this.comments().trim() || undefined,
-    };
+    const requests = ready.map(([equipmentId, draft]) =>
+      this.availabilityService.create({
+        equipmentId,
+        reportDate: this.reportDate(),
+        shift: this.shift(),
+        status: draft.status,
+        meterReading: draft.meterReading ?? undefined,
+        comments: draft.comments.trim() || undefined,
+      } as CreateAvailabilityPayload),
+    );
 
     this.isSubmitting.set(true);
-    this.availabilityService.create(payload).subscribe({
+    forkJoin(requests).subscribe({
       next: () => {
-        this.notify.success('Reporte de disponibilidad registrado correctamente.');
-        this.resetForm();
+        const n = ready.length;
+        this.notify.success(
+          `${n} equipo${n > 1 ? 's' : ''} reportado${n > 1 ? 's' : ''} correctamente.`,
+        );
         this.isSubmitting.set(false);
+        this.loadPending();
       },
       error: (err) => {
         const msg: string =
-          err?.error?.message ?? 'Ocurrió un error al registrar el reporte.';
+          err?.error?.message ?? 'Error al registrar algunos reportes.';
         this.notify.error(msg);
         this.isSubmitting.set(false);
       },
     });
   }
 
-  resetForm(): void {
-    this.selectedEquipmentId.set('');
-    this.equipSearch.set('');
-    this.reportDate.set(this.todayIso());
-    this.shift.set('DAY');
-    this.status.set('OPERATIONAL');
-    this.meterReading.set(null);
-    this.comments.set('');
-  }
-
   private todayIso(): string {
     return new Date().toISOString().slice(0, 10);
   }
 
-  // ── CanDeactivate logic ───────────────────────────────────────────────────
+  // ── CanDeactivate ─────────────────────────────────────────────────────────
 
   confirmLeaveIfDirty(): Observable<boolean> | boolean {
     if (!this.isDirty()) return true;
