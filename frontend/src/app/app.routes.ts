@@ -8,6 +8,7 @@ import { A } from './core/constants/admin-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
 import { lubeReportCanDeactivate } from './features/operations/lube-reports/lube-report-can-deactivate.guard';
 import { availabilityFormCanDeactivate } from './features/operations/availability/availability-form-can-deactivate.guard';
+import { faultReportCanDeactivate } from './features/operations/fault-reports/fault-report-can-deactivate.guard';
 
 export const routes: Routes = [
   {
@@ -208,6 +209,26 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/operations/availability/availability-monitor.component').then(
             (m) => m.AvailabilityMonitorComponent,
+          ),
+      },
+      // ── Operaciones: Registro de Fallas ──────────────────────────────────
+      {
+        path: 'operaciones/fallas',
+        canActivate: [permissionGuard],
+        data: { permissions: O.FAULT_REPORT_READ, pageTitle: 'Registro de Fallas' },
+        loadComponent: () =>
+          import('./features/operations/fault-reports/fault-report-list.component').then(
+            (m) => m.FaultReportListComponent,
+          ),
+      },
+      {
+        path: 'operaciones/fallas/nuevo',
+        canActivate: [permissionGuard],
+        canDeactivate: [faultReportCanDeactivate],
+        data: { permissions: O.FAULT_REPORT_CREATE, pageTitle: 'Registrar Falla' },
+        loadComponent: () =>
+          import('./features/operations/fault-reports/fault-report-form.component').then(
+            (m) => m.FaultReportFormComponent,
           ),
       },
       // ── Mantenimiento (pautas PM) ─────────────────────────────────────────

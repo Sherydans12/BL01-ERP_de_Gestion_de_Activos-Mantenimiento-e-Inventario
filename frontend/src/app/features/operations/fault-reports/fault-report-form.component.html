@@ -1,0 +1,228 @@
+<div class="min-h-screen bg-dark p-4 lg:p-6">
+
+  <!-- Encabezado -->
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15">
+        <svg class="h-6 w-6 text-red-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="text-xl font-semibold text-main">Registrar Falla</h1>
+        <p class="text-sm text-muted">Captura un evento correctivo imprevisto en terreno.</p>
+      </div>
+    </div>
+    <a routerLink="/app/operaciones/fallas"
+      class="text-sm text-muted hover:text-main transition-colors flex items-center gap-1">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/>
+      </svg>
+      Historial
+    </a>
+  </div>
+
+  <div class="max-w-2xl mx-auto space-y-5">
+
+    <!-- ── 1. Equipo ──────────────────────────────────────────────────────── -->
+    <div class="bg-surface border border-border rounded-2xl p-5">
+      <h2 class="text-sm font-semibold text-main mb-3 uppercase tracking-wide">1. Equipo afectado</h2>
+
+      @if (selectedEquipmentId()) {
+        <!-- Equipo seleccionado -->
+        <div class="flex items-center justify-between rounded-lg border border-primary/40 bg-primary/10 px-4 py-3">
+          <span class="text-sm font-medium text-main">{{ selectedEquipmentLabel() }}</span>
+          <button type="button" (click)="onSelectEquipment('')"
+            class="text-xs text-muted hover:text-red-400 transition-colors">Cambiar</button>
+        </div>
+      } @else {
+        <!-- Buscador -->
+        <div class="relative">
+          <input
+            type="text"
+            placeholder="Buscar por ID, marca, modelo o placa…"
+            [ngModel]="equipSearch()"
+            (ngModelChange)="equipSearch.set($event)"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-muted"
+          />
+        </div>
+
+        @if (equipLoading()) {
+          <p class="mt-2 text-xs text-muted">Cargando equipos…</p>
+        } @else if (filteredEquipments().length === 0) {
+          <p class="mt-2 text-xs text-muted">Sin resultados.</p>
+        } @else {
+          <ul class="mt-2 max-h-44 overflow-y-auto divide-y divide-border rounded-lg border border-border bg-dark">
+            @for (eq of filteredEquipments(); track eq.id) {
+              <li>
+                <button type="button" (click)="onSelectEquipment(eq.id)"
+                  class="w-full text-left px-4 py-2.5 text-sm text-main hover:bg-primary/10 transition-colors">
+                  <span class="font-mono text-primary text-xs mr-2">{{ eq.internalId }}</span>
+                  {{ eq.brand }} {{ eq.model }}
+                  @if (eq.plate) { <span class="text-muted ml-1">({{ eq.plate }})</span> }
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </div>
+
+    <!-- ── 2. Fecha, hora y horómetro ─────────────────────────────────────── -->
+    <div class="bg-surface border border-border rounded-2xl p-5">
+      <h2 class="text-sm font-semibold text-main mb-3 uppercase tracking-wide">2. Fecha y horómetro</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1">
+            Fecha y hora del evento <span class="text-red-400">*</span>
+          </label>
+          <input
+            type="datetime-local"
+            [max]="maxDate"
+            [ngModel]="eventDate()"
+            (ngModelChange)="eventDate.set($event)"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1">
+            Horómetro al momento de la falla <span class="text-muted">(opcional)</span>
+          </label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="ej. 12450"
+            [ngModel]="meterAtFault()"
+            (ngModelChange)="meterAtFault.set($event ? +$event : null)"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-muted"
+          />
+          <p class="mt-1 text-xs text-muted">Si es mayor al actual, actualiza el horómetro del equipo.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3. Sistema afectado ────────────────────────────────────────────── -->
+    <div class="bg-surface border border-border rounded-2xl p-5">
+      <h2 class="text-sm font-semibold text-main mb-3 uppercase tracking-wide">
+        3. Sistema afectado <span class="text-red-400">*</span>
+      </h2>
+      <div class="flex flex-wrap gap-2">
+        @for (sys of AFFECTED_SYSTEMS; track sys) {
+          <label
+            class="cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition-colors"
+            [class.border-primary]="selectedSystem() === sys"
+            [class.bg-primary]="selectedSystem() === sys"
+            [class.text-white]="selectedSystem() === sys"
+            [class.border-border]="selectedSystem() !== sys"
+            [class.text-muted]="selectedSystem() !== sys"
+            [class.hover:border-primary]="selectedSystem() !== sys"
+          >
+            <input type="radio" [value]="sys" [checked]="selectedSystem() === sys"
+              (change)="selectedSystem.set(sys)" class="sr-only"/>
+            {{ SYSTEM_LABELS[sys] }}
+          </label>
+        }
+      </div>
+    </div>
+
+    <!-- ── 4. Criticidad ──────────────────────────────────────────────────── -->
+    <div class="bg-surface border border-border rounded-2xl p-5">
+      <h2 class="text-sm font-semibold text-main mb-3 uppercase tracking-wide">
+        4. Criticidad <span class="text-red-400">*</span>
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        @for (crit of FAULT_CRITICALITIES; track crit) {
+          <label
+            class="cursor-pointer rounded-xl border-2 p-4 transition-all select-none"
+            [ngClass]="{
+              'border-red-500 bg-red-500/10':    crit === 'HIGH'   && selectedCriticality() === crit,
+              'border-orange-500 bg-orange-500/10': crit === 'MEDIUM' && selectedCriticality() === crit,
+              'border-yellow-500 bg-yellow-500/10': crit === 'LOW'    && selectedCriticality() === crit,
+              'border-border': selectedCriticality() !== crit
+            }"
+          >
+            <input type="radio" [value]="crit" [checked]="selectedCriticality() === crit"
+              (change)="selectedCriticality.set(crit)" class="sr-only"/>
+            <div class="flex flex-col gap-1">
+              <span
+                class="text-base font-bold"
+                [class.text-red-400]="crit === 'HIGH'"
+                [class.text-orange-400]="crit === 'MEDIUM'"
+                [class.text-yellow-400]="crit === 'LOW'"
+              >{{ CRITICALITY_META[crit].label }}</span>
+              <span class="text-xs text-muted leading-tight">{{ CRITICALITY_META[crit].subtitle }}</span>
+            </div>
+            @if (crit === 'HIGH') {
+              <p class="mt-2 text-xs font-semibold text-red-400">
+                ⚠ Genera OT reactiva + marca equipo fuera de servicio
+              </p>
+            } @else if (crit === 'MEDIUM') {
+              <p class="mt-2 text-xs font-semibold text-orange-400">
+                Genera OT correctiva automáticamente
+              </p>
+            }
+          </label>
+        }
+      </div>
+    </div>
+
+    <!-- ── 5. Descripción del síntoma ─────────────────────────────────────── -->
+    <div class="bg-surface border border-border rounded-2xl p-5">
+      <h2 class="text-sm font-semibold text-main mb-3 uppercase tracking-wide">
+        5. Descripción del síntoma <span class="text-red-400">*</span>
+      </h2>
+      <textarea
+        rows="4"
+        placeholder="Describe qué ocurrió: síntomas observados, condición del equipo, circunstancias… (mín. 10 caracteres)"
+        [ngModel]="symptomDescription()"
+        (ngModelChange)="symptomDescription.set($event)"
+        class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-muted resize-none"
+      ></textarea>
+      <p class="mt-1 text-xs text-muted text-right">
+        {{ symptomDescription().trim().length }} / mín. 10 caracteres
+      </p>
+    </div>
+
+    <!-- ── Acciones ───────────────────────────────────────────────────────── -->
+    <div class="flex items-center justify-between gap-4 pb-6">
+      <a routerLink="/app/operaciones/fallas"
+        class="text-sm text-muted hover:text-main transition-colors">
+        Cancelar
+      </a>
+      <button
+        type="button"
+        (click)="submit()"
+        [disabled]="!isFormValid() || isSubmitting()"
+        class="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
+        @if (isSubmitting()) {
+          <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          Registrando…
+        } @else {
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9"/>
+          </svg>
+          Registrar Falla
+        }
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal CanDeactivate -->
+<app-confirm-modal
+  [isOpen]="leaveConfirmOpen()"
+  title="¿Salir sin guardar?"
+  message="Tienes datos ingresados que se perderán si salís de esta pantalla."
+  confirmText="Salir"
+  cancelText="Quedarme"
+  (confirm)="onLeaveConfirmed()"
+  (cancel)="onLeaveCancelled()"
+/>

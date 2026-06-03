@@ -1,0 +1,381 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AvailabilityImpact,
+  FaultCriticality,
+  FaultReportStatus,
+  MaintenanceType,
+  MeterLogSource,
+  OtCategory,
+  OtType,
+  Prisma,
+} from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { SequenceService } from '../../common/sequence/sequence.service';
+import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { CreateFaultReportDto } from './dto/create-fault-report.dto';
+
+const FR_DOCUMENT_TYPE = 'FAULT_REPORT';
+const FR_PREFIX = 'RF';
+
+export interface ListFaultReportsQuery {
+  page?: string;
+  pageSize?: string;
+  equipmentId?: string;
+  criticality?: FaultCriticality;
+  status?: FaultReportStatus;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+@Injectable()
+export class FaultReportsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sequenceService: SequenceService,
+  ) {}
+
+  // ── Includes reutilizables ──────────────────────────────────────────────────
+
+  private readonly listInclude = {
+    equipment: {
+      select: {
+        id: true,
+        internalId: true,
+        brand: true,
+        model: true,
+        plate: true,
+        isOperational: true,
+      },
+    },
+    reportedBy: { select: { id: true, name: true } },
+    workOrder: { select: { id: true, correlative: true, status: true } },
+  } as const;
+
+  private readonly detailInclude = {
+    equipment: {
+      select: {
+        id: true,
+        internalId: true,
+        brand: true,
+        model: true,
+        plate: true,
+        isOperational: true,
+        currentMeter: true,
+      },
+    },
+    reportedBy: { select: { id: true, name: true } },
+    workOrder: {
+      select: {
+        id: true,
+        correlative: true,
+        status: true,
+        category: true,
+        affectsAvailability: true,
+      },
+    },
+    contract: { select: { id: true, code: true, name: true } },
+  } as const;
+
+  /**
+   * Registra un evento de falla en terreno.
+   *
+   * Motor de reglas (en la misma transacción Serializable):
+   *   HIGH  → crea OT NO_PROGRAMADA_REACTIVA  + isOperational=false + horómetro si avanza.
+   *   MEDIUM → crea OT NO_PROGRAMADA_CORRECTIVA + horómetro si avanza.
+   *   LOW   → solo registra el reporte (estado OPEN); planificador decide después.
+   */
+  async create(dto: CreateFaultReportDto, user: any) {
+    const tenantId = user.tenantId as string;
+    const userId = (user.id ?? user.sub) as string;
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        // ── 1. Validar equipo ─────────────────────────────────────────────────
+        const equipment = await tx.equipment.findFirst({
+          where: { id: dto.equipmentId, tenantId },
+          select: {
+            id: true,
+            currentMeter: true,
+            contractId: true,
+            subcontractId: true,
+          },
+        });
+        if (!equipment) {
+          throw new NotFoundException(
+            'El equipo no existe o no pertenece a este tenant.',
+          );
+        }
+        if (!equipment.contractId) {
+          throw new BadRequestException(
+            'El equipo no tiene un contrato asignado. Asócialo a un contrato antes de registrar fallas.',
+          );
+        }
+
+        // ── 2. Generar correlativo RF-XXXXX ───────────────────────────────────
+        const correlative = await this.sequenceService.getNextCorrelative(
+          tenantId,
+          FR_DOCUMENT_TYPE,
+          FR_PREFIX,
+          { tx, padWidth: 5 },
+        );
+
+        // ── 3. Crear el reporte (estado inicial OPEN) ─────────────────────────
+        const report = await tx.faultReport.create({
+          data: {
+            tenantId,
+            contractId: equipment.contractId,
+            equipmentId: dto.equipmentId,
+            reportedById: userId,
+            correlative,
+            eventDate: new Date(dto.eventDate),
+            meterAtFault: dto.meterAtFault ?? null,
+            affectedSystem: dto.affectedSystem,
+            criticality: dto.criticality,
+            symptomDescription: dto.symptomDescription,
+            status: FaultReportStatus.OPEN,
+          },
+        });
+
+        // ── 4. Actualizar horómetro si avanza (silent ignore si retrocede) ────
+        if (
+          dto.meterAtFault != null &&
+          dto.meterAtFault > equipment.currentMeter
+        ) {
+          await applyCurrentMeterChange(tx, {
+            tenantId,
+            equipmentId: dto.equipmentId,
+            oldMeter: equipment.currentMeter,
+            newMeter: dto.meterAtFault,
+            source: MeterLogSource.FAULT_REPORT,
+            sourceId: report.id,
+            userId,
+          });
+        }
+
+        // ── 5. Motor de reglas por criticidad ─────────────────────────────────
+        if (
+          dto.criticality === FaultCriticality.HIGH ||
+          dto.criticality === FaultCriticality.MEDIUM
+        ) {
+          const isHigh = dto.criticality === FaultCriticality.HIGH;
+          const category = isHigh
+            ? OtCategory.NO_PROGRAMADA_REACTIVA
+            : OtCategory.NO_PROGRAMADA_CORRECTIVA;
+          const affectsAvailability = isHigh
+            ? AvailabilityImpact.SI
+            : AvailabilityImpact.NO;
+
+          // Correlativo OT usando el patrón de count (alineado con WorkOrdersService)
+          const woCount = await tx.workOrder.count({ where: { tenantId } });
+          const year = new Date().getFullYear();
+          const woCorrelative = `OT-${year}-${String(woCount + 1).padStart(3, '0')}`;
+
+          const workOrder = await tx.workOrder.create({
+            data: {
+              tenantId,
+              createdByUserId: userId,
+              subcontractId: equipment.subcontractId ?? null,
+              correlative: woCorrelative,
+              equipmentId: dto.equipmentId,
+              type: OtType.NUEVA,
+              category,
+              maintenanceType: MaintenanceType.CORRECTIVO,
+              affectsAvailability,
+              initialMeter:
+                dto.meterAtFault != null
+                  ? dto.meterAtFault
+                  : equipment.currentMeter,
+              description: dto.symptomDescription,
+              initialRequestDescription: dto.symptomDescription,
+              symptomsText: dto.symptomDescription,
+              intervenedSystemsJson: [dto.affectedSystem],
+              ...(isHigh
+                ? { detentionStartedAt: new Date(dto.eventDate) }
+                : {}),
+            },
+          });
+
+          // Vincular OT al reporte y pasar a LINKED
+          const linked = await tx.faultReport.update({
+            where: { id: report.id },
+            data: {
+              workOrderId: workOrder.id,
+              status: FaultReportStatus.LINKED,
+            },
+          });
+
+          // Para falla ALTA: marcar el equipo fuera de servicio
+          if (isHigh) {
+            await tx.equipment.update({
+              where: { id: dto.equipmentId },
+              data: { isOperational: false },
+            });
+          }
+
+          return linked;
+        }
+
+        // Criticidad LOW: devuelve el reporte sin OT
+        return report;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
+    );
+  }
+
+  /**
+   * Convierte manualmente un reporte BAJA (LOW) en una OT correctiva.
+   * Solo aplica a reportes en estado OPEN con criticidad LOW.
+   * Usado por planificadores con el permiso `FAULT_REPORT_MANAGE`.
+   */
+  async createWorkOrderFromReport(id: string, user: any) {
+    const tenantId = user.tenantId as string;
+    const userId = (user.id ?? user.sub) as string;
+
+    const report = await this.prisma.faultReport.findFirst({
+      where: { id, tenantId },
+      select: {
+        id: true,
+        status: true,
+        criticality: true,
+        equipmentId: true,
+        symptomDescription: true,
+        affectedSystem: true,
+        meterAtFault: true,
+        equipment: { select: { currentMeter: true, subcontractId: true } },
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException(
+        'El reporte de falla no existe o no pertenece a este tenant.',
+      );
+    }
+    if (report.status !== FaultReportStatus.OPEN) {
+      throw new ConflictException(
+        'Solo se puede escalar a OT un reporte en estado OPEN.',
+      );
+    }
+    if (report.criticality !== FaultCriticality.LOW) {
+      throw new ConflictException(
+        'Los reportes de criticidad ALTA y MEDIA generan OT automáticamente. Este endpoint solo aplica a fallas BAJA.',
+      );
+    }
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const eq = report.equipment!;
+
+        const woCount = await tx.workOrder.count({ where: { tenantId } });
+        const year = new Date().getFullYear();
+        const woCorrelative = `OT-${year}-${String(woCount + 1).padStart(3, '0')}`;
+
+        const workOrder = await tx.workOrder.create({
+          data: {
+            tenantId,
+            createdByUserId: userId,
+            subcontractId: eq.subcontractId ?? null,
+            correlative: woCorrelative,
+            equipmentId: report.equipmentId,
+            type: OtType.NUEVA,
+            category: OtCategory.NO_PROGRAMADA_CORRECTIVA,
+            maintenanceType: MaintenanceType.CORRECTIVO,
+            affectsAvailability: AvailabilityImpact.NO,
+            initialMeter: report.meterAtFault ?? eq.currentMeter,
+            description: report.symptomDescription,
+            initialRequestDescription: report.symptomDescription,
+            symptomsText: report.symptomDescription,
+            intervenedSystemsJson: [report.affectedSystem],
+          },
+        });
+
+        return tx.faultReport.update({
+          where: { id: report.id },
+          data: {
+            workOrderId: workOrder.id,
+            status: FaultReportStatus.LINKED,
+          },
+        });
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
+    );
+  }
+
+  // ── Listado paginado ────────────────────────────────────────────────────────
+
+  async findAll(user: any, query: ListFaultReportsQuery = {}) {
+    const tenantId = user.tenantId as string;
+
+    const page = Math.max(1, parseInt(String(query.page ?? '1'), 10) || 1);
+    const pageSizeRaw = parseInt(String(query.pageSize ?? '25'), 10) || 25;
+    const pageSize = Math.min(100, Math.max(1, pageSizeRaw));
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.FaultReportWhereInput = { tenantId };
+
+    if (query.equipmentId?.trim()) {
+      where.equipmentId = query.equipmentId.trim();
+    }
+    if (query.criticality) {
+      where.criticality = query.criticality;
+    }
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.dateFrom || query.dateTo) {
+      where.eventDate = {};
+      if (query.dateFrom) {
+        where.eventDate.gte = new Date(query.dateFrom);
+      }
+      if (query.dateTo) {
+        const to = new Date(query.dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.eventDate.lte = to;
+      }
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.faultReport.findMany({
+        where,
+        include: this.listInclude,
+        orderBy: { eventDate: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.faultReport.count({ where }),
+    ]);
+
+    return { data: rows, total, page, pageSize };
+  }
+
+  // ── Detalle ─────────────────────────────────────────────────────────────────
+
+  async findOne(id: string, user: any) {
+    const tenantId = user.tenantId as string;
+
+    const report = await this.prisma.faultReport.findFirst({
+      where: { id, tenantId },
+      include: this.detailInclude,
+    });
+
+    if (!report) {
+      throw new NotFoundException(
+        'El reporte de falla no existe o no pertenece a este tenant.',
+      );
+    }
+
+    return report;
+  }
+}

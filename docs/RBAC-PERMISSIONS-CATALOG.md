@@ -454,6 +454,20 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 
 ---
 
+### Registro de fallas — correctivo imprevisto (`fault-report`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| 🔲 | `operations:fault-report:read` | `GET /api/fault-reports`<br>`GET /api/fault-reports/:id` | Listar y consultar detalle de eventos de falla. Filtrables por criticidad, sistema afectado y estado. |
+| 🔲 | `operations:fault-report:create` | `POST /api/fault-reports` | Registrar una falla en terreno. Criticidad ALTA → crea OT `NO_PROGRAMADA_REACTIVA` + `isOperational = false`. Criticidad MEDIA → crea OT `NO_PROGRAMADA_CORRECTIVA`. Criticidad BAJA → solo registra el reporte. |
+| 🔲 | `operations:fault-report:manage` | `POST /api/fault-reports/:id/create-work-order`<br>`PATCH /api/fault-reports/:id/close` | Gestión por planificador: convertir falla BAJA en OT manualmente o cerrarla sin intervención. |
+
+> **Regla de negocio clave:** La OT generada automáticamente usa `initialRequestDescription` ← `symptomDescription` del reporte, `category = NO_PROGRAMADA_REACTIVA | NO_PROGRAMADA_CORRECTIVA`, `maintenanceType = CORRECTIVO`, `status = OPEN`. La trazabilidad es bidireccional: `FaultReport.workOrderId` y `WorkOrder.faultReport`.
+
+> **Horómetro:** Si `meterAtFault > equipment.currentMeter`, se llama a `applyCurrentMeterChange` con `source = FAULT_REPORT` dentro de la misma transacción.
+
+---
+
 ## Módulo: Principal (`core`)
 
 ### Dashboard (`dashboard`)

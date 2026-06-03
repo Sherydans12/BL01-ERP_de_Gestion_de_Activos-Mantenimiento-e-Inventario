@@ -9,6 +9,17 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-02 — Módulo 3: Registro de Fallas (FaultReport) — Persistencia y Seguridad
+
+- **Contexto**: Requerimiento de capturar eventos correctivos imprevistos en terreno, actualizando el estado del equipo y alimentando la cola de trabajo del planificador. El sistema debe discriminar por criticidad para decidir el impacto automático sobre disponibilidad y mantenimiento.
+- **Decisión**:
+  1. **Persistencia:** Nuevo modelo `FaultReport` con enums `AffectedSystem` (7 sistemas: MOTOR, HYDRAULIC, ELECTRICAL, POWER_TRAIN, STRUCTURE, GET_WEAR, TIRES_TRACKS), `FaultCriticality` (HIGH/MEDIUM/LOW) y `FaultReportStatus` (OPEN/LINKED/CLOSED). Correlativo `RF-XXXXX` vía `SequenceCounter` existente. FK `workOrderId @unique` para relación 1:1 con la OT generada. Nuevo valor `FAULT_REPORT` en enum `MeterLogSource`.
+  2. **Regla de integración con OT (forma nativa BaseLogic):** Se descartó crear tablas intermedias (`WorkRequest`, `MaintenanceBacklog`). La primitiva nativa del planificador es la `WorkOrder`. La lógica de despacho por criticidad es: **ALTA** → crea `WorkOrder(category=NO_PROGRAMADA_REACTIVA, affectsAvailability=SI, detentionStartedAt=eventDate)` + `Equipment.isOperational = false` en la misma `$transaction`; **MEDIA** → crea `WorkOrder(category=NO_PROGRAMADA_CORRECTIVA, affectsAvailability=NO)` sin impacto en disponibilidad; **BAJA** → solo registra el `FaultReport` (el planificador convierte manualmente vía `POST /fault-reports/:id/create-work-order`).
+  3. **Integración con Módulo 2 (Disponibilidad):** `Equipment.isOperational = false` es mutado directamente en la transacción de una falla ALTA. `EquipmentAvailability` (Módulo 2) es declarativo/supervisor; lee `isOperational` como señal pero no es sincronizado automáticamente. El supervisor confirma el estado en su reporte de turno. Las dos capas son ortogonales.
+  4. **Horómetro:** Si `meterAtFault > equipment.currentMeter`, se llama a `applyCurrentMeterChange(tx, { source: FAULT_REPORT })` dentro de la misma transacción atómica.
+  5. **PBAC:** 3 nuevos permisos: `operations:fault-report:read` (ver listados), `create` (operador en terreno, genera OT automática para ALTA/MEDIA), `manage` (planificador: cierra BAJA o convierte a OT manualmente).
+- **Consecuencias**: Schema: +3 enums, +1 valor en `MeterLogSource`, +1 tabla `fault_reports` con `@@unique([tenantId, correlative])` y `@unique work_order_id`. Relaciones inversas en `Equipment`, `WorkOrder`, `Tenant`, `Contract` y `User`. Migración `20260602020000_init_fault_reports_module` aplicada. Pendiente: Fase 2 (servicio, controller, DTOs) y Fase 3 (frontend Angular 18).
+
 ## 2026-06-02 — Módulo de Disponibilidad Operativa Diaria: cierre frontend + smoke tests
 
 - **Contexto:** Cierre del módulo completo (backend + frontend) para merge a `develop`. El módulo permite a supervisores reportar el estado operativo de equipos por turno y a admins monitorear equipos sin reporte.

@@ -181,6 +181,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: O.AVAILABILITY_CREATE,
       },
       {
+        label: 'Registro de Fallas',
+        route: '/app/operaciones/fallas',
+        icon: ICONS.documentText,
+        permissions: O.FAULT_REPORT_READ,
+      },
+      {
         label: 'Monitor de Flota',
         route: '/app/operaciones/disponibilidad/monitor',
         icon: ICONS.chartBar,

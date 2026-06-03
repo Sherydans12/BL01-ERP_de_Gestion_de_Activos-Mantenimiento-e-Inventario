@@ -31,6 +31,7 @@ import { EmailModule } from './common/email/email.module';
 import { NotificationSettingsModule } from './features/notification-settings/notification-settings.module';
 import { LubeReportsModule } from './features/lube-reports/lube-reports.module';
 import { EquipmentAvailabilityModule } from './features/equipment-availability/equipment-availability.module';
+import { FaultReportsModule } from './features/fault-reports/fault-reports.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { EquipmentAvailabilityModule } from './features/equipment-availability/e
     NotificationSettingsModule,
     LubeReportsModule,
     EquipmentAvailabilityModule,
+    FaultReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

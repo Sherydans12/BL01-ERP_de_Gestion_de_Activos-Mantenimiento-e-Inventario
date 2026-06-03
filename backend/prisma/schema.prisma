@@ -75,6 +75,7 @@ model Equipment {
   assetCostRecords      AssetCostRecord[]
   lubeReports           LubeReport[]
   availabilities        EquipmentAvailability[]
+  faultReports          FaultReport[]
 
   @@unique([tenantId, internalId])
   @@unique([tenantId, plate])
@@ -210,6 +211,7 @@ model WorkOrder {
   assetCostRecords     AssetCostRecord[]
   backlogItems         WorkOrderBacklogItem[]
   fluidCompartments    WorkOrderFluidCompartment[]
+  faultReport          FaultReport?              @relation("FaultReportWorkOrder")
 
   @@unique([tenantId, correlative])
   @@map("work_orders")
@@ -585,6 +587,7 @@ model User {
   userNotificationSettings UserNotificationSetting[]
   lubeReports              LubeReport[]
   equipmentAvailabilities  EquipmentAvailability[] @relation("AvailabilityReportedBy")
+  faultReportsReported     FaultReport[]           @relation("FaultReportedBy")
 
   @@unique([tenantId, rut])
   @@map("users")
@@ -650,6 +653,7 @@ model Tenant {
   userNotificationSettings   UserNotificationSetting[]
   lubeReports                LubeReport[]
   equipmentAvailabilities    EquipmentAvailability[]
+  faultReports               FaultReport[]
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
@@ -708,6 +712,7 @@ model Contract {
   purchaseOrders        PurchaseOrder[]
   lubeReports           LubeReport[]
   equipmentAvailabilities EquipmentAvailability[]
+  faultReports          FaultReport[]
 
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
@@ -1053,6 +1058,7 @@ enum MeterLogSource {
   MANUAL
   TELEMETRY
   AVAILABILITY_REPORT
+  FAULT_REPORT
 }
 
 model EquipmentMeterLog {
@@ -1829,4 +1835,71 @@ model EquipmentAvailability {
   @@index([tenantId, reportDate, shift])
   @@index([tenantId, equipmentId])
   @@map("equipment_availabilities")
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: REGISTRO DE FALLAS (CORRECTIVO IMPREVISTO)
+// ---------------------------------------------------------------------
+
+/// Sistema del equipo afectado por la falla.
+enum AffectedSystem {
+  MOTOR
+  HYDRAULIC      // Hidráulico
+  ELECTRICAL     // Eléctrico
+  POWER_TRAIN    // Tren de Potencia
+  STRUCTURE      // Estructura
+  GET_WEAR       // Desgaste (GET)
+  TIRES_TRACKS   // Neumáticos/Orugas
+}
+
+/// Criticidad del evento de falla declarada por el operador.
+enum FaultCriticality {
+  HIGH    // ALTA  — Detiene el equipo
+  MEDIUM  // MEDIA — Opera con restricciones
+  LOW     // BAJA  — Falla menor
+}
+
+/// Estado del reporte de falla a lo largo de su ciclo de vida.
+enum FaultReportStatus {
+  OPEN    // Registrado, sin OT vinculada (BAJA o pendiente de planificador)
+  LINKED  // OT creada automáticamente (ALTA o MEDIA)
+  CLOSED  // Cerrado manualmente o por cierre de la OT asociada
+}
+
+/// Evento correctivo imprevisto en terreno.
+/// Criticidad ALTA → crea WorkOrder (NO_PROGRAMADA_REACTIVA) + isOperational = false.
+/// Criticidad MEDIA → crea WorkOrder (NO_PROGRAMADA_CORRECTIVA), sin impacto inmediato en disponibilidad.
+/// Criticidad BAJA  → solo registra el reporte; el planificador decide si genera OT.
+model FaultReport {
+  id             String            @id @default(uuid()) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  contractId     String            @map("contract_id") @db.Uuid
+  equipmentId    String            @map("equipment_id") @db.Uuid
+  reportedById   String            @map("reported_by_id") @db.Uuid
+  correlative    String            @db.VarChar(30)       // RF-XXXXX vía SequenceCounter
+
+  eventDate         DateTime          @map("event_date")
+  meterAtFault      Int?              @map("meter_at_fault")    // Horómetro al momento de la falla (opcional)
+  affectedSystem    AffectedSystem    @map("affected_system")
+  criticality       FaultCriticality
+  symptomDescription String           @map("symptom_description") @db.Text
+  status            FaultReportStatus @default(OPEN)
+
+  /// FK a la OT generada automáticamente (solo ALTA y MEDIA). Unique: una OT solo puede originarse en un reporte.
+  workOrderId    String?           @unique @map("work_order_id") @db.Uuid
+
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  tenant     Tenant     @relation(fields: [tenantId],    references: [id], onDelete: Cascade)
+  contract   Contract   @relation(fields: [contractId],  references: [id], onDelete: Restrict)
+  equipment  Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy User       @relation("FaultReportedBy",     fields: [reportedById], references: [id], onDelete: Restrict)
+  workOrder  WorkOrder? @relation("FaultReportWorkOrder", fields: [workOrderId],  references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, correlative])
+  @@index([tenantId, equipmentId])
+  @@index([tenantId, criticality, status])
+  @@index([tenantId, eventDate])
+  @@map("fault_reports")
 }

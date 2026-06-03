@@ -1,0 +1,165 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
+
+import { FaultReportFormComponent } from './fault-report-form.component';
+import {
+  FaultReportsService,
+  FaultReportRow,
+} from '../../../core/services/fault-reports/fault-reports.service';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { NotificationService } from '../../../core/services/notification/notification.service';
+
+// ── Stubs ─────────────────────────────────────────────────────────────────────
+
+const MOCK_REPORT: FaultReportRow = {
+  id: 'rf-uuid-001',
+  correlative: 'RF-00001',
+  eventDate: new Date().toISOString(),
+  meterAtFault: null,
+  affectedSystem: 'MOTOR',
+  criticality: 'LOW',
+  symptomDescription: 'Ruido inusual en el motor',
+  status: 'OPEN',
+  workOrderId: null,
+  createdAt: new Date().toISOString(),
+  equipment: {
+    id: 'eq-uuid-001',
+    internalId: 'EQ-001',
+    brand: 'Caterpillar',
+    model: '980G',
+    plate: 'AB-1234',
+    isOperational: true,
+  },
+  reportedBy: { id: 'usr-001', name: 'Juan Operador' },
+  workOrder: null,
+};
+
+const faultServiceSpy = jasmine.createSpyObj<FaultReportsService>(
+  'FaultReportsService',
+  { create: of(MOCK_REPORT) },
+);
+
+const fleetServiceSpy = jasmine.createSpyObj<FleetService>('FleetService', {
+  getEquipments: of({ data: [], total: 0, page: 1, limit: 300 }),
+});
+
+const notifySpy = jasmine.createSpyObj<NotificationService>('NotificationService', [
+  'success',
+  'error',
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('FaultReportFormComponent', () => {
+  let component: FaultReportFormComponent;
+  let fixture: ComponentFixture<FaultReportFormComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [FaultReportFormComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: FaultReportsService, useValue: faultServiceSpy },
+        { provide: FleetService,        useValue: fleetServiceSpy },
+        { provide: NotificationService, useValue: notifySpy },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(FaultReportFormComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('debería crearse', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('inicia con todos los campos en blanco y sin equipo seleccionado', () => {
+    expect(component.selectedEquipmentId()).toBe('');
+    expect(component.selectedSystem()).toBe('');
+    expect(component.selectedCriticality()).toBe('');
+    expect(component.symptomDescription()).toBe('');
+    expect(component.meterAtFault()).toBeNull();
+  });
+
+  it('equipLoading es false después de recibir la lista de flota', () => {
+    expect(component.equipLoading()).toBeFalse();
+  });
+
+  it('llama a FleetService.getEquipments al inicializar', () => {
+    expect(fleetServiceSpy.getEquipments).toHaveBeenCalled();
+  });
+
+  it('isFormValid es false cuando no hay datos ingresados', () => {
+    expect(component.isFormValid()).toBeFalse();
+  });
+
+  it('isFormValid es false cuando la descripción tiene menos de 10 caracteres', () => {
+    component.onSelectEquipment('eq-uuid-001');
+    component.selectedSystem.set('MOTOR');
+    component.selectedCriticality.set('LOW');
+    component.symptomDescription.set('corto');
+    expect(component.isFormValid()).toBeFalse();
+  });
+
+  it('isFormValid es true cuando todos los campos requeridos están completos', () => {
+    component.onSelectEquipment('eq-uuid-001');
+    component.selectedSystem.set('MOTOR');
+    component.selectedCriticality.set('LOW');
+    component.symptomDescription.set('Ruido inusual en el motor durante arranque en frío');
+    expect(component.isFormValid()).toBeTrue();
+  });
+
+  it('isDirty es false en el estado inicial', () => {
+    expect(component.isDirty()).toBeFalse();
+  });
+
+  it('isDirty es true cuando se selecciona un equipo', () => {
+    component.onSelectEquipment('eq-uuid-001');
+    expect(component.isDirty()).toBeTrue();
+  });
+
+  it('isDirty es true cuando se ingresa una descripción', () => {
+    component.symptomDescription.set('Falla en hidráulico');
+    expect(component.isDirty()).toBeTrue();
+  });
+
+  it('confirmLeaveIfDirty retorna true si no hay datos sin guardar', () => {
+    const result = component.confirmLeaveIfDirty();
+    expect(result).toBeTrue();
+  });
+
+  it('confirmLeaveIfDirty abre el modal cuando hay datos sin guardar', () => {
+    component.onSelectEquipment('eq-uuid-001');
+    component.confirmLeaveIfDirty();
+    expect(component.leaveConfirmOpen()).toBeTrue();
+  });
+
+  it('onSelectEquipment asigna el equipo y limpia la búsqueda', () => {
+    component.equipSearch.set('Caterpillar');
+    component.onSelectEquipment('eq-uuid-001');
+    expect(component.selectedEquipmentId()).toBe('eq-uuid-001');
+    expect(component.equipSearch()).toBe('');
+  });
+
+  it('resetForm limpia todos los signals al estado vacío', () => {
+    component.onSelectEquipment('eq-uuid-001');
+    component.selectedSystem.set('MOTOR');
+    component.selectedCriticality.set('HIGH');
+    component.symptomDescription.set('Motor fundido completamente');
+    component.meterAtFault.set(15000);
+
+    component.resetForm();
+
+    expect(component.selectedEquipmentId()).toBe('');
+    expect(component.selectedSystem()).toBe('');
+    expect(component.selectedCriticality()).toBe('');
+    expect(component.symptomDescription()).toBe('');
+    expect(component.meterAtFault()).toBeNull();
+  });
+});
