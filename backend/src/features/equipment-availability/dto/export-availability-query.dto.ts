@@ -10,9 +10,14 @@ export class ExportAvailabilityQueryDto {
   @IsDateString()
   reportDate: string;
 
-  /** Turno a exportar: DAY o NIGHT. */
+  /**
+   * Turno a exportar: DAY o NIGHT.
+   * Opcional — si se omite el servicio aplica DAY como default.
+   * Si se envía NIGHT y el tenant tiene hasNightShift=false, se rechaza con 400.
+   */
+  @IsOptional()
   @IsEnum(ShiftType)
-  shift: ShiftType;
+  shift?: ShiftType;
 
   /**
    * Filtro opcional por contrato.

@@ -20,6 +20,7 @@ import {
   ShiftType,
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { ShiftService } from '../../../core/services/shift/shift.service';
 
 export type ImportPageState =
   | 'idle'
@@ -41,6 +42,7 @@ export class AvailabilityImportComponent {
 
   private availabilityService = inject(EquipmentAvailabilityService);
   private notify = inject(NotificationService);
+  protected readonly shiftService = inject(ShiftService);
 
   @ViewChild('fileInput') fileInputRef!: ElementRef<HTMLInputElement>;
 

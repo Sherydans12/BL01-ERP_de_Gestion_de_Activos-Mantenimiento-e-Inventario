@@ -19,9 +19,14 @@ export class CreateEquipmentAvailabilityDto {
   @IsDateString()
   reportDate: string;
 
-  /** Turno: Día (DAY) o Noche (NIGHT). */
+  /**
+   * Turno: Día (DAY) o Noche (NIGHT).
+   * Opcional — si se omite el servicio aplica DAY como default.
+   * Si se envía NIGHT y el tenant tiene hasNightShift=false, se rechaza con 400.
+   */
+  @IsOptional()
   @IsEnum(ShiftType)
-  shift: ShiftType;
+  shift?: ShiftType;
 
   /** Estado operativo declarado por el supervisor. */
   @IsEnum(OperationalStatus)

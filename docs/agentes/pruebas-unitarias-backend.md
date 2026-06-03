@@ -4,19 +4,19 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-06-03
+**Última actualización:** 2026-06-03 (Sprint Turnos configurables — TenantOperationalConfig)
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **376 tests** en **22** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **383 tests** en **22** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
 | **Horómetro — helper `applyCurrentMeterChange`** | 100 % | 7 | Casos 1–7: happy path, silent skip (`oldMeter === newMeter`), fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL, fecha explícita, orden log→update (§3.12 — nuevo) |
 | **Horómetro — integración transversal M1/M2/M3** | 100 % | 4 | Caos en Terreno (5000→5050→5100 con M1 rechazado), lenient M2, lenient M3, doble avance secuencial (§3.13 — nuevo) |
-| **Disponibilidad operativa diaria** | ~90 % núcleo `create` + `findUnreported` | 13 | `create` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado (§3.11) |
+| **Disponibilidad operativa diaria** | ~97 % | 20 | `create`/`findUnreported`/`commitImport` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado + **guard hasNightShift=false** (7 tests nuevos §3.11) |
 | **Lubricantes — reporte consumo** | ~90 % núcleo `createReport` | 8 | Happy path, stock negativo, horómetro, bodega/equipo (§3.10) |
 | **Inventario — stock/kardex** | ~88 % del núcleo | 41 | Stock, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |

@@ -10,6 +10,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { ShiftService } from '../../../core/services/shift/shift.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { DeviceService } from '../../../core/services/device/device.service';
 import {
@@ -36,6 +37,7 @@ export class AvailabilityMonitorComponent implements OnInit {
   private fleetService = inject(FleetService);
   private notify = inject(NotificationService);
   protected readonly deviceService = inject(DeviceService);
+  protected readonly shiftService = inject(ShiftService);
 
   // ── Filtros ───────────────────────────────────────────────────────────────
   filterDate  = signal<string>(this.todayIso());

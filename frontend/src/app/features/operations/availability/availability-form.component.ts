@@ -11,6 +11,7 @@ import { RouterLink } from '@angular/router';
 import { Observable, Subject, forkJoin } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { ShiftService } from '../../../core/services/shift/shift.service';
 import {
   EquipmentAvailabilityService,
   CreateAvailabilityPayload,
@@ -55,6 +56,7 @@ export class AvailabilityFormComponent implements OnInit {
 
   private availabilityService = inject(EquipmentAvailabilityService);
   private notify = inject(NotificationService);
+  protected readonly shiftService = inject(ShiftService);
 
   // ── Filtros de turno ──────────────────────────────────────────────────────
   reportDate = signal<string>(this.todayIso());

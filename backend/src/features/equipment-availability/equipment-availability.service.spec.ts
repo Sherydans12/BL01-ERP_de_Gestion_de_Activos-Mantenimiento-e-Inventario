@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { OperationalStatus, Prisma, ShiftType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -596,5 +596,197 @@ describe('EquipmentAvailabilityService — commitImport', () => {
     expect(result.errors).toHaveLength(2);
     expect(tx.equipmentAvailability.upsert).not.toHaveBeenCalled();
     expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: resolveShift — guard hasNightShift=false
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EquipmentAvailabilityService — hasNightShift guard (create / findUnreported / commitImport)', () => {
+  let service: EquipmentAvailabilityService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  const nightShiftDisabledConfig = {
+    hasNightShift: false,
+    dayShiftStartTime: '08:00',
+    nightShiftStartTime: '20:00',
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    mockApplyCurrentMeterChange.mockClear();
+
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EquipmentAvailabilityService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+
+    service = module.get(EquipmentAvailabilityService);
+  });
+
+  // ── create() ─────────────────────────────────────────────────────────────
+
+  it('create: acepta shift=DAY aunque hasNightShift=false (siempre permitido)', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.equipmentAvailability.create.mockResolvedValue(createdRecord as never);
+
+    const result = await service.create(
+      buildDto({ shift: ShiftType.DAY }),
+      adminUser,
+    );
+
+    expect(result.shift).toBe(ShiftType.DAY);
+  });
+
+  it('create: lanza BadRequestException cuando shift=NIGHT y hasNightShift=false', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+
+    await expect(
+      service.create(buildDto({ shift: ShiftType.NIGHT }), adminUser),
+    ).rejects.toThrow(BadRequestException);
+
+    await expect(
+      service.create(buildDto({ shift: ShiftType.NIGHT }), adminUser),
+    ).rejects.toThrow(/turno noche no está habilitado/);
+
+    // Nunca debe llegar a la transacción de DB
+    expect(tx.equipmentAvailability.create).not.toHaveBeenCalled();
+  });
+
+  it('create: defaults shift=DAY cuando no se envía y hasNightShift=false', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.equipmentAvailability.create.mockResolvedValue(createdRecord as never);
+
+    // shift omitido en el DTO
+    const dto = buildDto();
+    delete (dto as Partial<typeof dto>).shift;
+    await service.create(dto, adminUser);
+
+    expect(tx.equipmentAvailability.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ shift: ShiftType.DAY }),
+      }),
+    );
+  });
+
+  // ── findUnreported() ──────────────────────────────────────────────────────
+
+  it('findUnreported: lanza BadRequestException cuando shift=NIGHT y hasNightShift=false', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+
+    await expect(
+      service.findUnreported(adminUser, {
+        date: '2026-06-02',
+        shift: ShiftType.NIGHT,
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    await expect(
+      service.findUnreported(adminUser, {
+        date: '2026-06-02',
+        shift: ShiftType.NIGHT,
+      }),
+    ).rejects.toThrow(/turno noche no está habilitado/);
+  });
+
+  it('findUnreported: defaults shift=DAY cuando no se envía y hasNightShift=false', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+    prisma.equipment.findMany.mockResolvedValue([] as never);
+    prisma.equipmentAvailability.findMany.mockResolvedValue([] as never);
+
+    await service.findUnreported(adminUser, { date: '2026-06-02' });
+
+    expect(prisma.equipmentAvailability.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ shift: ShiftType.DAY }),
+      }),
+    );
+  });
+
+  // ── commitImport() ────────────────────────────────────────────────────────
+
+  it('commitImport: lanza BadRequestException cuando shift=NIGHT y hasNightShift=false', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+
+    await expect(
+      service.commitImport(
+        {
+          reportDate: '2026-06-02',
+          shift: ShiftType.NIGHT,
+          rows: [{ equipmentId, status: OperationalStatus.OPERATIONAL }],
+        },
+        adminUser,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    await expect(
+      service.commitImport(
+        {
+          reportDate: '2026-06-02',
+          shift: ShiftType.NIGHT,
+          rows: [{ equipmentId, status: OperationalStatus.OPERATIONAL }],
+        },
+        adminUser,
+      ),
+    ).rejects.toThrow(/turno noche no está habilitado/);
+
+    expect(tx.equipmentAvailability.upsert).not.toHaveBeenCalled();
+  });
+
+  it('commitImport: defaults shift=DAY cuando no se envía y hasNightShift=false', async () => {
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      nightShiftDisabledConfig as never,
+    );
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.equipmentAvailability.upsert.mockResolvedValue({
+      ...validEquipment,
+      id: availabilityId,
+      reportedById: userId,
+      reportDate: new Date('2026-06-02'),
+      shift: ShiftType.DAY,
+      status: OperationalStatus.OPERATIONAL,
+      meterReading: null,
+      comments: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as never);
+
+    // shift omitido
+    const result = await service.commitImport(
+      {
+        reportDate: '2026-06-02',
+        rows: [{ equipmentId, status: OperationalStatus.OPERATIONAL }],
+      },
+      adminUser,
+    );
+
+    expect(result.committed).toBe(1);
+    expect(tx.equipmentAvailability.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId_equipmentId_reportDate_shift: expect.objectContaining({ shift: ShiftType.DAY }) }),
+      }),
+    );
   });
 });

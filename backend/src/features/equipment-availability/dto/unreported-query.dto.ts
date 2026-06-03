@@ -3,16 +3,20 @@ import { ShiftType } from '@prisma/client';
 
 /**
  * Query params para el endpoint de equipos no informados.
- * `date` y `shift` son obligatorios: delimitan exactamente el turno a consultar.
  */
 export class UnreportedQueryDto {
   /** Fecha del turno a consultar (ISO 8601, ej: "2026-06-02"). */
   @IsDateString()
   date: string;
 
-  /** Turno a consultar: DAY o NIGHT. */
+  /**
+   * Turno a consultar: DAY o NIGHT.
+   * Opcional — si se omite el servicio aplica DAY como default.
+   * Si se envía NIGHT y el tenant tiene hasNightShift=false, se rechaza con 400.
+   */
+  @IsOptional()
   @IsEnum(ShiftType)
-  shift: ShiftType;
+  shift?: ShiftType;
 
   /** Filtro opcional por contrato (solo para ADMIN que ve toda la flota). */
   @IsOptional()

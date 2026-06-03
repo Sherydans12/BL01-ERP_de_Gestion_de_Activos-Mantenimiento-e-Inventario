@@ -19,11 +19,14 @@ import { CommonModule, NgStyle } from '@angular/common';
 import {
   TenantService,
   Tenant,
+  TenantOperationalConfig,
 } from '../../../core/services/tenant/tenant.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { A } from '../../../core/constants/admin-permissions';
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Minimum contrast ratio for WCAG AA on normal text (4.5:1) */
 const WCAG_AA = 4.5;
@@ -98,12 +101,18 @@ export class CompanyConfigComponent implements OnInit {
   );
 
   configForm: FormGroup;
+  operationalForm: FormGroup;
+
   isSaving = signal(false);
   isSavingPurchasesModal = signal(false);
+  isSavingOperational = signal(false);
   isUploadingLogo = signal(false);
   isUploadingLogoLight = signal(false);
   isUploadingPdfLogo = signal(false);
   readonly palette = BRAND_PALETTE;
+
+  /** Señal local para reactividad del @if en el template (espeja hasNightShift del form). */
+  hasNightShiftValue = signal(true);
 
   purchasesConfigModalOpen = signal(false);
   purchasesConfigDialog = viewChild<ElementRef<HTMLDialogElement>>('purchasesConfigDialog');
@@ -124,6 +133,12 @@ export class CompanyConfigComponent implements OnInit {
       logoLightUrl: [''],
       laborRatePerHour: [0, [Validators.min(0)]],
     });
+
+    this.operationalForm = this.fb.group({
+      hasNightShift: [true],
+      dayShiftStartTime: ['08:00', [Validators.required, Validators.pattern(TIME_RE)]],
+      nightShiftStartTime: ['20:00', [Validators.required, Validators.pattern(TIME_RE)]],
+    });
   }
 
   ngOnInit() {
@@ -135,13 +150,55 @@ export class CompanyConfigComponent implements OnInit {
       next: (config: Tenant) => {
         this.tenantService.setTenant(config);
         this.patchForm(config);
+        this.patchOperationalForm(config.operationalConfig);
       },
       error: () => {
         const tenant = this.tenantService.currentTenant();
         if (tenant) {
           this.patchForm(tenant);
+          this.patchOperationalForm(tenant.operationalConfig);
         }
         this.notification.error('No se pudo cargar la configuración de empresa.');
+      },
+    });
+  }
+
+  private patchOperationalForm(cfg: TenantOperationalConfig | null | undefined) {
+    const hasNight = cfg?.hasNightShift ?? true;
+    this.operationalForm.patchValue({
+      hasNightShift: hasNight,
+      dayShiftStartTime: cfg?.dayShiftStartTime ?? '08:00',
+      nightShiftStartTime: cfg?.nightShiftStartTime ?? '20:00',
+    });
+    this.hasNightShiftValue.set(hasNight);
+  }
+
+  onNightShiftToggle(ev: Event) {
+    const checked = (ev.target as HTMLInputElement).checked;
+    this.hasNightShiftValue.set(checked);
+  }
+
+  saveOperationalConfig() {
+    if (this.operationalForm.invalid) {
+      this.operationalForm.markAllAsTouched();
+      this.notification.error('Revisa los horarios de turno (formato HH:MM requerido).');
+      return;
+    }
+    this.isSavingOperational.set(true);
+    const payload = this.operationalForm.value as Partial<TenantOperationalConfig>;
+    this.tenantService.updateOperationalConfig(payload).subscribe({
+      next: (cfg) => {
+        const current = this.tenantService.currentTenant();
+        if (current) {
+          this.tenantService.setTenant({ ...current, operationalConfig: cfg });
+        }
+        this.patchOperationalForm(cfg);
+        this.notification.success('Configuración de turnos guardada');
+        this.isSavingOperational.set(false);
+      },
+      error: () => {
+        this.notification.error('No se pudo guardar la configuración de turnos');
+        this.isSavingOperational.set(false);
       },
     });
   }

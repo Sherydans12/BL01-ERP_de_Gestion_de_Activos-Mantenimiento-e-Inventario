@@ -222,9 +222,50 @@ const ROW_FONT: Partial<ExcelJS.Font> = { name: 'Calibri', size: 10 };
 /** Comma-separated list of Spanish status labels for the dropdown formulae. */
 const STATUS_DROPDOWN = Object.values(EXCEL_STATUS_LABELS).join(',');
 
+/** System-level defaults for operational config — mirrors OPERATIONAL_CONFIG_DEFAULTS in tenant-config.service. */
+const OPERATIONAL_DEFAULTS = {
+  hasNightShift: true as boolean,
+  dayShiftStartTime: '08:00',
+  nightShiftStartTime: '20:00',
+};
+
+type OperationalConfigShape = typeof OPERATIONAL_DEFAULTS;
+
 @Injectable()
 export class EquipmentAvailabilityService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // ── Helpers: operational config & shift resolution ────────────────────────
+
+  /**
+   * Reads the tenant's operational config from DB.
+   * Returns system defaults if no row has been persisted yet (lazy-creation pattern).
+   */
+  private async getOperationalConfig(tenantId: string): Promise<OperationalConfigShape> {
+    const config = await this.prisma.tenantOperationalConfig.findUnique({
+      where: { tenantId },
+      select: { hasNightShift: true, dayShiftStartTime: true, nightShiftStartTime: true },
+    });
+    return config ?? { ...OPERATIONAL_DEFAULTS };
+  }
+
+  /**
+   * Resolves the effective ShiftType for a request:
+   *  - defaults to DAY when not provided.
+   *  - throws BadRequestException when NIGHT is requested and the tenant has it disabled.
+   */
+  private async resolveShift(tenantId: string, provided?: ShiftType | null): Promise<ShiftType> {
+    const shift = provided ?? ShiftType.DAY;
+    if (shift === ShiftType.NIGHT) {
+      const config = await this.getOperationalConfig(tenantId);
+      if (!config.hasNightShift) {
+        throw new BadRequestException(
+          'El turno noche no está habilitado para esta organización.',
+        );
+      }
+    }
+    return shift;
+  }
 
   private readonly listInclude = {
     equipment: {
@@ -259,6 +300,9 @@ export class EquipmentAvailabilityService {
     const tenantId = user.tenantId as string;
     const userId = (user.id ?? user.sub) as string;
 
+    // Resolve & validate shift outside the serializable transaction (no DB contention).
+    const effectiveShift = await this.resolveShift(tenantId, dto.shift);
+
     return this.prisma.$transaction(
       async (tx) => {
         // ── 1. Validar que el equipo pertenece al tenant ──────────────────────
@@ -283,7 +327,7 @@ export class EquipmentAvailabilityService {
               equipmentId: dto.equipmentId,
               reportedById: userId,
               reportDate: new Date(dto.reportDate),
-              shift: dto.shift,
+              shift: effectiveShift,
               status: dto.status,
               meterReading: dto.meterReading ?? null,
               comments: dto.comments ?? null,
@@ -336,6 +380,8 @@ export class EquipmentAvailabilityService {
     const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
     const allowedContracts = user.allowedContracts as string[] | undefined;
 
+    const effectiveShift = await this.resolveShift(tenantId, query.shift);
+
     const reportDate = new Date(query.date);
     reportDate.setUTCHours(0, 0, 0, 0);
 
@@ -364,7 +410,7 @@ export class EquipmentAvailabilityService {
         },
       }),
       this.prisma.equipmentAvailability.findMany({
-        where: { tenantId, reportDate, shift: query.shift },
+        where: { tenantId, reportDate, shift: effectiveShift },
         select: { equipmentId: true },
       }),
     ]);
@@ -467,6 +513,12 @@ export class EquipmentAvailabilityService {
     const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
     const allowedContracts = user.allowedContracts as string[] | undefined;
 
+    // Resolve shift + load operational config (needed for sheet label with start time).
+    const [effectiveShift, opConfig] = await Promise.all([
+      this.resolveShift(tenantId, query.shift),
+      this.getOperationalConfig(tenantId),
+    ]);
+
     const reportDate = new Date(query.reportDate);
     reportDate.setUTCHours(0, 0, 0, 0);
 
@@ -497,7 +549,7 @@ export class EquipmentAvailabilityService {
         orderBy: [{ internalId: 'asc' }],
       }),
       this.prisma.equipmentAvailability.findMany({
-        where: { tenantId, reportDate, shift: query.shift },
+        where: { tenantId, reportDate, shift: effectiveShift },
         select: {
           equipmentId: true,
           status: true,
@@ -529,8 +581,10 @@ export class EquipmentAvailabilityService {
     workbook.creator = 'BaseLogic TPM';
     workbook.created = new Date();
 
-    const shiftLabel = query.shift === 'DAY' ? 'Día' : 'Noche';
-    const ws = workbook.addWorksheet(`Disponibilidad ${shiftLabel}`, {
+    const shiftLabel = effectiveShift === 'DAY' ? 'Día' : 'Noche';
+    const shiftStartTime =
+      effectiveShift === 'DAY' ? opConfig.dayShiftStartTime : opConfig.nightShiftStartTime;
+    const ws = workbook.addWorksheet(`Disponibilidad ${shiftLabel} (${shiftStartTime})`, {
       pageSetup: { paperSize: 9, orientation: 'landscape' },
     });
 
@@ -700,7 +754,7 @@ export class EquipmentAvailabilityService {
     infoSheet.getCell('A1').value = 'reportDate';
     infoSheet.getCell('B1').value = query.reportDate;
     infoSheet.getCell('A2').value = 'shift';
-    infoSheet.getCell('B2').value = query.shift;
+    infoSheet.getCell('B2').value = effectiveShift;
     infoSheet.getCell('A3').value = 'tenantId';
     infoSheet.getCell('B3').value = tenantId;
     infoSheet.getCell('A4').value = 'generatedAt';
@@ -793,6 +847,16 @@ export class EquipmentAvailabilityService {
         'La plantilla no contiene metadatos de turno válidos. ' +
           'Descarga una nueva plantilla.',
       );
+    }
+    // Guard: reject NIGHT-shift files when the tenant has night shift disabled.
+    if (storedShift === ShiftType.NIGHT) {
+      const opConfig = await this.getOperationalConfig(tenantId);
+      if (!opConfig.hasNightShift) {
+        throw new BadRequestException(
+          'El turno noche no está habilitado para esta organización. ' +
+            'Descarga una nueva plantilla de Turno Día.',
+        );
+      }
     }
 
     // Read per-equipment currentMeter map stored in _info (row 6+)
@@ -1114,6 +1178,9 @@ export class EquipmentAvailabilityService {
     dto: ImportAvailabilityCommitDto,
     user: any,
   ): Promise<ImportCommitResult> {
+    const tenantId = user.tenantId as string;
+    const effectiveShift = await this.resolveShift(tenantId, dto.shift);
+
     let committed = 0;
     const errors: ImportCommitResult['errors'] = [];
 
@@ -1123,7 +1190,7 @@ export class EquipmentAvailabilityService {
           {
             equipmentId: row.equipmentId,
             reportDate: dto.reportDate,
-            shift: dto.shift,
+            shift: effectiveShift,
             status: row.status,
             meterReading: row.meterReading,
             comments: row.comments,

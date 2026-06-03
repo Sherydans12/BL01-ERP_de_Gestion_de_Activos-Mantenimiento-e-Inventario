@@ -1,18 +1,24 @@
-import { Injectable, computed } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { interval, map, startWith } from 'rxjs';
 import type { ShiftType } from '../equipment-availability/equipment-availability.service';
+import { TenantService } from '../tenant/tenant.service';
 
 /**
- * Turno operativo activo derivado de la hora local.
+ * Turno operativo activo derivado de la hora local y la configuración del tenant.
  *
- * Regla provisional (sin módulo de configuración aún): DÍA = 08:00–20:00,
- * NOCHE = 20:00–08:00. Si en el futuro se requiere configurar manualmente
- * los rangos por faena, este servicio es el único punto a tocar.
+ * Los horarios de inicio (dayShiftStartTime / nightShiftStartTime) se leen de
+ * TenantService.currentTenant().operationalConfig, que se carga al login y al
+ * inicializar el layout (GET /tenant-config).
+ *
+ * Regla inquebrantable: si hasNightShift === false, currentShift() devuelve
+ * siempre 'DAY' sin importar la hora del reloj.
  */
 @Injectable({ providedIn: 'root' })
 export class ShiftService {
-  // Tick cada minuto para que el turno y el reloj del header se mantengan al día.
+  private readonly tenantService = inject(TenantService);
+
+  // Tick cada minuto para mantener reloj y turno al día.
   private readonly _now = toSignal(
     interval(60_000).pipe(
       startWith(0),
@@ -23,18 +29,64 @@ export class ShiftService {
 
   readonly now = computed(() => this._now());
 
+  // ── Configuración operativa leída del tenant (con defaults seguros) ────────
+
+  readonly hasNightShift = computed(
+    () => this.tenantService.currentTenant()?.operationalConfig?.hasNightShift ?? true,
+  );
+
+  private readonly _dayStartHour = computed(() => {
+    const time =
+      this.tenantService.currentTenant()?.operationalConfig?.dayShiftStartTime ?? '08:00';
+    return parseInt(time.split(':')[0], 10);
+  });
+
+  private readonly _nightStartHour = computed(() => {
+    const time =
+      this.tenantService.currentTenant()?.operationalConfig?.nightShiftStartTime ?? '20:00';
+    return parseInt(time.split(':')[0], 10);
+  });
+
+  private readonly _dayStartTime = computed(
+    () =>
+      this.tenantService.currentTenant()?.operationalConfig?.dayShiftStartTime ?? '08:00',
+  );
+
+  private readonly _nightStartTime = computed(
+    () =>
+      this.tenantService.currentTenant()?.operationalConfig?.nightShiftStartTime ?? '20:00',
+  );
+
+  // ── Señales públicas ───────────────────────────────────────────────────────
+
   readonly currentShift = computed((): ShiftType => {
+    // Regla inquebrantable: sin turno noche → siempre DAY.
+    if (!this.hasNightShift()) return 'DAY';
+
     const h = this._now().getHours();
-    return h >= 8 && h < 20 ? 'DAY' : 'NIGHT';
+    const dayH = this._dayStartHour();
+    const nightH = this._nightStartHour();
+
+    // Caso normal: dayH < nightH (ej. 08–20)
+    if (dayH < nightH) {
+      return h >= dayH && h < nightH ? 'DAY' : 'NIGHT';
+    }
+    // Caso invertido (rarísimo, pero seguro): dayH >= nightH
+    return h >= dayH || h < nightH ? 'DAY' : 'NIGHT';
   });
 
   readonly shiftLabel = computed(() =>
     this.currentShift() === 'DAY' ? 'Turno Día' : 'Turno Noche',
   );
 
-  readonly shiftHours = computed(() =>
-    this.currentShift() === 'DAY' ? '08:00–20:00' : '20:00–08:00',
-  );
+  readonly shiftHours = computed(() => {
+    if (!this.hasNightShift()) {
+      return `Desde ${this._dayStartTime()}`;
+    }
+    return this.currentShift() === 'DAY'
+      ? `${this._dayStartTime()}–${this._nightStartTime()}`
+      : `${this._nightStartTime()}–${this._dayStartTime()}`;
+  });
 
   /** Fecha local (YYYY-MM-DD) para consultar reportes del turno actual. */
   readonly todayIso = computed(() => {

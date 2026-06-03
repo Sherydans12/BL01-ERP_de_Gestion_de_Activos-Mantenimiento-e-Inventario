@@ -9,6 +9,16 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-03 — Gestión Configurable de Turnos por Tenant (TenantOperationalConfig)
+
+- **Contexto:** El sistema EAM fue diseñado con `ShiftType` (`DAY` / `NIGHT`), pero el primer cliente solo opera en Turno Día. Se requería que la configuración de turnos fuera por Tenant para no forzar a todos a ver selectores que no usan.
+- **Decisión:**
+  - **Separación 1:1 (`TenantOperationalConfig`):** Se creó una tabla independiente vinculada a `Tenant` por FK única, con campos `hasNightShift: Boolean @default(true)`, `dayShiftStartTime: String @default("08:00")` y `nightShiftStartTime: String @default("20:00")`. Se eligió tabla separada (en lugar de campos inline en `Tenant`) para extensibilidad futura sin contaminar el modelo base.
+  - **Lazy-creation:** El registro solo se crea en base de datos al primer `PATCH /tenant-config/operational`; mientras no exista, el backend lee los defaults en memoria (`hasNightShift=true`, `08:00`, `20:00`). Esto evita backfill en tenants existentes.
+  - **Backend defensivo (`shift` opcional → default `DAY`):** Los DTOs de disponibilidad (`create`, `export`, `unreported`, `import`) declaran `shift?: ShiftType` con `@IsOptional()`. El helper privado `resolveShift(tenantId, provided?)` en `EquipmentAvailabilityService` aplica la regla: si `hasNightShift=false` e `shift` no se provee → inyecta `DAY`; si se provee `NIGHT` explícitamente → `BadRequestException`. +7 tests en `equipment-availability.service.spec.ts`.
+  - **Frontend reactivo via `ShiftService`:** `ShiftService` consume `TenantService.currentTenant()?.operationalConfig` mediante `computed()`. La regla es inquebrantable: si `hasNightShift()===false`, `currentShift()` retorna siempre `'DAY'` sin evaluar el reloj. Los componentes `AvailabilityFormComponent`, `AvailabilityMonitorComponent` y `AvailabilityImportComponent` envuelven sus selectores con `@if (shiftService.hasNightShift()) { … }`. `ShiftBadgeComponent` oculta el ícono de luna y muestra chip «Único» cuando corresponde.
+- **Consecuencias:** Sin cambios de schema aditivos para tenants existentes. La configuración operativa viaja en `GET /tenant-config` (payload `operationalConfig`) que ya se llama al iniciar sesión; no se engrosa el JWT. Suite dominio backend: **383 tests · 22 suites · 0 fallos**. Suite frontend: **176 tests · 0 fallos**.
+
 ## 2026-06-03 — Sprint 3 Sistema Integrado: lifecycle cost en modal (2.2) + stock en form de OT (2.3)
 
 - **Contexto:** Prioridades 2.2 y 2.3 del roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md). El modal de equipo no mostraba el costo acumulado del activo (los `AssetCostRecord` existían pero solo aparecían mal etiquetados en el timeline), y el form de OT no daba visibilidad del stock disponible al agregar repuestos.

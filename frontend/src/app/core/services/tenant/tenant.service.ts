@@ -36,6 +36,14 @@ export interface Tenant {
     baseRole: string;
     routes: string[];
   }> | null;
+  /** Configuración operativa: gestión de turnos. Lazy-created; null = usar defaults del sistema. */
+  operationalConfig?: TenantOperationalConfig | null;
+}
+
+export interface TenantOperationalConfig {
+  hasNightShift: boolean;
+  dayShiftStartTime: string;
+  nightShiftStartTime: string;
 }
 
 export interface Site {
@@ -80,6 +88,13 @@ export class TenantService {
 
   updateTenantConfig(data: Partial<Tenant>): Observable<Tenant> {
     return this.http.patch<Tenant>(`${environment.apiUrl}/tenant-config`, data);
+  }
+
+  updateOperationalConfig(data: Partial<TenantOperationalConfig>): Observable<TenantOperationalConfig> {
+    return this.http.patch<TenantOperationalConfig>(
+      `${environment.apiUrl}/tenant-config/operational`,
+      data,
+    );
   }
 
   /** Sube logo de marca (PNG/JPEG/WebP, máx. 2 MB). Devuelve tenant con `logoUrl` + `logoPublicUrl`. */

@@ -13,15 +13,10 @@ import { ShiftService } from '../../services/shift/shift.service';
   template: `
     <div
       class="flex items-center gap-2 rounded-lg border border-border bg-dark/40 px-2.5 py-1.5"
-      [title]="
-        'Turno ' +
-        (shift.currentShift() === 'DAY' ? 'Día' : 'Noche') +
-        ' (' +
-        shift.shiftHours() +
-        ')'
-      "
+      [title]="shift.shiftLabel() + ' (' + shift.shiftHours() + ')'"
     >
       @if (shift.currentShift() === 'DAY') {
+        <!-- Sol: Turno Día -->
         <svg
           class="h-4 w-4 text-warning"
           viewBox="0 0 24 24"
@@ -38,6 +33,7 @@ import { ShiftService } from '../../services/shift/shift.service';
           />
         </svg>
       } @else {
+        <!-- Luna: Turno Noche (solo cuando hasNightShift=true) -->
         <svg
           class="h-4 w-4 text-primary"
           viewBox="0 0 24 24"
@@ -55,6 +51,9 @@ import { ShiftService } from '../../services/shift/shift.service';
       <div class="flex flex-col leading-tight">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-main">
           {{ shift.shiftLabel() }}
+          @if (!shift.hasNightShift()) {
+            <span class="ml-1 text-muted normal-case font-normal tracking-normal">único</span>
+          }
         </span>
         <span class="font-mono text-[10px] text-muted">
           {{ shift.now() | date: 'EEE dd MMM · HH:mm' }}

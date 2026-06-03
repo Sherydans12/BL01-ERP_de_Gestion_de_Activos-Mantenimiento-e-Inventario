@@ -654,11 +654,33 @@ model Tenant {
   lubeReports                LubeReport[]
   equipmentAvailabilities    EquipmentAvailability[]
   faultReports               FaultReport[]
+  operationalConfig          TenantOperationalConfig?
 
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
 
   @@map("tenants")
+}
+
+/// Configuración operativa por tenant: gestión de turnos.
+/// Lazy-created: si no existe se usan los defaults del sistema (DAY-only = false, horarios 08:00/20:00).
+model TenantOperationalConfig {
+  id                  String  @id @default(cuid())
+  tenantId            String  @unique @map("tenant_id") @db.Uuid
+
+  /// Si el tenant opera con turno noche. false = solo Turno Día.
+  hasNightShift       Boolean @default(true) @map("has_night_shift")
+  /// Hora de inicio del Turno Día en formato HH:mm (24h).
+  dayShiftStartTime   String  @default("08:00") @map("day_shift_start_time") @db.VarChar(5)
+  /// Hora de inicio del Turno Noche en formato HH:mm (24h).
+  nightShiftStartTime String  @default("20:00") @map("night_shift_start_time") @db.VarChar(5)
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_operational_configs")
 }
 
 model TenantRole {
