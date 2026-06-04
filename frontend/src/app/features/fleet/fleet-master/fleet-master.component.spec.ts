@@ -12,13 +12,12 @@ import { CatalogService } from '../../../core/services/catalog/catalog.service';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ExportService } from '../../../core/services/export/export.service';
-import { PdfService } from '../../../core/services/pdf/pdf.service';
-import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 
 // ── Stubs mínimos ──────────────────────────────────────────────────────────────
 
 const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', {
   getEquipments: of({ data: [], total: 0, page: 1, limit: 10 }),
+  getEquipmentResumePdf: of(new Blob()),
   invalidateCache: undefined,
 });
 // Exponer listVersion como signal de sólo lectura que devuelve 0
@@ -42,8 +41,6 @@ const catalogSpy = jasmine.createSpyObj<CatalogService>('CatalogService', {
 const contractsSpy   = jasmine.createSpyObj<ContractsService>('ContractsService',   { findAll: of([]) });
 const notifySpy      = jasmine.createSpyObj<NotificationService>('NotificationService', ['success', 'error', 'warning', 'info']);
 const exportSpy      = jasmine.createSpyObj<ExportService>('ExportService',          ['exportToExcel']);
-const pdfSpy         = jasmine.createSpyObj<PdfService>('PdfService',                ['generateEquipmentResume']);
-const workOrdersSpy  = jasmine.createSpyObj<WorkOrdersService>('WorkOrdersService',  { getWorkOrdersFiltered: of({ data: [], total: 0 }) });
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -64,8 +61,6 @@ describe('FleetMasterComponent', () => {
         { provide: ContractsService,    useValue: contractsSpy },
         { provide: NotificationService, useValue: notifySpy },
         { provide: ExportService,       useValue: exportSpy },
-        { provide: PdfService,          useValue: pdfSpy },
-        { provide: WorkOrdersService,   useValue: workOrdersSpy },
       ],
     }).compileComponents();
 

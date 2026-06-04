@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { MeterLogSource, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { EquipmentsService } from './equipments.service';
 
 jest.mock('./equipment-meter-sync', () => ({
@@ -39,6 +40,10 @@ describe('EquipmentsService', () => {
       providers: [
         EquipmentsService,
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
 

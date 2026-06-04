@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
 import { WorkOrdersService } from './work-orders.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 jest.mock('../equipments/equipment-meter-sync', () => ({
   applyCurrentMeterChange: jest.fn().mockResolvedValue(undefined),
@@ -136,6 +137,10 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         {
           provide: InventoryStockService,
           useValue: inventoryStockService,
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
         },
       ],
     }).compile();
@@ -657,6 +662,10 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
             }),
           },
         },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
@@ -723,6 +732,10 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
               transaction: {},
             }),
           },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
         },
       ],
     }).compile();
@@ -842,6 +855,10 @@ describe('WorkOrdersService — promoteBacklogItem', () => {
               transaction: {},
             }),
           },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
         },
       ],
     }).compile();
@@ -999,6 +1016,10 @@ describe('WorkOrdersService — create', () => {
               transaction: {},
             }),
           },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
         },
       ],
     }).compile();
@@ -1167,6 +1188,10 @@ describe('WorkOrdersService — update (repuestos y reservas)', () => {
             }),
           },
         },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -1318,6 +1343,10 @@ describe('WorkOrdersService — getStats (integración transversal)', () => {
               transaction: {},
             }),
           },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
         },
       ],
     }).compile();

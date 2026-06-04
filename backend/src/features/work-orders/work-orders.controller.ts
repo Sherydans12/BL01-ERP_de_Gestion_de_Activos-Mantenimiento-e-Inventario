@@ -10,6 +10,8 @@ import {
   Req,
   Headers,
   BadRequestException,
+  Header,
+  StreamableFile,
 } from '@nestjs/common';
 import { WorkOrdersService } from './work-orders.service';
 import type { UpdateWorkOrderDto } from './work-orders.service';
@@ -85,6 +87,28 @@ export class WorkOrdersController {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
       search,
+    });
+  }
+
+  @Get(':id/pdf')
+  @RequirePermissions(SystemPermissions.OPERATIONS_WORK_ORDER_READ)
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  async streamPdf(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractHeader?: string,
+  ): Promise<StreamableFile> {
+    const activeContract = siteId || contractHeader;
+    const stream = await this.workOrdersService.getWorkOrderPdfStream(
+      req.user,
+      id,
+      activeContract,
+    );
+    return new StreamableFile(stream, {
+      type: 'application/pdf',
+      disposition: 'inline',
     });
   }
 

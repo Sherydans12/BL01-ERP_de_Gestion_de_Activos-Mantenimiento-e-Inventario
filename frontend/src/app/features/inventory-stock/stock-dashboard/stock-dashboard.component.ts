@@ -19,6 +19,7 @@ import {
   Validators,
   ReactiveFormsModule,
 } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, debounceTime } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -34,8 +35,6 @@ import {
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { InventoryAnalyticsService } from '../../../core/services/inventory-analytics/inventory-analytics.service';
-import { ExportService } from '../../../core/services/export/export.service';
-import { PdfService } from '../../../core/services/pdf/pdf.service';
 import { SkeletonRowComponent } from '../../../shared/components/skeleton-row/skeleton-row.component';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
 import { GLOBAL_ITEM_PICKER_CATALOG } from '../../../shared/components/global-item-picker/global-item-picker.catalog';
@@ -95,8 +94,6 @@ export class StockDashboardComponent implements OnInit {
   private notificationService = inject(NotificationService);
   private authService = inject(AuthService);
   private analyticsService = inject(InventoryAnalyticsService);
-  private exportService = inject(ExportService);
-  private pdfService = inject(PdfService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private workOrdersService = inject(WorkOrdersService);
@@ -203,7 +200,7 @@ export class StockDashboardComponent implements OnInit {
   workOrdersForReturn = signal<any[]>([]);
 
   valuationLoading = signal(false);
-  masterReportBusy = signal(false);
+  summaryReportBusy = signal(false);
   valuationGrandTotal = signal<number>(0);
   valuationByFamily = signal<
     { familyId: string; familyName: string; totalValue: number }[]
@@ -560,6 +557,10 @@ export class StockDashboardComponent implements OnInit {
     return this.authService.hasPermission(I.ANALYTICS_READ);
   }
 
+  canDownloadMasterValuationReport(): boolean {
+    return this.authService.hasPermission(I.ANALYTICS_REPORT);
+  }
+
   loadInventoryValuation() {
     if (!this.canSeeValuationReport()) {
       this.valuationGrandTotal.set(0);
@@ -596,51 +597,88 @@ export class StockDashboardComponent implements OnInit {
   }
 
   exportValuationExcel() {
-    const fam = this.valuationByFamily();
-    const data = fam.map((r) => ({
-      familia: r.familyName,
-      valor: r.totalValue,
-    }));
-    data.push({
-      familia: 'TOTAL',
-      valor: this.valuationGrandTotal(),
-    });
-    this.exportService.exportToExcel(data, 'Valorizacion_inventario', {
-      familia: 'Familia (nivel 1)',
-      valor: 'Valor (CLP)',
-    });
+    this.downloadValuationSummaryReport('xlsx');
   }
 
   exportValuationPdf() {
-    this.pdfService.generateInventoryValuationPdf(
-      this.valuationGrandTotal(),
-      this.valuationByFamily(),
-    );
+    this.downloadValuationSummaryReport('pdf');
   }
 
-  downloadMasterReport(format: 'pdf' | 'xlsx') {
+  private downloadValuationSummaryReport(format: 'pdf' | 'xlsx') {
     if (!this.canSeeValuationReport()) {
-      this.notificationService.error('No tiene permisos para descargar valorización.');
+      this.notificationService.error(
+        'No tiene permisos para exportar valorización.',
+      );
       return;
     }
-    this.masterReportBusy.set(true);
-    this.analyticsService.downloadFullReport(format).subscribe({
-      next: (blob) => {
-        const ext = format === 'pdf' ? 'pdf' : 'xlsx';
-        const a = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        a.href = url;
-        a.download = `valorizacion-maestro.${ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
-        this.masterReportBusy.set(false);
-        this.notificationService.success('Reporte descargado.');
-      },
-      error: () => {
-        this.masterReportBusy.set(false);
-        this.notificationService.error('No se pudo generar el reporte maestro.');
-      },
-    });
+    if (this.valuationByFamily().length === 0) {
+      this.notificationService.warning('No hay datos de valorización para exportar.');
+      return;
+    }
+    this.summaryReportBusy.set(true);
+    this.analyticsService
+      .downloadValuationSummaryReport(format)
+      .pipe(finalize(() => this.summaryReportBusy.set(false)))
+      .subscribe({
+        next: (blob) => {
+          const stamp = new Date().toISOString().slice(0, 10);
+          const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+          this.triggerBlobDownload(
+            blob,
+            `valorizacion-familias-${stamp}.${ext}`,
+          );
+          this.notificationService.success('Reporte descargado.');
+        },
+        error: (err) => {
+          void this.notifyReportDownloadError(
+            err,
+            'No se pudo generar el reporte de valorización.',
+          );
+        },
+      });
+  }
+
+  private triggerBlobDownload(blob: Blob, filename: string) {
+    if (!blob?.size) {
+      this.notificationService.error('El archivo generado está vacío.');
+      return;
+    }
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private async notifyReportDownloadError(
+    err: unknown,
+    fallback: string,
+  ): Promise<void> {
+    const message = await this.extractHttpBlobErrorMessage(err);
+    this.notificationService.error(message || fallback);
+  }
+
+  private async extractHttpBlobErrorMessage(err: unknown): Promise<string> {
+    if (!(err instanceof HttpErrorResponse)) return '';
+    const body = err.error;
+    if (body instanceof Blob) {
+      try {
+        const text = await body.text();
+        const parsed = JSON.parse(text) as {
+          message?: string | string[];
+        };
+        const msg = parsed.message;
+        if (Array.isArray(msg)) return msg.join('. ');
+        if (typeof msg === 'string' && msg.trim()) return msg;
+      } catch {
+        return '';
+      }
+    }
+    if (err.status === 403) {
+      return 'No tiene permisos para este reporte.';
+    }
+    return '';
   }
 
   openAdjustModal(row: any) {

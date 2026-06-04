@@ -1813,7 +1813,9 @@ export class PurchaseRequisitionsService {
         workOrder: WORK_ORDER_LINK_SELECT,
         items: {
           include: {
-            inventoryItem: { select: { partNumber: true, name: true } },
+            inventoryItem: {
+              select: { partNumber: true, name: true, description: true },
+            },
             awardedQuotationItem: {
               include: {
                 quotation: {

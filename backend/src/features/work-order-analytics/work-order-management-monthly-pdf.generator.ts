@@ -1,4 +1,13 @@
-import PDFDocument from 'pdfkit';
+import {
+  buildLogoBlockHtml,
+  buildPdfDocumentBaseCss,
+  escapeHtml,
+  formatClp,
+  pdfElectronicFootNoteHtml,
+  PDF_DOC_STATUS_CSS,
+  renderHtmlToPdfBuffer,
+  resolveTenantAccent,
+} from '../../common/pdf/pdf-html-shared';
 
 /** Datos mínimos del tablero para el PDF (evita import circular con el servicio). */
 export type WorkOrderAnalyticsDashboardPdfSlice = {
@@ -24,7 +33,6 @@ export type WorkOrderManagementMonthlyPdfInput = {
   month: number;
   contractLabel: string;
   dashboard: WorkOrderAnalyticsDashboardPdfSlice;
-  /** Referencia por equipo (peor PA primero); etiquetas sin marca/modelo usan patente / N° interno. */
   availabilityReferenceLines?: Array<{
     label: string;
     availabilityPct: string;
@@ -36,13 +44,10 @@ export type WorkOrderManagementMonthlyPdfInput = {
   totalMaintenanceEstimate: number;
 };
 
-function formatClp(n: number): string {
-  return new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(n);
-}
+export type WorkOrderManagementMonthlyPdfOptions = {
+  tenantLogoDataUri?: string | null;
+  tenantPrimaryColor?: string | null;
+};
 
 function formatPct(n: number | null): string {
   if (n == null || Number.isNaN(n)) return '—';
@@ -54,12 +59,10 @@ function formatHours(n: number | null): string {
   return `${n.toFixed(1)} h`;
 }
 
-/**
- * PDF ejecutivo: Resumen de Gestión Mensual (confiabilidad + costos de mantenimiento).
- */
-export function generateWorkOrderManagementMonthlyPdfBuffer(
+function buildWorkOrderManagementMonthlyHtml(
   payload: WorkOrderManagementMonthlyPdfInput,
-): Promise<Buffer> {
+  options: WorkOrderManagementMonthlyPdfOptions,
+): string {
   const {
     tenantName,
     year,
@@ -74,178 +77,166 @@ export function generateWorkOrderManagementMonthlyPdfBuffer(
     totalMaintenanceEstimate,
   } = payload;
 
+  const accent = resolveTenantAccent(options.tenantPrimaryColor);
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('es-CL', {
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
   });
+  const logoBlock = buildLogoBlockHtml(
+    tenantName,
+    options.tenantLogoDataUri,
+    'MNT',
+  );
+  const k = dashboard.kpis;
 
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 48 });
-    const chunks: Buffer[] = [];
-    doc.on('data', (c: Buffer) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+  const refRows = (availabilityReferenceLines ?? [])
+    .map(
+      (row) => `<tr>
+        <td class="l">${escapeHtml(row.label)}</td>
+        <td class="r">${escapeHtml(row.availabilityPct)}</td>
+      </tr>`,
+    )
+    .join('');
 
-    const left = doc.page.margins.left;
-    const width =
-      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const paretoRows = [...dashboard.paretoSystems]
+    .filter((p) => p.otCount > 0)
+    .slice(0, 12)
+    .map(
+      (row) => `<tr>
+        <td class="l">${escapeHtml(row.label)}</td>
+        <td class="r">${row.otCount}</td>
+      </tr>`,
+    )
+    .join('');
 
-    doc
-      .fontSize(16)
-      .fillColor('#1a1a1a')
-      .text(tenantName, left, doc.y, { width });
-    doc.moveDown(0.3);
+  const ps = dashboard.programmedSplit;
 
-    doc
-      .fontSize(18)
-      .fillColor('#111111')
-      .text('Resumen de Gestión Mensual — Mantenimiento', { align: 'center' });
-    doc.moveDown(0.4);
-    doc
-      .fontSize(10)
-      .fillColor('#555555')
-      .text(`Período: ${monthLabel}`, { align: 'center' });
-    doc.fontSize(10).text(`Alcance: ${contractLabel}`, { align: 'center' });
-    doc.moveDown(1.2);
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resumen gestión mantenimiento ${monthLabel}</title>
+  <style>
+    ${buildPdfDocumentBaseCss(accent)}
+    ${PDF_DOC_STATUS_CSS}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="top-doc">
+        <div class="doc-brand">
+          <div class="logo-corner">${logoBlock}</div>
+          <div class="title-block">
+            <h1>RESUMEN DE GESTIÓN MENSUAL</h1>
+            <p class="doc-status doc-status--caption">
+              <span class="doc-status-k">Área:</span>
+              Mantenimiento y confiabilidad
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="meta">
+        <table class="meta-t">
+          <tr>
+            <td>Período</td>
+            <td style="font-weight:700;">${escapeHtml(monthLabel)}</td>
+          </tr>
+          <tr>
+            <td>Alcance</td>
+            <td>${escapeHtml(contractLabel)}</td>
+          </tr>
+          <tr>
+            <td>Organización</td>
+            <td>${escapeHtml(tenantName)}</td>
+          </tr>
+        </table>
+      </div>
+    </div>
 
-    doc.fontSize(12).fillColor('#000000').text('Indicadores de confiabilidad', {
-      underline: true,
-    });
-    doc.moveDown(0.6);
+    <p class="section-title">Indicadores de confiabilidad</p>
+    <div class="kpi-row">
+      <div class="kpi-box">
+        <div class="kpi-t">Disponibilidad física (flota)</div>
+        <div class="kpi-v">${escapeHtml(formatPct(k.fleetAvailabilityPct))}</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-t">MTTR (correctivas)</div>
+        <div class="kpi-v">${escapeHtml(formatHours(k.mttrHours))}</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-t">MTBF (entre fallas NP)</div>
+        <div class="kpi-v">${escapeHtml(formatHours(k.mtbfHours))}</div>
+      </div>
+    </div>
+    <p class="muted" style="margin:0 0 10px;">
+      Detención con impacto en disponibilidad (mes): ${escapeHtml(formatHours(k.downtimeImpactHoursSi))} ·
+      OT correctivas en MTTR: ${k.correctiveOtCountForMttr} ·
+      Intervalos MTBF: ${k.unplannedFailureIntervalsForMtbf}
+    </p>
 
-    const kpiH = 52;
-    const gap = 10;
-    const colW = (width - gap * 2) / 3;
-    const boxY = doc.y;
-
-    const drawKpi = (x: number, title: string, value: string) => {
-      doc.save();
-      doc.roundedRect(x, boxY, colW, kpiH, 4).stroke('#cccccc');
-      doc
-        .fontSize(8)
-        .fillColor('#666666')
-        .text(title, x + 8, boxY + 8, { width: colW - 16 });
-      doc
-        .fontSize(11)
-        .fillColor('#111111')
-        .text(value, x + 8, boxY + 26, {
-          width: colW - 16,
-        });
-      doc.restore();
-    };
-
-    const k = dashboard.kpis;
-    drawKpi(
-      left,
-      'Disponibilidad física (flota)',
-      formatPct(k.fleetAvailabilityPct),
-    );
-    drawKpi(left + colW + gap, 'MTTR (correctivas)', formatHours(k.mttrHours));
-    drawKpi(
-      left + (colW + gap) * 2,
-      'MTBF (entre fallas no programadas)',
-      formatHours(k.mtbfHours),
-    );
-    doc.y = boxY + kpiH + 16;
-
-    doc
-      .fontSize(9)
-      .fillColor('#444444')
-      .text(
-        `Horas de detención con impacto en disponibilidad (recorte al mes): ${k.downtimeImpactHoursSi.toFixed(1)} h · OT correctivas en MTTR: ${k.correctiveOtCountForMttr} · Intervalos MTBF: ${k.unplannedFailureIntervalsForMtbf}`,
-        left,
-        doc.y,
-        { width },
-      );
-    doc.moveDown(1.2);
-
-    const refLines = availabilityReferenceLines ?? [];
-    if (refLines.length > 0) {
-      doc
-        .fontSize(12)
-        .fillColor('#000000')
-        .text('Referencia — disponibilidad por equipo (menor PA primero)', {
-          underline: true,
-        });
-      doc.moveDown(0.5);
-      doc
-        .fontSize(8)
-        .fillColor('#888888')
-        .text(
-          'Etiqueta: marca/modelo si existe; si no, patente o N° interno.',
-          left,
-          doc.y,
-          { width },
-        );
-      doc.moveDown(0.4);
-      doc.fontSize(9).fillColor('#444444');
-      for (const row of refLines) {
-        doc.text(`• ${row.label}: ${row.availabilityPct}`, { width });
-      }
-      doc.moveDown(1);
+    ${
+      refRows
+        ? `<p class="section-title">Referencia — disponibilidad por equipo (menor PA primero)</p>
+    <table class="items">
+      <thead><tr><th>Equipo</th><th>PA período</th></tr></thead>
+      <tbody>${refRows}</tbody>
+    </table>`
+        : ''
     }
 
-    doc
-      .fontSize(12)
-      .fillColor('#000000')
-      .text('Costos de mantenimiento (estimado)', {
-        underline: true,
-      });
-    doc.moveDown(0.5);
-    doc.fontSize(10).fillColor('#333333');
-    doc.text(
-      `Repuestos y fluidos (asset cost WORK_ORDER): ${formatClp(totalAssetCostWo)}`,
-      {
-        width,
-      },
-    );
-    doc.text(
-      `Mano de obra: ${totalLaborHours.toFixed(1)} HH × ${formatClp(laborRatePerHour)} = ${formatClp(laborCostEstimate)}`,
-      { width },
-    );
-    doc.moveDown(0.3);
-    doc
-      .fontSize(11)
-      .fillColor('#111111')
-      .text(`Total estimado: ${formatClp(totalMaintenanceEstimate)}`, {
-        width,
-      });
-    doc.moveDown(1);
+    <p class="section-title">Costos de mantenimiento (estimado)</p>
+    <table class="grid2">
+      <tr>
+        <td class="lbl">Repuestos y fluidos (asset cost OT)</td>
+        <td class="r">${escapeHtml(formatClp(totalAssetCostWo))}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Mano de obra</td>
+        <td class="r">${escapeHtml(formatClp(laborCostEstimate))} (${totalLaborHours.toFixed(1)} HH × ${formatClp(laborRatePerHour)})</td>
+      </tr>
+      <tr>
+        <td class="lbl">Total estimado</td>
+        <td class="r" style="font-weight:800;">${escapeHtml(formatClp(totalMaintenanceEstimate))}</td>
+      </tr>
+    </table>
 
-    doc
-      .fontSize(12)
-      .fillColor('#000000')
-      .text('Programado vs no programado (OT cerradas)', {
-        underline: true,
-      });
-    doc.moveDown(0.4);
-    doc.fontSize(10).fillColor('#333333');
-    const ps = dashboard.programmedSplit;
-    doc.text(`Programadas: ${ps.programmed}`, { width });
-    doc.text(`No programadas: ${ps.notProgrammed}`, { width });
-    doc.text(`Sin clasificar / otras: ${ps.unknown}`, { width });
-    doc.moveDown(0.8);
+    <p class="section-title">Programado vs no programado (OT cerradas)</p>
+    <table class="grid2">
+      <tr><td class="lbl">Programadas</td><td>${ps.programmed}</td></tr>
+      <tr><td class="lbl">No programadas</td><td>${ps.notProgrammed}</td></tr>
+      <tr><td class="lbl">Sin clasificar / otras</td><td>${ps.unknown}</td></tr>
+    </table>
 
-    doc
-      .fontSize(12)
-      .fillColor('#000000')
-      .text('Pareto — sistemas intervenidos (conteo OT)', {
-        underline: true,
-      });
-    doc.moveDown(0.5);
-    const topPareto = [...dashboard.paretoSystems]
-      .filter((p) => p.otCount > 0)
-      .slice(0, 8);
-    doc.fontSize(9).fillColor('#444444');
-    if (topPareto.length === 0) {
-      doc.text('Sin intervenciones registradas en el período.', { width });
-    } else {
-      for (const row of topPareto) {
-        doc.text(`• ${row.label}: ${row.otCount}`, { width });
-      }
-    }
+    <p class="section-title">Pareto — sistemas intervenidos (conteo OT)</p>
+    <table class="items">
+      <thead><tr><th>Sistema</th><th>OT</th></tr></thead>
+      <tbody>
+        ${
+          paretoRows ||
+          '<tr><td colspan="2" class="c muted">Sin intervenciones registradas en el período</td></tr>'
+        }
+      </tbody>
+    </table>
 
-    doc.end();
-  });
+    ${pdfElectronicFootNoteHtml([
+      `Resumen mensual mantenimiento`,
+      `${year}-${String(month).padStart(2, '0')}`,
+      contractLabel,
+    ])}
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * PDF ejecutivo: Resumen de Gestión Mensual (confiabilidad + costos de mantenimiento).
+ */
+export async function generateWorkOrderManagementMonthlyPdfBuffer(
+  payload: WorkOrderManagementMonthlyPdfInput,
+  options: WorkOrderManagementMonthlyPdfOptions = {},
+): Promise<Buffer> {
+  const html = buildWorkOrderManagementMonthlyHtml(payload, options);
+  return renderHtmlToPdfBuffer(html);
 }

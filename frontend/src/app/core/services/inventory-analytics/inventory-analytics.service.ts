@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import type { InventoryMasterReportOptions } from '../../models/inventory-master-report-options';
 
 export interface ValuationByFamilyRow {
   familyId: string;
@@ -63,6 +64,25 @@ export interface GlobalSearchResponse {
   results: GlobalSearchResult[];
 }
 
+export interface FullReportMetaWarehouse {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface FullReportMetaFamily {
+  familyId: string;
+  familyName: string;
+  totalValue: number;
+}
+
+export interface FullReportMetaResponse {
+  warehouses: FullReportMetaWarehouse[];
+  families: FullReportMetaFamily[];
+  catalogItemCount: number;
+  grandTotal: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -76,10 +96,57 @@ export class InventoryAnalyticsService {
     );
   }
 
-  /** Reporte maestro de valorización (PDF o Excel) — blob para descarga. */
-  downloadFullReport(format: 'pdf' | 'xlsx'): Observable<Blob> {
-    return this.http.get(`${this.apiUrl}/full-report`, {
+  /** Resumen por familia (PDF o Excel) — blob para descarga. */
+  downloadValuationSummaryReport(format: 'pdf' | 'xlsx'): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/valuation-report`, {
       params: { format },
+      responseType: 'blob',
+    });
+  }
+
+  getFullReportMeta(): Observable<FullReportMetaResponse> {
+    return this.http.get<FullReportMetaResponse>(
+      `${this.apiUrl}/full-report/meta`,
+    );
+  }
+
+  private fullReportHttpParams(
+    format: 'pdf' | 'xlsx',
+    options: InventoryMasterReportOptions,
+  ): HttpParams {
+    const s = options.sections;
+    let params = new HttpParams()
+      .set('format', format)
+      .set('includeWarehouseSummary', String(s.warehouseSummary))
+      .set('includeFamilySummary', String(s.familySummary))
+      .set('includeCritical', String(s.criticalItems))
+      .set('includeDeadStock', String(s.deadStock))
+      .set('includeItemDetail', String(s.itemDetail))
+      .set('includePurchases', String(s.purchases))
+      .set('onlyWithStock', String(options.onlyWithStock))
+      .set('criticalMaxRows', String(options.criticalMaxRows))
+      .set('deadStockMaxRows', String(options.deadStockMaxRows))
+      .set('purchaseMaxRows', String(options.purchaseMaxRows));
+
+    if (options.warehouseIds.length) {
+      params = params.set('warehouseIds', options.warehouseIds.join(','));
+    }
+    if (options.familyNames.length) {
+      params = params.set('familyNames', options.familyNames.join(','));
+    }
+    if (options.detailMaxRows != null && options.detailMaxRows > 0) {
+      params = params.set('detailMaxRows', String(options.detailMaxRows));
+    }
+    return params;
+  }
+
+  /** Reporte maestro de valorización (PDF o Excel) — blob para descarga. */
+  downloadFullReport(
+    format: 'pdf' | 'xlsx',
+    options: InventoryMasterReportOptions,
+  ): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/full-report`, {
+      params: this.fullReportHttpParams(format, options),
       responseType: 'blob',
     });
   }

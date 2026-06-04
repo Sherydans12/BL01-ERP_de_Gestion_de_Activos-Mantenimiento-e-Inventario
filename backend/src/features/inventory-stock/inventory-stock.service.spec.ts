@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../../common/storage/storage.service';
 import {
   InventoryStockService,
   PerformReturnDto,
@@ -78,6 +79,10 @@ describe('InventoryStockService', () => {
       providers: [
         InventoryStockService,
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -1107,9 +1112,14 @@ describe('InventoryStockService', () => {
         expect.objectContaining({
           warehouseCode: 'B-CENTRAL',
           rows: expect.arrayContaining([
-            expect.objectContaining({ inventoryCode: 'IN0001' }),
+            expect.objectContaining({
+              inventoryCode: 'IN0001',
+              itemName: 'Filtro',
+              description: 'Filtro aceite',
+            }),
           ]),
         }),
+        expect.any(Object),
       );
       expect(result.filename).toBe('B-CENTRAL-conteo-fisico.pdf');
       expect(result.buffer).toBeInstanceOf(Buffer);

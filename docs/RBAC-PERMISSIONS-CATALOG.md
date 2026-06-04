@@ -273,7 +273,7 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 
 | Estado | Llave del permiso | Acción en el API | Descripción de negocio |
 |:------:|-------------------|------------------|-------------------------|
-| ✅ | `operations:equipment:read` | `GET /api/equipments`<br>`GET /api/equipments/:id`<br>`GET /api/equipments/:id/analytics` | Listar flota, consultar ficha y analytics del activo. |
+| ✅ | `operations:equipment:read` | `GET /api/equipments`<br>`GET /api/equipments/:id`<br>`GET /api/equipments/:id/analytics`<br>`GET /api/equipments/:id/resume-pdf` | Listar flota, ficha, analytics y PDF hoja de vida del activo. |
 | ✅ | `operations:equipment:create` | `POST /api/equipments` | Alta de equipo en el maestro de flota. |
 | ✅ | `operations:equipment:update` | `PUT /api/equipments/:id` | Editar datos operativos, documentación y atributos del activo. |
 | ✅ | `operations:equipment:delete` | `DELETE /api/equipments/:id` | Desactivar o dar de baja un equipo (según reglas del servicio). |
@@ -284,7 +284,7 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 
 | Estado | Llave del permiso | Acción en el API | Descripción de negocio |
 |:------:|-------------------|------------------|-------------------------|
-| ✅ | `operations:work-order:read` | `GET /api/work-orders`<br>`GET /api/work-orders/stats`<br>`GET /api/work-orders/:id`<br>`GET /api/work-order-analytics/dashboard`<br>`GET /api/work-order-analytics/projected-services` | Ver listados, detalle, KPIs y analítica operativa de OTs. |
+| ✅ | `operations:work-order:read` | `GET /api/work-orders`<br>`GET /api/work-orders/stats`<br>`GET /api/work-orders/:id`<br>`GET /api/work-orders/:id/pdf`<br>`GET /api/work-order-analytics/dashboard`<br>`GET /api/work-order-analytics/projected-services` | Ver listados, detalle, PDF formal de OT, KPIs y analítica operativa. |
 | ✅ | `operations:work-order:create` | `POST /api/work-orders` | Crear una nueva orden de trabajo. |
 | ✅ | `operations:work-order:update` | `PATCH /api/work-orders/:id` (cabecera/planificación)<br>`GET /api/work-order-analytics/report/monthly/pdf` | Editar planificación, clasificación y reportes de gestión. |
 | ✅ | `operations:work-order:assign` | `PATCH /api/work-orders/:id` (`participantUserIds`, `shiftSupervisorUserId`, …) | Asignar personal y responsables en la OT (ABAC en servicio). |

@@ -4,7 +4,14 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
+import { Readable } from 'stream';
+import { StorageService } from '../../common/storage/storage.service';
+import {
+  generateWorkOrderPdfBuffer,
+  type WoPdfOrder,
+} from './work-order-pdf.generator';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../common/email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -344,6 +351,7 @@ export class WorkOrdersService {
     private readonly emailService: EmailService,
     private readonly config: ConfigService,
     private readonly inventoryStockService: InventoryStockService,
+    private readonly storage: StorageService,
   ) {}
 
   private async notifyWarrantyStakeholders(params: {
@@ -1214,6 +1222,135 @@ export class WorkOrdersService {
       equiposDetenidos,
       faultReportsOpen,
     };
+  }
+
+  /** Logo tenant embebido en HTML del PDF (evita URLs firmadas inaccesibles desde Chromium). */
+  private async tryFetchTenantLogoDataUri(
+    storageKey: string | null | undefined,
+  ): Promise<string | null> {
+    const raw = storageKey?.trim();
+    if (!raw) return null;
+    try {
+      const url = (await this.storage.getReadOnlyUrl(raw)).trim();
+      if (!url) return null;
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 12_000);
+      const res = await fetch(url, { signal: ac.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const ct =
+        res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+      if (!ct.startsWith('image/')) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 2_500_000) return null;
+      return `data:${ct};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * PDF formal de OT (HTML + Chromium), alineado a plantilla OC/SRC.
+   */
+  async getWorkOrderPdfStream(
+    user: any,
+    id: string,
+    activeContract?: string,
+  ): Promise<Readable> {
+    const where = this.workOrderAccessWhere(user, id, activeContract);
+    const order = await this.prisma.workOrder.findFirst({
+      where,
+      include: {
+        tenant: {
+          select: {
+            name: true,
+            rut: true,
+            pdfLogoUrl: true,
+            primaryColor: true,
+          },
+        },
+        createdByUser: { select: { name: true, email: true } },
+        shiftSupervisorUser: { select: { name: true, email: true } },
+        subcontract: { select: { id: true, name: true, code: true } },
+        warehouse: { select: { id: true, code: true, name: true } },
+        equipment: {
+          include: {
+            contract: { select: { id: true, name: true, code: true } },
+            subcontract: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                contractId: true,
+              },
+            },
+          },
+        },
+        systems: { include: { catalogItem: true } },
+        fluids: { include: { catalogItem: true } },
+        tasks: true,
+        parts: { include: { inventoryItem: true } },
+        fluidSamples: {
+          include: { system: { select: { id: true, name: true } } },
+        },
+        fluidCompartments: {
+          include: {
+            inventoryItem: {
+              select: {
+                id: true,
+                partNumber: true,
+                name: true,
+                inventoryCode: true,
+              },
+            },
+          },
+        },
+        backlogItems: true,
+        stockReservations: {
+          include: {
+            item: {
+              select: {
+                partNumber: true,
+                name: true,
+                description: true,
+                inventoryCode: true,
+              },
+            },
+            warehouse: { select: { code: true, name: true } },
+          },
+        },
+        purchaseRequisitions: {
+          select: { id: true, correlative: true, status: true },
+        },
+        purchaseOrders: {
+          select: { id: true, correlative: true, status: true },
+        },
+        faultReport: {
+          select: {
+            correlative: true,
+            criticality: true,
+            affectedSystem: true,
+            status: true,
+            eventDate: true,
+            symptomDescription: true,
+            meterAtFault: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Orden de trabajo no encontrada');
+    }
+
+    const tenantLogoDataUri = await this.tryFetchTenantLogoDataUri(
+      order.tenant.pdfLogoUrl,
+    );
+    const buffer = await generateWorkOrderPdfBuffer(
+      order as unknown as WoPdfOrder,
+      { tenantLogoDataUri },
+    );
+    return Readable.from(buffer);
   }
 
   async findOne(user: any, id: string, activeContract?: string) {

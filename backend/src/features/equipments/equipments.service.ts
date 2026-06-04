@@ -3,8 +3,16 @@ import {
   InternalServerErrorException,
   BadRequestException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
+import { Readable } from 'stream';
+import { fetchTenantPdfLogoDataUri } from '../../common/pdf/fetch-tenant-pdf-logo';
+import { StorageService } from '../../common/storage/storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  generateEquipmentResumePdfBuffer,
+  type EquipmentResumePdfPayload,
+} from './equipment-resume-pdf.generator';
 import { MeterLogSource, Prisma } from '@prisma/client';
 import { pickEquipmentWritablePayload } from './equipment-write-keys';
 import { applyCurrentMeterChange } from './equipment-meter-sync';
@@ -19,7 +27,10 @@ import {
 export class EquipmentsService {
   private readonly logger = new Logger(EquipmentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   /** Alcance por contrato/subcontrato (JWT `allowedContracts`; vacío → sin filas). */
   private pushEquipmentContractScope(
@@ -453,6 +464,121 @@ export class EquipmentsService {
         subcontract: true,
       },
     });
+  }
+
+  /**
+   * PDF hoja de vida del activo (HTML + Chromium).
+   */
+  async getEquipmentResumePdfStream(
+    user: any,
+    id: string,
+    siteHeader?: string,
+  ): Promise<Readable> {
+    const tenantId = user.tenantId as string;
+    const where: Prisma.EquipmentWhereInput = { id, tenantId };
+    const andConditions: Prisma.EquipmentWhereInput[] = [];
+    this.pushEquipmentContractScope(andConditions, user, siteHeader);
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    const equipment = await this.prisma.equipment.findFirst({
+      where,
+      include: {
+        contract: { select: { code: true, name: true } },
+        subcontract: { select: { code: true, name: true } },
+      },
+    });
+    if (!equipment) {
+      throw new NotFoundException('Equipo no encontrado o sin permisos');
+    }
+
+    const [tenant, closedWorkOrders, openWorkOrdersCount, meterLogs] =
+      await Promise.all([
+        this.prisma.tenant.findFirst({
+          where: { id: tenantId },
+          select: { name: true, pdfLogoUrl: true, primaryColor: true },
+        }),
+        this.prisma.workOrder.findMany({
+          where: { equipmentId: id, tenantId, status: 'CLOSED' },
+          orderBy: { closedAt: 'desc' },
+          take: 15,
+          select: {
+            correlative: true,
+            status: true,
+            category: true,
+            maintenanceType: true,
+            description: true,
+            createdAt: true,
+            closedAt: true,
+            initialMeter: true,
+            finalMeter: true,
+            metricHh: true,
+          },
+        }),
+        this.prisma.workOrder.count({
+          where: {
+            equipmentId: id,
+            tenantId,
+            status: { in: ['OPEN', 'IN_PROGRESS', 'ON_HOLD'] },
+          },
+        }),
+        this.prisma.equipmentMeterLog.findMany({
+          where: { equipmentId: id, tenantId },
+          orderBy: { date: 'desc' },
+          take: 8,
+          include: { user: { select: { name: true } } },
+        }),
+      ]);
+
+    const otIds = [
+      ...new Set(
+        meterLogs
+          .filter((l) => l.source === 'OT' && l.sourceId)
+          .map((l) => l.sourceId as string),
+      ),
+    ];
+    const woMap =
+      otIds.length > 0
+        ? new Map(
+            (
+              await this.prisma.workOrder.findMany({
+                where: { tenantId, id: { in: otIds } },
+                select: { id: true, correlative: true },
+              })
+            ).map((w) => [w.id, w.correlative]),
+          )
+        : new Map<string, string>();
+
+    const recentMeterLogs = meterLogs.map((l) => ({
+      date: l.date,
+      oldValue: l.oldValue,
+      newValue: l.newValue,
+      source: l.source,
+      workOrderCorrelative:
+        l.source === 'OT' && l.sourceId
+          ? (woMap.get(l.sourceId) ?? null)
+          : null,
+      user: l.user,
+    }));
+
+    const payload: EquipmentResumePdfPayload = {
+      equipment,
+      tenantName: tenant?.name ?? 'Empresa',
+      closedWorkOrders,
+      openWorkOrdersCount,
+      recentMeterLogs,
+    };
+
+    const tenantLogoDataUri = await fetchTenantPdfLogoDataUri(
+      this.storage,
+      tenant?.pdfLogoUrl,
+    );
+    const buffer = await generateEquipmentResumePdfBuffer(payload, {
+      tenantLogoDataUri,
+      tenantPrimaryColor: tenant?.primaryColor,
+    });
+    return Readable.from(buffer);
   }
 
   // PUT: Actualizar un equipo existente

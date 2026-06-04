@@ -770,7 +770,12 @@ export class PurchaseOrdersService {
         items: {
           include: {
             inventoryItem: {
-              select: { id: true, partNumber: true, name: true },
+              select: {
+                id: true,
+                partNumber: true,
+                name: true,
+                description: true,
+              },
             },
           },
         },

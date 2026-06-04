@@ -1,4 +1,6 @@
 import { chromium } from 'playwright';
+import { catalogItemLineLabel } from '../../common/pdf/item-catalog-display.util';
+import { pdfElectronicFootNoteHtml } from '../../common/pdf/pdf-html-shared';
 
 /**
  * PDF formal de orden de compra (HTML → Chromium → PDF).
@@ -55,7 +57,11 @@ export type PoPdfOrder = {
     description: string;
     quantity: unknown;
     unitCost: { toString: () => string };
-    inventoryItem?: { partNumber?: string | null; name?: string } | null;
+    inventoryItem?: {
+      partNumber?: string | null;
+      name?: string | null;
+      description?: string | null;
+    } | null;
   }>;
 };
 
@@ -200,13 +206,12 @@ function equipmentLine(eq: NonNullable<PoPdfOrder['equipment']>): string {
 }
 
 function buildItemDescription(line: PoPdfOrder['items'][0]): string {
-  const part = line.inventoryItem?.partNumber?.trim();
-  const name = line.inventoryItem?.name?.trim();
-  const base = line.description?.trim() || '—';
-  if (part && name) return `COD (${part}) ${name} — ${base}`;
-  if (part) return `COD (${part}) ${base}`;
-  if (name) return `${name} — ${base}`;
-  return base;
+  return catalogItemLineLabel({
+    partNumber: line.inventoryItem?.partNumber,
+    name: line.inventoryItem?.name,
+    description: line.inventoryItem?.description,
+    lineDescription: line.description,
+  });
 }
 
 /** Filas vacías al final solo cuando hay pocas líneas (evita segunda página artificial). */
@@ -761,9 +766,7 @@ function buildPurchaseOrderHtml(
       </div>
     </div>
 
-    <p class="foot-note" style="margin-top:10px;text-align:center;">
-      Documento generado electrónicamente desde TPM · ${escapeHtml(order.correlative)} · ${escapeHtml(currency)}
-    </p>
+    ${pdfElectronicFootNoteHtml([order.correlative, currency])}
   </div>
 </body>
 </html>`;

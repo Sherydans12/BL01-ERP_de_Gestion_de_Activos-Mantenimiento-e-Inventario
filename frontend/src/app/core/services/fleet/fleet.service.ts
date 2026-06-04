@@ -110,6 +110,12 @@ export class FleetService {
     return this.http.get<Equipment>(`${this.apiUrl}/${id}`);
   }
 
+  getEquipmentResumePdf(id: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/${id}/resume-pdf`, {
+      responseType: 'blob',
+    });
+  }
+
   getEquipmentAnalytics(id: string): Observable<EquipmentAnalytics> {
     return this.http.get<EquipmentAnalytics>(
       `${this.apiUrl}/${id}/analytics`,

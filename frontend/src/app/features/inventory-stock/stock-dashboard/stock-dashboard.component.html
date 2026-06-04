@@ -230,30 +230,25 @@
             Valorización por familia (nivel 1)
           </h3>
           <div class="flex flex-wrap gap-2 shrink-0">
-            <button
-              type="button"
-              (click)="downloadMasterReport('pdf')"
-              [disabled]="valuationLoading() || masterReportBusy()"
-              class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40"
-              title="Familia, subcategoría, stock total, CPP, valor; resumen por bodega"
-            >
-              Reporte maestro PDF
-            </button>
-            <button
-              type="button"
-              (click)="downloadMasterReport('xlsx')"
-              [disabled]="valuationLoading() || masterReportBusy()"
-              class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40"
-            >
-              Reporte maestro Excel
-            </button>
+            @if (canDownloadMasterValuationReport()) {
+              <a
+                routerLink="/app/inventario/reporte-maestro"
+                class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 inline-flex items-center"
+                title="Configurar secciones, filtros y descargar PDF o Excel"
+              >
+                Reporte maestro…
+              </a>
+            }
             <button
               type="button"
               (click)="exportValuationPdf()"
               [disabled]="
-                valuationLoading() || valuationByFamily().length === 0
+                valuationLoading() ||
+                summaryReportBusy() ||
+                valuationByFamily().length === 0
               "
               class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-border text-muted hover:text-main hover:bg-dark disabled:opacity-40"
+              title="Resumen ejecutivo por familia (PDF BaseLogic-EAM)"
             >
               Exportar PDF
             </button>
@@ -261,9 +256,12 @@
               type="button"
               (click)="exportValuationExcel()"
               [disabled]="
-                valuationLoading() || valuationByFamily().length === 0
+                valuationLoading() ||
+                summaryReportBusy() ||
+                valuationByFamily().length === 0
               "
               class="text-[10px] font-mono px-3 py-1.5 rounded-lg border border-border text-muted hover:text-main hover:bg-dark disabled:opacity-40"
+              title="Resumen por familia con % del total"
             >
               Exportar Excel
             </button>

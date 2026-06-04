@@ -184,6 +184,12 @@ export class WorkOrdersService {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
   }
 
+  getWorkOrderPdf(id: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/${id}/pdf`, {
+      responseType: 'blob',
+    });
+  }
+
   updateStatus(
     id: string,
     status: string,

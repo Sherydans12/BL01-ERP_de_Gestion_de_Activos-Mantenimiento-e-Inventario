@@ -10,6 +10,8 @@ import {
   UseGuards,
   Req,
   Headers,
+  Header,
+  StreamableFile,
 } from '@nestjs/common';
 import { EquipmentsService } from './equipments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -111,6 +113,28 @@ export class EquipmentsController {
   ) {
     const activeContract = contractId || siteId;
     return this.equipmentsService.getAnalytics(req.user, id, activeContract);
+  }
+
+  @Get(':id/resume-pdf')
+  @RequirePermissions(SystemPermissions.OPERATIONS_EQUIPMENT_READ)
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  async streamResumePdf(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ): Promise<StreamableFile> {
+    const activeContract = contractId || siteId;
+    const stream = await this.equipmentsService.getEquipmentResumePdfStream(
+      req.user,
+      id,
+      activeContract,
+    );
+    return new StreamableFile(stream, {
+      type: 'application/pdf',
+      disposition: 'inline',
+    });
   }
 
   @Get(':id/meter-snapshot')

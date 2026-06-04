@@ -362,6 +362,18 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'inventario/reporte-maestro',
+        canActivate: [permissionGuard],
+        data: {
+          permissions: I.ANALYTICS_REPORT,
+          pageTitle: 'Reporte maestro de valorización',
+        },
+        loadComponent: () =>
+          import('./features/inventory-stock/inventory-master-report/inventory-master-report.component').then(
+            (m) => m.InventoryMasterReportComponent,
+          ),
+      },
+      {
         path: 'stock',
         redirectTo: 'inventario/stock',
         pathMatch: 'full',

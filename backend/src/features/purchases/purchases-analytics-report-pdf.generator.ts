@@ -1,4 +1,11 @@
-import { chromium } from 'playwright';
+import {
+  buildLogoBlockHtml,
+  escapeHtml,
+  formatClp,
+  pdfElectronicFootNoteHtml,
+  renderHtmlToPdfBuffer,
+  resolveTenantAccent,
+} from '../../common/pdf/pdf-html-shared';
 
 /**
  * PDF ejecutivo de compras (analytics) — HTML + Chromium.
@@ -45,23 +52,6 @@ export type PurchasesAnalyticsPdfOptions = {
   tenantPrimaryColor?: string | null;
 };
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function formatClp(n: number): string {
-  try {
-    return `$ ${n.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`;
-  } catch {
-    return `$ ${n}`;
-  }
-}
-
 function formatPct(n: number): string {
   return `${(n * 100).toLocaleString('es-CL', { maximumFractionDigits: 1 })} %`;
 }
@@ -104,15 +94,12 @@ function buildPurchasesAnalyticsHtml(
   data: PurchasesAnalyticsDashboardPdfData,
   options: PurchasesAnalyticsPdfOptions,
 ): string {
-  const accent =
-    options.tenantPrimaryColor?.trim() &&
-    /^#[0-9A-Fa-f]{6}$/.test(options.tenantPrimaryColor.trim())
-      ? options.tenantPrimaryColor.trim()
-      : '#0891b2';
-
-  const logoBlock = options.tenantLogoDataUri
-    ? `<img class="logo" src="${options.tenantLogoDataUri}" alt="" />`
-    : `<div class="logo-ph">${escapeHtml(tenantName.slice(0, 3).toUpperCase() || 'BL')}</div>`;
+  const accent = resolveTenantAccent(options.tenantPrimaryColor);
+  const logoBlock = buildLogoBlockHtml(
+    tenantName,
+    options.tenantLogoDataUri,
+    'CMP',
+  );
 
   const leadAvg = weightedAvgLeadTimeDays(data.topVendors);
 
@@ -547,9 +534,11 @@ function buildPurchasesAnalyticsHtml(
     <p style="font-size:9px;line-height:1.45;color:#334155;">${prevNote}</p>
     <p class="muted" style="font-size:8px;">${policyNote}</p>
 
-    <p class="foot-note">
-      Documento generado ${escapeHtml(new Date().toLocaleString('es-CL'))} · ${escapeHtml(tenantName)} · TPM / BaseLogic
-    </p>
+    ${pdfElectronicFootNoteHtml([
+      'Reporte ejecutivo de compras',
+      tenantName,
+      formatLongRange(periodFrom, periodTo),
+    ])}
   </div>
 </body>
 </html>`;
@@ -571,26 +560,5 @@ export async function generatePurchasesAnalyticsReportPdfBuffer(
     data,
     options,
   );
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-dev-shm-usage', '--no-sandbox'],
-    executablePath:
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim() || undefined,
-  });
-  try {
-    const page = await browser.newPage();
-    try {
-      await page.setContent(html, { waitUntil: 'load' });
-      const pdf = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '7mm', bottom: '7mm', left: '9mm', right: '9mm' },
-      });
-      return Buffer.from(pdf);
-    } finally {
-      await page.close();
-    }
-  } finally {
-    await browser.close();
-  }
+  return renderHtmlToPdfBuffer(html);
 }

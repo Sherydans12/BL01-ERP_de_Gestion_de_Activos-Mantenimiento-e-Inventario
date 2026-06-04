@@ -8,6 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { userCanAccessContractId } from '../../common/contract-scope.util';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
+import { fetchTenantPdfLogoDataUri } from '../../common/pdf/fetch-tenant-pdf-logo';
+import { StorageService } from '../../common/storage/storage.service';
 import { generatePhysicalCountSheetPdfBuffer } from './physical-count-sheet-pdf.generator';
 import {
   getPolicyThresholdsForNewItemStockRow,
@@ -56,7 +58,10 @@ export interface UpdateStockLevelsDto {
 
 @Injectable()
 export class InventoryStockService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   private assertWarehouseContractAccess(
     user: { role?: string; allowedContracts?: string[] },
@@ -1607,23 +1612,41 @@ export class InventoryStockService {
     });
 
     const pdfRows = stocks.map((r) => {
-      const rawDesc = r.item.description?.trim() || r.item.name?.trim() || '—';
+      const itemName = (r.item.name ?? '').trim() || '—';
+      const rawDesc = (r.item.description ?? '').trim() || '—';
       const description =
-        rawDesc.length > 120 ? `${rawDesc.slice(0, 117)}…` : rawDesc;
+        rawDesc.length > 200 ? `${rawDesc.slice(0, 197)}…` : rawDesc;
       return {
         inventoryCode: (r.item.inventoryCode ?? '').trim() || '—',
         partNumber: (r.item.partNumber ?? '').trim() || '—',
+        itemName,
         description,
         location: (r.location ?? '').trim(),
       };
     });
 
-    const buffer = await generatePhysicalCountSheetPdfBuffer({
-      warehouseCode: wh.code,
-      warehouseName: wh.name,
-      generatedAt: new Date(),
-      rows: pdfRows,
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: { name: true, pdfLogoUrl: true, primaryColor: true },
     });
+    const tenantLogoDataUri = await fetchTenantPdfLogoDataUri(
+      this.storage,
+      tenant?.pdfLogoUrl,
+    );
+
+    const buffer = await generatePhysicalCountSheetPdfBuffer(
+      {
+        warehouseCode: wh.code,
+        warehouseName: wh.name,
+        generatedAt: new Date(),
+        rows: pdfRows,
+      },
+      {
+        tenantName: tenant?.name,
+        tenantLogoDataUri,
+        tenantPrimaryColor: tenant?.primaryColor,
+      },
+    );
     const safe = `${wh.code}-conteo-fisico`.replace(/[^a-zA-Z0-9._-]+/g, '_');
     return { buffer, filename: `${safe}.pdf` };
   }

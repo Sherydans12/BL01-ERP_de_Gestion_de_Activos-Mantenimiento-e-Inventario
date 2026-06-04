@@ -29,8 +29,6 @@ import { EquipmentDetailModalComponent } from '../equipment-detail-modal/equipme
 import { ExportService } from '../../../core/services/export/export.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
-import { PdfService } from '../../../core/services/pdf/pdf.service';
-import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 
 // IMPORTAMOS LAS INTERFACES GLOBALES (Mirroring del Schema)
@@ -71,8 +69,6 @@ export class FleetMasterComponent implements OnInit {
   private contractsService = inject(ContractsService);
   private notificationService = inject(NotificationService);
   private exportService = inject(ExportService);
-  private pdfService = inject(PdfService);
-  private workOrdersService = inject(WorkOrdersService);
   authService = inject(AuthService);
 
   readonly isEquipmentFormReadOnly = computed(() => {
@@ -610,25 +606,28 @@ export class FleetMasterComponent implements OnInit {
 
   downloadResume(eq: Equipment) {
     this.isDownloadingPdf.set(eq.id);
-    this.notificationService.info('Generando Hoja de Vida...');
+    this.notificationService.info('Generando hoja de vida...');
 
-    this.workOrdersService
-      .getWorkOrdersFiltered({
-        equipmentId: eq.id,
-        status: 'CLOSED',
-        limit: 10,
-      })
+    this.fleetService
+      .getEquipmentResumePdf(eq.id)
       .pipe(finalize(() => this.isDownloadingPdf.set(null)))
       .subscribe({
-        next: (res) => {
-          this.pdfService.generateEquipmentResume(eq, res.data);
+        next: (blob) => {
+          if (!blob?.size) {
+            this.notificationService.error('Respuesta PDF vacía');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const safePlate = (eq.plate ?? '').replace(/[^\w-]+/g, '_');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `HOJA_VIDA_${eq.internalId}${safePlate ? `_${safePlate}` : ''}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
           this.notificationService.success('PDF generado exitosamente.');
         },
-        error: (err) => {
-          console.error('Error fetching history for PDF', err);
-          this.notificationService.error(
-            'Error al obtener el historial de mantenimiento.',
-          );
+        error: () => {
+          this.notificationService.error('No se pudo generar la hoja de vida PDF.');
         },
       });
   }

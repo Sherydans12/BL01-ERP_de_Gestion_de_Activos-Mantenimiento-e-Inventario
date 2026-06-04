@@ -1,4 +1,6 @@
 import { chromium } from 'playwright';
+import { catalogItemLineLabel } from '../../common/pdf/item-catalog-display.util';
+import { pdfElectronicFootNoteHtml } from '../../common/pdf/pdf-html-shared';
 
 /**
  * PDF de resumen de requerimiento (SRC) — HTML + Chromium.
@@ -32,7 +34,11 @@ export type SrcPdfRequisition = {
     unitOfMeasure: string;
     partNumber?: string | null;
     itemNotes?: string | null;
-    inventoryItem?: { partNumber?: string | null; name?: string | null } | null;
+    inventoryItem?: {
+      partNumber?: string | null;
+      name?: string | null;
+      description?: string | null;
+    } | null;
     awardedQuotationItem?: {
       unitPrice: unknown;
       quotation?: {
@@ -130,14 +136,13 @@ function equipmentLine(
 }
 
 function buildItemRowDescription(line: SrcPdfRequisition['items'][0]): string {
-  const part =
-    line.inventoryItem?.partNumber?.trim() || line.partNumber?.trim();
-  const name = line.inventoryItem?.name?.trim();
-  const base = line.description?.trim() || '—';
-  if (part && name) return `COD (${part}) ${name} — ${base}`;
-  if (part) return `COD (${part}) ${base}`;
-  if (name) return `${name} — ${base}`;
-  return base;
+  return catalogItemLineLabel({
+    partNumber:
+      line.inventoryItem?.partNumber?.trim() || line.partNumber?.trim(),
+    name: line.inventoryItem?.name,
+    description: line.inventoryItem?.description,
+    lineDescription: line.description,
+  });
 }
 
 const PO_INACTIVE = new Set(['CANCELLED', 'REJECTED']);
@@ -596,9 +601,10 @@ function buildPurchaseRequisitionHtml(
       <tbody>${itemRows}</tbody>
     </table>
 
-    <p class="foot-note">
-      Documento generado electrónicamente desde TPM · SRC ${escapeHtml(req.correlative)} · resumen para archivo y auditoría
-    </p>
+    ${pdfElectronicFootNoteHtml([
+      `SRC ${req.correlative}`,
+      'resumen para archivo y auditoría',
+    ])}
   </div>
 </body>
 </html>`;
