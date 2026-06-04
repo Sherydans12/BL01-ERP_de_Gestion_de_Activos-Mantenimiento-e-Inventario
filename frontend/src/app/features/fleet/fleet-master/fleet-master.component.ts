@@ -48,6 +48,10 @@ import { Equipment, MeterType, Contract } from '../../../core/models/types';
   templateUrl: './fleet-master.component.html',
   styles: [
     `
+      :host {
+        display: block;
+      }
+
       :host dialog.equipment-register-dialog {
         box-sizing: border-box;
         width: 100vw;
