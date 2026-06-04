@@ -2,9 +2,9 @@
 
 **Producto:** TPM — Gestión de Activos y EAM  
 **Versión del módulo:** Operations v1.0  
-**Fecha de liberación:** 2026-06-03  
+**Fecha de liberación:** 2026-06-04  
 **Entorno objetivo:** QA (Coolify) → Producción  
-**Clasificación:** Mayor · Primera liberación del módulo operativo integrado
+**Clasificación:** Mayor · Primera liberación del módulo operativo integrado (+ hardening de integridad de fluidos)
 
 ---
 
@@ -27,8 +27,13 @@ El camión lubricador registra cada despacho directamente en la app: qué aceite
 **Capacidades principales:**
 
 - Registro de despacho con múltiples productos por equipo (aceite motor, hidráulico, transmisión, etc.).
-- Descuento de stock en tiempo real desde la bodega virtual del camión lubricador.
+- Descuento de stock en tiempo real desde la bodega virtual del camión lubricador, centralizado en `InventoryStockService.performTransactionCore` (misma lógica que OT e inventario).
+- **Visibilidad de stock al elegir artículo:** badge «Disponible: X [UoM]» por línea (componente shared `app-fluid-quantity-row`); el dato proviene del picker sin consultas adicionales.
+- **Control de stock negativo configurable:** en **Ajustes → Empresa**, el toggle «Bloquear stock negativo» activa rechazo estricto (`BadRequestException`) en lugar de permitir saldo pendiente de regularización.
+- **Precisión decimal:** cantidades con `Decimal.js` y epsilon `1e-9`; rechazo de fracciones si la UoM del artículo no admite decimales.
+- **Consumo inusual:** despachos que superan el umbral lógico (p. ej. 100 LT) exigen confirmación explícita («Confirmar cantidad inusual») antes de guardar.
 - Lectura de horómetro opcional: si el operario la ingresa, el sistema actualiza el contador de horas del equipo. Si la lectura fuera menor a la última registrada, el sistema la **rechaza** con un mensaje claro — el horómetro nunca retrocede.
+- Banner de referencia de lectura (Trinidad Operativa): muestra la última lectura y su fuente antes de ingresar horómetro o cantidad.
 - El costo de cada despacho queda imputado al activo para el cálculo del costo de ciclo de vida.
 
 ---
@@ -78,6 +83,33 @@ El planificador puede crear una OT desde cualquier reporte de falla en estado Ab
 
 #### Integración con el formulario de Órdenes de Trabajo
 Cuando el planificador crea una OT y selecciona un equipo con fallas Abiertas sin vincular, el sistema muestra un banner de alerta con el detalle de cada falla. Así ninguna intervención se programa sin conocer el estado real del activo.
+
+Al **cerrar una OT**, los fluidos de inventario usan la misma fila de cantidad (`app-fluid-quantity-row`) que M1: stock visible, validación decimal, aviso o bloqueo por stock insuficiente según configuración del tenant, y confirmación de consumo inusual vía `confirmedLargeFluidDispatch`.
+
+---
+
+## Integridad de fluidos — stock, decimales y consumo inusual
+
+Esta versión cierra una brecha detectada en auditoría: M1 y OT permitían stock negativo silencioso y cantidades en punto flotante sin validación unificada en UI.
+
+### Qué cambió
+
+| Área | Antes | Ahora |
+|------|-------|-------|
+| **Descuento de stock (M1 / OT)** | Lógica duplicada; negativo → `isPendingRegularization` siempre | Un solo núcleo: `performTransactionCore` con aritmética `Decimal.js` |
+| **Stock negativo** | Siempre permitido con regularización pendiente | **Configurable** por tenant (`blockNegativeStock` en `TenantOperationalConfig`) |
+| **UI de cantidad** | Input manual «Litros» fijo en OT; sin stock en M1 | Componente shared `app-fluid-quantity-row` en M1 y OT |
+| **Decimales** | Sin validación coherente UoM | `step` 0.01 o 1; rechazo si `allowsDecimals=false` |
+| **Consumo atípico** | Sin salvaguarda | Umbral por UoM + checkbox de confirmación |
+
+### Modos de stock negativo
+
+- **`blockNegativeStock = false` (default):** comportamiento legacy — si el despacho supera el disponible, el kardex registra saldo negativo y marca `isPendingRegularization`. La UI muestra aviso **ámbar**.
+- **`blockNegativeStock = true`:** el backend rechaza la operación con mensaje explícito (*Stock insuficiente para X. Disponible: Y, solicitado: Z.*). La UI muestra error **rojo** y bloquea Guardar / Cerrar OT.
+
+### Configuración
+
+**Ajustes → Empresa → Operaciones:** toggle «Bloquear stock negativo» (persistido en `PATCH /tenant-config/operational` junto con la configuración de turnos).
 
 ---
 
@@ -139,10 +171,12 @@ Esta versión fue validada con tres niveles de pruebas automatizadas:
 | Nivel | Descripción | Resultado |
 |-------|-------------|-----------|
 | **Unitario — Helper de horómetro** | `applyCurrentMeterChange`: happy path, silent skip, fuentes M1/M2/M3, orden de operaciones | 7/7 ✅ |
+| **Unitario — Precisión de stock** | `stock-quantity.util`: resta decimal, epsilon, detección de déficit | 3/3 ✅ |
 | **Integración — Caos en Terreno** | Flujo secuencial M2→M1(rechazado)→M3 sobre estado compartido; verifica 0 contaminación de logs | 4/4 ✅ |
-| **Unitario — Servicios backend** | Suite completa de dominio | 376/376 ✅ |
+| **Unitario — Servicios backend** | Suite completa de dominio (incl. `blockNegativeStock`, M1→`performTransactionCore`, fracciones UoM) | 391/391 ✅ |
 | **Componente Angular — Lógica** | `meterHistoryRows`: delta, orden, traducción de fuentes, preview | 20/20 ✅ |
 | **Componente Angular — Rendering** | Tabla de historial: filas, delta `+50 Hrs`, etiquetas, CSS | 22/22 ✅ |
+| **Formularios M1 / OT** | `lube-report-form` + `work-order-form` integrados con `app-fluid-quantity-row` | build ✅ |
 
 ---
 
@@ -175,13 +209,33 @@ Esta versión fue validada con tres niveles de pruebas automatizadas:
 3. Verificar la previsualización y confirmar la importación.
 4. Verificar que los equipos completados ya no aparecen en la lista de "sin reportar" del dashboard.
 
+### Escenario 5 — Integridad de fluidos en M1 (stock y decimales)
+
+1. En **Ajustes → Empresa**, activar «Bloquear stock negativo» y guardar.
+2. Desde **Operaciones → Lubricantes → Nuevo**, elegir bodega virtual, equipo y un lubricante con stock conocido (p. ej. 5 LT).
+3. Ingresar cantidad **6** → verificar badge rojo, mensaje de stock insuficiente y botón Guardar deshabilitado.
+4. Desactivar el bloqueo, repetir con cantidad 6 → aviso ámbar (regularización pendiente) pero permite guardar si el resto del formulario es válido.
+5. Probar artículo con UoM entera (`allowsDecimals=false`) ingresando `2.5` → error de formato y bloqueo de guardado.
+
+### Escenario 6 — Fluidos en cierre de OT
+
+1. Abrir una OT en progreso con bodega de consumo asignada; agregar fluido desde catálogo.
+2. Verificar badge «Disponible» y unidad correcta (no label fijo «Litros»).
+3. Ingresar cantidad > umbral lógico (p. ej. 120 LT) sin marcar confirmación → bloqueo de cierre.
+4. Marcar «Confirmar cantidad inusual» y cerrar OT → verificar kardex `WORK_ORDER_ISSUE` y costo imputado.
+
 ---
 
 ## Cambios técnicos para el equipo de desarrollo
 
-- **Sin migraciones de base de datos** en esta versión (el schema es el de la v0.9 con la columna `quantityConfirmed` en `receipt_items` ya aplicada).
-- Nuevos endpoints: `GET /equipment-availability/unreported`, `POST /equipment-availability/export-template`, `POST /equipment-availability/import/validate`, `POST /equipment-availability/import/commit`.
-- Nuevos endpoints M3: `POST /fault-reports/:id/attachments`, `GET /fault-reports/:id/attachments/:attachmentId/download`.
+- **Migración:** `20260604120000_tenant_block_negative_stock` — columna `block_negative_stock` en `tenant_operational_configs` (default `false`). Ejecutar `npx prisma migrate deploy` en local/QA antes de probar el toggle.
+- **Utils compartidos:** `backend/src/common/inventory/stock-quantity.util.ts`, `fluid-dispatch-limits.util.ts` (backend y mirror FE en `shared/utils/`).
+- **Núcleo de stock:** M1 (`LubeReportsService`) y cierre OT (`WorkOrdersService`) delegan descuentos a `InventoryStockService.performTransactionCore`.
+- **Picker inventario:** campo `stockAvailableQuantity` en filas del catálogo (físico − reservas).
+- **Frontend shared:** `app-fluid-quantity-row` — inputs `itemId`, `warehouseId`, `allowsDecimals`, `availableStock`, `FormControl`, emite `validationChange` y `confirmedLargeDispatchChange`.
+- **DTOs:** `LubeReportLineDto.confirmedLargeDispatch`; cierre OT acepta `confirmedLargeFluidDispatch` en body de `PATCH .../status`.
+- Endpoints M2 (sin cambios respecto a v1.0 base): `GET /equipment-availability/unreported`, export/import Excel.
+- Endpoints M3: `POST /fault-reports/:id/attachments`, `GET /fault-reports/:id/attachments/:attachmentId/download`.
 - El evento `EQUIPMENT_DOWN` está registrado en [`docs/agentes/notificaciones-sistema.md`](../agentes/notificaciones-sistema.md) y la plantilla de correo en [`docs/CORREOS-SISTEMA.md`](../CORREOS-SISTEMA.md).
 
 ---
@@ -193,6 +247,7 @@ Esta versión fue validada con tres niveles de pruebas automatizadas:
 | El dashboard no muestra KPIs cruzados en tiempo real (PMs próximas, semáforo de flota) | Medio — requiere navegación manual a Flota | v1.1 |
 | La notificación push de "PM próxima" no está implementada (requiere campo anti-spam en schema) | Bajo — el cálculo visual ya existe en el modal | v1.1 |
 | Los reportes de disponibilidad no se agregan aún en un reporte ejecutivo mensual exportable | Bajo — la data existe, falta la vista de reporte | v1.2 |
+| `ItemStock.quantity` sigue siendo `Float` en Postgres; la precisión se garantiza en runtime con `Decimal.js` | Bajo — migración a `Decimal` en schema evaluable en v1.2 | v1.2 |
 
 ---
 
@@ -208,5 +263,5 @@ Esta versión fue validada con tres niveles de pruebas automatizadas:
 
 ---
 
-*Preparado por: Equipo TPM / BaseLogic — Agente Cursor (sesión 2026-06-03)*  
+*Preparado por: Equipo TPM / BaseLogic — Agente Cursor (sesiones 2026-06-03 / 2026-06-04)*  
 *Aprobación técnica pendiente antes del merge a `main`.*

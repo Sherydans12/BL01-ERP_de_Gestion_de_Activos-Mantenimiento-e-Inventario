@@ -9,6 +9,17 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-04 — Integridad de fluidos (M1 + OT): stock centralizado, decimales y consumo inusual
+
+- **Contexto:** Auditoría de M1 (Lubricantes) y fluidos en cierre de OT detectó stock negativo permitido por diseño (`isPendingRegularization`), inputs manuales sin visibilidad de disponible, label fijo «Litros» en OT y drift de punto flotante en restas de `ItemStock`.
+- **Decisión:**
+  - **Núcleo único:** `InventoryStockService.performTransactionCore` con `stock-quantity.util` (`Decimal.js`, epsilon `1e-9`). M1 (`LUBE_DISPATCH`) y OT (`WORK_ORDER_ISSUE`) delegan descuentos; W2W reutiliza el mismo mensaje de insuficiencia.
+  - **Flag tenant:** `TenantOperationalConfig.blockNegativeStock` (default `false`). Si `true` → `BadRequestException` en lugar de saldo negativo pendiente.
+  - **Frontend shared:** `app-fluid-quantity-row` — badge disponible, validación ámbar/rojo, `step` según `allowsDecimals`, checkbox consumo inusual. Integrado en `lube-report-form` y `work-order-form` (fluidos). Stock del picker vía `stockAvailableQuantity` (sin N+1).
+  - **Consumo atípico:** umbral por UoM (~100 LT); `confirmedLargeDispatch` en línea M1 y `confirmedLargeFluidDispatch` al cerrar OT.
+  - **Configuración UI:** toggle en **Ajustes → Empresa** (`PATCH /tenant-config/operational`).
+- **Consecuencias:** Migración `20260604120000_tenant_block_negative_stock`. Suite dominio **391 tests · 22 suites · 0 fallos**. Columna `ItemStock.quantity` sigue `Float` en DB; precisión en runtime hasta evaluar migración schema.
+
 ## 2026-06-03 — Banner de referencia de lectura (Ojo de Seguridad) — Trinidad Operativa
 
 - **Contexto:** Errores de digitación de horómetro/odómetro en terreno alimentan `currentMeter` vía M1, M2, M3, OT y captura masiva. Se requería visibilidad de la última lectura y su fuente antes de cada ingreso.
@@ -22,7 +33,7 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 
 - **Contexto:** El sistema EAM fue diseñado con `ShiftType` (`DAY` / `NIGHT`), pero el primer cliente solo opera en Turno Día. Se requería que la configuración de turnos fuera por Tenant para no forzar a todos a ver selectores que no usan.
 - **Decisión:**
-  - **Separación 1:1 (`TenantOperationalConfig`):** Se creó una tabla independiente vinculada a `Tenant` por FK única, con campos `hasNightShift: Boolean @default(true)`, `dayShiftStartTime: String @default("08:00")` y `nightShiftStartTime: String @default("20:00")`. Se eligió tabla separada (en lugar de campos inline en `Tenant`) para extensibilidad futura sin contaminar el modelo base.
+  - **Separación 1:1 (`TenantOperationalConfig`):** Se creó una tabla independiente vinculada a `Tenant` por FK única, con campos `hasNightShift: Boolean @default(true)`, `dayShiftStartTime`, `nightShiftStartTime` y, desde 2026-06-04, `blockNegativeStock: Boolean @default(false)` para controlar stock negativo en M1/OT/inventario.
   - **Lazy-creation:** El registro solo se crea en base de datos al primer `PATCH /tenant-config/operational`; mientras no exista, el backend lee los defaults en memoria (`hasNightShift=true`, `08:00`, `20:00`). Esto evita backfill en tenants existentes.
   - **Backend defensivo (`shift` opcional → default `DAY`):** Los DTOs de disponibilidad (`create`, `export`, `unreported`, `import`) declaran `shift?: ShiftType` con `@IsOptional()`. El helper privado `resolveShift(tenantId, provided?)` en `EquipmentAvailabilityService` aplica la regla: si `hasNightShift=false` e `shift` no se provee → inyecta `DAY`; si se provee `NIGHT` explícitamente → `BadRequestException`. +7 tests en `equipment-availability.service.spec.ts`.
   - **Frontend reactivo via `ShiftService`:** `ShiftService` consume `TenantService.currentTenant()?.operationalConfig` mediante `computed()`. La regla es inquebrantable: si `hasNightShift()===false`, `currentShift()` retorna siempre `'DAY'` sin evaluar el reloj. Los componentes `AvailabilityFormComponent`, `AvailabilityMonitorComponent` y `AvailabilityImportComponent` envuelven sus selectores con `@if (shiftService.hasNightShift()) { … }`. `ShiftBadgeComponent` oculta el ícono de luna y muestra chip «Único» cuando corresponde.
@@ -34,6 +45,7 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:**
   - **2.2 — Tab «Costos» (frontend, sin backend):** `AssetCostType` FE alineado al enum real (`PURCHASE | WORK_ORDER | LUBE_DISPATCH`); `AssetCostRecord` suma `workOrder?.correlative`. Nuevos `computed`: `costTotal`, `costByType` (subtotal + % por tipo, orden desc), `costRecordsSorted`; helper `assetCostTypeMeta` (label + color de barra/texto) y `formatMoney` reutilizado. El tab muestra KPI total + barras por tipo + tabla de imputaciones con origen (OT/OC/recepción). **Fix colateral:** el timeline del tab «Historial» etiquetaba *todos* los cost records como «Compra externa»; ahora distingue los tres tipos. +4 specs.
   - **2.3 — Stock en repuestos del form de OT (frontend, sin backend):** `stockForItem(itemId)` lee `warehouseStocks` (ya cargado al elegir bodega de consumo) y devuelve `availableQuantity` (físico − reservado). Cada línea de repuesto vinculada muestra «Stock disponible: X» (verde) o «Sin stock» (rojo); `partRowHasShortage` marca en rojo si la cantidad supera el disponible y `anyPartStockShortage` dispara un aviso en la sección. No bloquea el guardado (consistente con la regla de regularización pendiente al cerrar OT). +5 specs.
+  - **Ampliación 2026-06-04:** repuestos mantienen aviso local; **fluidos M1 y OT** migraron a `app-fluid-quantity-row` con bloqueo opcional vía `blockNegativeStock` (ver decisión 2026-06-04).
 - **Consecuencias:**
   - Suites: frontend **120** (+9: 4 costos + 5 stock OT); backend dominio **345** (sin cambios — Sprint 3 es 100% frontend); `ng build` y lint verdes.
   - El modal de equipo queda como **centro de lifecycle cost** (consumo + costo por tipo) y el planificador ve el abastecimiento antes de comprometer repuestos. **Sprint 3 CERRADO** → quedan solo las extensiones push de Prioridad 3 (3.1 EQUIPMENT_DOWN, 3.2 PM próxima).
@@ -319,7 +331,8 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
   - Nuevo evento NOTIFICATION_EVENTS.EQUIPMENT_DOWN en el catalogo.
   - FaultReportsService.create dispara (fire-and-forget, fuera de la transaccion Serializable) 
 otifyEquipmentDown() cuando criticality === HIGH.
-  - Pool de destinatarios: ole = ADMIN activos + usuarios con UserContract al contrato del equipo (misma logica de acceso que el modulo de compras).
+  - Pool de destinatarios: 
+ole = ADMIN activos + usuarios con UserContract al contrato del equipo (misma logica de acceso que el modulo de compras).
   - Motor omnicanal NotificationDispatcherService: EMAIL (opt-in) + WEB_PUSH (opt-in) + ccEmails del tenant.
   - Plantilla uildMailEquipmentDown en 	ransactional-mail.builder.ts; preview en docs/email-previews/07-equipo-fuera-de-servicio.html.
   - Frontend: parsePushNotificationData refactorizado a PushNavAction; clic en push de EQUIPMENT_DOWN navega a /app/operaciones/fallas.

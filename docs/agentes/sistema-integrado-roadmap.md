@@ -6,13 +6,13 @@
 
 ---
 
-## Estado actual (post Integración Transversal M1·M2·M3 — 2026-06-03)
+## Estado actual (post Integración Transversal M1·M2·M3 + hardening fluidos — 2026-06-04)
 
 | Módulo | Backend | Frontend | Integración con Flota | Integración con OT | Integración con Inventario |
 |--------|---------|----------|-----------------------|--------------------|---------------------------|
 | **Flota / Equipos** | ✅ completo | ✅ Centro de Mando | — | ✅ OT lista en modal | ✅ Costos en modal |
-| **OT (Work Orders)** | ✅ completo | ✅ completo | ✅ `isOperational` + horómetro | — | ✅ consumo en cierre |
-| **M1 · Lubricantes** | ✅ completo | ✅ completo | ✅ horómetro (`currentMeter`) | — | ✅ kardex `LUBE_DISPATCH` |
+| **OT (Work Orders)** | ✅ completo | ✅ completo | ✅ `isOperational` + horómetro | — | ✅ consumo en cierre + **`app-fluid-quantity-row`** |
+| **M1 · Lubricantes** | ✅ completo | ✅ completo | ✅ horómetro + banner referencia | — | ✅ kardex `LUBE_DISPATCH` vía **`performTransactionCore`** + UI stock |
 | **M2 · Disponibilidad** | ✅ completo | ✅ completo | ✅ lee `isOperational` | — | — |
 | **M3 · Fallas** | ✅ completo | ✅ completo + `invalidateCache` | ✅ `isOperational` + OT auto | ✅ OT no programada auto | — |
 | **Inventario / Kardex** | ✅ completo | ✅ completo | parcial (solo en modal) | ✅ `WORK_ORDER_ISSUE` | — |
@@ -98,6 +98,12 @@ Al agregar repuestos a una OT, mostrar el stock disponible en bodega para cada �
 - Registrar en `docs/agentes/notificaciones-sistema.md`.
 
 **3.1 · Push cuando equipo queda fuera de servicio — HECHO (Sprint 4, 2026-06-03)**
+
+#### Hardening fluidos M1 + OT — HECHO (2026-06-04)
+
+- `performTransactionCore` unifica descuentos M1 (`LUBE_DISPATCH`) y OT (`WORK_ORDER_ISSUE`).
+- `TenantOperationalConfig.blockNegativeStock` + UI `app-fluid-quantity-row` + confirmación consumo inusual.
+- Release notes: [`docs/releases/RELEASE-NOTES-OPERATIONS-v1.md`](../releases/RELEASE-NOTES-OPERATIONS-v1.md) § Integridad de fluidos.
 
 #### 3.2 · Push cuando se acerca la PM
 `currentMeter >= nextServiceAt - 50 hrs` (configurable por `pmIntervalOverride`). Disparar alerta al planificador.

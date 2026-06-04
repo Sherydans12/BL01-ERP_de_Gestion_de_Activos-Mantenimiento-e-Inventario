@@ -2,7 +2,7 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-06-03 |
+| **Última modificación** | 2026-06-04 |
 | **Versión documento** | 1.1 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
@@ -274,7 +274,8 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
   - `finalMeter` ≥ `initialMeter` salvo `MeterAdjustment` reciente que justifique reinicio.
   - `closureEquipmentOperational` booleano obligatorio.
   - Repuestos/fluidos de inventario → `warehouseId` obligatorio.
-  - Por parte/fluido con `inventoryItem.isInventory`: descuenta `ItemStock`, `InventoryTransaction` `WORK_ORDER_ISSUE`, congela `unitCost`; stock negativo → `isPendingRegularization = true`.
+  - Por parte/fluido con `inventoryItem.isInventory`: descuenta vía **`InventoryStockService.performTransactionCore`** (`WORK_ORDER_ISSUE`), congela `unitCost`. Stock negativo → `isPendingRegularization = true` **salvo** `TenantOperationalConfig.blockNegativeStock = true` → `BadRequestException`.
+  - Fluidos: validación UoM (`allowsDecimals`), umbral de consumo inusual (`confirmedLargeFluidDispatch` en cierre).
   - Horómetro vía `applyCurrentMeterChange` (`EquipmentMeterLog` fuente OT).
   - Opcional `AssetCostRecord` tipo `WORK_ORDER`.
 
@@ -392,9 +393,20 @@ flowchart TD
   M2 -.lee.-> EQOP
 ```
 
-#### C) Costeo e inventario (M1)
+#### C) Costeo e inventario (M1 y fluidos OT)
 
-M1 además cruza con Inventario y Finanzas en su transacción Serializable: descuenta `ItemStock` desde una bodega `VIRTUAL` (camión lubricador), genera `InventoryTransaction(type=OUT, referenceType=LUBE_DISPATCH)` con CPP congelado e imputa `AssetCostRecord(LUBE_DISPATCH)` al equipo. Ver decisión [2026-06-02 — Lubricantes](agentes/decisiones.md).
+M1 cruza con Inventario y Finanzas en transacción Serializable: descuenta `ItemStock` desde bodega `VIRTUAL` (camión lubricador) vía **`performTransactionCore`** (`OUT`, `referenceType=LUBE_DISPATCH`), CPP congelado e imputa `AssetCostRecord(LUBE_DISPATCH)`. El cierre de OT usa el mismo núcleo para repuestos y fluidos (`WORK_ORDER_ISSUE`).
+
+**Stock negativo (regla transversal):**
+
+| `blockNegativeStock` | Comportamiento |
+|---------------------|----------------|
+| `false` (default) | Permite saldo negativo; marca `isPendingRegularization` en kardex |
+| `true` | Rechaza con `BadRequestException` — mensaje unificado vía `stock-quantity.util` |
+
+Flag en [`TenantOperationalConfig`](../backend/prisma/schema.prisma) (`block_negative_stock`); configurable en **Ajustes → Empresa**. Aritmética de cantidades: `Decimal.js` + epsilon `1e-9` en runtime (columna DB sigue `Float`).
+
+**UI:** componente shared [`app-fluid-quantity-row`](../frontend/src/app/shared/components/fluid-quantity-row/) en M1 y OT; stock disponible en picker (`stockAvailableQuantity` = físico − reservas). Ver decisión [2026-06-04 — Integridad de fluidos](agentes/decisiones.md).
 
 #### D) Implicancia para la UI (SSOT en frontend)
 

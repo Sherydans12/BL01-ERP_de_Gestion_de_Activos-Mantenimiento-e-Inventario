@@ -4,21 +4,21 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-06-03 (Sprint Turnos configurables — TenantOperationalConfig)
+**Última actualización:** 2026-06-04 (Integridad de fluidos — `blockNegativeStock`, `performTransactionCore` M1/OT)
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **383 tests** en **22** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **391 tests** en **22** archivos (sin PostgreSQL real).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
 | **Horómetro — helper `applyCurrentMeterChange`** | 100 % | 7 | Casos 1–7: happy path, silent skip (`oldMeter === newMeter`), fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL, fecha explícita, orden log→update (§3.12 — nuevo) |
 | **Horómetro — integración transversal M1/M2/M3** | 100 % | 4 | Caos en Terreno (5000→5050→5100 con M1 rechazado), lenient M2, lenient M3, doble avance secuencial (§3.13 — nuevo) |
 | **Disponibilidad operativa diaria** | ~97 % | 20 | `create`/`findUnreported`/`commitImport` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado + **guard hasNightShift=false** (7 tests nuevos §3.11) |
-| **Lubricantes — reporte consumo** | ~90 % núcleo `createReport` | 8 | Happy path, stock negativo, horómetro, bodega/equipo (§3.10) |
-| **Inventario — stock/kardex** | ~88 % del núcleo | 41 | Stock, devoluciones OT, IRA, PDF (§3.2) |
+| **Lubricantes — reporte consumo** | ~95 % núcleo `createReport` | 18 | Happy path vía `performTransactionCore`, stock negativo, `blockNegativeStock`, fracciones UoM, `confirmedLargeDispatch`, horómetro, bodega/equipo (§3.10) |
+| **Inventario — stock/kardex** | ~90 % del núcleo | 42 | Stock, `blockNegativeStock` en OUT, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
 | **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
@@ -47,7 +47,7 @@ npm run test:domain:watch
 
 - **`applyCurrentMeterChange`** (+7): `equipment-meter-sync.spec.ts` nuevo. Casos: happy path Decimal, silent skip `oldMeter===newMeter`, fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL con sourceId, fecha explícita, orden log→update. 100 % del helper cubierto.
 - **Cross-Module horómetro** (+4): `operations-cross-modules.spec.ts` nuevo. Usa implementación **real** del helper (sin mock) + estado mutable compartido entre M1/M2/M3. Escenarios: "Caos en Terreno" (5000→5050→5100, M1 rechazado sin alterar estado), lenient M2, lenient M3, doble avance secuencial M2→M3. Documenta la asimetría strict/lenient entre módulos.
-- Suite dominio: **376 tests · 22 archivos**.
+- Suite dominio: **391 tests · 22 archivos**.
 
 ### Iteración N+7 (2026-05-22) — hecho
 
@@ -184,7 +184,8 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 
 | Archivo spec | Servicio / ámbito | Tests | Notas |
 |--------------|-------------------|-------|-------|
-| `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **41** | Movimientos, devoluciones OT, IRA, PDF (§3.2) |
+| `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **42** | Movimientos, `blockNegativeStock`, devoluciones OT, IRA, PDF (§3.2) |
+| `common/inventory/stock-quantity.util.spec.ts` | **Util — precisión decimal stock** | **3** | Resta, epsilon, `wouldStockGoNegative` |
 | `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **38** | Ciclo SRC + `update` (§4.9) |
 | `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
 | `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **20** | Mutación, recepción, listado (§3.3) |
@@ -200,7 +201,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/equipments/equipments.service.spec.ts` | **Flota — equipos** | **7** | `create`/`update` ABAC; bulk 50+2 (§3.8); `getAnalytics` incluye `parts` (Sprint 2.1) |
 | `features/auth/auth.service.spec.ts` | **Auth — login** | **3** | JWT permissions + lockout (§5.1) |
 | `features/meter-adjustments/meter-adjustments.service.spec.ts` | **Flota — ajustes** | **3** | Reinicio medidor con motivo (§3.9) |
-| `features/lube-reports/lube-reports.service.spec.ts` | **Lubricantes — reporte consumo** | **8** | `createReport`: happy path, stock negativo, horómetro, bodega, equipo (§3.10) |
+| `features/lube-reports/lube-reports.service.spec.ts` | **Lubricantes — reporte consumo** | **18** | `createReport` vía `performTransactionCore`, stock, UoM, consumo inusual (§3.10) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
 | `features/auth/auth.controller.spec.ts` | Auth controller | — | Smoke |
 | `features/users/users.controller.spec.ts` | Users controller | — | Smoke |
@@ -229,14 +230,14 @@ Documentación de dominio: [inventario-stock-transferencias-kardex.md](inventari
 
 ### 3.2 Spec: `inventory-stock.service.spec.ts`
 
-**Última ejecución:** 40 passed (2026-05-22).
+**Última ejecución:** 42 passed (2026-06-04).
 
 #### Bloques `describe` y casos
 
 | Bloque | Qué valida |
 |--------|------------|
 | `clearPendingRegularizationFlags` | No-op si saldo &lt; 0; `updateMany` si saldo ≥ 0 |
-| `performTransactionCore` | Usuario requerido; cantidad &gt; 0 (excepto ADJUST); bodega válida; **IN** + CPP ponderado; **OUT** + flag regularización; **ADJUST** negativo; **FIELD_DISPATCH** solo OUT; **FIELD_RETURN** costo y tope terreno; política min/max al crear `item_stock` |
+| `performTransactionCore` | Usuario requerido; cantidad &gt; 0 (excepto ADJUST); bodega válida; **IN** + CPP ponderado; **OUT** + flag regularización; **OUT** + `blockNegativeStock` → rechazo; **ADJUST** negativo; **FIELD_DISPATCH** solo OUT; **FIELD_RETURN** costo y tope terreno; política min/max al crear `item_stock` |
 | `performTransaction` | `$transaction` con `Serializable` |
 | `performReturn` | Cantidad positiva; sin salidas OT; tope vs consumo; happy path `WORK_ORDER_RETURN`; enmascaramiento costo sin `inventory:stock:view_cost` |
 | `updateStockLevels` | Bodega inexistente; payload vacío; max &lt; min |
@@ -344,19 +345,19 @@ Mock: `equipment-meter-sync.applyCurrentMeterChange`.
 
 ### 3.10 Spec: `lube-reports.service.spec.ts`
 
-**Última ejecución:** 8 passed (2026-06-02).
+**Última ejecución:** 18 passed (2026-06-04).
 
-Mocks: `jest.mock('../equipments/equipment-meter-sync')` → `applyCurrentMeterChange`; `SequenceService.getNextCorrelative` stub.
+Mocks: `InventoryStockService.performTransactionCore`; `jest.mock('../equipments/equipment-meter-sync')` → `applyCurrentMeterChange`; `SequenceService.getNextCorrelative` stub.
 
 | Bloque | Casos |
 |--------|-------|
-| `createReport` — happy path | Crea reporte + descuenta stock (10→7) + kardex `OUT / LUBE_DISPATCH` + `applyCurrentMeterChange` + `assetCostRecord LUBE_DISPATCH` |
-| `createReport` — horómetro igual | `meterReading === currentMeter` → no llama `applyCurrentMeterChange` |
-| `createReport` — sin horómetro | `meterReading` omitido → no llama `applyCurrentMeterChange` |
-| `createReport` — stock negativo | Despacho > stock → `isPendingRegularization: true` en la transacción |
-| `createReport` — horómetro regresivo | `meterReading < currentMeter` → `BadRequestException` + rollback total (no tocar stock ni kardex) |
-| `createReport` — bodega fuera del contrato | `warehouse.contractId ≠ dto.contractId` → `BadRequestException` antes de consultar equipo |
-| `createReport` — bodega no existe | `warehouse.findFirst` → null → `NotFoundException` |
+| `createReport` — happy path | Delega a `performTransactionCore` (`OUT / LUBE_DISPATCH`) + horómetro + `assetCostRecord` |
+| `createReport` — stock negativo | Despacho > stock → delega; regularización vía core |
+| `createReport` — `blockNegativeStock` | Core rechaza → propagación de error |
+| `createReport` — fracciones UoM | `allowsDecimals=false` + cantidad decimal → `BadRequestException` |
+| `createReport` — consumo inusual | Sin `confirmedLargeDispatch` → error |
+| `createReport` — horómetro regresivo | Rollback total (no llama core) |
+| `findAll` / `findOne` | Listado y detalle con mock de `InventoryStockService` |
 | `createReport` — equipo no existe | `equipment.findFirst` → null → `NotFoundException` |
 
 ---

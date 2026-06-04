@@ -17,3 +17,5 @@ Términos internos del dominio para que los agentes no inventen sinónimos disti
 | Falla / Reporte de Falla (M3) | Evento correctivo imprevisto en terreno (`FaultReport`, correlativo `RF-XXXXX`); clasificado por `AffectedSystem` y `FaultCriticality`. |
 | Falla Crítica / ALTA (`HIGH`) | Criticidad que detiene el equipo: `isOperational=false` + OT `NO_PROGRAMADA_REACTIVA` (`affectsAvailability=SI`) automática en la misma transacción. MEDIA crea OT correctiva sin detener; BAJA solo registra. |
 | M1 / M2 / M3 | Módulos de Operaciones en terreno: **M1** Consumo de Lubricantes (`LubeReport`, `RCL-XXXXX`), **M2** Disponibilidad Operativa Diaria (`EquipmentAvailability`), **M3** Registro e Informe de Fallas (`FaultReport`, `RF-XXXXX`). |
+| `blockNegativeStock` | Flag en `TenantOperationalConfig`. Si `true`, M1/OT/inventario rechazan descuentos que dejarían stock &lt; 0; si `false`, permite saldo negativo con `isPendingRegularization`. |
+| Consumo inusual (fluidos) | Despacho que supera umbral lógico por UoM (p. ej. 100 LT). Requiere `confirmedLargeDispatch` (M1) o `confirmedLargeFluidDispatch` (cierre OT). |

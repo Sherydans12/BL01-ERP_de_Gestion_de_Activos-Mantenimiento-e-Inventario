@@ -2,7 +2,7 @@
 
 Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El **foco actual del proyecto** está en el backend de dominio (212 tests); el frontend tiene sobre todo **smoke** (`should be created`).
 
-**Última actualización:** 2026-06-03 (v3 — Fase 3 historial horómetro)
+**Última actualización:** 2026-06-04 (integridad fluidos — `app-fluid-quantity-row` en M1/OT)
 
 ---
 
@@ -37,7 +37,8 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `features/maintenance-kits/kit-form.component.spec.ts` | Componente | Smoke |
 | `features/maintenance-kits/kit-list.component.spec.ts` | Componente | Smoke |
 | `features/operations/lube-reports/lube-report-list.component.spec.ts` | Componente | Smoke |
-| `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke |
+| `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke + horómetro regresivo; líneas con `FormControl` |
+| `shared/components/fluid-quantity-row/` | Componente | *(sin spec dedicado aún — validación vía formularios M1/OT)* |
 | `features/operations/availability/availability-form.component.spec.ts` | Componente | Smoke |
 | `features/operations/availability/availability-monitor.component.spec.ts` | Componente | Smoke |
 | `features/operations/fault-reports/fault-report-form.component.spec.ts` | Componente | Smoke + `invalidateCache` HIGH/LOW (14 tests) |
