@@ -39,16 +39,22 @@ export async function selectFirstNonEmptyOption(page: Page, selectLocator: Retur
   if (value) await selectLocator.selectOption(value);
 }
 
-/** Espera a que un `<select>` esté habilitado y contenga la opción indicada. */
+/** Espera a que un `<select>` contenga la opción indicada y la selecciona (o valida valor bloqueado). */
 export async function selectOptionWhenReady(
   selectLocator: ReturnType<Page['locator']>,
   value: string,
   timeout = 25_000,
 ) {
-  await expect(selectLocator).toBeEnabled({ timeout });
   await expect
     .poll(async () => selectLocator.locator(`option[value="${value}"]`).count(), { timeout })
     .toBeGreaterThan(0);
+
+  if (await selectLocator.isDisabled()) {
+    await expect(selectLocator).toHaveValue(value, { timeout: 5_000 });
+    return;
+  }
+
+  await expect(selectLocator).toBeEnabled({ timeout });
   await selectLocator.selectOption(value);
 }
 

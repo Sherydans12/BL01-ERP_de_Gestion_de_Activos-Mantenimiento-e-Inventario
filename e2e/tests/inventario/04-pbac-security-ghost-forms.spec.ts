@@ -1,6 +1,6 @@
 import { test, expect } from '../../fixtures/inventario.fixture';
-import { INVENTARIO_USERS, seedBrowserSession, apiLogin } from '../../helpers/auth';
-import { getWarehouses } from '../../helpers/api-inventario';
+import { INVENTARIO_USERS, seedBrowserSession, apiLogin, API_BASE } from '../../helpers/auth';
+import { findW2WPair, getWarehouses } from '../../helpers/api-inventario';
 import { waitForPageReady } from '../../helpers/ui';
 
 test.describe('Inventario — seguridad PBAC y formularios fantasma', () => {
@@ -60,5 +60,42 @@ test.describe('Inventario — seguridad PBAC y formularios fantasma', () => {
     const fieldset = page.locator('fieldset[disabled]');
     await expect(fieldset).toBeVisible();
     await expect(page.getByRole('button', { name: 'GUARDAR ARTÍCULO' })).toHaveCount(0);
+  });
+
+  test('solo lectura: POST /inventory-transfers bloqueado por PermissionsGuard (403)', async ({
+    backendAvailable,
+  }) => {
+    void backendAvailable;
+
+    const { token: gestorToken } = await apiLogin(INVENTARIO_USERS.gestor);
+    const pair = await findW2WPair(gestorToken);
+    test.skip(!pair, 'Se requieren ≥2 bodegas en un contrato para W2W');
+
+    const { token: lecturaToken } = await apiLogin(INVENTARIO_USERS.lectura);
+    const catalogRes = await fetch(
+      `${API_BASE}/inventory-items?page=1&pageSize=1`,
+      { headers: { Authorization: `Bearer ${gestorToken}` } },
+    );
+    const catalog = (await catalogRes.json()) as { data?: { id: string }[] };
+    const itemId = catalog.data?.[0]?.id;
+    test.skip(!itemId, 'Sin artículos en catálogo');
+
+    const res = await fetch(`${API_BASE}/inventory-transfers`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${lecturaToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        originWarehouseId: pair!.origin.id,
+        destinationWarehouseId: pair!.destination.id,
+        lines: [{ itemId, quantity: 1 }],
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { message?: string | string[] };
+    const msg = Array.isArray(body.message) ? body.message.join(' ') : String(body.message ?? '');
+    expect(msg).toMatch(/permiso|forbidden|transferencia/i);
   });
 });
