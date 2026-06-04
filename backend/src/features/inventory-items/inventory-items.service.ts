@@ -741,6 +741,11 @@ export class InventoryItemsService {
         } else {
           stockUnitCost = null;
         }
+        const stockAvailableQuantity =
+          warehouseIdForStock && stockQuantity != null
+            ? Number(stockQuantity ?? 0) -
+              (reservedByItemId.get(row.id) ?? 0)
+            : null;
         return {
           id: row.id,
           qrCode: row.qrCode,
@@ -754,6 +759,7 @@ export class InventoryItemsService {
           categoryId: row.categoryId,
           itemCategory: row.itemCategory,
           stockQuantity,
+          stockAvailableQuantity,
           stockUnitCost: this.maskPickerCostByRole(user, stockUnitCost),
           stockLocation,
           stockCritical,

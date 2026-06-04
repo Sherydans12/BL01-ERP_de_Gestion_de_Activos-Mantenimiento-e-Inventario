@@ -98,6 +98,8 @@ export interface ItemPickerRow {
   itemCategory: ItemCategory;
   /** Saldo en la bodega indicada; `null` si no se pidió bodega. */
   stockQuantity: number | null;
+  /** Disponible operativo (físico − reservado) en la bodega del contexto. */
+  stockAvailableQuantity?: number | null;
   /** CPP en la bodega del contexto; solo cuando el picker envía `warehouseId`. */
   stockUnitCost?: number | null;
   /** Ubicación física registrada en esa bodega (pasillo/estante), si existe. */

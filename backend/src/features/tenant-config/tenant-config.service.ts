@@ -19,12 +19,14 @@ export const OPERATIONAL_CONFIG_DEFAULTS = {
   hasNightShift: true as boolean,
   dayShiftStartTime: '08:00',
   nightShiftStartTime: '20:00',
+  blockNegativeStock: false as boolean,
 };
 
 export type TenantOperationalConfigShape = {
   hasNightShift: boolean;
   dayShiftStartTime: string;
   nightShiftStartTime: string;
+  blockNegativeStock: boolean;
 };
 
 /** Logos en UI (R2/S3): máximo permitido por SigV4; sesiones más largas → recargar o re-fetch config. */
@@ -179,6 +181,7 @@ export class TenantConfigService {
         hasNightShift: true,
         dayShiftStartTime: true,
         nightShiftStartTime: true,
+        blockNegativeStock: true,
       },
     });
     return config ?? { ...OPERATIONAL_CONFIG_DEFAULTS };
@@ -204,6 +207,9 @@ export class TenantConfigService {
         nightShiftStartTime:
           dto.nightShiftStartTime ??
           OPERATIONAL_CONFIG_DEFAULTS.nightShiftStartTime,
+        blockNegativeStock:
+          dto.blockNegativeStock ??
+          OPERATIONAL_CONFIG_DEFAULTS.blockNegativeStock,
       },
       update: {
         ...(dto.hasNightShift !== undefined && {
@@ -215,11 +221,15 @@ export class TenantConfigService {
         ...(dto.nightShiftStartTime !== undefined && {
           nightShiftStartTime: dto.nightShiftStartTime,
         }),
+        ...(dto.blockNegativeStock !== undefined && {
+          blockNegativeStock: dto.blockNegativeStock,
+        }),
       },
       select: {
         hasNightShift: true,
         dayShiftStartTime: true,
         nightShiftStartTime: true,
+        blockNegativeStock: true,
       },
     });
   }

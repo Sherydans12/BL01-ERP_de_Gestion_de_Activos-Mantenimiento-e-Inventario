@@ -673,6 +673,25 @@
           </label>
         </div>
 
+        <div class="flex items-start gap-4 rounded-xl border border-border bg-dark/25 px-5 py-4">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-main">Bloquear stock negativo</p>
+            <p class="text-xs text-muted mt-0.5 leading-relaxed">
+              Si está activo, despachos M1, cierres de OT y salidas de kardex
+              <strong class="text-main/90"> rechazan</strong> cantidades que superen el saldo disponible.
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5" title="Bloquear stock negativo">
+            <input type="checkbox" formControlName="blockNegativeStock" class="sr-only peer" />
+            <div class="w-11 h-6 bg-border peer-focus:ring-2 peer-focus:ring-primary/40 rounded-full peer
+                        peer-checked:after:translate-x-full peer-checked:after:border-white
+                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                        after:bg-white after:border-gray-300 after:border after:rounded-full
+                        after:h-5 after:w-5 after:transition-all
+                        peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
         <!-- Horarios de inicio (solo visibles con turno noche activo) -->
         @if (hasNightShiftValue()) {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">

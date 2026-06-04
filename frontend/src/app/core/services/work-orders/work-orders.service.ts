@@ -190,6 +190,7 @@ export class WorkOrdersService {
     warehouseId?: string,
     closureEquipmentOperational?: boolean,
     confirmedLargeJump?: boolean,
+    confirmedLargeFluidDispatch?: boolean,
   ) {
     const payload: Record<string, string | boolean> = { status };
     if (warehouseId) payload['warehouseId'] = warehouseId;
@@ -198,6 +199,9 @@ export class WorkOrdersService {
     }
     if (confirmedLargeJump === true) {
       payload['confirmedLargeJump'] = true;
+    }
+    if (confirmedLargeFluidDispatch === true) {
+      payload['confirmedLargeFluidDispatch'] = true;
     }
     return this.http.patch(`${this.apiUrl}/${id}/status`, payload);
   }

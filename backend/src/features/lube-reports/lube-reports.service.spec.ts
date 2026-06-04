@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { LubeReportsService } from './lube-reports.service';
 import { CreateLubeReportDto } from './dto/create-lube-report.dto';
+import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 
 // ── Mock del helper de horómetro (patrón establecido en work-orders y equipments) ──
 jest.mock('../equipments/equipment-meter-sync', () => ({
@@ -96,6 +97,14 @@ describe('LubeReportsService — createReport', () => {
   let prisma: DeepMockProxy<PrismaService>;
   let tx: DeepMockProxy<Prisma.TransactionClient>;
   let sequenceService: { getNextCorrelative: jest.Mock };
+  let inventoryStockService: { performTransactionCore: jest.Mock };
+
+  const inventoryItemRow = {
+    id: itemId,
+    partNumber: 'LUBE-10W',
+    inventoryCode: 'IN0001',
+    unitOfMeasure: { abbreviation: 'LT', allowsDecimals: true },
+  };
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -105,8 +114,18 @@ describe('LubeReportsService — createReport', () => {
     sequenceService = {
       getNextCorrelative: jest.fn().mockResolvedValue('RCL-00001'),
     };
+    inventoryStockService = {
+      performTransactionCore: jest.fn().mockResolvedValue({
+        stock: { quantity: 7, unitCost: 850 },
+        transaction: {
+          isPendingRegularization: false,
+          newStock: 7,
+          previousStock: 10,
+          quantity: 3,
+        },
+      }),
+    };
 
-    // Patrón estándar: $transaction delega al callback con el tx mock
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
@@ -116,6 +135,10 @@ describe('LubeReportsService — createReport', () => {
         LubeReportsService,
         { provide: PrismaService, useValue: prisma },
         { provide: SequenceService, useValue: sequenceService },
+        {
+          provide: InventoryStockService,
+          useValue: inventoryStockService,
+        },
       ],
     }).compile();
 
@@ -126,42 +149,25 @@ describe('LubeReportsService — createReport', () => {
   it('happy path: crea el reporte, descuenta stock y actualiza horómetro', async () => {
     tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
-    tx.itemStock.findUnique.mockResolvedValue(currentStock as never);
-    tx.itemStock.upsert.mockResolvedValue({
-      ...currentStock,
-      quantity: 7,
-    } as never);
-    tx.inventoryTransaction.create.mockResolvedValue({} as never);
+    tx.inventoryItem.findFirst.mockResolvedValue(inventoryItemRow as never);
     tx.lubeReport.create.mockResolvedValue(createdReport as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
     tx.assetCostRecord.create.mockResolvedValue({} as never);
 
     const result = await service.createReport(buildDto(), adminUser);
 
-    // Verifica que el reporte fue creado correctamente
     expect(result.id).toBe(reportId);
     expect(result.correlative).toBe('RCL-00001');
 
-    // Verifica que el stock se decrementó (upsert con newQty = 10 - 3 = 7)
-    expect(tx.itemStock.upsert).toHaveBeenCalledWith(
+    expect(inventoryStockService.performTransactionCore).toHaveBeenCalledWith(
+      tx,
       expect.objectContaining({
-        update: { quantity: 7 },
+        type: 'OUT',
+        referenceType: 'LUBE_DISPATCH',
+        referenceId: reportId,
+        quantity: 3,
       }),
-    );
-
-    // Verifica que se generó una transacción de kardex tipo OUT con referenceType correcto
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          type: 'OUT',
-          referenceType: 'LUBE_DISPATCH',
-          referenceId: reportId,
-          quantity: 3,
-          previousStock: 10,
-          newStock: 7,
-          isPendingRegularization: false,
-        }),
-      }),
+      adminUser,
     );
 
     // Verifica que el horómetro fue actualizado (meterReading=1050 > currentMeter=1000)
@@ -197,31 +203,20 @@ describe('LubeReportsService — createReport', () => {
       ...validEquipment,
       currentMeter: 1050,
     } as never);
-    tx.itemStock.findUnique.mockResolvedValue(currentStock as never);
-    tx.itemStock.upsert.mockResolvedValue({
-      ...currentStock,
-      quantity: 7,
-    } as never);
-    tx.inventoryTransaction.create.mockResolvedValue({} as never);
+    tx.inventoryItem.findFirst.mockResolvedValue(inventoryItemRow as never);
     tx.lubeReport.create.mockResolvedValue(createdReport as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
     tx.assetCostRecord.create.mockResolvedValue({} as never);
 
     await service.createReport(buildDto({ meterReading: 1050 }), adminUser);
 
-    // Si meterReading === currentMeter no debe actualizarse el medidor
     expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
   });
 
   it('happy path: no llama a applyCurrentMeterChange cuando el horómetro es omitido', async () => {
     tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
-    tx.itemStock.findUnique.mockResolvedValue(currentStock as never);
-    tx.itemStock.upsert.mockResolvedValue({
-      ...currentStock,
-      quantity: 7,
-    } as never);
-    tx.inventoryTransaction.create.mockResolvedValue({} as never);
+    tx.inventoryItem.findFirst.mockResolvedValue(inventoryItemRow as never);
     tx.lubeReport.create.mockResolvedValue({
       ...createdReport,
       meterReading: null,
@@ -229,7 +224,6 @@ describe('LubeReportsService — createReport', () => {
     tx.lubeReportLine.create.mockResolvedValue({} as never);
     tx.assetCostRecord.create.mockResolvedValue({} as never);
 
-    // Sin meterReading en el DTO
     await service.createReport(
       buildDto({ meterReading: undefined }),
       adminUser,
@@ -238,38 +232,54 @@ describe('LubeReportsService — createReport', () => {
     expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
   });
 
-  it('happy path: marca isPendingRegularization cuando el stock queda negativo', async () => {
+  it('delega stock negativo a performTransactionCore (regularización pendiente)', async () => {
     tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
-
-    // Solo hay 1 unidad en stock pero se despachan 5
-    tx.itemStock.findUnique.mockResolvedValue({
-      ...currentStock,
-      quantity: 1,
-    } as never);
-    tx.itemStock.upsert.mockResolvedValue({
-      ...currentStock,
-      quantity: -4,
-    } as never);
-    tx.inventoryTransaction.create.mockResolvedValue({} as never);
+    tx.inventoryItem.findFirst.mockResolvedValue(inventoryItemRow as never);
     tx.lubeReport.create.mockResolvedValue(createdReport as never);
     tx.lubeReportLine.create.mockResolvedValue({} as never);
     tx.assetCostRecord.create.mockResolvedValue({} as never);
+    inventoryStockService.performTransactionCore.mockResolvedValue({
+      stock: { quantity: -4, unitCost: 850 },
+      transaction: { isPendingRegularization: true, newStock: -4 },
+    });
 
     await service.createReport(
       buildDto({ lines: [{ itemId, quantity: 5 }] }),
       adminUser,
     );
 
-    // La transacción de kardex debe tener isPendingRegularization en true
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          newStock: -4,
-          isPendingRegularization: true,
-        }),
-      }),
-    );
+    expect(inventoryStockService.performTransactionCore).toHaveBeenCalled();
+  });
+
+  it('rechaza cantidad fraccionaria si la UoM no admite decimales', async () => {
+    tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.inventoryItem.findFirst.mockResolvedValue({
+      ...inventoryItemRow,
+      unitOfMeasure: { abbreviation: 'UN', allowsDecimals: false },
+    } as never);
+
+    await expect(
+      service.createReport(
+        buildDto({ lines: [{ itemId, quantity: 2.5 }] }),
+        adminUser,
+      ),
+    ).rejects.toThrow(/no admite fracciones/);
+  });
+
+  it('exige confirmedLargeDispatch en consumo atípico', async () => {
+    tx.warehouse.findFirst.mockResolvedValue(validWarehouse as never);
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.inventoryItem.findFirst.mockResolvedValue(inventoryItemRow as never);
+    tx.lubeReport.create.mockResolvedValue(createdReport as never);
+
+    await expect(
+      service.createReport(
+        buildDto({ lines: [{ itemId, quantity: 150 }] }),
+        adminUser,
+      ),
+    ).rejects.toThrow(/confirmedLargeDispatch/);
   });
 
   // ── FALLA DE NEGOCIO: HORÓMETRO REGRESIVO ──────────────────────────────────
@@ -290,8 +300,7 @@ describe('LubeReportsService — createReport', () => {
     ).rejects.toThrow(/menor al valor actual del equipo/);
 
     // Nada de stock ni kardex debe haberse tocado
-    expect(tx.itemStock.upsert).not.toHaveBeenCalled();
-    expect(tx.inventoryTransaction.create).not.toHaveBeenCalled();
+    expect(inventoryStockService.performTransactionCore).not.toHaveBeenCalled();
     expect(tx.lubeReport.create).not.toHaveBeenCalled();
     expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
   });
@@ -389,6 +398,10 @@ describe('LubeReportsService — findAll', () => {
         LubeReportsService,
         { provide: PrismaService, useValue: prisma },
         { provide: SequenceService, useValue: sequenceService },
+        {
+          provide: InventoryStockService,
+          useValue: { performTransactionCore: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -524,6 +537,10 @@ describe('LubeReportsService — findOne', () => {
         LubeReportsService,
         { provide: PrismaService, useValue: prisma },
         { provide: SequenceService, useValue: sequenceService },
+        {
+          provide: InventoryStockService,
+          useValue: { performTransactionCore: jest.fn() },
+        },
       ],
     }).compile();
 

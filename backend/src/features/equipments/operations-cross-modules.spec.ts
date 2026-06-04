@@ -33,6 +33,7 @@ import { NotificationDispatcherService } from '../../common/notifications/notifi
 import { EquipmentAvailabilityService } from '../equipment-availability/equipment-availability.service';
 import { LubeReportsService } from '../lube-reports/lube-reports.service';
 import { FaultReportsService } from '../fault-reports/fault-reports.service';
+import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
@@ -260,6 +261,10 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
           LubeReportsService,
           { provide: PrismaService, useValue: prisma },
           { provide: SequenceService, useValue: sequenceService },
+          {
+            provide: InventoryStockService,
+            useValue: { performTransactionCore: jest.fn() },
+          },
         ],
       }).compile(),
       Test.createTestingModule({

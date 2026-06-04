@@ -46,6 +46,12 @@ import {
   ItemPickerRow,
 } from '../../../core/services/inventory-items/inventory-items.service';
 import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
+import { TenantService } from '../../../core/services/tenant/tenant.service';
+import {
+  FluidQuantityRowComponent,
+  FluidQuantityValidation,
+} from '../../../shared/components/fluid-quantity-row/fluid-quantity-row.component';
+import { parseFluidQuantity, requiresLargeDispatchConfirmation } from '../../../shared/utils/fluid-dispatch-limits.util';
 import { MaintenanceKitsService } from '../../../core/services/maintenance-kits/maintenance-kits.service';
 import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
 import {
@@ -111,6 +117,7 @@ function isoToDatetimeLocalValue(iso: string): string {
     HasAnyPermissionDirective,
     MeterReferenceBannerComponent,
     ConfirmModalComponent,
+    FluidQuantityRowComponent,
   ],
   templateUrl: './work-order-form.component.html',
   styleUrl: './work-order-form.component.scss',
@@ -129,6 +136,7 @@ export class WorkOrderFormComponent implements OnInit {
   private warehousesService = inject(WarehousesService);
   private inventoryItemsService = inject(InventoryItemsService);
   private inventoryStockService = inject(InventoryStockService);
+  private tenantService = inject(TenantService);
   private maintenanceKitsService = inject(MaintenanceKitsService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
   readonly catalogService = inject(CatalogService);
@@ -172,6 +180,13 @@ export class WorkOrderFormComponent implements OnInit {
   partPickerIndex = signal(-1);
   showFluidPicker = signal(false);
   fluidPickerRowIndex = signal(-1);
+  fluidLineValidations = signal<Record<number, FluidQuantityValidation>>({});
+
+  blockNegativeStock = computed(
+    () =>
+      this.tenantService.currentTenant()?.operationalConfig
+        ?.blockNegativeStock ?? false,
+  );
 
   otKindOptions = OT_KIND_OPTIONS;
   noPlanSubtypeOptions = NO_PLAN_SUBTYPE_OPTIONS;
@@ -294,7 +309,10 @@ export class WorkOrderFormComponent implements OnInit {
   );
 
   readonly canCloseOt = computed(
-    () => this.showCloseOtButton() && this.closeAllowed(),
+    () =>
+      this.showCloseOtButton() &&
+      this.closeAllowed() &&
+      this.allActiveFluidRowsValid(),
   );
 
   readonly canManageBacklog = computed(() =>
@@ -434,6 +452,10 @@ export class WorkOrderFormComponent implements OnInit {
       action: ['RELLENO' as const],
       inventoryItemId: [''],
       linkedFluidItemName: [''],
+      unitAbbr: ['LT'],
+      allowsDecimals: [true],
+      stockAvailable: [null as number | null],
+      confirmedLargeDispatch: [false],
     });
   }
 
@@ -795,6 +817,9 @@ export class WorkOrderFormComponent implements OnInit {
         linkedFluidItemName: hit.inventoryItem
           ? `${hit.inventoryItem.partNumber} — ${hit.inventoryItem.name}`
           : '',
+        unitAbbr: hit.inventoryItem?.unitOfMeasure?.abbreviation ?? 'LT',
+        allowsDecimals:
+          hit.inventoryItem?.unitOfMeasure?.allowsDecimals ?? true,
       });
       this.compartmentRowsArray.push(g);
     }
@@ -849,10 +874,94 @@ export class WorkOrderFormComponent implements OnInit {
         return `Fluidos por compartimiento (fila ${i + 1}): elija un ítem del catálogo de inventario.`;
       }
       if (!hasLiters) {
-        return `Fluidos por compartimiento (fila ${i + 1}): indique litros consumidos (> 0).`;
+        return `Fluidos por compartimiento (fila ${i + 1}): indique cantidad consumida (> 0) en la unidad del artículo.`;
       }
     }
     return null;
+  }
+
+  allActiveFluidRowsValid(): boolean {
+    const vals = this.fluidLineValidations();
+    for (let i = 0; i < this.compartmentRowsArray.length; i++) {
+      const raw = this.compartmentRowsArray.at(i).getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+        allowsDecimals?: boolean;
+      };
+      const id = raw.inventoryItemId?.trim() ?? '';
+      const allowsDecimals = raw.allowsDecimals ?? true;
+      const liters = parseFluidQuantity(raw.liters, allowsDecimals);
+      if (!id && liters <= 0) continue;
+      if (id && liters > 0 && vals[i]?.valid !== true) return false;
+    }
+    return true;
+  }
+
+  fluidsNeedLargeConfirmAtClose(): boolean {
+    for (const row of this.compartmentRowsArray.controls) {
+      const raw = row.getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+        unitAbbr?: string;
+        allowsDecimals?: boolean;
+      };
+      if (!raw.inventoryItemId?.trim()) continue;
+      const qty = parseFluidQuantity(
+        raw.liters,
+        raw.allowsDecimals ?? true,
+      );
+      if (
+        requiresLargeDispatchConfirmation(
+          qty,
+          raw.unitAbbr ?? 'LT',
+          raw.allowsDecimals ?? true,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  fluidsLargeConfirmOkAtClose(): boolean {
+    for (let i = 0; i < this.compartmentRowsArray.length; i++) {
+      const raw = this.compartmentRowsArray.at(i).getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+        unitAbbr?: string;
+        allowsDecimals?: boolean;
+        confirmedLargeDispatch?: boolean;
+      };
+      if (!raw.inventoryItemId?.trim()) continue;
+      const qty = parseFluidQuantity(
+        raw.liters,
+        raw.allowsDecimals ?? true,
+      );
+      if (
+        requiresLargeDispatchConfirmation(
+          qty,
+          raw.unitAbbr ?? 'LT',
+          raw.allowsDecimals ?? true,
+        ) &&
+        !raw.confirmedLargeDispatch
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  onFluidLineValidation(index: number, validation: FluidQuantityValidation): void {
+    this.fluidLineValidations.update((prev) => ({ ...prev, [index]: validation }));
+  }
+
+  onFluidLargeConfirm(index: number, confirmed: boolean): void {
+    const g = this.compartmentRowsArray.at(index) as FormGroup;
+    g.patchValue({ confirmedLargeDispatch: confirmed });
+  }
+
+  fluidLitersControl(row: AbstractControl): FormControl<string | number | null> {
+    return row.get('liters') as FormControl<string | number | null>;
   }
 
   buildCreatePayload(): CreateWorkOrderExcelPayload {
@@ -973,6 +1082,12 @@ export class WorkOrderFormComponent implements OnInit {
     const fluidErr = this.validateFluidCompartmentRows();
     if (fluidErr) {
       this.notificationService.error(fluidErr);
+      return;
+    }
+    if (!this.allActiveFluidRowsValid()) {
+      this.notificationService.error(
+        'Revise las cantidades de fluidos (stock, formato o confirmación de consumo inusual).',
+      );
       return;
     }
     if (this.otForm.invalid || this.isFormReadOnly()) {
@@ -1109,7 +1224,23 @@ export class WorkOrderFormComponent implements OnInit {
       );
       return;
     }
+    if (!this.allActiveFluidRowsValid()) {
+      this.notificationService.error(
+        'Revise las cantidades de fluidos antes de cerrar la OT.',
+      );
+      return;
+    }
+    if (
+      this.fluidsNeedLargeConfirmAtClose() &&
+      !this.fluidsLargeConfirmOkAtClose()
+    ) {
+      this.notificationService.error(
+        'Confirme las cantidades inusuales de fluidos antes de cerrar la OT.',
+      );
+      return;
+    }
     const confirmedLargeJump = this.detentionFinalNeedsJumpConfirm();
+    const confirmedLargeFluidDispatch = this.fluidsNeedLargeConfirmAtClose();
     const payload = this.buildCreatePayload();
     this.workOrdersService
       .patchWorkOrder(this.otId, payload)
@@ -1121,6 +1252,7 @@ export class WorkOrderFormComponent implements OnInit {
             wh || undefined,
             equipmentOperational,
             confirmedLargeJump,
+            confirmedLargeFluidDispatch === true,
           ),
         ),
       )
@@ -1366,6 +1498,11 @@ export class WorkOrderFormComponent implements OnInit {
         fluidType: label,
         inventoryItemId: row.id,
         linkedFluidItemName: pnOrSku ? `${pnOrSku} — ${row.name}` : row.name,
+        unitAbbr: row.unitOfMeasure?.abbreviation ?? 'LT',
+        allowsDecimals: row.unitOfMeasure?.allowsDecimals ?? true,
+        stockAvailable:
+          row.stockAvailableQuantity ?? row.stockQuantity ?? null,
+        confirmedLargeDispatch: false,
       });
     }
     this.onFluidPickerClosed();

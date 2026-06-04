@@ -674,6 +674,8 @@ model TenantOperationalConfig {
   dayShiftStartTime   String  @default("08:00") @map("day_shift_start_time") @db.VarChar(5)
   /// Hora de inicio del Turno Noche en formato HH:mm (24h).
   nightShiftStartTime String  @default("20:00") @map("night_shift_start_time") @db.VarChar(5)
+  /// Si true, las salidas de stock no pueden dejar saldo negativo (BadRequest en lugar de regularización pendiente).
+  blockNegativeStock  Boolean @default(false) @map("block_negative_stock")
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

@@ -8,6 +8,7 @@ import { environment } from '../../../../environments/environment';
 export interface LubeReportLinePayload {
   itemId: string;
   quantity: number;
+  confirmedLargeDispatch?: boolean;
 }
 
 export interface CreateLubeReportPayload {

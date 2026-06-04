@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { FormControl } from '@angular/forms';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -131,7 +132,8 @@ describe('LubeReportFormComponent', () => {
         unitAbbr: 'L',
         allowsDecimals: false,
         stockAvailable: 10,
-        quantity: 1,
+        quantityControl: new FormControl(1),
+        confirmedLargeDispatch: false,
       },
     ]);
     component.meterReading.set(1000);

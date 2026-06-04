@@ -138,6 +138,7 @@ export class CompanyConfigComponent implements OnInit {
       hasNightShift: [true],
       dayShiftStartTime: ['08:00', [Validators.required, Validators.pattern(TIME_RE)]],
       nightShiftStartTime: ['20:00', [Validators.required, Validators.pattern(TIME_RE)]],
+      blockNegativeStock: [false],
     });
   }
 
@@ -169,6 +170,7 @@ export class CompanyConfigComponent implements OnInit {
       hasNightShift: hasNight,
       dayShiftStartTime: cfg?.dayShiftStartTime ?? '08:00',
       nightShiftStartTime: cfg?.nightShiftStartTime ?? '20:00',
+      blockNegativeStock: cfg?.blockNegativeStock ?? false,
     });
     this.hasNightShiftValue.set(hasNight);
   }

@@ -211,7 +211,7 @@ describe('InventoryTransferService', () => {
       });
 
       await expect(service.executeTransfer(baseDto, adminUser)).rejects.toThrow(
-        /Stock insuficiente en origen/,
+        /Stock insuficiente para PN-1/,
       );
     });
 

@@ -19,6 +19,14 @@ import {
 } from '../../common/inventory/field-dispatch.constants';
 import { getFieldDispatchOutstandingForItem } from '../../common/inventory/field-dispatch-outstanding';
 import { userCanViewInventoryCost } from '../auth/permissions.util';
+import {
+  addStockQty,
+  subtractStockQty,
+  isStockQtyNegative,
+  wouldStockGoNegative,
+  insufficientStockMessage,
+  STOCK_QTY_EPSILON,
+} from '../../common/inventory/stock-quantity.util';
 
 export interface PerformTransactionDto {
   warehouseId: string;
@@ -99,7 +107,7 @@ export class InventoryStockService {
     itemId: string,
     newQuantity: number,
   ): Promise<void> {
-    if (new Decimal(newQuantity).lt(0)) return;
+    if (isStockQtyNegative(newQuantity)) return;
     await tx.inventoryTransaction.updateMany({
       where: {
         warehouseId,
@@ -1097,6 +1105,41 @@ export class InventoryStockService {
     };
   }
 
+  private async tenantBlocksNegativeStock(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<boolean> {
+    const cfg = await tx.tenantOperationalConfig.findUnique({
+      where: { tenantId },
+      select: { blockNegativeStock: true },
+    });
+    return cfg?.blockNegativeStock ?? false;
+  }
+
+  private async throwIfBlockedNegativeStock(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    previousQty: number,
+    deductQty: number,
+  ): Promise<void> {
+    if (!wouldStockGoNegative(previousQty, deductQty)) return;
+    const block = await this.tenantBlocksNegativeStock(tx, tenantId);
+    if (!block) return;
+
+    const item = await tx.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { partNumber: true, inventoryCode: true },
+    });
+    const label =
+      item?.partNumber?.trim() ||
+      item?.inventoryCode?.trim() ||
+      itemId;
+    throw new BadRequestException(
+      insufficientStockMessage(label, previousQty, deductQty),
+    );
+  }
+
   /**
    * Ejecuta IN, OUT o ADJUST.
    * OUT ahora permite stock negativo, marcando isPendingRegularization.
@@ -1171,7 +1214,7 @@ export class InventoryStockService {
         dto.warehouseId,
         dto.itemId,
       );
-      if (dto.quantity > outstanding + 1e-6) {
+      if (dto.quantity > outstanding + STOCK_QTY_EPSILON) {
         throw new BadRequestException(
           `La cantidad de reingreso (${dto.quantity}) supera lo pendiente desde terreno (${outstanding}).`,
         );
@@ -1193,7 +1236,7 @@ export class InventoryStockService {
     let isPendingRegularization = false;
 
     if (dto.type === 'IN') {
-      newQty = previousQty + dto.quantity;
+      newQty = addStockQty(previousQty, dto.quantity);
 
       if (dto.unitCost && dto.unitCost > 0) {
         const cQ = new Decimal(previousQty);
@@ -1205,16 +1248,34 @@ export class InventoryStockService {
           ? dto.unitCost
           : parseFloat(cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4));
       }
-    } else if (dto.type === 'OUT') {
-      newQty = previousQty - dto.quantity;
-      if (newQty < 0) {
+    } else if (dto.type === 'OUT' || dto.type === 'WORK_ORDER_ISSUE') {
+      await this.throwIfBlockedNegativeStock(
+        tx,
+        user.tenantId,
+        dto.itemId,
+        previousQty,
+        dto.quantity,
+      );
+      newQty = subtractStockQty(previousQty, dto.quantity);
+      if (isStockQtyNegative(newQty)) {
         isPendingRegularization = true;
       }
     } else if (dto.type === 'ADJUST') {
-      newQty = previousQty + dto.quantity;
-      if (newQty < 0) {
+      newQty = addStockQty(previousQty, dto.quantity);
+      if (isStockQtyNegative(newQty)) {
+        await this.throwIfBlockedNegativeStock(
+          tx,
+          user.tenantId,
+          dto.itemId,
+          previousQty,
+          subtractStockQty(previousQty, newQty),
+        );
         isPendingRegularization = true;
       }
+    } else {
+      throw new BadRequestException(
+        `Tipo de transacción no soportado: ${dto.type}.`,
+      );
     }
 
     const policyDefaults = !currentStock

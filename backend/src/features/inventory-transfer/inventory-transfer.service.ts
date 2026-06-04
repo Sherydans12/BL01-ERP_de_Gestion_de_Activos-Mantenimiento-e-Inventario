@@ -6,6 +6,11 @@ import {
 } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
+import {
+  subtractStockQty,
+  wouldStockGoNegative,
+  insufficientStockMessage,
+} from '../../common/inventory/stock-quantity.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 import {
@@ -338,14 +343,18 @@ export class InventoryTransferService {
           });
 
           const prevO = originStock?.quantity ?? 0;
-          if (prevO + 1e-9 < line.quantity) {
+          if (wouldStockGoNegative(prevO, line.quantity)) {
             throw new BadRequestException(
-              `Stock insuficiente en origen para ${item.partNumber}. Disponible: ${prevO}, solicitado: ${line.quantity}.`,
+              insufficientStockMessage(
+                item.partNumber ?? item.id,
+                prevO,
+                line.quantity,
+              ),
             );
           }
 
           const cppOrigin = Number(originStock?.unitCost ?? 0);
-          const newOriginQty = prevO - line.quantity;
+          const newOriginQty = subtractStockQty(prevO, line.quantity);
 
           await tx.itemStock.update({
             where: {

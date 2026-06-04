@@ -6,31 +6,22 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
 import { WorkOrdersService } from './work-orders.service';
-import {
-  getPolicyThresholdsForNewItemStockRow,
-  clearItemStockPolicyIfMatchesWarehouse,
-} from '../inventory-items/inventory-item-stock-policy.helper';
+import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 
 jest.mock('../equipments/equipment-meter-sync', () => ({
   applyCurrentMeterChange: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../inventory-items/inventory-item-stock-policy.helper');
 
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 const mockApplyCurrentMeterChange = jest.mocked(applyCurrentMeterChange);
-const mockGetPolicyThresholds = jest.mocked(
-  getPolicyThresholdsForNewItemStockRow,
-);
-const mockClearItemStockPolicy = jest.mocked(
-  clearItemStockPolicyIfMatchesWarehouse,
-);
 
 describe('WorkOrdersService — updateStatus (CLOSED)', () => {
   let service: WorkOrdersService;
   let prisma: DeepMockProxy<PrismaService>;
   let tx: DeepMockProxy<Prisma.TransactionClient>;
+  let inventoryStockService: { performTransactionCore: jest.Mock };
 
   const tenantId = '11111111-1111-1111-1111-111111111111';
   const woId = '22222222-2222-2222-2222-222222222222';
@@ -121,8 +112,12 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     tx = mockDeep<Prisma.TransactionClient>();
-    mockGetPolicyThresholds.mockResolvedValue({ minStock: 0, maxStock: 0 });
-    mockClearItemStockPolicy.mockResolvedValue(undefined);
+    inventoryStockService = {
+      performTransactionCore: jest.fn().mockResolvedValue({
+        stock: { quantity: 8, unitCost: 25 },
+        transaction: { isPendingRegularization: false },
+      }),
+    };
     mockApplyCurrentMeterChange.mockClear();
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
@@ -137,6 +132,10 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         {
           provide: EmailService,
           useValue: { sendMail: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: InventoryStockService,
+          useValue: inventoryStockService,
         },
       ],
     }).compile();
@@ -310,12 +309,6 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         ...wo,
         status: 'CLOSED',
       } as never);
-      tx.itemStock.findUnique.mockResolvedValue({
-        quantity: 10,
-        unitCost: 25,
-      } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
       tx.workOrderPart.update.mockResolvedValue({} as never);
       tx.assetCostRecord.create.mockResolvedValue({} as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
@@ -392,12 +385,6 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         ...wo,
         status: 'CLOSED',
       } as never);
-      tx.itemStock.findUnique.mockResolvedValue({
-        quantity: 10,
-        unitCost: 25,
-      } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
       tx.workOrderPart.update.mockResolvedValue({} as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
@@ -419,16 +406,17 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     expect(result.status).toBe('CLOSED');
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(inventoryStockService.performTransactionCore).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
         type: 'WORK_ORDER_ISSUE',
         quantity: 2,
-        previousStock: 10,
-        newStock: 8,
+        itemId,
         referenceType: 'WORK_ORDER',
         referenceId: woId,
       }),
-    });
+      adminUser,
+    );
     expect(tx.stockReservation.deleteMany).toHaveBeenCalledWith({
       where: { workOrderId: woId },
     });
@@ -470,7 +458,11 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
           liters: 3.5,
           inventoryItemId: fluidItemId,
           fluidType: 'HID-OIL',
-          inventoryItem: { isInventory: true, partNumber: 'HID-OIL' },
+          inventoryItem: {
+            isInventory: true,
+            partNumber: 'HID-OIL',
+            unitOfMeasure: { abbreviation: 'LT', allowsDecimals: true },
+          },
         },
       ],
     });
@@ -481,12 +473,6 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         ...wo,
         status: 'CLOSED',
       } as never);
-      tx.itemStock.findUnique.mockResolvedValue({
-        quantity: 20,
-        unitCost: 12,
-      } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
       return (fn as (client: typeof tx) => Promise<unknown>)(tx);
@@ -506,13 +492,16 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       closureEquipmentOperational: true,
     });
 
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(inventoryStockService.performTransactionCore).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
         type: 'WORK_ORDER_ISSUE',
         quantity: 3.5,
-        notes: expect.stringContaining('Consumo fluido OT OT-100'),
+        itemId: fluidItemId,
+        referenceType: 'WORK_ORDER',
       }),
-    });
+      adminUser,
+    );
   });
 
   it('rechaza medidor final menor al inicial sin ajuste previo', async () => {
@@ -659,6 +648,15 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: { get: configGet } },
         { provide: EmailService, useValue: { sendMail } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
@@ -717,6 +715,15 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
           useValue: { get: jest.fn().mockReturnValue('') },
         },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
@@ -827,6 +834,15 @@ describe('WorkOrdersService — promoteBacklogItem', () => {
           useValue: { get: jest.fn().mockReturnValue('') },
         },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
@@ -964,7 +980,6 @@ describe('WorkOrdersService — create', () => {
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     tx = mockDeep<Prisma.TransactionClient>();
-    mockGetPolicyThresholds.mockResolvedValue({ minStock: 0, maxStock: 0 });
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -976,6 +991,15 @@ describe('WorkOrdersService — create', () => {
           useValue: { get: jest.fn().mockReturnValue('') },
         },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -1134,6 +1158,15 @@ describe('WorkOrdersService — update (repuestos y reservas)', () => {
           useValue: { get: jest.fn().mockReturnValue('') },
         },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -1277,6 +1310,15 @@ describe('WorkOrdersService — getStats (integración transversal)', () => {
           useValue: { get: jest.fn().mockReturnValue('') },
         },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);

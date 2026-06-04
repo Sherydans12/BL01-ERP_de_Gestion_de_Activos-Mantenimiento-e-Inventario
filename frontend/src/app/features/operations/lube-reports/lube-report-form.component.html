@@ -266,14 +266,13 @@
               <thead>
                 <tr class="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
                   <th class="pb-3 pr-4">Artículo</th>
-                  <th class="pb-3 pr-4 w-24 text-right">Disponible</th>
-                  <th class="pb-3 pr-4 w-32 text-right">Cantidad</th>
+                  <th class="pb-3 pr-4">Cantidad</th>
                   <th class="pb-3 w-12"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border">
                 @for (line of lines(); track line.itemId) {
-                  <tr class="group">
+                  <tr class="group align-top">
                     <td class="py-3 pr-4">
                       <p class="font-medium text-main leading-tight">{{ line.name }}</p>
                       <p class="text-xs text-muted">
@@ -282,30 +281,17 @@
                         {{ line.unitAbbr }}
                       </p>
                     </td>
-                    <td class="py-3 pr-4 text-right">
-                      @if (line.stockAvailable !== null) {
-                        <span
-                          class="text-sm font-mono"
-                          [class.text-red-400]="line.stockAvailable <= 0"
-                          [class.text-yellow-400]="line.stockAvailable > 0 && line.stockAvailable < 5"
-                          [class.text-main]="line.stockAvailable >= 5">
-                          {{ line.stockAvailable | number:'1.0-3' }}
-                        </span>
-                      } @else {
-                        <span class="text-xs text-muted">—</span>
-                      }
-                    </td>
-                    <td class="py-3 pr-4 text-right">
-                      <input
-                        type="number"
-                        [id]="'qty-' + line.itemId"
-                        [name]="'qty-' + line.itemId"
-                        [value]="line.quantity"
-                        (change)="updateQty(line.itemId, $any($event.target).value)"
-                        [min]="line.allowsDecimals ? 0.001 : 1"
-                        [step]="line.allowsDecimals ? 0.001 : 1"
-                        required
-                        class="w-28 min-h-[48px] rounded-lg border border-border bg-dark px-3 py-2 text-right text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    <td class="py-3 pr-4">
+                      <app-fluid-quantity-row
+                        [itemId]="line.itemId"
+                        [unitAbbr]="line.unitAbbr"
+                        [allowsDecimals]="line.allowsDecimals"
+                        [availableStock]="line.stockAvailable"
+                        [blockNegativeStock]="blockNegativeStock()"
+                        [quantityControl]="line.quantityControl"
+                        [confirmedLargeDispatch]="line.confirmedLargeDispatch"
+                        (confirmedLargeDispatchChange)="onLineLargeConfirm(line.itemId, $event)"
+                        (validationChange)="onLineValidation(line.itemId, $event)" />
                     </td>
                     <td class="py-3 text-right">
                       <button

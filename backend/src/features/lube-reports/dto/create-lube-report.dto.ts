@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNotEmpty,
@@ -21,6 +22,11 @@ export class LubeReportLineDto {
   @IsNumber()
   @Min(0.001)
   quantity: number;
+
+  /** Requerido si la cantidad supera el umbral operativo de consumo atípico. */
+  @IsOptional()
+  @IsBoolean()
+  confirmedLargeDispatch?: boolean;
 }
 
 export class CreateLubeReportDto {

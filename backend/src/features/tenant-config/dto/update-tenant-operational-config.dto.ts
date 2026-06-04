@@ -20,4 +20,9 @@ export class UpdateTenantOperationalConfigDto {
   @IsOptional()
   @Matches(TIME_REGEX, { message: TIME_MSG })
   nightShiftStartTime?: string;
+
+  /** Bloquear salidas que dejarían stock negativo (despachos / OT / kardex OUT). */
+  @IsBoolean()
+  @IsOptional()
+  blockNegativeStock?: boolean;
 }

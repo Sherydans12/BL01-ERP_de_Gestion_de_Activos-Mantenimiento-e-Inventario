@@ -6,23 +6,33 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Observable, Subject } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
-import { InventoryItemsService, ItemPickerRow, ItemCategory } from '../../../core/services/inventory-items/inventory-items.service';
+import {
+  InventoryItemsService,
+  ItemPickerRow,
+  ItemCategory,
+} from '../../../core/services/inventory-items/inventory-items.service';
 import {
   LubeReportsService,
   CreateLubeReportPayload,
 } from '../../../core/services/lube-reports/lube-reports.service';
+import { TenantService } from '../../../core/services/tenant/tenant.service';
 import { GlobalItemPickerComponent } from '../../../shared/components/global-item-picker/global-item-picker.component';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import {
+  FluidQuantityRowComponent,
+  FluidQuantityValidation,
+} from '../../../shared/components/fluid-quantity-row/fluid-quantity-row.component';
 import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
 import type { EquipmentMeterSnapshot } from '../../../core/models/types';
+import { parseFluidQuantity } from '../../../shared/utils/fluid-dispatch-limits.util';
 import { O } from '../../../core/constants/operations-permissions';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
@@ -33,9 +43,9 @@ interface DraftLine {
   inventoryCode: string | null;
   unitAbbr: string;
   allowsDecimals: boolean;
-  /** Saldo disponible en bodega al momento de agregar el ítem. */
   stockAvailable: number | null;
-  quantity: number;
+  quantityControl: FormControl<string | number | null>;
+  confirmedLargeDispatch: boolean;
 }
 
 @Component({
@@ -44,56 +54,60 @@ interface DraftLine {
   imports: [
     CommonModule,
     FormsModule,
+    ReactiveFormsModule,
     RouterLink,
     GlobalItemPickerComponent,
     ConfirmModalComponent,
     HasPermissionDirective,
     MeterReferenceBannerComponent,
+    FluidQuantityRowComponent,
   ],
   templateUrl: './lube-report-form.component.html',
 })
 export class LubeReportFormComponent implements OnInit {
   protected readonly O = O;
 
-  private lubeService    = inject(LubeReportsService);
+  private lubeService = inject(LubeReportsService);
   private warehousesService = inject(WarehousesService);
-  private fleetService   = inject(FleetService);
-  private itemsService   = inject(InventoryItemsService);
-  private notify         = inject(NotificationService);
+  private fleetService = inject(FleetService);
+  private itemsService = inject(InventoryItemsService);
+  private notify = inject(NotificationService);
+  private tenantService = inject(TenantService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
 
   meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
   meterSnapshotLoading = signal(false);
   private lastSnapshotEquipmentId: string | null = null;
 
-  // ── Catálogos ────────────────────────────────────────────────────────────
-  warehouses  = signal<any[]>([]);
-  equipments  = signal<any[]>([]);
+  warehouses = signal<any[]>([]);
+  equipments = signal<any[]>([]);
   equipSearch = signal('');
-
-  /** ID de la familia "Lubricante" (o la primera subcategoría que coincida). */
   lubeFamilyId = signal<string | null>(null);
 
-  // ── Estado del formulario ─────────────────────────────────────────────────
   selectedWarehouseId = signal<string>('');
-  selectedContractId  = signal<string>('');
+  selectedContractId = signal<string>('');
   selectedEquipmentId = signal<string>('');
-  dispatchDate        = signal<string>(this.todayIso());
-  meterReading        = signal<number | null>(null);
-  notes               = signal<string>('');
-  lines               = signal<DraftLine[]>([]);
+  dispatchDate = signal<string>(this.todayIso());
+  meterReading = signal<number | null>(null);
+  notes = signal<string>('');
+  lines = signal<DraftLine[]>([]);
+  lineValidations = signal<Record<string, FluidQuantityValidation>>({});
 
-  pickerOpen         = signal(false);
-  isSubmitting       = signal(false);
+  pickerOpen = signal(false);
+  isSubmitting = signal(false);
   isSubmittingAndKeep = signal(false);
-  warehousLoading    = signal(true);
-  equipLoading       = signal(false);
+  warehousLoading = signal(true);
+  equipLoading = signal(false);
 
-  // ── CanDeactivate: modal de confirmación de salida ────────────────────────
-  leaveConfirmOpen   = signal(false);
+  leaveConfirmOpen = signal(false);
   private leaveResult$ = new Subject<boolean>();
 
-  /** Equipos filtrados por texto de búsqueda (computed para reactividad). */
+  blockNegativeStock = computed(
+    () =>
+      this.tenantService.currentTenant()?.operationalConfig
+        ?.blockNegativeStock ?? false,
+  );
+
   filteredEquipments = computed(() => {
     const q = this.equipSearch().toLowerCase().trim();
     if (!q) return this.equipments();
@@ -106,11 +120,12 @@ export class LubeReportFormComponent implements OnInit {
     );
   });
 
-  /** Medidor vigente del snapshot (SSOT); fallback al listado de flota. */
   effectiveCurrentMeter = computed<number | null>(() => {
     const snap = this.meterSnapshot();
     if (snap) return snap.currentMeter;
-    const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
+    const eq = this.equipments().find(
+      (e) => e.id === this.selectedEquipmentId(),
+    );
     return eq?.currentMeter ?? null;
   });
 
@@ -121,25 +136,28 @@ export class LubeReportFormComponent implements OnInit {
     return reading < cur;
   });
 
-  /** Habilita el picker solo cuando hay bodega seleccionada. */
   canAddItems = computed(() => !!this.selectedWarehouseId());
 
-  /** El formulario está listo para enviar. */
+  allLinesValid = computed(() => {
+    const vals = this.lineValidations();
+    const rows = this.lines();
+    if (rows.length === 0) return false;
+    return rows.every((l) => vals[l.itemId]?.valid === true);
+  });
+
   isFormValid = computed(
     () =>
       !!this.selectedWarehouseId() &&
       !!this.selectedEquipmentId() &&
       !!this.dispatchDate() &&
       this.lines().length > 0 &&
-      this.lines().every((l) => l.quantity > 0),
+      this.allLinesValid(),
   );
 
-  /** Formulario listo para guardar (incluye regla de horómetro no regresivo). */
   canSubmit = computed(
     () => this.isFormValid() && !this.meterReadingInvalid(),
   );
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────
   ngOnInit(): void {
     this.loadWarehouses();
     this.loadEquipments();
@@ -174,7 +192,6 @@ export class LubeReportFormComponent implements OnInit {
     });
   }
 
-  /** Busca la familia de categorías cuyo nombre contenga "lubric", "aceite" o "grasa". */
   private resolveLubeFamily(): void {
     this.itemsService.getCategoryFamilies().subscribe({
       next: (families: ItemCategory[]) => {
@@ -184,13 +201,10 @@ export class LubeReportFormComponent implements OnInit {
         );
         this.lubeFamilyId.set(match?.id ?? null);
       },
-      error: () => {
-        // No bloquea el flujo: el picker abrirá sin familia bloqueada.
-      },
+      error: () => {},
     });
   }
 
-  // ── Handlers de form ─────────────────────────────────────────────────────
   onEquipmentChange(equipmentId: string): void {
     this.selectedEquipmentId.set(equipmentId);
     if (!equipmentId) {
@@ -227,33 +241,45 @@ export class LubeReportFormComponent implements OnInit {
     const wh = this.warehouses().find((w) => w.id === warehouseId);
     this.selectedWarehouseId.set(warehouseId);
     this.selectedContractId.set(wh?.contractId ?? '');
-    // Vacía las líneas al cambiar bodega (el stock cambia).
     this.lines.set([]);
+    this.lineValidations.set({});
+  }
+
+  private resolveAvailableStock(row: ItemPickerRow): number | null {
+    const fromPicker =
+      row.stockAvailableQuantity ?? row.stockQuantity ?? null;
+    return fromPicker != null && Number.isFinite(Number(fromPicker))
+      ? Number(fromPicker)
+      : null;
   }
 
   onItemPicked(row: ItemPickerRow): void {
     const existing = this.lines().find((l) => l.itemId === row.id);
     if (existing) {
-      // Incrementa cantidad si el ítem ya estaba en la lista.
-      this.lines.update((prev) =>
-        prev.map((l) =>
-          l.itemId === row.id
-            ? { ...l, quantity: +(l.quantity + 1).toFixed(4) }
-            : l,
-        ),
+      const allowsDecimals = existing.allowsDecimals;
+      const cur = parseFluidQuantity(
+        existing.quantityControl.value,
+        allowsDecimals,
       );
+      const next = allowsDecimals
+        ? +(cur + 1).toFixed(3)
+        : Math.floor(cur) + 1;
+      existing.quantityControl.setValue(String(next));
       this.pickerOpen.set(false);
       return;
     }
+
+    const allowsDecimals = row.unitOfMeasure.allowsDecimals ?? false;
     const newLine: DraftLine = {
       itemId: row.id,
       name: row.name,
       partNumber: row.partNumber,
       inventoryCode: row.inventoryCode ?? null,
       unitAbbr: row.unitOfMeasure.abbreviation,
-      allowsDecimals: row.unitOfMeasure.allowsDecimals ?? false,
-      stockAvailable: row.stockQuantity,
-      quantity: 1,
+      allowsDecimals,
+      stockAvailable: this.resolveAvailableStock(row),
+      quantityControl: new FormControl<string>('1'),
+      confirmedLargeDispatch: false,
     };
     this.lines.update((prev) => [...prev, newLine]);
     this.pickerOpen.set(false);
@@ -261,28 +287,34 @@ export class LubeReportFormComponent implements OnInit {
 
   removeLine(itemId: string): void {
     this.lines.update((prev) => prev.filter((l) => l.itemId !== itemId));
+    this.lineValidations.update((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
   }
 
-  updateQty(itemId: string, raw: string): void {
-    const val = parseFloat(raw);
-    if (isNaN(val) || val <= 0) return;
+  onLineValidation(itemId: string, validation: FluidQuantityValidation): void {
+    this.lineValidations.update((prev) => ({ ...prev, [itemId]: validation }));
+  }
+
+  onLineLargeConfirm(itemId: string, confirmed: boolean): void {
     this.lines.update((prev) =>
-      prev.map((l) => (l.itemId === itemId ? { ...l, quantity: val } : l)),
+      prev.map((l) =>
+        l.itemId === itemId ? { ...l, confirmedLargeDispatch: confirmed } : l,
+      ),
     );
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-
-  /**
-   * @param keepContext Si es `true`, tras el POST exitoso solo limpia equipo,
-   * horómetro y cantidades de líneas — mantiene bodega y lubricantes para
-   * despachar rápidamente al siguiente camión en la fila.
-   */
   submit(keepContext = false): void {
     if (!this.canSubmit()) {
       if (this.meterReadingInvalid()) {
         this.notify.error(
           'El horómetro ingresado no puede ser menor al medidor actual del equipo.',
+        );
+      } else {
+        this.notify.error(
+          'Revise las cantidades de lubricante (stock, formato o confirmación de consumo inusual).',
         );
       }
       return;
@@ -296,7 +328,14 @@ export class LubeReportFormComponent implements OnInit {
       dispatchDate: this.dispatchDate(),
       meterReading: this.meterReading() ?? undefined,
       notes: this.notes().trim() || undefined,
-      lines: this.lines().map((l) => ({ itemId: l.itemId, quantity: l.quantity })),
+      lines: this.lines().map((l) => ({
+        itemId: l.itemId,
+        quantity: parseFluidQuantity(
+          l.quantityControl.value,
+          l.allowsDecimals,
+        ),
+        confirmedLargeDispatch: l.confirmedLargeDispatch || undefined,
+      })),
     };
 
     if (keepContext) {
@@ -307,12 +346,18 @@ export class LubeReportFormComponent implements OnInit {
 
     this.lubeService.createReport(payload).subscribe({
       next: (report) => {
-        this.notify.success(`Despacho ${report.correlative} registrado con éxito.`);
+        this.notify.success(
+          `Despacho ${report.correlative} registrado con éxito.`,
+        );
         if (keepContext) {
-          // Solo limpia equipo, horómetro y cantidades — mantiene bodega y lubricantes.
           this.onEquipmentChange('');
           this.equipSearch.set('');
-          this.lines.update((prev) => prev.map((l) => ({ ...l, quantity: 1 })));
+          this.lines.update((prev) =>
+            prev.map((l) => {
+              l.quantityControl.setValue('1');
+              return { ...l, confirmedLargeDispatch: false };
+            }),
+          );
           this.isSubmittingAndKeep.set(false);
         } else {
           this.resetForm();
@@ -329,7 +374,6 @@ export class LubeReportFormComponent implements OnInit {
     });
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   resetForm(): void {
     this.selectedWarehouseId.set('');
     this.selectedContractId.set('');
@@ -338,6 +382,7 @@ export class LubeReportFormComponent implements OnInit {
     this.meterReading.set(null);
     this.notes.set('');
     this.lines.set([]);
+    this.lineValidations.set({});
     this.equipSearch.set('');
   }
 
@@ -345,21 +390,18 @@ export class LubeReportFormComponent implements OnInit {
     return new Date().toISOString().slice(0, 10);
   }
 
-  /** Devuelve la placa / ID interno del equipo seleccionado para mostrar en el formulario. */
   selectedEquipmentLabel = computed(() => {
-    const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
+    const eq = this.equipments().find(
+      (e) => e.id === this.selectedEquipmentId(),
+    );
     if (!eq) return '';
     const plate = eq.plate ? ` — ${eq.plate}` : '';
     return `${eq.internalId ?? ''} ${eq.brand ?? ''} ${eq.model ?? ''}${plate}`.trim();
   });
 
-  // ── CanDeactivate ─────────────────────────────────────────────────────────
-
-  /** Llamado por el guard. Si hay líneas sin guardar, muestra el modal y devuelve Observable. */
   confirmLeaveIfDirty(): Observable<boolean> | boolean {
     if (this.lines().length === 0) return true;
     this.leaveConfirmOpen.set(true);
-    // El modal emitirá en leaveResult$ al confirmar o cancelar.
     return this.leaveResult$.asObservable();
   }
 

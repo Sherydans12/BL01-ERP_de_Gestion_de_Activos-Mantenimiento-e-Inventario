@@ -651,16 +651,23 @@
                       </button>
                     }
                   </div>
-                  <div class="sm:col-span-2">
-                    <label class="text-[9px] text-muted uppercase tracking-wide">Litros</label>
-                    <input
-                      formControlName="liters"
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0"
-                      class="mt-0.5 w-full bg-dark border border-border rounded-lg px-2 py-2 text-sm font-mono text-main outline-none focus:border-primary"
-                    />
+                  <div class="sm:col-span-5">
+                    @if (row.get('inventoryItemId')?.value) {
+                      <app-fluid-quantity-row
+                        [itemId]="row.get('inventoryItemId')!.value"
+                        [unitAbbr]="row.get('unitAbbr')?.value || 'LT'"
+                        [allowsDecimals]="row.get('allowsDecimals')?.value ?? true"
+                        [availableStock]="row.get('stockAvailable')?.value ?? null"
+                        [blockNegativeStock]="blockNegativeStock()"
+                        [quantityControl]="fluidLitersControl(row)"
+                        [confirmedLargeDispatch]="row.get('confirmedLargeDispatch')?.value ?? false"
+                        (confirmedLargeDispatchChange)="onFluidLargeConfirm(i, $event)"
+                        (validationChange)="onFluidLineValidation(i, $event)" />
+                    } @else {
+                      <p class="text-[11px] text-muted mt-4">
+                        Elija un ítem del catálogo para ingresar cantidad.
+                      </p>
+                    }
                   </div>
                   <div class="sm:col-span-3">
                     <label class="text-[9px] text-muted uppercase tracking-wide">Acción</label>
@@ -676,6 +683,10 @@
                 <input type="hidden" formControlName="fluidType" />
                 <input type="hidden" formControlName="inventoryItemId" />
                 <input type="hidden" formControlName="linkedFluidItemName" />
+                <input type="hidden" formControlName="unitAbbr" />
+                <input type="hidden" formControlName="allowsDecimals" />
+                <input type="hidden" formControlName="stockAvailable" />
+                <input type="hidden" formControlName="confirmedLargeDispatch" />
               </div>
             }
           </div>

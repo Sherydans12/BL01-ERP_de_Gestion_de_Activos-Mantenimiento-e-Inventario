@@ -258,6 +258,28 @@ describe('InventoryStockService', () => {
       );
     });
 
+    it('OUT rechaza stock insuficiente cuando blockNegativeStock está activo', async () => {
+      setupWarehouseFound();
+      setupExistingStock(3, 8);
+      tx.tenantOperationalConfig.findUnique.mockResolvedValue({
+        blockNegativeStock: true,
+      } as never);
+      tx.inventoryItem.findFirst.mockResolvedValue({
+        partNumber: 'FLUID-1',
+        inventoryCode: 'IN001',
+      } as never);
+
+      await expect(
+        service.performTransactionCore(
+          tx,
+          { ...baseDto, type: 'OUT', quantity: 5 },
+          adminUser,
+        ),
+      ).rejects.toThrow(/Stock insuficiente/);
+
+      expect(tx.itemStock.upsert).not.toHaveBeenCalled();
+    });
+
     it('ADJUST permite cantidad negativa y marca regularización si el saldo queda < 0', async () => {
       setupWarehouseFound();
       setupExistingStock(2, 5);

@@ -31,10 +31,11 @@ import Decimal from 'decimal.js';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { userHasPermission } from '../auth/permissions.util';
 
+import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 import {
-  getPolicyThresholdsForNewItemStockRow,
-  clearItemStockPolicyIfMatchesWarehouse,
-} from '../inventory-items/inventory-item-stock-policy.helper';
+  assertLargeDispatchConfirmed,
+  assertQuantityAllowedForUom,
+} from '../../common/inventory/fluid-dispatch-limits.util';
 
 function truncateForDb(s: string, max: number): string {
   if (!s) return '';
@@ -342,6 +343,7 @@ export class WorkOrdersService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly config: ConfigService,
+    private readonly inventoryStockService: InventoryStockService,
   ) {}
 
   private async notifyWarrantyStakeholders(params: {
@@ -1808,6 +1810,7 @@ export class WorkOrdersService {
       warehouseId?: string;
       closureEquipmentOperational?: boolean;
       confirmedLargeJump?: boolean;
+      confirmedLargeFluidDispatch?: boolean;
     },
     activeContract?: string,
   ) {
@@ -1817,6 +1820,7 @@ export class WorkOrdersService {
       warehouseId,
       closureEquipmentOperational,
       confirmedLargeJump,
+      confirmedLargeFluidDispatch,
     } = body;
     const where = this.workOrderAccessWhere(user, id, activeContract);
 
@@ -1839,7 +1843,14 @@ export class WorkOrdersService {
                       select: {
                         id: true,
                         partNumber: true,
+                        inventoryCode: true,
                         isInventory: true,
+                        unitOfMeasure: {
+                          select: {
+                            abbreviation: true,
+                            allowsDecimals: true,
+                          },
+                        },
                       },
                     },
                   },
@@ -1986,70 +1997,22 @@ export class WorkOrdersService {
 
             if (inventoryParts.length > 0 && effectiveWarehouseId) {
               for (const part of inventoryParts) {
-                const currentStock = await tx.itemStock.findUnique({
-                  where: {
-                    warehouseId_itemId: {
+                const { stock } =
+                  await this.inventoryStockService.performTransactionCore(
+                    tx,
+                    {
                       warehouseId: effectiveWarehouseId,
                       itemId: part.inventoryItemId,
+                      type: 'WORK_ORDER_ISSUE',
+                      quantity: part.quantity,
+                      referenceId: workOrder.id,
+                      referenceType: 'WORK_ORDER',
+                      notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}`,
                     },
-                  },
-                });
+                    user,
+                  );
 
-                const previousQty = currentStock?.quantity || 0;
-                const newQty = previousQty - part.quantity;
-                const isPendingRegularization = newQty < 0;
-
-                const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
-
-                const policyDefaults = !currentStock
-                  ? await getPolicyThresholdsForNewItemStockRow(
-                      tx,
-                      tenantId,
-                      part.inventoryItemId,
-                      effectiveWarehouseId,
-                    )
-                  : { minStock: 0, maxStock: 0 };
-
-                await tx.itemStock.upsert({
-                  where: {
-                    warehouseId_itemId: {
-                      warehouseId: effectiveWarehouseId,
-                      itemId: part.inventoryItemId,
-                    },
-                  },
-                  update: { quantity: newQty },
-                  create: {
-                    warehouseId: effectiveWarehouseId,
-                    itemId: part.inventoryItemId,
-                    quantity: newQty,
-                    unitCost: 0,
-                    minStock: policyDefaults.minStock,
-                    maxStock: policyDefaults.maxStock,
-                  },
-                });
-
-                await clearItemStockPolicyIfMatchesWarehouse(
-                  tx,
-                  tenantId,
-                  part.inventoryItemId,
-                  effectiveWarehouseId,
-                );
-
-                await tx.inventoryTransaction.create({
-                  data: {
-                    type: 'WORK_ORDER_ISSUE',
-                    quantity: part.quantity,
-                    previousStock: previousQty,
-                    newStock: newQty,
-                    isPendingRegularization,
-                    referenceId: workOrder.id,
-                    referenceType: 'WORK_ORDER',
-                    notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
-                    warehouse: { connect: { id: effectiveWarehouseId } },
-                    item: { connect: { id: part.inventoryItemId } },
-                    user: { connect: { id: userId } },
-                  },
-                });
+                const frozenUnitCost = Number(stock?.unitCost ?? 0);
 
                 await tx.workOrderPart.update({
                   where: { id: part.id },
@@ -2066,73 +2029,50 @@ export class WorkOrdersService {
               for (const fc of inventoryFluids) {
                 const qty = Number(fc.liters);
                 const itemId = fc.inventoryItemId as string;
+                const invItem = fc.inventoryItem;
+                const itemLabel =
+                  invItem?.partNumber?.trim() ||
+                  invItem?.inventoryCode?.trim() ||
+                  fc.fluidType ||
+                  itemId;
+                const unitAbbr =
+                  invItem?.unitOfMeasure?.abbreviation ?? 'LT';
+                const allowsDecimals =
+                  invItem?.unitOfMeasure?.allowsDecimals ?? true;
 
-                const currentStock = await tx.itemStock.findUnique({
-                  where: {
-                    warehouseId_itemId: {
-                      warehouseId: effectiveWarehouseId,
-                      itemId,
-                    },
-                  },
-                });
+                assertQuantityAllowedForUom(
+                  qty,
+                  allowsDecimals,
+                  itemLabel,
+                  unitAbbr,
+                );
+                assertLargeDispatchConfirmed(
+                  qty,
+                  unitAbbr,
+                  allowsDecimals,
+                  confirmedLargeFluidDispatch,
+                  itemLabel,
+                );
 
-                const previousQty = currentStock?.quantity || 0;
-                const newQty = previousQty - qty;
-                const isPendingRegularization = newQty < 0;
-                const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
                 const pn =
                   fc.inventoryItem?.partNumber ?? fc.fluidType ?? 'fluid';
 
-                const policyDefaults = !currentStock
-                  ? await getPolicyThresholdsForNewItemStockRow(
-                      tx,
-                      tenantId,
-                      itemId,
-                      effectiveWarehouseId,
-                    )
-                  : { minStock: 0, maxStock: 0 };
-
-                await tx.itemStock.upsert({
-                  where: {
-                    warehouseId_itemId: {
+                const { stock } =
+                  await this.inventoryStockService.performTransactionCore(
+                    tx,
+                    {
                       warehouseId: effectiveWarehouseId,
                       itemId,
+                      type: 'WORK_ORDER_ISSUE',
+                      quantity: qty,
+                      referenceId: workOrder.id,
+                      referenceType: 'WORK_ORDER',
+                      notes: `Consumo fluido OT ${workOrder.correlative} (${fc.compartment}) — ${pn}`,
                     },
-                  },
-                  update: { quantity: newQty },
-                  create: {
-                    warehouseId: effectiveWarehouseId,
-                    itemId,
-                    quantity: newQty,
-                    unitCost: 0,
-                    minStock: policyDefaults.minStock,
-                    maxStock: policyDefaults.maxStock,
-                  },
-                });
+                    user,
+                  );
 
-                await clearItemStockPolicyIfMatchesWarehouse(
-                  tx,
-                  tenantId,
-                  itemId,
-                  effectiveWarehouseId,
-                );
-
-                await tx.inventoryTransaction.create({
-                  data: {
-                    type: 'WORK_ORDER_ISSUE',
-                    quantity: qty,
-                    previousStock: previousQty,
-                    newStock: newQty,
-                    isPendingRegularization,
-                    referenceId: workOrder.id,
-                    referenceType: 'WORK_ORDER',
-                    notes: `Consumo fluido OT ${workOrder.correlative} (${fc.compartment}) — ${pn}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
-                    warehouse: { connect: { id: effectiveWarehouseId } },
-                    item: { connect: { id: itemId } },
-                    user: { connect: { id: userId } },
-                  },
-                });
-
+                const frozenUnitCost = Number(stock?.unitCost ?? 0);
                 totalConsumableCost = totalConsumableCost.plus(
                   new Decimal(qty).mul(new Decimal(frozenUnitCost)),
                 );

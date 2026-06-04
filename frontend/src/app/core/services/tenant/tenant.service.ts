@@ -44,6 +44,7 @@ export interface TenantOperationalConfig {
   hasNightShift: boolean;
   dayShiftStartTime: string;
   nightShiftStartTime: string;
+  blockNegativeStock?: boolean;
 }
 
 export interface Site {
