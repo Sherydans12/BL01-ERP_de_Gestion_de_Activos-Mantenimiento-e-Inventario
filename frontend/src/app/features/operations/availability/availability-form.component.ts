@@ -7,11 +7,14 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { Observable, Subject, forkJoin } from 'rxjs';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Observable, Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { ContractsService } from '../../../core/services/contracts/contracts.service';
+import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
 import {
   EquipmentAvailabilityService,
   CreateAvailabilityPayload,
@@ -24,6 +27,8 @@ import {
   UnreportedEquipment,
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
+import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import type { Contract, EquipmentMeterSnapshot } from '../../../core/models/types';
 import { O } from '../../../core/constants/operations-permissions';
 
 export interface DraftAvailability {
@@ -40,10 +45,18 @@ const STATUS_DOT: Record<OperationalStatus, string> = {
   DOWN_MAINTENANCE: 'bg-orange-400',
 };
 
+const PAGE_SIZE = 10;
+
 @Component({
   selector: 'app-availability-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ConfirmModalComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    ConfirmModalComponent,
+    MeterReferenceBannerComponent,
+  ],
   templateUrl: './availability-form.component.html',
 })
 export class AvailabilityFormComponent implements OnInit {
@@ -53,26 +66,38 @@ export class AvailabilityFormComponent implements OnInit {
   protected readonly SHIFT_LABELS = SHIFT_LABELS;
   protected readonly STATUS_LABELS = STATUS_LABELS;
   protected readonly STATUS_DOT = STATUS_DOT;
+  protected readonly PAGE_SIZE = PAGE_SIZE;
 
   private availabilityService = inject(EquipmentAvailabilityService);
+  private contractsService = inject(ContractsService);
+  private route = inject(ActivatedRoute);
   private notify = inject(NotificationService);
+  private meterSnapshotService = inject(EquipmentMeterSnapshotService);
   protected readonly shiftService = inject(ShiftService);
+  protected readonly authService = inject(AuthService);
 
-  // ── Filtros de turno ──────────────────────────────────────────────────────
-  reportDate = signal<string>(this.todayIso());
+  reportDate = signal<string>('');
   shift = signal<ShiftType>('DAY');
+  filterContractId = signal<string>('');
+  searchDraft = signal('');
+  searchQuery = signal('');
+  compactView = signal(false);
+  highlightEquipmentId = signal<string | null>(null);
 
-  // ── Lista de equipos pendientes ───────────────────────────────────────────
   pendingEquipments = signal<UnreportedEquipment[]>([]);
+  pendingTotal = signal(0);
+  page = signal(1);
   isLoadingEquipments = signal(false);
 
-  // ── Estado bulk: Record<equipmentId, DraftAvailability> ──────────────────
   drafts = signal<Record<string, DraftAvailability>>({});
+  meterSnapshots = signal<Record<string, EquipmentMeterSnapshot | null>>({});
+  expandedMeterIds = signal<Set<string>>(new Set());
 
-  // ── Envío ─────────────────────────────────────────────────────────────────
   isSubmitting = signal(false);
+  contracts = signal<Contract[]>([]);
 
-  /** Entradas listas = tienen al menos el status seleccionado. */
+  private searchSubject = new Subject<string>();
+
   readyToSubmit = computed(() =>
     Object.entries(this.drafts()).filter(
       ([, v]) => v.status !== null,
@@ -81,38 +106,103 @@ export class AvailabilityFormComponent implements OnInit {
 
   readyCount = computed(() => this.readyToSubmit().length);
 
-  /** Hay datos sin guardar si algún draft fue tocado. */
+  totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.pendingTotal() / PAGE_SIZE)),
+  );
+
   isDirty = computed(() =>
     Object.values(this.drafts()).some(
       (v) => v.status !== null || v.meterReading != null || !!v.comments.trim(),
     ),
   );
 
-  // ── CanDeactivate ─────────────────────────────────────────────────────────
+  contractOptions = computed(() => {
+    const all = this.contracts();
+    const role = this.authService.currentUser()?.role;
+    const allowed = this.authService.currentUser()?.allowedContracts ?? [];
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN' || allowed.includes('ALL')) {
+      return all;
+    }
+    return all.filter((c) => allowed.includes(c.id));
+  });
+
   leaveConfirmOpen = signal(false);
   private leaveResult$ = new Subject<boolean>();
 
   get maxDate(): string {
-    return this.todayIso();
+    return this.shiftService.todayIso();
   }
 
   ngOnInit(): void {
+    const qp = this.route.snapshot.queryParamMap;
+    this.reportDate.set(qp.get('date') ?? this.shiftService.todayIso());
+    this.shift.set((qp.get('shift') as ShiftType) ?? this.shiftService.currentShift());
+    this.highlightEquipmentId.set(qp.get('equipmentId'));
+
+    this.contractsService.findAll().subscribe({
+      next: (list) => this.contracts.set(list.filter((c) => c.isActive !== false)),
+    });
+
+    this.searchSubject
+      .pipe(debounceTime(300), distinctUntilChanged())
+      .subscribe((q) => {
+        this.searchQuery.set(q);
+        this.page.set(1);
+        this.loadPending();
+      });
+
+    this.loadPending();
+  }
+
+  onSearchDraftChange(v: string): void {
+    this.searchDraft.set(v);
+    this.searchSubject.next(v);
+  }
+
+  onFilterChange(): void {
+    this.page.set(1);
+    this.loadPending();
+  }
+
+  goToPage(p: number): void {
+    if (p < 1 || p > this.totalPages()) return;
+    this.page.set(p);
     this.loadPending();
   }
 
   loadPending(): void {
     this.isLoadingEquipments.set(true);
     this.availabilityService
-      .getUnreported({ date: this.reportDate(), shift: this.shift() })
+      .getUnreported({
+        date: this.reportDate(),
+        shift: this.shift(),
+        contractId: this.filterContractId() || undefined,
+        search: this.searchQuery() || undefined,
+        page: this.page(),
+        pageSize: PAGE_SIZE,
+      })
       .subscribe({
-        next: (list) => {
-          this.pendingEquipments.set(list);
-          const initial: Record<string, DraftAvailability> = {};
-          for (const eq of list) {
-            initial[eq.id] = { status: null, meterReading: null, comments: '' };
+        next: (res) => {
+          this.pendingEquipments.set(res.data);
+          this.pendingTotal.set(res.total);
+          const initial: Record<string, DraftAvailability> = { ...this.drafts() };
+          for (const eq of res.data) {
+            if (!initial[eq.id]) {
+              initial[eq.id] = { status: null, meterReading: null, comments: '' };
+            }
           }
           this.drafts.set(initial);
           this.isLoadingEquipments.set(false);
+
+          const highlight = this.highlightEquipmentId();
+          if (highlight && res.data.some((e) => e.id === highlight)) {
+            setTimeout(() => {
+              document.getElementById(`avail-eq-${highlight}`)?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+              });
+            }, 100);
+          }
         },
         error: () => {
           this.notify.error('No se pudieron cargar los equipos pendientes.');
@@ -121,14 +211,23 @@ export class AvailabilityFormComponent implements OnInit {
       });
   }
 
-  onFilterChange(): void {
-    this.loadPending();
+  openMeterPanel(equipmentId: string): void {
+    if (this.expandedMeterIds().has(equipmentId)) return;
+    const next = new Set(this.expandedMeterIds());
+    next.add(equipmentId);
+    this.meterSnapshotService.getSnapshot(equipmentId).subscribe({
+      next: (snap) =>
+        this.meterSnapshots.update((m) => ({ ...m, [equipmentId]: snap })),
+      error: () =>
+        this.meterSnapshots.update((m) => ({ ...m, [equipmentId]: null })),
+    });
+    this.expandedMeterIds.set(next);
   }
 
-  /**
-   * Actualiza un campo del borrador de un equipo de forma inmutable.
-   * Signal<Record<>> → nuevo objeto raíz → Angular detecta el cambio.
-   */
+  isMeterExpanded(equipmentId: string): boolean {
+    return this.expandedMeterIds().has(equipmentId);
+  }
+
   updateDraft(equipmentId: string, patch: Partial<DraftAvailability>): void {
     const current = this.drafts();
     this.drafts.set({
@@ -137,49 +236,43 @@ export class AvailabilityFormComponent implements OnInit {
     });
   }
 
-  /**
-   * Envía todos los reportes listos (status != null) en paralelo con forkJoin.
-   * Muestra un solo toast de resultado al finalizar.
-   */
   submitAll(): void {
     const ready = this.readyToSubmit();
     if (!ready.length || this.isSubmitting()) return;
 
-    const requests = ready.map(([equipmentId, draft]) =>
-      this.availabilityService.create({
-        equipmentId,
-        reportDate: this.reportDate(),
-        shift: this.shift(),
-        status: draft.status,
-        meterReading: draft.meterReading ?? undefined,
-        comments: draft.comments.trim() || undefined,
-      } as CreateAvailabilityPayload),
-    );
+    const rows = ready.map(([equipmentId, draft]) => ({
+      equipmentId,
+      status: draft.status,
+      meterReading: draft.meterReading ?? undefined,
+      comments: draft.comments.trim() || undefined,
+    }));
 
     this.isSubmitting.set(true);
-    forkJoin(requests).subscribe({
-      next: () => {
-        const n = ready.length;
-        this.notify.success(
-          `${n} equipo${n > 1 ? 's' : ''} reportado${n > 1 ? 's' : ''} correctamente.`,
-        );
-        this.isSubmitting.set(false);
-        this.loadPending();
-      },
-      error: (err) => {
-        const msg: string =
-          err?.error?.message ?? 'Error al registrar algunos reportes.';
-        this.notify.error(msg);
-        this.isSubmitting.set(false);
-      },
-    });
+    this.availabilityService
+      .batchCreate(this.reportDate(), this.shift(), rows)
+      .subscribe({
+        next: (result) => {
+          if (result.committed > 0) {
+            this.notify.success(
+              `${result.committed} equipo${result.committed > 1 ? 's' : ''} reportado${result.committed > 1 ? 's' : ''} correctamente.`,
+            );
+          }
+          if (result.errors.length > 0) {
+            this.notify.error(
+              `${result.errors.length} equipo(s) con error. Revisa e intenta de nuevo.`,
+            );
+          }
+          this.isSubmitting.set(false);
+          this.loadPending();
+        },
+        error: (err) => {
+          const msg: string =
+            err?.error?.message ?? 'Error al registrar algunos reportes.';
+          this.notify.error(msg);
+          this.isSubmitting.set(false);
+        },
+      });
   }
-
-  private todayIso(): string {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  // ── CanDeactivate ─────────────────────────────────────────────────────────
 
   confirmLeaveIfDirty(): Observable<boolean> | boolean {
     if (!this.isDirty()) return true;

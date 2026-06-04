@@ -1,4 +1,14 @@
-import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import { ShiftType } from '@prisma/client';
 
 /**
@@ -22,4 +32,22 @@ export class UnreportedQueryDto {
   @IsOptional()
   @IsUUID()
   contractId?: string;
+
+  /** Búsqueda por código interno, patente, marca o modelo. */
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
 }

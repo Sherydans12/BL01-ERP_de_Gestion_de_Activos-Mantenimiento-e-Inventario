@@ -1,5 +1,6 @@
 import {
   Component,
+  OnDestroy,
   OnInit,
   computed,
   inject,
@@ -7,82 +8,205 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
+import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
-import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { AuthService } from '../../../core/services/auth/auth.service';
+import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { DeviceService } from '../../../core/services/device/device.service';
 import {
   EquipmentAvailabilityService,
-  UnreportedEquipment,
   SHIFTS,
   SHIFT_LABELS,
+  STATUS_COLORS,
+  STATUS_LABELS,
   ShiftType,
+  ShiftBoardRow,
+  ShiftBoardSummary,
+  ShiftBoardTab,
+  OperationalStatus,
 } from '../../../core/services/equipment-availability/equipment-availability.service';
+import { EquipmentDetailModalComponent } from '../../fleet/equipment-detail-modal/equipment-detail-modal.component';
+import type { Contract } from '../../../core/models/types';
 import { O } from '../../../core/constants/operations-permissions';
+
+const PAGE_SIZE = 25;
+const AUTO_REFRESH_MS = 5 * 60_000;
+
+const STATUS_DOT: Record<OperationalStatus, string> = {
+  OPERATIONAL: 'bg-green-400',
+  STANDBY: 'bg-blue-400',
+  RESERVE_NO_OPERATOR: 'bg-yellow-400',
+  DOWN_FAILURE: 'bg-red-400',
+  DOWN_MAINTENANCE: 'bg-orange-400',
+};
+
+const TAB_OPTIONS: { id: ShiftBoardTab; label: string }[] = [
+  { id: 'ALL', label: 'Todos' },
+  { id: 'REPORTED', label: 'Reportados' },
+  { id: 'PENDING', label: 'Pendientes' },
+  { id: 'EXCLUDED', label: 'Fuera de servicio' },
+];
 
 @Component({
   selector: 'app-availability-monitor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, EquipmentDetailModalComponent],
   templateUrl: './availability-monitor.component.html',
 })
-export class AvailabilityMonitorComponent implements OnInit {
+export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
   protected readonly O = O;
   protected readonly SHIFTS = SHIFTS;
   protected readonly SHIFT_LABELS = SHIFT_LABELS;
+  protected readonly STATUS_LABELS = STATUS_LABELS;
+  protected readonly STATUS_COLORS = STATUS_COLORS;
+  protected readonly STATUS_DOT = STATUS_DOT;
+  protected readonly TAB_OPTIONS = TAB_OPTIONS;
+  protected readonly PAGE_SIZE = PAGE_SIZE;
 
   private availabilityService = inject(EquipmentAvailabilityService);
-  private fleetService = inject(FleetService);
+  private contractsService = inject(ContractsService);
+  private route = inject(ActivatedRoute);
   private notify = inject(NotificationService);
+  protected readonly authService = inject(AuthService);
   protected readonly deviceService = inject(DeviceService);
   protected readonly shiftService = inject(ShiftService);
 
-  // ── Filtros ───────────────────────────────────────────────────────────────
-  filterDate  = signal<string>(this.todayIso());
+  filterDate = signal<string>('');
   filterShift = signal<ShiftType>('DAY');
+  filterContractId = signal<string>('');
+  filterTab = signal<ShiftBoardTab>('ALL');
+  searchDraft = signal('');
+  searchQuery = signal('');
 
-  // ── Estado ────────────────────────────────────────────────────────────────
-  unreported  = signal<UnreportedEquipment[]>([]);
-  isLoading   = signal(false);
+  rows = signal<ShiftBoardRow[]>([]);
+  summary = signal<ShiftBoardSummary | null>(null);
+  totalRows = signal(0);
+  page = signal(1);
+  isLoading = signal(false);
+  isExporting = signal(false);
   lastQueried = signal<string | null>(null);
 
-  /** Total de equipos de la flota (desde FleetService). */
-  totalFleet = signal(0);
+  contracts = signal<Contract[]>([]);
+  showEquipmentDetail = signal(false);
+  detailEquipmentId = signal<string | null>(null);
 
-  /** Equipos sin reportar en el turno consultado. */
-  unreportedCount = computed(() => this.unreported().length);
+  private searchSubject = new Subject<string>();
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Derivado: reportados = total - pendientes (solo válido tras la consulta). */
-  reportedCount = computed(() =>
-    Math.max(0, this.totalFleet() - this.unreportedCount()),
+  totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.totalRows() / PAGE_SIZE)),
   );
 
-  /** Todos reportados: sin cargando, lista vacía, con consulta previa. */
-  allReported = computed(
-    () => !this.isLoading() && this.unreportedCount() === 0 && this.lastQueried() != null,
+  pageNumbers = computed(() =>
+    Array.from({ length: this.totalPages() }, (_, i) => i + 1),
   );
+
+  isAdminScope = computed(() => {
+    const role = this.authService.currentUser()?.role;
+    return role === 'ADMIN' || role === 'SUPER_ADMIN';
+  });
+
+  contractOptions = computed(() => {
+    const all = this.contracts();
+    const allowed = this.authService.currentUser()?.allowedContracts ?? [];
+    if (this.isAdminScope() || allowed.includes('ALL')) {
+      return all;
+    }
+    return all.filter((c) => allowed.includes(c.id));
+  });
 
   get maxDate(): string {
-    return this.todayIso();
+    return this.shiftService.todayIso();
   }
 
   ngOnInit(): void {
-    this.fleetService.getEquipments({ limit: 1 }).subscribe({
-      next: (res) => this.totalFleet.set(res.total),
-      error: () => { /* no crítico: el summary bar simplemente no muestra total */ },
+    const qp = this.route.snapshot.queryParamMap;
+    this.filterDate.set(qp.get('date') ?? this.shiftService.todayIso());
+    this.filterShift.set((qp.get('shift') as ShiftType) ?? this.shiftService.currentShift());
+    if (qp.get('tab') === 'PENDING') {
+      this.filterTab.set('PENDING');
+    }
+
+    this.contractsService.findAll().subscribe({
+      next: (list) => this.contracts.set(list.filter((c) => c.isActive !== false)),
+      error: () => { /* no bloquea */ },
     });
+
+    this.searchSubject
+      .pipe(debounceTime(300), distinctUntilChanged())
+      .subscribe((q) => {
+        this.searchQuery.set(q);
+        this.page.set(1);
+        this.query();
+      });
+
+    this.query();
+    this.refreshTimer = setInterval(() => this.query(false), AUTO_REFRESH_MS);
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+  }
+
+  onSearchDraftChange(v: string): void {
+    this.searchDraft.set(v);
+    this.searchSubject.next(v);
+  }
+
+  onDateChange(v: string): void {
+    this.filterDate.set(v);
+  }
+
+  onShiftChange(v: ShiftType): void {
+    this.filterShift.set(v);
+  }
+
+  onContractChange(v: string): void {
+    this.filterContractId.set(v);
+    this.page.set(1);
     this.query();
   }
 
-  query(): void {
-    this.isLoading.set(true);
+  setTab(tab: ShiftBoardTab): void {
+    this.filterTab.set(tab);
+    this.page.set(1);
+    this.query();
+  }
+
+  applyFilters(): void {
+    this.page.set(1);
+    this.query();
+  }
+
+  goToPage(p: number): void {
+    if (p < 1 || p > this.totalPages()) return;
+    this.page.set(p);
+    this.query(false);
+  }
+
+  query(showLoading = true): void {
+    if (showLoading) this.isLoading.set(true);
+
+    const contractId = this.filterContractId() || undefined;
+
     this.availabilityService
-      .getUnreported({ date: this.filterDate(), shift: this.filterShift() })
+      .getShiftBoard({
+        date: this.filterDate(),
+        shift: this.filterShift(),
+        contractId,
+        search: this.searchQuery() || undefined,
+        tab: this.filterTab(),
+        page: this.page(),
+        pageSize: PAGE_SIZE,
+      })
       .subscribe({
-        next: (data) => {
-          this.unreported.set(data);
+        next: (res) => {
+          this.rows.set(res.rows);
+          this.summary.set(res.summary);
+          this.totalRows.set(res.total);
           this.lastQueried.set(
             `${this.filterDate()} — ${SHIFT_LABELS[this.filterShift()]}`,
           );
@@ -95,15 +219,63 @@ export class AvailabilityMonitorComponent implements OnInit {
       });
   }
 
-  onDateChange(v: string): void {
-    this.filterDate.set(v);
+  exportTemplate(): void {
+    this.isExporting.set(true);
+    this.availabilityService
+      .exportTemplate(
+        this.filterDate(),
+        this.filterShift(),
+        this.filterContractId() || undefined,
+      )
+      .subscribe({
+        next: () => this.isExporting.set(false),
+        error: () => {
+          this.notify.error('No se pudo descargar la plantilla Excel.');
+          this.isExporting.set(false);
+        },
+      });
   }
 
-  onShiftChange(v: ShiftType): void {
-    this.filterShift.set(v);
+  openEquipmentDetail(equipmentId: string): void {
+    this.detailEquipmentId.set(equipmentId);
+    this.showEquipmentDetail.set(true);
   }
 
-  private todayIso(): string {
-    return new Date().toISOString().slice(0, 10);
+  reportLink(equipmentId: string): string[] {
+    return ['/app/operaciones/disponibilidad/nuevo'];
+  }
+
+  reportQueryParams(equipmentId: string): Record<string, string> {
+    return {
+      equipmentId,
+      date: this.filterDate(),
+      shift: this.filterShift(),
+    };
+  }
+
+  formatReportedAt(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '—';
+    }
+  }
+
+  contractLabel(contractId: string | null): string {
+    if (!contractId) return 'Sin contrato';
+    const c = this.contracts().find((x) => x.id === contractId);
+    return c ? `${c.code}` : contractId.slice(0, 8);
+  }
+
+  statusBreakdownEntries(summary: ShiftBoardSummary): Array<{ status: OperationalStatus; count: number }> {
+    return (Object.keys(summary.byStatus) as OperationalStatus[])
+      .map((status) => ({ status, count: summary.byStatus[status] }))
+      .filter((e) => e.count > 0);
   }
 }

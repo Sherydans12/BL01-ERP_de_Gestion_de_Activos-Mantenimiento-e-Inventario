@@ -192,6 +192,12 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ICONS.chartBar,
         permissions: O.AVAILABILITY_MONITOR,
       },
+      {
+        label: 'Historial Disponibilidad',
+        route: '/app/operaciones/disponibilidad/historial',
+        icon: ICONS.clipboard,
+        permissions: O.AVAILABILITY_READ,
+      },
     ],
   },
   {

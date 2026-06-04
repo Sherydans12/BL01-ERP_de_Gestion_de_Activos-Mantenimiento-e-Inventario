@@ -61,6 +61,7 @@
       </a>
       <a
         routerLink="/app/operaciones/disponibilidad/monitor"
+        [queryParams]="{ tab: 'PENDING' }"
         class="dash-kpi-tile dash-kpi-tile--link"
       >
         <span class="dash-kpi-tile__label">Sin reporte de turno</span>

@@ -13,7 +13,7 @@
 | **Flota / Equipos** | ✅ completo | ✅ Centro de Mando | — | ✅ OT lista en modal | ✅ Costos en modal |
 | **OT (Work Orders)** | ✅ completo | ✅ completo | ✅ `isOperational` + horómetro | — | ✅ consumo en cierre + **`app-fluid-quantity-row`** |
 | **M1 · Lubricantes** | ✅ completo | ✅ completo | ✅ horómetro + banner referencia | — | ✅ kardex `LUBE_DISPATCH` vía **`performTransactionCore`** + UI stock |
-| **M2 · Disponibilidad** | ✅ completo | ✅ completo | ✅ lee `isOperational` | — | — |
+| **M2 · Disponibilidad** | ✅ completo | ✅ tablero turno + historial | ✅ lee `isOperational` | — | — |
 | **M3 · Fallas** | ✅ completo | ✅ completo + `invalidateCache` | ✅ `isOperational` + OT auto | ✅ OT no programada auto | — |
 | **Inventario / Kardex** | ✅ completo | ✅ completo | parcial (solo en modal) | ✅ `WORK_ORDER_ISSUE` | — |
 | **Compras P2P** | ✅ completo | ✅ completo | parcial (costos en modal) | ✅ `AssetCostRecord` en cierre | ✅ recepción → stock |
@@ -42,6 +42,10 @@ El dashboard actual no cruza módulos. Objetivo: una pantalla con "estado del si
 - **Alertas de abastecimiento** (`getSupplyAlerts` del servicio de inventario): artículos bajo stock mínimo que podrían impactar el mantenimiento próximo.
 - **Próximas PMs**: equipos cuyo `currentMeter >= nextServiceAt - margen` (ya calculado en el modal, reutilizar lógica).
 - **Última disponibilidad del turno activo**: badge con "X equipos sin reportar" en el turno actual (usa `GET /equipment-availability/unreported`).
+
+**M2 · Tablero del turno + carga escalable — HECHO (2026-06-04)**
+
+> Monitor de Flota reescrito: `GET /shift-board` (KPIs, tabs Reportados/Pendientes/Excluidos, paginación, búsqueda, contrato, auto-refresh 5 min, export Excel, modal ficha). Formulario de disponibilidad paginado con vista compacta, batch create y banner de horómetro. Nueva ruta **Historial** (`/disponibilidad/historial`). Plan: [`m2-disponibilidad-plan-implementacion.md`](m2-disponibilidad-plan-implementacion.md).
 
 **Archivos clave:**
 - `frontend/src/app/features/dashboard/` (ruta `/app/dashboard`)
@@ -152,7 +156,7 @@ El sistema se considera integrado como una unidad cuando:
 - [ ] Abrir la app y en **< 5 segundos** el usuario puede ver qué equipos están detenidos, por qué y cuándo fue la última intervención.
 - [ ] Desde el modal de cualquier equipo, el usuario puede navegar a su última OT, su última falla, su último parte de turno y su último lubricante — sin salir del contexto.
 - [ ] El planificador crea una OT y ya sabe cuál es el stock disponible de los repuestos que necesita.
-- [ ] El supervisor reporta disponibilidad y el dashboard se actualiza sin recargar la página.
+- [ ] El supervisor reporta disponibilidad y el dashboard se actualiza sin recargar la página. _(Parcial: monitor auto-refresh 5 min; dashboard KPI unreported al cargar.)_
 
 ---
 

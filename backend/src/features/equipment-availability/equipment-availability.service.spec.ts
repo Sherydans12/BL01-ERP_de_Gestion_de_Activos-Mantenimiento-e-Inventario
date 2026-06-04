@@ -296,10 +296,11 @@ describe('EquipmentAvailabilityService — findUnreported', () => {
       shift: ShiftType.DAY,
     });
 
-    expect(result).toHaveLength(2);
-    expect(result.map((e) => e.id)).not.toContain(equipmentId);
-    expect(result.map((e) => e.id)).toContain(eq2Id);
-    expect(result.map((e) => e.id)).toContain(eq3Id);
+    expect(result.data).toHaveLength(2);
+    expect(result.total).toBe(2);
+    expect(result.data.map((e) => e.id)).not.toContain(equipmentId);
+    expect(result.data.map((e) => e.id)).toContain(eq2Id);
+    expect(result.data.map((e) => e.id)).toContain(eq3Id);
   });
 
   it('retorna lista vacía cuando todos los equipos han sido reportados', async () => {
@@ -313,7 +314,8 @@ describe('EquipmentAvailabilityService — findUnreported', () => {
       shift: ShiftType.DAY,
     });
 
-    expect(result).toHaveLength(0);
+    expect(result.data).toHaveLength(0);
+    expect(result.total).toBe(0);
   });
 
   it('retorna toda la flota cuando no hay ningún reporte en el turno', async () => {
@@ -325,7 +327,8 @@ describe('EquipmentAvailabilityService — findUnreported', () => {
       shift: ShiftType.NIGHT,
     });
 
-    expect(result).toHaveLength(3);
+    expect(result.data).toHaveLength(3);
+    expect(result.total).toBe(3);
   });
 
   it('aplica el filtro contractId explícito en la query de equipos', async () => {
@@ -442,6 +445,187 @@ describe('EquipmentAvailabilityService — findAll', () => {
         where: expect.objectContaining({ tenantId, shift: ShiftType.NIGHT }),
       }),
     );
+  });
+
+  it('supervisor: filtra historial por allowedContracts vía relación equipment', async () => {
+    prisma.equipmentAvailability.findMany.mockResolvedValue([] as never);
+    prisma.equipmentAvailability.count.mockResolvedValue(0);
+
+    await service.findAll(supervisorUser);
+
+    expect(prisma.equipmentAvailability.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId,
+          equipment: expect.objectContaining({
+            contractId: { in: [contractId] },
+          }),
+        }),
+      }),
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: getShiftBoard
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EquipmentAvailabilityService — getShiftBoard', () => {
+  let service: EquipmentAvailabilityService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const fleetStub = [
+    {
+      id: equipmentId,
+      internalId: 'EQ-001',
+      brand: 'CAT',
+      model: '330',
+      plate: 'A-001',
+      contractId,
+      isOperational: true,
+    },
+    {
+      id: eq2Id,
+      internalId: 'EQ-002',
+      brand: 'Komatsu',
+      model: 'PC200',
+      plate: 'A-002',
+      contractId,
+      isOperational: true,
+    },
+    {
+      id: eq3Id,
+      internalId: 'EQ-003',
+      brand: 'Volvo',
+      model: 'EC300',
+      plate: 'A-003',
+      contractId,
+      isOperational: false,
+    },
+  ];
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EquipmentAvailabilityService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+    service = module.get(EquipmentAvailabilityService);
+  });
+
+  it('retorna summary coherente y filas REPORTED/PENDING/EXCLUDED', async () => {
+    prisma.equipment.findMany.mockResolvedValue(fleetStub as never);
+    prisma.equipmentAvailability.findMany.mockResolvedValue([
+      {
+        id: availabilityId,
+        equipmentId,
+        status: OperationalStatus.OPERATIONAL,
+        meterReading: 1200,
+        comments: null,
+        createdAt: new Date('2026-06-02T10:00:00Z'),
+        reportedBy: { id: userId, name: 'Supervisor' },
+        equipment: fleetStub[0],
+      },
+    ] as never);
+
+    const result = await service.getShiftBoard(adminUser, {
+      date: '2026-06-02',
+      shift: ShiftType.DAY,
+      tab: 'ALL',
+    });
+
+    expect(result.summary).toMatchObject({
+      totalFleet: 2,
+      reportedCount: 1,
+      unreportedCount: 1,
+      excludedDownCount: 1,
+      completionPct: 50,
+    });
+    expect(result.rows).toHaveLength(3);
+    expect(result.rows.find((r) => r.equipmentId === equipmentId)?.rowKind).toBe(
+      'REPORTED',
+    );
+    expect(result.rows.find((r) => r.equipmentId === eq2Id)?.rowKind).toBe(
+      'PENDING',
+    );
+    expect(result.rows.find((r) => r.equipmentId === eq3Id)?.rowKind).toBe(
+      'EXCLUDED',
+    );
+  });
+
+  it('filtra tab REPORTED antes de paginar', async () => {
+    prisma.equipment.findMany.mockResolvedValue(fleetStub as never);
+    prisma.equipmentAvailability.findMany.mockResolvedValue([
+      {
+        id: availabilityId,
+        equipmentId,
+        status: OperationalStatus.STANDBY,
+        meterReading: null,
+        comments: null,
+        createdAt: new Date(),
+        reportedBy: { id: userId, name: 'Supervisor' },
+        equipment: fleetStub[0],
+      },
+    ] as never);
+
+    const result = await service.getShiftBoard(adminUser, {
+      date: '2026-06-02',
+      shift: ShiftType.DAY,
+      tab: 'REPORTED',
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.rows.every((r) => r.rowKind === 'REPORTED')).toBe(true);
+    expect(result.summary.byStatus.STANDBY).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: batchCreate
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EquipmentAvailabilityService — batchCreate', () => {
+  let service: EquipmentAvailabilityService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EquipmentAvailabilityService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+    service = module.get(EquipmentAvailabilityService);
+  });
+
+  it('persiste filas válidas y acumula errores por fila fallida', async () => {
+    tx.equipment.findFirst
+      .mockResolvedValueOnce(validEquipment as never)
+      .mockRejectedValueOnce(new NotFoundException('Equipo no encontrado'));
+    tx.equipmentAvailability.upsert.mockResolvedValue(createdRecord as never);
+
+    const result = await service.batchCreate(
+      {
+        reportDate: '2026-06-02',
+        shift: ShiftType.DAY,
+        rows: [
+          { equipmentId, status: OperationalStatus.OPERATIONAL },
+          { equipmentId: eq2Id, status: OperationalStatus.DOWN_FAILURE },
+        ],
+      },
+      adminUser,
+    );
+
+    expect(result.committed).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].equipmentId).toBe(eq2Id);
   });
 });
 

@@ -8,6 +8,8 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 **Integración del sistema completo (roadmap):** [sistema-integrado-roadmap.md](sistema-integrado-roadmap.md) — plan para que todos los módulos (Flota, OT, M1/M2/M3, Inventario, Compras) se vean y operen como un único sistema; sprints priorizados, criterio de "completitud" y guía de trabajo entre módulos.
 
+**M2 Disponibilidad — tablero del turno (implementación):** [m2-disponibilidad-plan-implementacion.md](m2-disponibilidad-plan-implementacion.md) — monitor, formulario paginado, historial, APIs `shift-board` / `batch`.
+
 **Compras PBAC — pruebas API/E2E:** [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md) (seed 13 personas, `simulate:compras-pbac`, Playwright `e2e/`).  
 **Inventario PBAC — pruebas API/E2E:** [inventario-pbac-pruebas-api-e2e.md](inventario-pbac-pruebas-api-e2e.md) (seed 8 personas, `simulate:inventario-pbac`, Playwright `e2e/tests/inventario/`).
 

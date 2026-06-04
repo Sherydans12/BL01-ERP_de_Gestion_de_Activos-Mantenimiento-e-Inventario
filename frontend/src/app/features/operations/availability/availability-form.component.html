@@ -1,215 +1,184 @@
 <div class="min-h-screen bg-dark p-4 lg:p-6 pb-32">
 
-  <!-- Encabezado -->
   <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
     <div>
-      <h1 class="text-2xl font-bold text-main">Carga Masiva de Disponibilidad</h1>
-      <p class="text-muted text-sm mt-1">Reporta el estado operativo de toda la flota para el turno seleccionado.</p>
+      <h1 class="text-2xl font-bold text-main">Reporte de Disponibilidad</h1>
+      <p class="text-muted text-sm mt-1">Reporta el estado operativo de la flota para el turno seleccionado.</p>
     </div>
-    <!-- Acceso rápido a importación Excel -->
-    <a
-      routerLink="/app/operaciones/disponibilidad/importar"
-      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold
-             border border-primary/40 text-primary hover:bg-primary/10 hover:border-primary
-             transition-all flex-shrink-0 min-h-[40px]"
-      title="Llenar el turno desde un archivo Excel descargado previamente"
-    >
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-      </svg>
-      Importar desde Excel
-    </a>
+    <div class="flex flex-wrap gap-2">
+      <a routerLink="/app/operaciones/disponibilidad/monitor"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-border text-muted hover:text-main min-h-[40px]">
+        Monitor de Flota
+      </a>
+      <a routerLink="/app/operaciones/disponibilidad/importar"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-primary/40 text-primary hover:bg-primary/10 min-h-[40px]">
+        Importar Excel
+      </a>
+    </div>
   </div>
 
-  <!-- Panel de filtros: Fecha + Turno -->
-  <div class="bg-surface border border-border rounded-2xl p-5 mb-6">
-    <div class="grid grid-cols-1 gap-4"
-         [class.sm:grid-cols-2]="shiftService.hasNightShift()">
-
-      <!-- Fecha -->
+  <!-- Filtros -->
+  <div class="bg-surface border border-border rounded-2xl p-5 mb-6 space-y-4">
+    <div class="grid grid-cols-1 gap-4" [class.sm:grid-cols-2]="shiftService.hasNightShift()" [class.lg:grid-cols-4]="contractOptions().length > 1">
       <div>
-        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">
-          Fecha <span class="text-red-400">*</span>
-        </label>
-        <input
-          type="date"
-          [max]="maxDate"
-          [ngModel]="reportDate()"
-          (ngModelChange)="reportDate.set($event); onFilterChange()"
-          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm
-                 focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-        />
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Fecha <span class="text-red-400">*</span></label>
+        <input type="date" [max]="maxDate" [ngModel]="reportDate()" (ngModelChange)="reportDate.set($event); onFilterChange()"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]" />
       </div>
-
-      <!-- Turno: visible solo si el tenant tiene turno noche -->
       @if (shiftService.hasNightShift()) {
         <div>
-          <label class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">
-            Turno <span class="text-red-400">*</span>
-          </label>
-          <div class="flex gap-3">
+          <label class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Turno</label>
+          <div class="flex gap-2">
             @for (s of SHIFTS; track s) {
-              <label
-                class="flex items-center justify-center gap-2 cursor-pointer text-sm px-4 min-h-[48px] rounded-lg border transition-all flex-1 select-none"
-                [ngClass]="shift() === s
-                  ? {'border-primary': true, 'text-primary': true, 'bg-primary/10': true}
-                  : {'border-border': true, 'text-muted': true}"
-              >
-                <input
-                  type="radio"
-                  [value]="s"
-                  [checked]="shift() === s"
-                  (change)="shift.set(s); onFilterChange()"
-                  class="sr-only"
-                />
-                @if (s === 'DAY') {
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 1.78a1 1 0 011.414 1.414l-.707.707a1 1 0 01-1.414-1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM4.78 14.22a1 1 0 011.414 1.414l-.707.707a1 1 0 01-1.414-1.414l.707-.707zM10 15a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM3.636 5.636a1 1 0 011.414 0l.707.707a1 1 0 01-1.414 1.414l-.707-.707a1 1 0 010-1.414zM3 10a1 1 0 011-1h1a1 1 0 110 2H4a1 1 0 01-1-1zM10 6a4 4 0 100 8 4 4 0 000-8z" clip-rule="evenodd"/></svg>
-                } @else {
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
-                }
+              <label class="flex items-center justify-center gap-2 cursor-pointer text-sm px-3 min-h-[44px] rounded-lg border transition-all flex-1"
+                [ngClass]="shift() === s ? {'border-primary': true, 'text-primary': true, 'bg-primary/10': true} : {'border-border': true, 'text-muted': true}">
+                <input type="radio" [value]="s" [checked]="shift() === s" (change)="shift.set(s); onFilterChange()" class="sr-only" />
                 {{ SHIFT_LABELS[s] }}
               </label>
             }
           </div>
         </div>
       }
-    </div>
-
-    <!-- Turno único: chip informativo cuando no hay turno noche -->
-    @if (!shiftService.hasNightShift()) {
-      <div class="mt-3 flex items-center gap-2 text-xs text-muted">
-        <svg class="w-3.5 h-3.5 text-warning flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 1.78a1 1 0 011.414 1.414l-.707.707a1 1 0 01-1.414-1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM3 10a1 1 0 011-1h1a1 1 0 110 2H4a1 1 0 01-1-1zM10 6a4 4 0 100 8 4 4 0 000-8z" clip-rule="evenodd"/>
-        </svg>
-        Turno Día ({{ shiftService.shiftHours() }}) — turno noche desactivado para esta organización
+      @if (contractOptions().length > 1) {
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Contrato</label>
+          <select [ngModel]="filterContractId()" (ngModelChange)="filterContractId.set($event); onFilterChange()"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]">
+            <option value="">Todos</option>
+            @for (c of contractOptions(); track c.id) {
+              <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Buscar equipo</label>
+        <input type="search" placeholder="Código, patente…" [ngModel]="searchDraft()" (ngModelChange)="onSearchDraftChange($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]" />
       </div>
-    }
+    </div>
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-xs text-muted">
+        @if (!isLoadingEquipments()) {
+          {{ pendingTotal() }} pendiente{{ pendingTotal() !== 1 ? 's' : '' }} en el turno
+          @if (readyCount() > 0) { · <span class="text-main font-semibold">{{ readyCount() }}</span> listos para enviar }
+        }
+      </p>
+      <label class="inline-flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+        <input type="checkbox" [ngModel]="compactView()" (ngModelChange)="compactView.set($event)" class="rounded border-border" />
+        Vista compacta (tabla)
+      </label>
+    </div>
   </div>
 
-  <!-- Estado: cargando (skeleton) -->
   @if (isLoadingEquipments()) {
     <div class="space-y-3 animate-pulse">
       @for (i of [1, 2, 3]; track i) {
-        <div class="bg-surface border border-border rounded-xl p-5 space-y-3">
-          <div class="h-4 w-36 bg-border rounded"></div>
-          <div class="flex gap-2">
-            @for (j of [1, 2, 3, 4, 5]; track j) {
-              <div class="h-12 flex-1 bg-border rounded-lg"></div>
-            }
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div class="h-9 bg-border rounded-lg"></div>
-            <div class="h-9 bg-border rounded-lg"></div>
-          </div>
-        </div>
+        <div class="bg-surface border border-border rounded-xl p-5 h-32 bg-border/30"></div>
       }
     </div>
-  }
-
-  <!-- Estado: ¡Todos reportados! -->
-  @else if (pendingEquipments().length === 0) {
+  } @else if (pendingTotal() === 0) {
     <div class="bg-surface border border-green-500/30 rounded-2xl p-10 text-center">
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-4">
-        <svg class="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-      </div>
       <h2 class="text-xl font-bold text-green-400 mb-1">¡Flota al 100%!</h2>
       <p class="text-muted text-sm">Todos los equipos del turno han sido reportados.</p>
+      <a routerLink="/app/operaciones/disponibilidad/monitor" class="inline-block mt-4 text-sm text-primary hover:underline">Ver monitor del turno</a>
     </div>
-  }
-
-  <!-- Bulk Grid: equipos pendientes -->
-  @else {
+  } @else if (compactView()) {
+    <div class="bg-surface border border-border rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border bg-dark/40">
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Equipo</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Estado</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Horómetro</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Comentarios</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            @for (eq of pendingEquipments(); track eq.id) {
+              <tr [id]="'avail-eq-' + eq.id" class="hover:bg-dark/30"
+                [class.ring-2]="highlightEquipmentId() === eq.id"
+                [class.ring-primary]="highlightEquipmentId() === eq.id">
+                <td class="px-4 py-3">
+                  <span class="font-mono text-xs text-muted block">{{ eq.internalId }}</span>
+                  <span class="text-main">{{ eq.brand }} {{ eq.model }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <select [ngModel]="drafts()[eq.id]?.status" (ngModelChange)="updateDraft(eq.id, { status: $event })"
+                    class="w-full min-w-[140px] px-2 py-1.5 bg-dark border border-border rounded-lg text-xs text-main">
+                    <option [ngValue]="null">— Seleccionar —</option>
+                    @for (s of OPERATIONAL_STATUSES; track s) {
+                      <option [ngValue]="s">{{ STATUS_LABELS[s] }}</option>
+                    }
+                  </select>
+                </td>
+                <td class="px-4 py-3">
+                  <input type="number" min="1" step="1" placeholder="Hrs"
+                    [ngModel]="drafts()[eq.id]?.meterReading"
+                    (ngModelChange)="updateDraft(eq.id, { meterReading: $event ? +$event : null })"
+                    (focus)="openMeterPanel(eq.id)"
+                    class="w-24 px-2 py-1.5 bg-dark border border-border rounded-lg text-xs text-main" />
+                </td>
+                <td class="px-4 py-3">
+                  <input type="text" maxlength="200" placeholder="Observaciones…"
+                    [ngModel]="drafts()[eq.id]?.comments" (ngModelChange)="updateDraft(eq.id, { comments: $event })"
+                    class="w-full min-w-[120px] px-2 py-1.5 bg-dark border border-border rounded-lg text-xs text-main" />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  } @else {
     <div class="space-y-4">
       @for (eq of pendingEquipments(); track eq.id) {
-        <div
+        <div [id]="'avail-eq-' + eq.id"
           class="bg-surface rounded-xl p-4 lg:p-5 space-y-4 border transition-colors"
           [ngClass]="drafts()[eq.id]?.status !== null ? {'border-primary/40': true} : {'border-border': true}"
-        >
-
-          <!-- Cabecera: ID + nombre + placa + indicador de completitud -->
+          [class.ring-2]="highlightEquipmentId() === eq.id"
+          [class.ring-primary]="highlightEquipmentId() === eq.id">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <span class="font-mono text-xs text-muted block">{{ eq.internalId }}</span>
-              <h3 class="text-sm font-semibold text-main leading-snug truncate">
-                {{ eq.brand }} {{ eq.model }}
-              </h3>
+              <h3 class="text-sm font-semibold text-main">{{ eq.brand }} {{ eq.model }}</h3>
             </div>
-            <div class="flex items-center gap-2 flex-shrink-0 pt-0.5">
-              @if (eq.plate) {
-                <span class="px-2 py-0.5 rounded text-xs bg-dark text-muted border border-border font-mono">
-                  {{ eq.plate }}
-                </span>
-              }
-              @if (drafts()[eq.id]?.status !== null) {
-                <span
-                  class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  [ngClass]="STATUS_DOT[drafts()[eq.id]!.status!]"
-                ></span>
-              }
-            </div>
+            @if (eq.plate) {
+              <span class="px-2 py-0.5 rounded text-xs bg-dark text-muted border border-border font-mono">{{ eq.plate }}</span>
+            }
           </div>
 
-          <!-- Radio Cards de estado operativo -->
-          <div>
-            <p class="text-xs font-medium text-muted mb-2 uppercase tracking-wide">
-              Estado Operativo <span class="text-red-400">*</span>
-            </p>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              @for (s of OPERATIONAL_STATUSES; track s) {
-                <label
-                  class="flex items-center gap-2 px-3 min-h-[48px] rounded-lg border cursor-pointer transition-all select-none"
-                  [ngClass]="drafts()[eq.id]?.status === s
-                    ? {'border-primary': true, 'bg-primary/10': true, 'text-primary': true}
-                    : {'border-border': true, 'text-muted': true}"
-                >
-                  <input
-                    type="radio"
-                    [name]="'status-' + eq.id"
-                    [value]="s"
-                    [checked]="drafts()[eq.id]?.status === s"
-                    (change)="updateDraft(eq.id, { status: s })"
-                    class="sr-only"
-                  />
-                  <span class="w-2 h-2 rounded-full flex-shrink-0" [ngClass]="STATUS_DOT[s]"></span>
-                  <span class="text-xs leading-tight">{{ STATUS_LABELS[s] }}</span>
-                </label>
-              }
-            </div>
+          @if (isMeterExpanded(eq.id)) {
+            <app-meter-reference-banner [snapshot]="meterSnapshots()[eq.id] ?? null" />
+          }
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            @for (s of OPERATIONAL_STATUSES; track s) {
+              <label class="flex items-center gap-2 px-3 min-h-[44px] rounded-lg border cursor-pointer transition-all select-none text-xs"
+                [ngClass]="drafts()[eq.id]?.status === s ? {'border-primary': true, 'bg-primary/10': true, 'text-primary': true} : {'border-border': true, 'text-muted': true}">
+                <input type="radio" [name]="'status-' + eq.id" [value]="s" [checked]="drafts()[eq.id]?.status === s"
+                  (change)="updateDraft(eq.id, { status: s })" class="sr-only" />
+                <span class="w-2 h-2 rounded-full" [ngClass]="STATUS_DOT[s]"></span>
+                {{ STATUS_LABELS[s] }}
+              </label>
+            }
           </div>
 
-          <!-- Horómetro + Comentarios -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-medium text-muted mb-1">
-                Horómetro <span class="text-muted text-xs">(opcional)</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                placeholder="Ej: 12450"
+              <label class="block text-xs font-medium text-muted mb-1">Horómetro (opcional)</label>
+              <input type="number" min="1" step="1" placeholder="Ej: 12450"
                 [ngModel]="drafts()[eq.id]?.meterReading"
                 (ngModelChange)="updateDraft(eq.id, { meterReading: $event ? +$event : null })"
-                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm
-                       focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-              />
+                (focus)="openMeterPanel(eq.id)"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm min-h-[44px]" />
             </div>
             <div>
-              <label class="block text-xs font-medium text-muted mb-1">
-                Comentarios <span class="text-muted text-xs">(opcional)</span>
-              </label>
-              <input
-                type="text"
-                maxlength="200"
-                placeholder="Observaciones del turno…"
-                [ngModel]="drafts()[eq.id]?.comments"
-                (ngModelChange)="updateDraft(eq.id, { comments: $event })"
-                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm
-                       focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
-              />
+              <label class="block text-xs font-medium text-muted mb-1">Comentarios (opcional)</label>
+              <input type="text" maxlength="200" placeholder="Observaciones del turno…"
+                [ngModel]="drafts()[eq.id]?.comments" (ngModelChange)="updateDraft(eq.id, { comments: $event })"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm min-h-[44px]" />
             </div>
           </div>
         </div>
@@ -217,68 +186,39 @@
     </div>
   }
 
+  @if (totalPages() > 1 && !isLoadingEquipments()) {
+    <div class="flex items-center justify-center gap-3 mt-6">
+      <button type="button" (click)="goToPage(page() - 1)" [disabled]="page() <= 1"
+        class="px-4 py-2 rounded-lg text-sm border border-border text-muted disabled:opacity-40">Anterior</button>
+      <span class="text-sm text-muted">Página {{ page() }} de {{ totalPages() }}</span>
+      <button type="button" (click)="goToPage(page() + 1)" [disabled]="page() >= totalPages()"
+        class="px-4 py-2 rounded-lg text-sm border border-border text-muted disabled:opacity-40">Siguiente</button>
+    </div>
+  }
 </div>
 
-<!-- Barra de envío anclada al fondo -->
-@if (!isLoadingEquipments() && pendingEquipments().length > 0) {
+@if (!isLoadingEquipments() && pendingTotal() > 0) {
   <div class="fixed bottom-0 left-0 right-0 z-30 bg-dark border-t border-border px-4 py-3 lg:px-8">
     <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
-
-      <!-- Contador de progreso -->
       <p class="text-sm text-muted hidden sm:block">
         @if (readyCount() > 0) {
-          <span class="text-main font-semibold">{{ readyCount() }}</span>
-          de {{ pendingEquipments().length }} equipo{{ pendingEquipments().length > 1 ? 's' : '' }} listos
+          <span class="text-main font-semibold">{{ readyCount() }}</span> listos · {{ pendingTotal() }} pendientes total
         } @else {
           Selecciona el estado de al menos un equipo
         }
       </p>
-
-      <div class="flex items-center gap-3 ml-auto sm:ml-0">
-        <a
-          routerLink="/app/operaciones/disponibilidad/monitor"
-          class="text-sm text-muted hover:text-main transition-colors px-3 py-2 min-h-[48px] flex items-center"
-        >
-          Cancelar
-        </a>
-
-        <button
-          type="button"
-          (click)="submitAll()"
-          [disabled]="readyCount() === 0 || isSubmitting()"
-          class="inline-flex items-center gap-2 px-6 min-h-[48px] rounded-xl text-sm font-bold
-                 bg-primary text-white hover:opacity-90 shadow-lg shadow-primary/20
-                 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          @if (isSubmitting()) {
-            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            Enviando…
-          } @else {
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-            </svg>
-            @if (readyCount() > 0) {
-              Enviar {{ readyCount() }} Reporte{{ readyCount() > 1 ? 's' : '' }}
-            } @else {
-              Enviar Reportes
-            }
-          }
+      <div class="flex items-center gap-3 ml-auto">
+        <a routerLink="/app/operaciones/disponibilidad/monitor" class="text-sm text-muted hover:text-main px-3 py-2 min-h-[48px] flex items-center">Cancelar</a>
+        <button type="button" (click)="submitAll()" [disabled]="readyCount() === 0 || isSubmitting()"
+          class="inline-flex items-center gap-2 px-6 min-h-[48px] rounded-xl text-sm font-bold bg-primary text-white hover:opacity-90 disabled:opacity-40">
+          @if (isSubmitting()) { Enviando… } @else { Enviar {{ readyCount() > 0 ? readyCount() : '' }} Reporte{{ readyCount() > 1 ? 's' : '' }} }
         </button>
       </div>
     </div>
   </div>
 }
 
-<!-- Modal de confirmación al salir con datos -->
-<app-confirm-modal
-  [isOpen]="leaveConfirmOpen()"
-  title="¿Salir sin guardar?"
+<app-confirm-modal [isOpen]="leaveConfirmOpen()" title="¿Salir sin guardar?"
   message="Tienes datos ingresados que se perderán si sales ahora."
-  confirmText="Salir de todas formas"
-  cancelText="Quedarme aquí"
-  (confirm)="onLeaveConfirmed()"
-  (cancel)="onLeaveCancelled()"
-/>
+  confirmText="Salir de todas formas" cancelText="Quedarme aquí"
+  (confirm)="onLeaveConfirmed()" (cancel)="onLeaveCancelled()" />

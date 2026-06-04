@@ -212,6 +212,15 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'operaciones/disponibilidad/historial',
+        canActivate: [permissionGuard],
+        data: { permissions: O.AVAILABILITY_READ, pageTitle: 'Historial de Disponibilidad' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-history.component').then(
+            (m) => m.AvailabilityHistoryComponent,
+          ),
+      },
+      {
         path: 'operaciones/disponibilidad/importar',
         canActivate: [permissionGuard],
         data: { permissions: O.AVAILABILITY_CREATE, pageTitle: 'Importar Disponibilidad (Excel)' },

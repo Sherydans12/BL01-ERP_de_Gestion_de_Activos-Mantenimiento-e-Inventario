@@ -105,6 +105,74 @@ export interface UnreportedEquipment {
   model: string;
   plate: string | null;
   contractId: string | null;
+  type?: string;
+  currentMeter?: number;
+  meterType?: string;
+}
+
+export interface PaginatedUnreportedResponse {
+  data: UnreportedEquipment[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type ShiftBoardTab = 'ALL' | 'REPORTED' | 'PENDING' | 'EXCLUDED';
+export type ShiftBoardRowKind = 'REPORTED' | 'PENDING' | 'EXCLUDED';
+
+export interface ShiftBoardSummary {
+  totalFleet: number;
+  reportedCount: number;
+  unreportedCount: number;
+  excludedDownCount: number;
+  completionPct: number;
+  byStatus: Record<OperationalStatus, number>;
+  byContract: Array<{
+    contractId: string | null;
+    totalFleet: number;
+    reportedCount: number;
+    unreportedCount: number;
+  }>;
+}
+
+export interface ShiftBoardRow {
+  equipmentId: string;
+  internalId: string;
+  brand: string;
+  model: string;
+  plate: string | null;
+  contractId: string | null;
+  isOperational: boolean;
+  rowKind: ShiftBoardRowKind;
+  availabilityId?: string;
+  status?: OperationalStatus;
+  meterReading?: number | null;
+  comments?: string | null;
+  isAvailable?: boolean;
+  reportedBy?: { id: string; name: string } | null;
+  reportedAt?: string | null;
+}
+
+export interface ShiftBoardResponse {
+  date: string;
+  shift: ShiftType;
+  summary: ShiftBoardSummary;
+  rows: ShiftBoardRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface BatchAvailabilityRow {
+  equipmentId: string;
+  status: OperationalStatus;
+  meterReading?: number;
+  comments?: string;
+}
+
+export interface BatchCreateResult {
+  committed: number;
+  errors: Array<{ equipmentId: string; reason: string }>;
 }
 
 // ── Parámetros de consulta ─────────────────────────────────────────────────
@@ -116,12 +184,27 @@ export interface AvailabilityListParams {
   shift?: ShiftType;
   dateFrom?: string;
   dateTo?: string;
+  contractId?: string;
+  search?: string;
 }
 
 export interface UnreportedParams {
   date: string;
   shift: ShiftType;
   contractId?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ShiftBoardParams {
+  date: string;
+  shift: ShiftType;
+  contractId?: string;
+  search?: string;
+  tab?: ShiftBoardTab;
+  page?: number;
+  pageSize?: number;
 }
 
 // ── Excel Import / Export ─────────────────────────────────────────────────
@@ -203,6 +286,8 @@ export class EquipmentAvailabilityService {
     if (params.shift)               p = p.set('shift',       params.shift);
     if (params.dateFrom?.trim())    p = p.set('dateFrom',    params.dateFrom.trim());
     if (params.dateTo?.trim())      p = p.set('dateTo',      params.dateTo.trim());
+    if (params.contractId?.trim())  p = p.set('contractId',  params.contractId.trim());
+    if (params.search?.trim())      p = p.set('search',      params.search.trim());
     return this.http.get<AvailabilityListResponse>(this.apiUrl, { params: p });
   }
 
@@ -210,15 +295,42 @@ export class EquipmentAvailabilityService {
     return this.http.get<AvailabilityRecord>(`${this.apiUrl}/${id}`);
   }
 
-  getUnreported(params: UnreportedParams): Observable<UnreportedEquipment[]> {
+  getUnreported(params: UnreportedParams): Observable<PaginatedUnreportedResponse> {
     let p = new HttpParams()
       .set('date', params.date)
       .set('shift', params.shift);
     if (params.contractId) p = p.set('contractId', params.contractId);
-    return this.http.get<UnreportedEquipment[]>(
+    if (params.search?.trim()) p = p.set('search', params.search.trim());
+    if (params.page != null) p = p.set('page', String(params.page));
+    if (params.pageSize != null) p = p.set('pageSize', String(params.pageSize));
+    return this.http.get<PaginatedUnreportedResponse>(
       `${this.apiUrl}/unreported`,
       { params: p },
     );
+  }
+
+  getShiftBoard(params: ShiftBoardParams): Observable<ShiftBoardResponse> {
+    let p = new HttpParams()
+      .set('date', params.date)
+      .set('shift', params.shift);
+    if (params.contractId) p = p.set('contractId', params.contractId);
+    if (params.search?.trim()) p = p.set('search', params.search.trim());
+    if (params.tab) p = p.set('tab', params.tab);
+    if (params.page != null) p = p.set('page', String(params.page));
+    if (params.pageSize != null) p = p.set('pageSize', String(params.pageSize));
+    return this.http.get<ShiftBoardResponse>(`${this.apiUrl}/shift-board`, { params: p });
+  }
+
+  batchCreate(
+    reportDate: string,
+    shift: ShiftType,
+    rows: BatchAvailabilityRow[],
+  ): Observable<BatchCreateResult> {
+    return this.http.post<BatchCreateResult>(`${this.apiUrl}/batch`, {
+      reportDate,
+      shift,
+      rows,
+    });
   }
 
   // ── Excel Export ─────────────────────────────────────────────────────────

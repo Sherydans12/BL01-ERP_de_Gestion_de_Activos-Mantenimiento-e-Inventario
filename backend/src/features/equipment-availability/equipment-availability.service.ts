@@ -17,6 +17,11 @@ import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availabil
 import { UnreportedQueryDto } from './dto/unreported-query.dto';
 import { ExportAvailabilityQueryDto } from './dto/export-availability-query.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
+import {
+  ShiftBoardQueryDto,
+  ShiftBoardTab,
+} from './dto/shift-board-query.dto';
+import { BatchCreateAvailabilityDto } from './dto/batch-create-availability.dto';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & types shared with controller / frontend interface
@@ -29,6 +34,70 @@ export interface ListAvailabilityQuery {
   shift?: ShiftType;
   dateFrom?: string;
   dateTo?: string;
+  contractId?: string;
+  search?: string;
+}
+
+export type ShiftBoardRowKind = 'REPORTED' | 'PENDING' | 'EXCLUDED';
+
+export interface ShiftBoardSummary {
+  totalFleet: number;
+  reportedCount: number;
+  unreportedCount: number;
+  excludedDownCount: number;
+  completionPct: number;
+  byStatus: Record<OperationalStatus, number>;
+  byContract: Array<{
+    contractId: string | null;
+    totalFleet: number;
+    reportedCount: number;
+    unreportedCount: number;
+  }>;
+}
+
+export interface ShiftBoardRow {
+  equipmentId: string;
+  internalId: string;
+  brand: string;
+  model: string;
+  plate: string | null;
+  contractId: string | null;
+  isOperational: boolean;
+  rowKind: ShiftBoardRowKind;
+  availabilityId?: string;
+  status?: OperationalStatus;
+  meterReading?: number | null;
+  comments?: string | null;
+  isAvailable?: boolean;
+  reportedBy?: { id: string; name: string } | null;
+  reportedAt?: string | null;
+}
+
+export interface ShiftBoardResponse {
+  date: string;
+  shift: ShiftType;
+  summary: ShiftBoardSummary;
+  rows: ShiftBoardRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PaginatedUnreportedResponse {
+  data: Array<{
+    id: string;
+    internalId: string;
+    brand: string;
+    model: string;
+    plate: string | null;
+    contractId: string | null;
+    type?: string;
+    currentMeter?: number;
+    meterType?: string;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 /**
@@ -284,10 +353,84 @@ export class EquipmentAvailabilityService {
         brand: true,
         model: true,
         plate: true,
+        isOperational: true,
+        contractId: true,
       },
     },
     reportedBy: { select: { id: true, name: true } },
   } as const;
+
+  /** Alcance de equipos por tenant + contratos del JWT. */
+  private buildEquipmentScopeWhere(
+    user: any,
+    contractId?: string,
+    options?: { operationalOnly?: boolean },
+  ): Prisma.EquipmentWhereInput {
+    const tenantId = user.tenantId as string;
+    const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
+    const allowedContracts = user.allowedContracts as string[] | undefined;
+
+    const where: Prisma.EquipmentWhereInput = { tenantId };
+    if (options?.operationalOnly !== false) {
+      where.isOperational = true;
+    }
+
+    if (!isAdmin && allowedContracts?.length) {
+      where.contractId = { in: allowedContracts };
+    }
+    if (contractId) {
+      where.contractId = contractId;
+    }
+    return where;
+  }
+
+  private mergeEquipmentSearch(
+    base: Prisma.EquipmentWhereInput,
+    search?: string,
+  ): Prisma.EquipmentWhereInput {
+    const q = search?.trim();
+    if (!q) return base;
+    return {
+      AND: [
+        base,
+        {
+          OR: [
+            { internalId: { contains: q, mode: 'insensitive' } },
+            { plate: { contains: q, mode: 'insensitive' } },
+            { brand: { contains: q, mode: 'insensitive' } },
+            { model: { contains: q, mode: 'insensitive' } },
+            { mineInternalId: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+      ],
+    };
+  }
+
+  private emptyStatusCounts(): Record<OperationalStatus, number> {
+    return {
+      OPERATIONAL: 0,
+      STANDBY: 0,
+      RESERVE_NO_OPERATOR: 0,
+      DOWN_FAILURE: 0,
+      DOWN_MAINTENANCE: 0,
+    };
+  }
+
+  private filterShiftBoardTab(
+    rows: ShiftBoardRow[],
+    tab: ShiftBoardTab,
+  ): ShiftBoardRow[] {
+    switch (tab) {
+      case 'REPORTED':
+        return rows.filter((r) => r.rowKind === 'REPORTED');
+      case 'PENDING':
+        return rows.filter((r) => r.rowKind === 'PENDING');
+      case 'EXCLUDED':
+        return rows.filter((r) => r.rowKind === 'EXCLUDED');
+      default:
+        return rows;
+    }
+  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // EXISTING METHODS (unchanged)
@@ -381,30 +524,25 @@ export class EquipmentAvailabilityService {
   }
 
   /**
-   * Retorna los equipos activos (`isOperational = true`) que NO tienen reporte
-   * para el turno y fecha indicados.
+   * Equipos activos sin reporte para el turno — paginado con búsqueda opcional.
    */
-  async findUnreported(user: any, query: UnreportedQueryDto) {
+  async findUnreported(
+    user: any,
+    query: UnreportedQueryDto,
+  ): Promise<PaginatedUnreportedResponse> {
     const tenantId = user.tenantId as string;
-    const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
-    const allowedContracts = user.allowedContracts as string[] | undefined;
-
     const effectiveShift = await this.resolveShift(tenantId, query.shift);
 
     const reportDate = new Date(query.date);
     reportDate.setUTCHours(0, 0, 0, 0);
 
-    const equipmentWhere: Prisma.EquipmentWhereInput = {
-      tenantId,
-      isOperational: true,
-    };
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 25));
 
-    if (!isAdmin && allowedContracts?.length) {
-      equipmentWhere.contractId = { in: allowedContracts };
-    }
-    if (query.contractId) {
-      equipmentWhere.contractId = query.contractId;
-    }
+    const equipmentWhere = this.mergeEquipmentSearch(
+      this.buildEquipmentScopeWhere(user, query.contractId),
+      query.search,
+    );
 
     const [fleet, reported] = await Promise.all([
       this.prisma.equipment.findMany({
@@ -416,7 +554,11 @@ export class EquipmentAvailabilityService {
           model: true,
           plate: true,
           contractId: true,
+          type: true,
+          currentMeter: true,
+          meterType: true,
         },
+        orderBy: { internalId: 'asc' },
       }),
       this.prisma.equipmentAvailability.findMany({
         where: { tenantId, reportDate, shift: effectiveShift },
@@ -425,7 +567,197 @@ export class EquipmentAvailabilityService {
     ]);
 
     const reportedIds = new Set(reported.map((r) => r.equipmentId));
-    return fleet.filter((e) => !reportedIds.has(e.id));
+    const unreported = fleet.filter((e) => !reportedIds.has(e.id));
+    const total = unreported.length;
+    const skip = (page - 1) * pageSize;
+    const data = unreported.slice(skip, skip + pageSize);
+
+    return { data, total, page, pageSize };
+  }
+
+  /**
+   * Tablero del turno para Monitor de Flota: KPIs + filas reportadas/pendientes/excluidas.
+   */
+  async getShiftBoard(
+    user: any,
+    query: ShiftBoardQueryDto,
+  ): Promise<ShiftBoardResponse> {
+    const tenantId = user.tenantId as string;
+    const effectiveShift = await this.resolveShift(tenantId, query.shift);
+
+    const reportDate = new Date(query.date);
+    reportDate.setUTCHours(0, 0, 0, 0);
+
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 25));
+    const tab: ShiftBoardTab = query.tab ?? 'ALL';
+
+    const equipmentWhere = this.mergeEquipmentSearch(
+      this.buildEquipmentScopeWhere(user, query.contractId, {
+        operationalOnly: false,
+      }),
+      query.search,
+    );
+
+    const [fleet, reports] = await Promise.all([
+      this.prisma.equipment.findMany({
+        where: equipmentWhere,
+        select: {
+          id: true,
+          internalId: true,
+          brand: true,
+          model: true,
+          plate: true,
+          contractId: true,
+          isOperational: true,
+        },
+        orderBy: { internalId: 'asc' },
+      }),
+      this.prisma.equipmentAvailability.findMany({
+        where: { tenantId, reportDate, shift: effectiveShift },
+        include: this.listInclude,
+      }),
+    ]);
+
+    const fleetIds = new Set(fleet.map((e) => e.id));
+    const reportsInScope = reports.filter((r) => fleetIds.has(r.equipmentId));
+    const reportByEquipmentId = new Map(
+      reportsInScope.map((r) => [r.equipmentId, r]),
+    );
+
+    const allRows: ShiftBoardRow[] = fleet.map((eq) => {
+      const base = {
+        equipmentId: eq.id,
+        internalId: eq.internalId,
+        brand: eq.brand,
+        model: eq.model,
+        plate: eq.plate,
+        contractId: eq.contractId,
+        isOperational: eq.isOperational,
+      };
+
+      if (!eq.isOperational) {
+        return { ...base, rowKind: 'EXCLUDED' as const };
+      }
+
+      const report = reportByEquipmentId.get(eq.id);
+      if (!report) {
+        return { ...base, rowKind: 'PENDING' as const };
+      }
+
+      return {
+        ...base,
+        rowKind: 'REPORTED' as const,
+        availabilityId: report.id,
+        status: report.status,
+        meterReading: report.meterReading,
+        comments: report.comments,
+        isAvailable: isAvailableStatus(report.status),
+        reportedBy: report.reportedBy,
+        reportedAt: report.createdAt.toISOString(),
+      };
+    });
+
+    const operational = allRows.filter((r) => r.isOperational);
+    const reportedOperational = operational.filter((r) => r.rowKind === 'REPORTED');
+    const byStatus = this.emptyStatusCounts();
+    for (const row of reportedOperational) {
+      if (row.status) {
+        byStatus[row.status]++;
+      }
+    }
+
+    const totalFleet = operational.length;
+    const reportedCount = reportedOperational.length;
+    const unreportedCount = operational.filter((r) => r.rowKind === 'PENDING').length;
+    const excludedDownCount = allRows.filter((r) => r.rowKind === 'EXCLUDED').length;
+    const completionPct =
+      totalFleet > 0 ? Math.round((reportedCount / totalFleet) * 100) : 100;
+
+    const contractMap = new Map<
+      string,
+      { totalFleet: number; reportedCount: number; unreportedCount: number }
+    >();
+    for (const row of operational) {
+      const key = row.contractId ?? '__none__';
+      const entry = contractMap.get(key) ?? {
+        totalFleet: 0,
+        reportedCount: 0,
+        unreportedCount: 0,
+      };
+      entry.totalFleet++;
+      if (row.rowKind === 'REPORTED') entry.reportedCount++;
+      if (row.rowKind === 'PENDING') entry.unreportedCount++;
+      contractMap.set(key, entry);
+    }
+    const byContract = Array.from(contractMap.entries()).map(([key, v]) => ({
+      contractId: key === '__none__' ? null : key,
+      ...v,
+    }));
+
+    const summary: ShiftBoardSummary = {
+      totalFleet,
+      reportedCount,
+      unreportedCount,
+      excludedDownCount,
+      completionPct,
+      byStatus,
+      byContract,
+    };
+
+    const filtered = this.filterShiftBoardTab(allRows, tab);
+    const total = filtered.length;
+    const skip = (page - 1) * pageSize;
+    const rows = filtered.slice(skip, skip + pageSize);
+
+    return {
+      date: query.date,
+      shift: effectiveShift,
+      summary,
+      rows,
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * Creación masiva desde formulario web — éxito parcial por fila.
+   */
+  async batchCreate(
+    dto: BatchCreateAvailabilityDto,
+    user: any,
+  ): Promise<ImportCommitResult> {
+    const tenantId = user.tenantId as string;
+    const effectiveShift = await this.resolveShift(tenantId, dto.shift);
+
+    let committed = 0;
+    const errors: ImportCommitResult['errors'] = [];
+
+    for (const row of dto.rows) {
+      try {
+        await this.upsertRow(
+          {
+            equipmentId: row.equipmentId,
+            reportDate: dto.reportDate,
+            shift: effectiveShift,
+            status: row.status,
+            meterReading: row.meterReading,
+            comments: row.comments,
+          },
+          user,
+        );
+        committed++;
+      } catch (e) {
+        const reason =
+          e instanceof Error
+            ? e.message
+            : 'Error desconocido al guardar el registro.';
+        errors.push({ equipmentId: row.equipmentId, reason });
+      }
+    }
+
+    return { committed, errors };
   }
 
   /**
@@ -433,6 +765,8 @@ export class EquipmentAvailabilityService {
    */
   async findAll(user: any, query: ListAvailabilityQuery = {}) {
     const tenantId = user.tenantId as string;
+    const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
+    const allowedContracts = user.allowedContracts as string[] | undefined;
 
     const page = Math.max(1, parseInt(String(query.page ?? '1'), 10) || 1);
     const pageSizeRaw = parseInt(String(query.pageSize ?? '25'), 10) || 25;
@@ -459,11 +793,26 @@ export class EquipmentAvailabilityService {
       }
     }
 
+    const equipmentFilter: Prisma.EquipmentWhereInput = {};
+    if (!isAdmin && allowedContracts?.length) {
+      equipmentFilter.contractId = { in: allowedContracts };
+    }
+    if (query.contractId?.trim()) {
+      equipmentFilter.contractId = query.contractId.trim();
+    }
+    const searchMerged = this.mergeEquipmentSearch(
+      equipmentFilter,
+      query.search,
+    );
+    if (Object.keys(searchMerged).length > 0) {
+      where.equipment = searchMerged;
+    }
+
     const [rows, total] = await Promise.all([
       this.prisma.equipmentAvailability.findMany({
         where,
         include: this.listInclude,
-        orderBy: [{ reportDate: 'desc' }, { shift: 'asc' }],
+        orderBy: [{ reportDate: 'desc' }, { shift: 'asc' }, { createdAt: 'desc' }],
         skip,
         take: pageSize,
       }),

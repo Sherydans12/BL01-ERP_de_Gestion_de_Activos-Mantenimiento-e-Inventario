@@ -9,6 +9,14 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-04 — M2 Disponibilidad: tablero del turno + carga escalable
+
+- **Contexto:** Monitor solo listaba pendientes; formulario cargaba toda la flota sin paginar/filtrar; no había vista de reportados del turno ni historial consultable.
+- **Decisión:**
+  - Backend: `GET /shift-board` (KPIs + filas REPORTED/PENDING/EXCLUDED), `unreported` paginado, `POST /batch`, ABAC en `findAll`.
+  - Frontend: Monitor con tabs, tabla unificada, auto-refresh 5 min, export Excel, modal ficha; formulario paginado con búsqueda/contrato/vista compacta/batch/meter banner; nueva ruta `/disponibilidad/historial`.
+- **Consecuencias:** Plan en `docs/agentes/m2-disponibilidad-plan-implementacion.md`. Pendiente roadmap: push anti-spam pendientes (Sprint 4.2).
+
 ## 2026-06-04 — Integridad de fluidos (M1 + OT): stock centralizado, decimales y consumo inusual
 
 - **Contexto:** Auditoría de M1 (Lubricantes) y fluidos en cierre de OT detectó stock negativo permitido por diseño (`isPendingRegularization`), inputs manuales sin visibilidad de disponible, label fijo «Litros» en OT y drift de punto flotante en restas de `ItemStock`.

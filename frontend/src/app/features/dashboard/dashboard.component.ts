@@ -61,15 +61,17 @@ export class DashboardComponent implements OnInit {
   loadUnreported() {
     const date = this.shiftService.todayIso();
     const shift = this.shiftService.currentShift();
-    this.availabilityService.getUnreported({ date, shift }).subscribe({
-      next: (list) =>
-        this.stats.update((s) =>
-          s ? { ...s, unreportedCount: list.length } : s,
-        ),
-      error: () => {
-        /* silencioso — métrica complementaria */
-      },
-    });
+    this.availabilityService
+      .getUnreported({ date, shift, page: 1, pageSize: 1 })
+      .subscribe({
+        next: (res) =>
+          this.stats.update((s) =>
+            s ? { ...s, unreportedCount: res.total } : s,
+          ),
+        error: () => {
+          /* silencioso — métrica complementaria */
+        },
+      });
   }
 
   /** Compatibilidad si el API aún no expone bloques nuevos. */

@@ -19,7 +19,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { EquipmentAvailabilityService } from './equipment-availability.service';
 import type { ListAvailabilityQuery } from './equipment-availability.service';
@@ -27,6 +30,8 @@ import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availabil
 import { UnreportedQueryDto } from './dto/unreported-query.dto';
 import { ExportAvailabilityQueryDto } from './dto/export-availability-query.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
+import { ShiftBoardQueryDto } from './dto/shift-board-query.dto';
+import { BatchCreateAvailabilityDto } from './dto/batch-create-availability.dto';
 
 /** Multer limit for Excel import: 5 MB is more than enough for any fleet template. */
 const EXCEL_IMPORT_LIMITS = { limits: { fileSize: 5 * 1024 * 1024 } };
@@ -55,12 +60,26 @@ export class EquipmentAvailabilityController {
   // ─── Static GET routes (must precede :id) ────────────────────────────────
 
   /**
+   * GET /api/equipment-availability/shift-board
+   *
+   * Tablero del turno: KPIs + filas reportadas/pendientes/excluidas (paginado).
+   */
+  @Get('shift-board')
+  @RequirePermissions(SystemPermissions.OPERATIONS_AVAILABILITY_MONITOR)
+  getShiftBoard(@Req() req: any, @Query() query: ShiftBoardQueryDto) {
+    return this.availabilityService.getShiftBoard(req.user, query);
+  }
+
+  /**
    * GET /api/equipment-availability/unreported
    *
-   * Panel de alerta: equipos activos sin reporte en el turno consultado.
+   * Equipos activos sin reporte en el turno consultado (paginado).
    */
   @Get('unreported')
-  @RequirePermissions(SystemPermissions.OPERATIONS_AVAILABILITY_MONITOR)
+  @RequireAnyPermissions(
+    SystemPermissions.OPERATIONS_AVAILABILITY_MONITOR,
+    SystemPermissions.OPERATIONS_AVAILABILITY_CREATE,
+  )
   findUnreported(@Req() req: any, @Query() query: UnreportedQueryDto) {
     return this.availabilityService.findUnreported(req.user, query);
   }
@@ -117,6 +136,18 @@ export class EquipmentAvailabilityController {
       );
     }
     return this.availabilityService.validateImport(file.buffer, req.user);
+  }
+
+  /**
+   * POST /api/equipment-availability/batch
+   *
+   * Creación masiva desde formulario web — éxito parcial por fila.
+   */
+  @Post('batch')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.OPERATIONS_AVAILABILITY_CREATE)
+  batchCreate(@Body() dto: BatchCreateAvailabilityDto, @Req() req: any) {
+    return this.availabilityService.batchCreate(dto, req.user);
   }
 
   /**
