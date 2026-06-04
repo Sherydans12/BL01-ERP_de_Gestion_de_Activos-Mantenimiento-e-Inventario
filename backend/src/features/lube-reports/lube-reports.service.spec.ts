@@ -49,16 +49,6 @@ const validEquipment = {
   currentMeter: 1000,
 };
 
-/** Stock actual del ítem con CPP = 850 */
-const currentStock = {
-  warehouseId,
-  itemId,
-  quantity: 10,
-  unitCost: new Prisma.Decimal('850.0000'),
-  minStock: 2,
-  maxStock: 50,
-};
-
 /** Reporte creado simulando el retorno de tx.lubeReport.create */
 const createdReport = {
   id: reportId,

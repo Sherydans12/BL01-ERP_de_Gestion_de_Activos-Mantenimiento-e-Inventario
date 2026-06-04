@@ -137,9 +137,7 @@ export class LubeReportsService {
           }
 
           const itemLabel =
-            item.partNumber?.trim() ||
-            item.inventoryCode?.trim() ||
-            item.id;
+            item.partNumber?.trim() || item.inventoryCode?.trim() || item.id;
           const unitAbbr = item.unitOfMeasure?.abbreviation ?? 'UN';
           const allowsDecimals = item.unitOfMeasure?.allowsDecimals ?? false;
 
@@ -157,19 +155,20 @@ export class LubeReportsService {
             itemLabel,
           );
 
-          const { stock } = await this.inventoryStockService.performTransactionCore(
-            tx,
-            {
-              warehouseId: dto.warehouseId,
-              itemId: line.itemId,
-              type: 'OUT',
-              quantity: line.quantity,
-              referenceId: report.id,
-              referenceType: LUBE_DISPATCH_REFERENCE_TYPE,
-              notes: `Despacho lubricante ${correlative}`,
-            },
-            user,
-          );
+          const { stock } =
+            await this.inventoryStockService.performTransactionCore(
+              tx,
+              {
+                warehouseId: dto.warehouseId,
+                itemId: line.itemId,
+                type: 'OUT',
+                quantity: line.quantity,
+                referenceId: report.id,
+                referenceType: LUBE_DISPATCH_REFERENCE_TYPE,
+                notes: `Despacho lubricante ${correlative}`,
+              },
+              user,
+            );
 
           const frozenUnitCost = Number(stock?.unitCost ?? 0);
 

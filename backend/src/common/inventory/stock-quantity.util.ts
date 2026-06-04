@@ -7,7 +7,10 @@ export function addStockQty(previousQty: number, delta: number): number {
   return new Decimal(previousQty).plus(delta).toNumber();
 }
 
-export function subtractStockQty(previousQty: number, deductQty: number): number {
+export function subtractStockQty(
+  previousQty: number,
+  deductQty: number,
+): number {
   return new Decimal(previousQty).minus(deductQty).toNumber();
 }
 

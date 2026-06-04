@@ -1132,9 +1132,7 @@ export class InventoryStockService {
       select: { partNumber: true, inventoryCode: true },
     });
     const label =
-      item?.partNumber?.trim() ||
-      item?.inventoryCode?.trim() ||
-      itemId;
+      item?.partNumber?.trim() || item?.inventoryCode?.trim() || itemId;
     throw new BadRequestException(
       insufficientStockMessage(label, previousQty, deductQty),
     );

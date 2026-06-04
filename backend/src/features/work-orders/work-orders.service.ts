@@ -2035,8 +2035,7 @@ export class WorkOrdersService {
                   invItem?.inventoryCode?.trim() ||
                   fc.fluidType ||
                   itemId;
-                const unitAbbr =
-                  invItem?.unitOfMeasure?.abbreviation ?? 'LT';
+                const unitAbbr = invItem?.unitOfMeasure?.abbreviation ?? 'LT';
                 const allowsDecimals =
                   invItem?.unitOfMeasure?.allowsDecimals ?? true;
 

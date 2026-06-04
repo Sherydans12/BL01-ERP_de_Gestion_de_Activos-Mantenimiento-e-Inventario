@@ -743,8 +743,7 @@ export class InventoryItemsService {
         }
         const stockAvailableQuantity =
           warehouseIdForStock && stockQuantity != null
-            ? Number(stockQuantity ?? 0) -
-              (reservedByItemId.get(row.id) ?? 0)
+            ? Number(stockQuantity ?? 0) - (reservedByItemId.get(row.id) ?? 0)
             : null;
         return {
           id: row.id,

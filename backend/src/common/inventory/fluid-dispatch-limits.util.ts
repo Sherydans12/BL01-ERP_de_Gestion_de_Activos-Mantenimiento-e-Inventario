@@ -10,7 +10,8 @@ export function largeFluidDispatchThreshold(
   if (!allowsDecimals) return 50;
   const u = (unitAbbr || '').trim().toUpperCase();
   if (u === 'KG') return 80;
-  if (u === 'LT' || u === 'LTS' || u === 'L') return DEFAULT_LARGE_FLUID_DISPATCH_LT;
+  if (u === 'LT' || u === 'LTS' || u === 'L')
+    return DEFAULT_LARGE_FLUID_DISPATCH_LT;
   return DEFAULT_LARGE_FLUID_DISPATCH_LT;
 }
 
