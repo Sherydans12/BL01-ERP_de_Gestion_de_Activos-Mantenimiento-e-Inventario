@@ -11,7 +11,8 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 **M2 Disponibilidad — tablero del turno (implementación):** [m2-disponibilidad-plan-implementacion.md](m2-disponibilidad-plan-implementacion.md) — monitor, formulario paginado, historial, APIs `shift-board` / `batch`.
 
 **Compras PBAC — pruebas API/E2E:** [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md) (seed 13 personas, `simulate:compras-pbac`, Playwright `e2e/`).  
-**Inventario PBAC — pruebas API/E2E:** [inventario-pbac-pruebas-api-e2e.md](inventario-pbac-pruebas-api-e2e.md) (seed 8 personas, `simulate:inventario-pbac`, Playwright `e2e/tests/inventario/`).
+**Inventario PBAC — pruebas API/E2E:** [inventario-pbac-pruebas-api-e2e.md](inventario-pbac-pruebas-api-e2e.md) (seed 8 personas, `simulate:inventario-pbac`, Playwright `e2e/tests/inventario/`).  
+**Operaciones × Inventario — E2E cobertura y pendientes:** [operaciones-e2e-cobertura-y-pendientes.md](operaciones-e2e-cobertura-y-pendientes.md) (ciclo M1/W2W/OT, caos/resiliencia, puntos ciegos y specs P0–P3).
 
 **Mapa de repos externos** (claude-mem, ui-ux, n8n-mcp, LightRAG, everything-claude-code): [repos-externos.md](repos-externos.md).
 

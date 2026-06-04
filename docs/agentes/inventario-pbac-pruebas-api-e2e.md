@@ -130,6 +130,7 @@ Helpers: `e2e/helpers/auth.ts` (`INVENTARIO_USERS`), `api-inventario.ts`, `ui.ts
 | Códigos cortos (`00`) | No usar `getByText('00')` suelto — matchea `<option>` oculto; filtrar tabla con `{code} —` |
 | Guard PBAC | `expect(page).not.toHaveURL(...)` en lugar de `waitForURL(/\/app\/)` (acepta la ruta denegada) |
 | Umbrales vs ajuste | Modal política: sin input «Nuevo stock físico»; ajuste: `Confirmar corrección` → `Sí, aplicar ajuste` |
+| Operaciones / M1 / OT | Ver [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) — `resolveE2EPrimaryContractId`, `setReactiveInput`, `parseUiNumber` |
 
 ---
 

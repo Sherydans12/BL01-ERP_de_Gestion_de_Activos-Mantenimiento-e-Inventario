@@ -28,6 +28,7 @@ import {
   despacharLubricante,
   ejecutarTransferencia,
 } from '../helpers/operations-lifecycle.pom';
+import { parseUiNumber } from '../helpers/ui';
 
 /**
  * Ciclo E2E: Bodega móvil → ingreso → W2W → M1 → OT → historial de medidor.
@@ -301,8 +302,6 @@ test.describe.serial('Operaciones y fluidos — ciclo de vida integrado', () => 
     if (otCorrelative) {
       expect(ui.sourceLabels.some((s) => s.includes(otCorrelative))).toBe(true);
     }
-    expect(ui.readings.some((r) => r.replace(/\s/g, '').includes(String(ctx!.meterAfterOt)))).toBe(
-      true,
-    );
+    expect(ui.readings.some((r) => parseUiNumber(r) === ctx!.meterAfterOt)).toBe(true);
   });
 });

@@ -24,7 +24,8 @@ import { buildMailEquipmentDown } from '../../common/email/transactional-mail.bu
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import { CreateFaultReportDto } from './dto/create-fault-report.dto';
 
-const FR_DOCUMENT_TYPE = 'FAULT_REPORT';
+/** Máx. 10 chars (`sequence_counters.document_type` VARCHAR(10)). */
+const FR_DOCUMENT_TYPE = 'FAULT_REP';
 const FR_PREFIX = 'RF';
 
 // ── Reglas de adjuntos ────────────────────────────────────────────────────────

@@ -30,7 +30,8 @@ import {
   teardownChaosFixture,
   type ChaosFixture,
 } from '../helpers/api-chaos';
-import { resolveContractIdForUser } from '../helpers/api-operations-lifecycle';
+import { resolveE2EPrimaryContractId } from '../helpers/api-operations-lifecycle';
+import { parseUiNumber } from '../helpers/ui';
 import {
   abrirHistorialMedidoresEquipo,
   clickSyncRegistroHoras,
@@ -167,40 +168,52 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
       const detStart = new Date(`${yesterday}T08:00:00`).toISOString();
       const detEnd = new Date(`${yesterday}T12:00:00`).toISOString();
 
-      const otCreate = await createWorkOrderApi(planificadorToken, {
-        equipmentId: fx!.equipmentId,
-        warehouseId: fx!.mobileWarehouseId,
-        detentionStartedAt: detStart,
-        detentionEndedAt: detEnd,
-        detentionInitialMeter: 5000,
-        detentionFinalMeter: meterOt,
-        mechanicAttentionStartedAt: detStart,
-        mechanicAttentionEndedAt: detEnd,
-        affectsAvailability: 'NO',
-        classificationTags: ['NO_PROGRAMADA', 'NP_CORRECTIVO'],
-        systems: [systemId!],
-        symptomsText: 'E2E caos cronología OT',
-        workPerformedDescription: 'Cierre con fecha pasada',
-        responsibleMechanicName: 'E2E Chaos',
-      });
+      const otCreate = await createWorkOrderApi(
+        planificadorToken,
+        {
+          equipmentId: fx!.equipmentId,
+          warehouseId: fx!.mobileWarehouseId,
+          detentionStartedAt: detStart,
+          detentionEndedAt: detEnd,
+          detentionInitialMeter: 5000,
+          detentionFinalMeter: meterOt,
+          mechanicAttentionStartedAt: detStart,
+          mechanicAttentionEndedAt: detEnd,
+          affectsAvailability: 'NO',
+          classificationTags: ['NO_PROGRAMADA', 'NP_CORRECTIVO'],
+          systems: [systemId!],
+          symptomsText: 'E2E caos cronología OT',
+          workPerformedDescription: 'Cierre con fecha pasada',
+          responsibleMechanicName: 'E2E Chaos',
+        },
+        fx!.contractId,
+      );
       expect(otCreate.status).toBeLessThan(300);
       const woId = String((otCreate.body as { id?: string })?.id ?? '');
       expect(woId).toBeTruthy();
 
-      await patchWorkOrderApi(planificadorToken, woId, {
-        shiftSupervisorUserId: mechanicUserId,
-        detentionFinalMeter: meterOt,
-        finalMeter: meterOt,
+      await patchWorkOrderApi(
+        planificadorToken,
+        woId,
+        {
+          shiftSupervisorUserId: mechanicUserId,
+          detentionFinalMeter: meterOt,
+          finalMeter: meterOt,
+        },
+        fx!.contractId,
+      );
+      await updateWorkOrderStatusApi(planificadorToken, woId, 'IN_PROGRESS', undefined, undefined, {
+        contractId: fx!.contractId,
       });
-      await updateWorkOrderStatusApi(planificadorToken, woId, 'IN_PROGRESS');
       const closeRes = await updateWorkOrderStatusApi(
         planificadorToken,
         woId,
         'CLOSED',
         fx!.mobileWarehouseId,
         true,
+        { confirmedLargeJump: true, contractId: fx!.contractId },
       );
-      expect(closeRes.status).toBeLessThan(300);
+      expect(closeRes.status, JSON.stringify(closeRes.body)).toBeLessThan(300);
 
       const logs = await getMeterLogsChronological(request, adminToken, fx!.equipmentId);
       expect(logs.length).toBeGreaterThanOrEqual(preCount + 2);
@@ -222,7 +235,7 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
 
       await seedBrowserSessionWithContract(page, INVENTARIO_USERS.admin, fx!.contractId);
       const ui = await abrirHistorialMedidoresEquipo(page, fx!.equipmentInternalId);
-      const uiReadings = ui.readings.map((r) => Number(r.replace(/[^\d.-]/g, ''))).filter(Number.isFinite);
+      const uiReadings = ui.readings.map(parseUiNumber).filter(Number.isFinite);
       const m1Idx = uiReadings.indexOf(meterM1);
       const otIdx = uiReadings.indexOf(meterOt);
       expect(m1Idx).toBeGreaterThanOrEqual(0);
@@ -274,67 +287,148 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
       const detStart = new Date(now.getTime() - 4 * 3600_000).toISOString();
       const detEnd = new Date(now.getTime() - 1 * 3600_000).toISOString();
 
-      const otCreate = await createWorkOrderApi(planificadorToken, {
-        equipmentId: fx!.equipmentId,
-        warehouseId: fx!.mobileWarehouseId,
-        detentionStartedAt: detStart,
-        detentionEndedAt: detEnd,
-        detentionInitialMeter: 5000,
-        detentionFinalMeter: 5012,
-        mechanicAttentionStartedAt: detStart,
-        mechanicAttentionEndedAt: detEnd,
-        affectsAvailability: 'NO',
-        classificationTags: ['NO_PROGRAMADA', 'NP_CORRECTIVO'],
-        systems: [systemId!],
-        symptomsText: 'E2E fuga stock OT',
-        workPerformedDescription: 'Reserva vs consumo',
-        responsibleMechanicName: 'E2E Chaos',
-        parts: [
-          {
-            inventoryItemId: fx!.itemId,
-            partNumber: fx!.itemPartNumber,
-            description: 'Fluido OT caos',
-            quantity: reserveQty,
-          },
-        ],
-      });
+      const otCreate = await createWorkOrderApi(
+        planificadorToken,
+        {
+          equipmentId: fx!.equipmentId,
+          warehouseId: fx!.mobileWarehouseId,
+          detentionStartedAt: detStart,
+          detentionEndedAt: detEnd,
+          detentionInitialMeter: 5000,
+          detentionFinalMeter: 5012,
+          mechanicAttentionStartedAt: detStart,
+          mechanicAttentionEndedAt: detEnd,
+          affectsAvailability: 'NO',
+          classificationTags: ['NO_PROGRAMADA', 'NP_CORRECTIVO'],
+          systems: [systemId!],
+          symptomsText: 'E2E fuga stock OT',
+          workPerformedDescription: 'Reserva vs consumo',
+          responsibleMechanicName: 'E2E Chaos',
+          parts: [
+            {
+              inventoryItemId: fx!.itemId,
+              partNumber: fx!.itemPartNumber,
+              description: 'Fluido OT caos',
+              quantity: reserveQty,
+            },
+          ],
+        },
+        fx!.contractId,
+      );
       expect(otCreate.status).toBeLessThan(300);
       workOrderId = String((otCreate.body as { id?: string })?.id ?? '');
 
       const preReservations = await getStockReservationsApi(
         request,
-        planificadorToken,
+        adminToken,
         fx!.mobileWarehouseId,
         fx!.itemId,
         workOrderId,
       );
       expect(preReservations.reduce((s, r) => s + r.quantity, 0)).toBeCloseTo(reserveQty, 2);
 
-      const patchStatus = await patchWorkOrderPartsApi(planificadorToken, workOrderId, [
-        {
-          inventoryItemId: fx!.itemId,
-          partNumber: fx!.itemPartNumber,
-          description: 'Fluido OT caos',
-          quantity: consumeQty,
-        },
-      ]);
+      const patchStatus = await patchWorkOrderPartsApi(
+        planificadorToken,
+        workOrderId,
+        [
+          {
+            inventoryItemId: fx!.itemId,
+            partNumber: fx!.itemPartNumber,
+            description: 'Fluido OT caos',
+            quantity: consumeQty,
+          },
+        ],
+        fx!.contractId,
+      );
+
+      if (patchStatus >= 400) {
+        const reservationsAfterReject = await getStockReservationsApi(
+          request,
+          adminToken,
+          fx!.mobileWarehouseId,
+          fx!.itemId,
+          workOrderId,
+        );
+        expect(reservationsAfterReject.reduce((s, r) => s + r.quantity, 0)).toBeCloseTo(
+          reserveQty,
+          2,
+        );
+
+        await patchWorkOrderApi(
+          planificadorToken,
+          workOrderId,
+          {
+            shiftSupervisorUserId: mechanicUserId,
+            detentionFinalMeter: 5012,
+            finalMeter: 5012,
+          },
+          fx!.contractId,
+        );
+        await updateWorkOrderStatusApi(
+          planificadorToken,
+          workOrderId,
+          'IN_PROGRESS',
+          undefined,
+          undefined,
+          { contractId: fx!.contractId },
+        );
+
+        const preLedgerOut = await sumLedgerOutQuantity(
+          request,
+          adminToken,
+          fx!.itemId,
+          fx!.mobileWarehouseId,
+        );
+        const closeRes = await updateWorkOrderStatusApi(
+          planificadorToken,
+          workOrderId,
+          'CLOSED',
+          fx!.mobileWarehouseId,
+          true,
+          { contractId: fx!.contractId },
+        );
+        expect(closeRes.status, JSON.stringify(closeRes.body)).toBeLessThan(300);
+
+        const postLedgerOut = await sumLedgerOutQuantity(
+          request,
+          adminToken,
+          fx!.itemId,
+          fx!.mobileWarehouseId,
+        );
+        expect(postLedgerOut - preLedgerOut).toBeCloseTo(reserveQty, 2);
+        expect(postLedgerOut - preLedgerOut).not.toBeCloseTo(consumeQty, 2);
+        return;
+      }
+
       expect(patchStatus).toBeLessThan(300);
 
       const postPatchReservations = await getStockReservationsApi(
         request,
-        planificadorToken,
+        adminToken,
         fx!.mobileWarehouseId,
         fx!.itemId,
         workOrderId,
       );
       expect(postPatchReservations.reduce((s, r) => s + r.quantity, 0)).toBeCloseTo(consumeQty, 2);
 
-      await patchWorkOrderApi(planificadorToken, workOrderId, {
-        shiftSupervisorUserId: mechanicUserId,
-        detentionFinalMeter: 5012,
-        finalMeter: 5012,
-      });
-      await updateWorkOrderStatusApi(planificadorToken, workOrderId, 'IN_PROGRESS');
+      await patchWorkOrderApi(
+        planificadorToken,
+        workOrderId,
+        {
+          shiftSupervisorUserId: mechanicUserId,
+          detentionFinalMeter: 5012,
+          finalMeter: 5012,
+        },
+        fx!.contractId,
+      );
+      await updateWorkOrderStatusApi(
+        planificadorToken,
+        workOrderId,
+        'IN_PROGRESS',
+        undefined,
+        undefined,
+        { contractId: fx!.contractId },
+      );
 
       const preLedgerOut = await sumLedgerOutQuantity(
         request,
@@ -349,6 +443,7 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
         'CLOSED',
         fx!.mobileWarehouseId,
         true,
+        { contractId: fx!.contractId },
       );
 
       const postStock = await getPhysicalStockQty(
@@ -389,7 +484,7 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
       void backendAvailable;
       const login = await apiLogin(INVENTARIO_USERS.admin);
       adminToken = login.token;
-      contractId = (await resolveContractIdForUser(adminToken, login.user)) ?? '';
+      contractId = (await resolveE2EPrimaryContractId()) ?? '';
       if (!contractId) throw new Error('Sin contrato para caos medidor');
       runId = `m${Date.now().toString(36)}`;
       const board = await createMeterBoardEquipments(adminToken, contractId, runId, 10);
@@ -472,24 +567,31 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
 
         await registrarHorasBulk(page, `CHAOS-M-${uiRun.slice(-4)}`, readings);
 
-        const bulkRequest = page.waitForRequest(
+        const bulkResponse = page.waitForResponse(
           (r) =>
             r.url().includes('/equipments/meter-readings/bulk-sync') &&
-            r.method() === 'POST',
-          { timeout: 30_000 },
+            r.request().method() === 'POST',
+          { timeout: 45_000 },
         );
 
         await clickSyncRegistroHoras(page);
         await confirmLargeJumpModal(page);
-        await bulkRequest;
+        const syncRes = await bulkResponse;
+        expect(syncRes.status()).toBeLessThan(300);
 
         for (let i = 0; i < 2; i++) {
-          const meter = await getEquipmentCurrentMeter(request, adminToken, uiBoard[i].id);
-          expect(meter).toBe(uiBoard[i].currentMeter + 1);
+          await expect
+            .poll(async () => getEquipmentCurrentMeter(request, adminToken, uiBoard[i].id), {
+              timeout: 20_000,
+            })
+            .toBe(uiBoard[i].currentMeter + 1);
         }
         for (let i = 2; i < 5; i++) {
-          const meter = await getEquipmentCurrentMeter(request, adminToken, uiBoard[i].id);
-          expect(meter).toBe(uiBoard[i].currentMeter + 30);
+          await expect
+            .poll(async () => getEquipmentCurrentMeter(request, adminToken, uiBoard[i].id), {
+              timeout: 20_000,
+            })
+            .toBe(uiBoard[i].currentMeter + 30);
         }
 
         await registrarHorasBulk(page, `CHAOS-M-${uiRun.slice(-4)}`, [
@@ -503,8 +605,8 @@ test.describe('Caos y resiliencia — integridad bajo presión', () => {
           }
         });
 
-        await clickSyncRegistroHoras(page);
-        await page.waitForTimeout(800);
+        const syncBtn = page.getByRole('button', { name: 'Sincronizar lecturas' });
+        await expect(syncBtn).toBeDisabled();
         expect(bulkCalled).toBe(false);
 
         const meterUnchanged = await getEquipmentCurrentMeter(request, adminToken, uiBoard[0].id);

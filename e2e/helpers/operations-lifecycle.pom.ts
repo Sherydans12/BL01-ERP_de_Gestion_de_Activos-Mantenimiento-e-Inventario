@@ -8,6 +8,7 @@ import {
 import {
   confirmDialog,
   selectOptionWhenReady,
+  setReactiveInput,
   stockDashboardWarehouseSelect,
   uniqueLabel,
   waitForPageReady,
@@ -93,7 +94,7 @@ export async function crearArticuloEIngresarStock(
 
   const dialog = page.locator('dialog').filter({ hasText: 'Operación de almacén' });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
-  await dialog.locator('label').filter({ hasText: /^Entrada por compra$/ }).first().click();
+  await dialog.locator('input[formControlName="movementKind"][value="PURCHASE_IN"]').click({ force: true });
   await dialog
     .getByRole('button', { name: /Buscar artículo en el Catálogo Maestro/i })
     .click();
@@ -192,7 +193,8 @@ export async function despacharLubricante(
 
   const qtyInput = page.locator(`input[id="fluid-qty-${ctx.itemId}"]`);
   await expect(qtyInput).toBeVisible({ timeout: 15_000 });
-  await qtyInput.fill(String(cantidad));
+  await setReactiveInput(qtyInput, String(cantidad));
+  await expect(qtyInput).toHaveValue(String(cantidad), { timeout: 10_000 });
 
   const largeConfirm = page.getByLabel('Confirmar cantidad inusual');
   if (await largeConfirm.isVisible().catch(() => false)) {
@@ -242,11 +244,16 @@ export async function cerrarOT(
   mechanicUserId: string,
   planificadorToken: string,
 ): Promise<void> {
-  await patchWorkOrderApi(planificadorToken, workOrderId, {
-    shiftSupervisorUserId: mechanicUserId,
-    detentionFinalMeter: medidorFinal,
-    finalMeter: medidorFinal,
-  });
+  await patchWorkOrderApi(
+    planificadorToken,
+    workOrderId,
+    {
+      shiftSupervisorUserId: mechanicUserId,
+      detentionFinalMeter: medidorFinal,
+      finalMeter: medidorFinal,
+    },
+    ctx.contractId,
+  );
 
   await page.goto(`/app/ots/${workOrderId}`);
   await waitForPageReady(page);
@@ -260,6 +267,7 @@ export async function cerrarOT(
     'CLOSED',
     ctx.mobileWarehouseId,
     true,
+    { contractId: ctx.contractId },
   );
   expect(closeRes.status).toBeLessThan(300);
 }
@@ -276,14 +284,15 @@ export async function registrarHorasBulk(
 
   const search = page.locator('input[type="search"]');
   await search.fill(searchPrefix);
-  await page.waitForTimeout(800);
+  await page.waitForResponse(
+    (r) => r.url().includes('/meter-capture-board') && r.request().method() === 'GET',
+    { timeout: 30_000 },
+  ).catch(() => {});
 
   for (const row of readings) {
     const input = page.locator(`#meter-reading-${row.equipmentId}`);
     await expect(input).toBeVisible({ timeout: 25_000 });
-    await input.clear();
-    await input.pressSequentially(String(row.value), { delay: 15 });
-    await input.blur();
+    await setReactiveInput(input, String(row.value));
   }
 }
 
@@ -305,12 +314,19 @@ export async function abrirHistorialMedidoresEquipo(
   await page.goto('/app/flota');
   await waitForPageReady(page);
 
+  const search = page.locator('input[placeholder*="interno" i], input[inputmode="search"]').first();
+  await search.fill(equipmentInternalId);
+  await page.waitForResponse(
+    (r) => r.url().includes('/equipments') && r.request().method() === 'GET',
+    { timeout: 25_000 },
+  ).catch(() => {});
+
   const row = page.locator('tbody tr').filter({ hasText: equipmentInternalId }).first();
   await expect(row).toBeVisible({ timeout: 25_000 });
-  await row.getByRole('button', { name: 'HOJA DE VIDA' }).click();
+  await row.getByRole('button', { name: equipmentInternalId }).click();
 
-  const dialog = page.locator('dialog.equipment-detail-dialog');
-  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  const dialog = page.locator('dialog.equipment-detail-dialog[open]');
+  await expect(dialog).toBeVisible({ timeout: 25_000 });
   await dialog.getByRole('button', { name: 'Historial de Medidores' }).click();
 
   const table = dialog.locator('app-equipment-meter-history-table table tbody tr');

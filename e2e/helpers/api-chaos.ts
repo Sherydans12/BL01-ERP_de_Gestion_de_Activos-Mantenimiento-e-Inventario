@@ -10,11 +10,30 @@ import {
   deleteWarehouseApi,
   findUnitAllowingDecimals,
   requestJson,
-  resolveContractIdForUser,
+  resolveE2EPrimaryContractId,
   type MeterLogRow,
 } from './api-operations-lifecycle';
 
 type ApiJson = Record<string, unknown>;
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  attempts = 4,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 750 * attempt));
+    }
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
 
 export type ChaosFixture = {
   runId: string;
@@ -58,9 +77,10 @@ export type BulkMeterResult = {
 };
 
 export async function bootstrapChaosFixture(adminEmail: string): Promise<ChaosFixture | null> {
-  const { token, user } = await apiLogin(adminEmail);
-  const contractId = await resolveContractIdForUser(token, user);
+  const contractId = await resolveE2EPrimaryContractId();
   if (!contractId) return null;
+
+  const { token } = await apiLogin(adminEmail);
 
   const whRes = await fetch(`${API_BASE}/warehouses?contractId=${encodeURIComponent(contractId)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -207,20 +227,24 @@ export async function sumLedgerOutQuantity(
   const data = (body as ApiJson).data;
   if (!Array.isArray(data)) return 0;
   return (data as { type: string; quantity: number }[])
-    .filter((r) => r.type === 'OUT' || r.type === 'TRANSFER_OUT')
+    .filter((r) => r.type === 'OUT' || r.type === 'TRANSFER_OUT' || r.type === 'WORK_ORDER_ISSUE')
     .reduce((s, r) => s + Math.abs(Number(r.quantity)), 0);
 }
 
 export async function createWorkOrderApi(
   token: string,
   payload: ApiJson,
+  contractId?: string,
 ): Promise<{ status: number; body: ApiJson | null }> {
-  const res = await fetch(`${API_BASE}/work-orders`, {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  if (contractId) headers['x-site-id'] = contractId;
+
+  const res = await fetchWithRetry(`${API_BASE}/work-orders`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(payload),
   });
   const text = await res.text();
@@ -237,13 +261,17 @@ export async function patchWorkOrderPartsApi(
   token: string,
   workOrderId: string,
   parts: { inventoryItemId: string; quantity: number; partNumber?: string; description?: string }[],
+  contractId?: string,
 ): Promise<number> {
-  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}`, {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  if (contractId) headers['x-site-id'] = contractId;
+
+  const res = await fetchWithRetry(`${API_BASE}/work-orders/${workOrderId}`, {
     method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({ parts }),
   });
   return res.status;

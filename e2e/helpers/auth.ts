@@ -37,6 +37,21 @@ export const OPERACIONES_USERS = {
 } as const;
 
 /** Sesión con contrato activo explícito (p. ej. operador destino W2W). */
+async function gotoAppShell(page: Page) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto('/app/dashboard', { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(/\/app\//, { timeout: 30_000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(800 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 export async function seedBrowserSessionWithContract(
   page: Page,
   email: string,
@@ -53,15 +68,20 @@ export async function seedBrowserSessionWithContract(
     },
     { token, userJson: JSON.stringify(userWithPermissions), cid: contractId },
   );
-  await page.goto('/app/dashboard');
-  await page.waitForURL(/\/app\//, { timeout: 30_000 });
+  await gotoAppShell(page);
 }
 
 async function fetchCaptcha(attempt = 0) {
   if (attempt > 0) {
     await new Promise((r) => setTimeout(r, 3000 * attempt));
   }
-  const res = await fetch(`${API_BASE}/auth/captcha`);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/captcha`);
+  } catch (err) {
+    if (attempt < 6) return fetchCaptcha(attempt + 1);
+    throw err;
+  }
   if (res.status === 429 && attempt < 6) {
     return fetchCaptcha(attempt + 1);
   }
@@ -84,17 +104,23 @@ export async function apiLogin(email: string, attempt = 0) {
     await new Promise((r) => setTimeout(r, 4000 * attempt));
   }
   const captcha = await fetchCaptcha();
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tenantCode: TENANT_CODE,
-      email,
-      password: PASSWORD,
-      challengeId: captcha.challengeId,
-      challengeAnswer: captcha.answer,
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantCode: TENANT_CODE,
+        email,
+        password: PASSWORD,
+        challengeId: captcha.challengeId,
+        challengeAnswer: captcha.answer,
+      }),
+    });
+  } catch (error) {
+    if (attempt < 6) return apiLogin(email, attempt + 1);
+    throw error;
+  }
   const body = (await res.json()) as {
     access_token?: string;
     user?: {
@@ -145,8 +171,7 @@ export async function seedBrowserSession(page: Page, email: string) {
     },
     { token, userJson: JSON.stringify(userWithPermissions), cid: contractId },
   );
-  await page.goto('/app/dashboard');
-  await page.waitForURL(/\/app\//, { timeout: 30_000 });
+  await gotoAppShell(page);
 }
 
 export async function findPendingPurchaseOrderId(email: string): Promise<string | null> {

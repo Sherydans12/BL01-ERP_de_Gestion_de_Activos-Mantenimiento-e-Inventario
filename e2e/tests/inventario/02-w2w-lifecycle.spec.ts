@@ -29,7 +29,7 @@ test.describe.serial('Inventario — ciclo W2W origen → destino', () => {
 
   test.beforeAll(async ({ backendAvailable }) => {
     void backendAvailable;
-    const { token } = await apiLogin(INVENTARIO_USERS.gestor);
+    const { token } = await apiLogin(INVENTARIO_USERS.w2wOrigen);
     const pair = await findW2WPair(token);
     if (!pair) {
       throw new Error('Se requieren al menos 2 bodegas en el mismo contrato para W2W E2E');
@@ -52,6 +52,10 @@ test.describe.serial('Inventario — ciclo W2W origen → destino', () => {
     await seedBrowserSessionWithContract(page, INVENTARIO_USERS.w2wOrigen, contractId);
     await page.goto('/app/inventario/transferencias');
     await waitForPageReady(page);
+    await page.waitForResponse(
+      (r) => r.url().includes('/warehouses') && r.request().method() === 'GET' && r.ok(),
+      { timeout: 30_000 },
+    ).catch(() => {});
 
     const originSelect = page.locator('select[formControlName="originWarehouseId"]');
     const destSelect = page.locator('select[formControlName="destinationWarehouseId"]');

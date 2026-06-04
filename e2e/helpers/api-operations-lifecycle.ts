@@ -1,5 +1,5 @@
 import type { APIRequestContext } from '@playwright/test';
-import { API_BASE, apiLogin } from './auth';
+import { API_BASE, apiLogin, OPERACIONES_USERS } from './auth';
 import {
   getCategoryChildren,
   getCategoryFamilies,
@@ -54,6 +54,21 @@ export async function resolveContractIdForUser(
   const fromJwt = user.allowedContracts?.find((c) => c !== 'ALL');
   if (fromJwt) return fromJwt;
 
+  const contractsRes = await fetch(`${API_BASE}/contracts`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (contractsRes.ok) {
+    const contracts = (await contractsRes.json()) as {
+      id: string;
+      code?: string;
+      isActive?: boolean;
+    }[];
+    const primary = contracts
+      .filter((c) => c.isActive !== false)
+      .sort((a, b) => (a.code ?? '').localeCompare(b.code ?? ''))[0];
+    if (primary?.id) return primary.id;
+  }
+
   const res = await fetch(`${API_BASE}/warehouses`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -61,6 +76,12 @@ export async function resolveContractIdForUser(
   const warehouses = (await res.json()) as { contractId?: string }[];
   const hit = warehouses.find((w) => w.contractId);
   return hit?.contractId ?? null;
+}
+
+/** Contrato primario PBAC operaciones (misma lógica que seed-operaciones-pbac-personas). */
+export async function resolveE2EPrimaryContractId(): Promise<string | null> {
+  const { token, user } = await apiLogin(OPERACIONES_USERS.planificador);
+  return resolveContractIdForUser(token, user);
 }
 
 const DEFAULTS = {
@@ -79,13 +100,17 @@ async function apiJson(
   method: string,
   path: string,
   body?: unknown,
+  contractId?: string,
 ): Promise<{ status: number; body: ApiJson | ApiJson[] | null }> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  if (contractId) headers['x-site-id'] = contractId;
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -291,8 +316,15 @@ export async function patchWorkOrderApi(
   token: string,
   workOrderId: string,
   payload: ApiJson,
+  contractId?: string,
 ): Promise<number> {
-  const { status } = await apiJson(token, 'PATCH', `/work-orders/${workOrderId}`, payload);
+  const { status } = await apiJson(
+    token,
+    'PATCH',
+    `/work-orders/${workOrderId}`,
+    payload,
+    contractId,
+  );
   return status;
 }
 
@@ -302,12 +334,25 @@ export async function updateWorkOrderStatusApi(
   status: string,
   warehouseId?: string,
   closureEquipmentOperational?: boolean,
+  extras?: {
+    confirmedLargeJump?: boolean;
+    confirmedLargeFluidDispatch?: boolean;
+    contractId?: string;
+  },
 ): Promise<{ status: number; body: ApiJson | null }> {
-  const res = await apiJson(token, 'PATCH', `/work-orders/${workOrderId}/status`, {
-    status,
-    warehouseId,
-    closureEquipmentOperational,
-  });
+  const { contractId, ...statusExtras } = extras ?? {};
+  const res = await apiJson(
+    token,
+    'PATCH',
+    `/work-orders/${workOrderId}/status`,
+    {
+      status,
+      warehouseId,
+      closureEquipmentOperational,
+      ...statusExtras,
+    },
+    contractId,
+  );
   return { status: res.status, body: res.body && !Array.isArray(res.body) ? res.body : null };
 }
 
@@ -318,9 +363,11 @@ export async function updateWorkOrderStatusApi(
 export async function bootstrapOperationsLifecycleSeed(
   adminEmail: string,
 ): Promise<OperationsLifecycleSeed | null> {
-  const { token, user } = await apiLogin(adminEmail);
-  const contractId = await resolveContractIdForUser(token, user);
+  const contractId = await resolveE2EPrimaryContractId();
   if (!contractId) return null;
+
+  const { token, user } = await apiLogin(adminEmail);
+  void user;
 
   const whRes = await apiJson(token, 'GET', `/warehouses?contractId=${encodeURIComponent(contractId)}`);
   const warehouses = Array.isArray(whRes.body) ? whRes.body : [];

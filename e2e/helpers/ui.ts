@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 function confirmButtonName(confirmLabel: string | RegExp): string | RegExp {
   if (typeof confirmLabel === 'string') {
@@ -70,6 +70,42 @@ export function stockDashboardWarehouseSelect(page: Page) {
 
 export function uniqueLabel(prefix: string) {
   return `${prefix} E2E ${Date.now()}`;
+}
+
+/** Actualiza inputs enlazados a Reactive Forms (Angular) donde `fill()` no propaga al FormControl. */
+export async function setReactiveInput(locator: Locator, value: string) {
+  await locator.evaluate((el, next) => {
+    const input = el as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )?.set;
+    setter?.call(input, next);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+  await locator.blur();
+}
+
+/** Parsea números mostrados en UI es-CL (5.020 → 5020, 8,5 → 8.5). */
+export function parseUiNumber(raw: string): number {
+  const t = raw.replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!t) return NaN;
+  if (t.includes(',') && t.includes('.')) {
+    const lastComma = t.lastIndexOf(',');
+    const lastDot = t.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      return Number(t.replace(/\./g, '').replace(',', '.'));
+    }
+    return Number(t.replace(/,/g, ''));
+  }
+  if (t.includes(',')) {
+    return Number(t.replace(',', '.'));
+  }
+  if (/^\d+\.\d{3}$/.test(t)) {
+    return Number(t.replace('.', ''));
+  }
+  return Number(t);
 }
 
 export async function expectHeadingVisible(page: Page, name: string | RegExp) {

@@ -9,6 +9,15 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-04 — E2E operaciones: estabilización caos/lifecycle + correlativos M1/M3
+
+- **Contexto:** Suite nueva (`e2e-chaos-resilience`, `e2e-operations-lifecycle`) fallaba por desalineación de contrato PBAC, Reactive Forms en Playwright, parseo es-CL en historial de medidor, kardex `WORK_ORDER_ISSUE` omitido en helpers, y tipos de documento &gt; 10 chars en `sequence_counters`.
+- **Decisión:**
+  - Backend: `FAULT_REP` en `fault-reports.service` (paridad con `LUBE_RCL` ya en M1).
+  - E2E: `resolveE2EPrimaryContractId()`, header `x-site-id` en OT, `setReactiveInput` / `parseUiNumber`, modal flota vía ficha (no HOJA DE VIDA PDF), retries red/auth.
+  - Doc: [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) — puntos ciegos y backlog P0–P3.
+- **Consecuencias:** Suite focalizada **11/11**; suite completa **59 tests** con retry en navegación. Pendiente E2E: `blockNegativeStock`, M2 tablero, M3 falla ALTA smoke.
+
 ## 2026-06-04 — M2 Disponibilidad: tablero del turno + carga escalable
 
 - **Contexto:** Monitor solo listaba pendientes; formulario cargaba toda la flota sin paginar/filtrar; no había vista de reportados del turno ni historial consultable.
