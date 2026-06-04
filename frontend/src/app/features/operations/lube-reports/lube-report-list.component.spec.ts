@@ -13,9 +13,13 @@ describe('LubeReportListComponent', () => {
   let component: LubeReportListComponent;
   let fixture: ComponentFixture<LubeReportListComponent>;
 
-  const lubeServiceSpy = jasmine.createSpyObj<LubeReportsService>('LubeReportsService', {
-    getReports: of({ data: [], total: 0, page: 1, pageSize: 20 }),
-  });
+  const lubeServiceSpy = jasmine.createSpyObj<LubeReportsService>(
+    'LubeReportsService',
+    ['getReports', 'getReport'],
+  );
+  lubeServiceSpy.getReports.and.returnValue(
+    of({ data: [], total: 0, page: 1, pageSize: 25 }),
+  );
 
   const warehousesServiceSpy = jasmine.createSpyObj<WarehousesService>('WarehousesService', {
     getWarehouses: of([]),
@@ -55,5 +59,27 @@ describe('LubeReportListComponent', () => {
     expect(component.page()).toBe(1);
     expect(component.rows()).toEqual([]);
     expect(component.total()).toBe(0);
+  });
+
+  it('abre modal de detalle al solicitar un reporte', () => {
+    lubeServiceSpy.getReport.and.returnValue(
+      of({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        correlative: 'RCL-00001',
+        dispatchDate: '2026-06-01',
+        meterReading: 100,
+        notes: null,
+        createdAt: '2026-06-01',
+        equipment: { id: 'e', internalId: 'EQ-1', brand: 'X', model: 'Y', plate: null },
+        warehouse: { id: 'w', code: 'B1', name: 'Bodega' },
+        user: { id: 'u', name: 'Op' },
+        lines: [],
+      } as any),
+    );
+    component.openDetail('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(lubeServiceSpy.getReport).toHaveBeenCalledWith(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    );
+    expect(component.detailOpen()).toBeTrue();
   });
 });

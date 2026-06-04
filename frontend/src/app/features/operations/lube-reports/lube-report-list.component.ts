@@ -4,15 +4,20 @@ import {
   computed,
   inject,
   signal,
+  DestroyRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import {
   LubeReportsService,
   LubeReportRow,
   LubeReportListParams,
+  LubeReportListSortField,
+  LubeReportDetail,
 } from '../../../core/services/lube-reports/lube-reports.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
@@ -20,71 +25,126 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { DeviceService } from '../../../core/services/device/device.service';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { O } from '../../../core/constants/operations-permissions';
-
-const PAGE_SIZE = 20;
+import { LubeReportDetailModalComponent } from './lube-report-detail-modal/lube-report-detail-modal.component';
 
 @Component({
   selector: 'app-lube-report-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, HasPermissionDirective],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    HasPermissionDirective,
+    LubeReportDetailModalComponent,
+  ],
   templateUrl: './lube-report-list.component.html',
 })
 export class LubeReportListComponent implements OnInit {
   protected readonly O = O;
 
-  private lubeService    = inject(LubeReportsService);
-  private warehousesSvc  = inject(WarehousesService);
-  private fleetSvc       = inject(FleetService);
-  private notify         = inject(NotificationService);
+  private lubeService = inject(LubeReportsService);
+  private warehousesSvc = inject(WarehousesService);
+  private fleetSvc = inject(FleetService);
+  private notify = inject(NotificationService);
+  private destroyRef = inject(DestroyRef);
   protected deviceService = inject(DeviceService);
 
-  // ── Catálogos para filtros ────────────────────────────────────────────
+  readonly pageSizeOptions = [10, 25, 50, 100] as const;
+
   warehouses = signal<any[]>([]);
   equipments = signal<any[]>([]);
 
-  // ── Filtros activos ───────────────────────────────────────────────────
-  filterWarehouseId  = signal<string>('');
-  filterEquipmentId  = signal<string>('');
-  filterDateFrom     = signal<string>('');
-  filterDateTo       = signal<string>('');
+  filterWarehouseId = signal<string>('');
+  filterEquipmentId = signal<string>('');
+  filterDateFrom = signal<string>('');
+  filterDateTo = signal<string>('');
 
-  // ── Estado de la tabla ────────────────────────────────────────────────
-  rows        = signal<LubeReportRow[]>([]);
-  total       = signal(0);
-  page        = signal(1);
-  loading     = signal(false);
+  searchQuery = signal('');
+  private search$ = new Subject<string>();
 
-  totalPages = computed(() => Math.max(1, Math.ceil(this.total() / PAGE_SIZE)));
-  pageNumbers = computed(() =>
-    Array.from({ length: this.totalPages() }, (_, i) => i + 1),
+  sortField = signal<LubeReportListSortField>('dispatchDate');
+  sortDir = signal<'asc' | 'desc'>('desc');
+
+  rows = signal<LubeReportRow[]>([]);
+  total = signal(0);
+  page = signal(1);
+  pageSize = signal(25);
+  loading = signal(false);
+
+  detailOpen = signal(false);
+  detailLoading = signal(false);
+  detailReport = signal<LubeReportDetail | null>(null);
+  detailError = signal<string | null>(null);
+
+  hasActiveSearch = computed(() => !!this.searchQuery().trim());
+
+  hasActiveFilters = computed(
+    () =>
+      !!this.filterWarehouseId() ||
+      !!this.filterEquipmentId() ||
+      !!this.filterDateFrom() ||
+      !!this.filterDateTo(),
+  );
+
+  totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.total() / this.pageSize())),
+  );
+
+  rangeFrom = computed(() =>
+    this.total() === 0 ? 0 : (this.page() - 1) * this.pageSize() + 1,
+  );
+
+  rangeTo = computed(() =>
+    Math.min(this.page() * this.pageSize(), this.total()),
   );
 
   ngOnInit(): void {
+    this.search$
+      .pipe(
+        debounceTime(350),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        this.page.set(1);
+        this.load();
+      });
+
     this.warehousesSvc.getWarehouses().subscribe({
       next: (data) => this.warehouses.set(data),
       error: () => { /* no bloquea */ },
     });
-    this.fleetSvc.getEquipments({ limit: 200 }).subscribe({
-      next: (res) => this.equipments.set(res.data),
+    this.fleetSvc.getEquipments({ limit: 500 }).subscribe({
+      next: (res) => this.equipments.set(res.data ?? []),
       error: () => { /* no bloquea */ },
     });
     this.load();
   }
 
-  private load(): void {
-    this.loading.set(true);
+  private listParams(): LubeReportListParams {
     const params: LubeReportListParams = {
       page: this.page(),
-      pageSize: PAGE_SIZE,
-      warehouseId:  this.filterWarehouseId() || undefined,
-      equipmentId:  this.filterEquipmentId() || undefined,
-      dateFrom:     this.filterDateFrom() || undefined,
-      dateTo:       this.filterDateTo() || undefined,
+      pageSize: this.pageSize(),
+      sort: this.sortField(),
+      dir: this.sortDir(),
+      warehouseId: this.filterWarehouseId() || undefined,
+      equipmentId: this.filterEquipmentId() || undefined,
+      dateFrom: this.filterDateFrom() || undefined,
+      dateTo: this.filterDateTo() || undefined,
     };
-    this.lubeService.getReports(params).subscribe({
+    const s = this.searchQuery().trim();
+    if (s) params.search = s;
+    return params;
+  }
+
+  private load(): void {
+    this.loading.set(true);
+    this.lubeService.getReports(this.listParams()).subscribe({
       next: (res) => {
         this.rows.set(res.data);
         this.total.set(res.total);
+        this.page.set(res.page);
+        this.pageSize.set(res.pageSize);
         this.loading.set(false);
       },
       error: () => {
@@ -92,6 +152,48 @@ export class LubeReportListComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  onSearchChange(value: string): void {
+    this.searchQuery.set(value);
+    this.search$.next(value.trim());
+  }
+
+  onSearchEnter(event: Event): void {
+    event.preventDefault();
+    const v = (event.target as HTMLInputElement).value?.trim() ?? '';
+    this.searchQuery.set(v);
+    this.page.set(1);
+    this.load();
+  }
+
+  clearSearch(): void {
+    this.searchQuery.set('');
+    this.page.set(1);
+    this.load();
+  }
+
+  onSortFieldChange(value: string): void {
+    if (!this.isSortField(value)) return;
+    this.sortField.set(value);
+    this.page.set(1);
+    this.applyDefaultDirForField(value);
+    this.load();
+  }
+
+  onSortDirChange(value: string): void {
+    if (value !== 'asc' && value !== 'desc') return;
+    this.sortDir.set(value);
+    this.page.set(1);
+    this.load();
+  }
+
+  onPageSizeChange(value: unknown): void {
+    const n = typeof value === 'string' ? parseInt(value, 10) : Number(value);
+    if (!Number.isFinite(n) || n < 1) return;
+    this.pageSize.set(Math.min(100, n));
+    this.page.set(1);
+    this.load();
   }
 
   applyFilters(): void {
@@ -108,10 +210,69 @@ export class LubeReportListComponent implements OnInit {
     this.load();
   }
 
-  goToPage(p: number): void {
-    if (p < 1 || p > this.totalPages()) return;
-    this.page.set(p);
+  prevPage(): void {
+    if (this.page() <= 1) return;
+    this.page.update((p) => p - 1);
     this.load();
+  }
+
+  nextPage(): void {
+    if (this.page() >= this.totalPages()) return;
+    this.page.update((p) => p + 1);
+    this.load();
+  }
+
+  openDetail(id: string): void {
+    this.detailOpen.set(true);
+    this.detailLoading.set(true);
+    this.detailReport.set(null);
+    this.detailError.set(null);
+
+    this.lubeService.getReport(id).subscribe({
+      next: (detail) => {
+        this.detailReport.set(detail);
+        this.detailLoading.set(false);
+      },
+      error: (err) => {
+        const msg =
+          err?.error?.message ??
+          'No se pudo cargar el detalle del despacho.';
+        this.detailError.set(
+          typeof msg === 'string' ? msg : 'No se pudo cargar el detalle del despacho.',
+        );
+        this.detailLoading.set(false);
+      },
+    });
+  }
+
+  closeDetail(): void {
+    this.detailOpen.set(false);
+    this.detailReport.set(null);
+    this.detailError.set(null);
+  }
+
+  private isSortField(v: string): v is LubeReportListSortField {
+    return (
+      v === 'dispatchDate' ||
+      v === 'correlative' ||
+      v === 'createdAt' ||
+      v === 'meterReading' ||
+      v === 'warehouseName' ||
+      v === 'equipmentInternalId' ||
+      v === 'userName'
+    );
+  }
+
+  private applyDefaultDirForField(field: LubeReportListSortField): void {
+    if (
+      field === 'dispatchDate' ||
+      field === 'createdAt' ||
+      field === 'meterReading'
+    ) {
+      this.sortDir.set('desc');
+    } else {
+      this.sortDir.set('asc');
+    }
   }
 
   equipmentLabel(row: LubeReportRow): string {

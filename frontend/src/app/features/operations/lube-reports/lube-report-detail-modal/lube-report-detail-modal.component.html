@@ -1,0 +1,142 @@
+@if (open) {
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 sm:p-6"
+    (click)="close()"
+    role="presentation"
+  >
+    <div
+      class="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-3xl max-h-[min(92vh,820px)] overflow-hidden flex flex-col"
+      (click)="$event.stopPropagation()"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lube-detail-title"
+    >
+      <div
+        class="flex shrink-0 items-start justify-between gap-3 border-b border-border bg-dark/40 px-5 py-4"
+      >
+        <div class="min-w-0">
+          <p
+            id="lube-detail-title"
+            class="text-xs font-mono uppercase tracking-wider text-muted"
+          >
+            Despacho de lubricantes
+          </p>
+          @if (loading) {
+            <div class="mt-2 h-6 w-48 max-w-full rounded bg-dark animate-pulse"></div>
+            <div class="mt-1 h-4 w-32 rounded bg-dark/80 animate-pulse"></div>
+          } @else if (report) {
+            <h3 class="mt-1 text-lg font-bold text-main font-mono">
+              {{ report.correlative }}
+            </h3>
+            <p class="mt-0.5 text-sm text-muted">
+              {{ report.dispatchDate | date:'dd/MM/yyyy HH:mm' }}
+            </p>
+          }
+        </div>
+        <button
+          type="button"
+          (click)="close()"
+          class="shrink-0 rounded-lg p-2 text-muted hover:bg-dark hover:text-main transition-colors"
+          aria-label="Cerrar"
+        >
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 py-4">
+        @if (loading) {
+          <div class="space-y-3">
+            @for (_ of [1, 2, 3, 4]; track $index) {
+              <div class="h-4 rounded bg-dark animate-pulse"></div>
+            }
+          </div>
+        } @else if (errorMessage) {
+          <p class="text-sm text-red-400">{{ errorMessage }}</p>
+        } @else if (report) {
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mb-6">
+            <div>
+              <dt class="text-xs uppercase tracking-wide text-muted">Equipo</dt>
+              <dd class="mt-0.5 font-medium text-main">{{ equipmentLabel(report) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs uppercase tracking-wide text-muted">Origen (bodega)</dt>
+              <dd class="mt-0.5 text-main">
+                {{ report.warehouse.code }} — {{ report.warehouse.name }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs uppercase tracking-wide text-muted">Operador</dt>
+              <dd class="mt-0.5 text-main">{{ report.user.name }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs uppercase tracking-wide text-muted">Horómetro</dt>
+              <dd class="mt-0.5 font-mono text-main">
+                @if (report.meterReading !== null) {
+                  {{ report.meterReading | number }} h
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </dd>
+            </div>
+            @if (report.notes?.trim()) {
+              <div class="sm:col-span-2">
+                <dt class="text-xs uppercase tracking-wide text-muted">Observaciones</dt>
+                <dd class="mt-0.5 text-main whitespace-pre-wrap">{{ report.notes }}</dd>
+              </div>
+            }
+          </dl>
+
+          <h4 class="text-xs font-mono uppercase tracking-wider text-muted mb-2">
+            Líneas despachadas ({{ report.lines.length }})
+          </h4>
+          <div class="overflow-x-auto rounded-lg border border-border">
+            <table class="w-full min-w-[28rem] text-sm">
+              <thead>
+                <tr class="border-b border-border bg-dark/50 text-left text-xs text-muted uppercase">
+                  <th class="px-3 py-2">Artículo</th>
+                  <th class="px-3 py-2 text-right">Cantidad</th>
+                  <th class="px-3 py-2 text-right">Costo unit.</th>
+                  <th class="px-3 py-2 text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                @for (line of report.lines; track line.id) {
+                  <tr>
+                    <td class="px-3 py-2.5">
+                      <p class="font-medium text-main">{{ line.item.name }}</p>
+                      <p class="text-xs text-muted font-mono">
+                        {{ line.item.inventoryCode || line.item.partNumber || '—' }}
+                      </p>
+                    </td>
+                    <td class="px-3 py-2.5 text-right font-mono text-main whitespace-nowrap">
+                      {{ line.quantity | number:'1.0-4' }}
+                      {{ line.item.unitOfMeasure.abbreviation }}
+                    </td>
+                    <td class="px-3 py-2.5 text-right font-mono text-muted whitespace-nowrap">
+                      {{ line.unitCost | number:'1.2-4' }}
+                    </td>
+                    <td class="px-3 py-2.5 text-right font-mono text-main whitespace-nowrap">
+                      {{ lineTotal(line) | number:'1.2-2' }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="border-t border-border bg-dark/30">
+                  <td colspan="3" class="px-3 py-2.5 text-right text-xs font-semibold uppercase text-muted">
+                    Total estimado (CPP)
+                  </td>
+                  <td class="px-3 py-2.5 text-right font-mono font-semibold text-primary">
+                    {{ dispatchTotal(report) | number:'1.2-2' }}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+}

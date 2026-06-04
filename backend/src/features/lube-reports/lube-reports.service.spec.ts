@@ -425,10 +425,14 @@ describe('LubeReportsService — findAll', () => {
 
     await service.findAll(adminUser, { warehouseId });
 
-    expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ tenantId, warehouseId }),
-      }),
+    const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as {
+      where: { AND: Array<Record<string, unknown>> };
+    };
+    expect(callArg.where.AND).toEqual(
+      expect.arrayContaining([
+        { tenantId },
+        { warehouseId },
+      ]),
     );
   });
 
@@ -438,10 +442,14 @@ describe('LubeReportsService — findAll', () => {
 
     await service.findAll(adminUser, { equipmentId });
 
-    expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ tenantId, equipmentId }),
-      }),
+    const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as {
+      where: { AND: Array<Record<string, unknown>> };
+    };
+    expect(callArg.where.AND).toEqual(
+      expect.arrayContaining([
+        { tenantId },
+        { equipmentId },
+      ]),
     );
   });
 
@@ -454,20 +462,52 @@ describe('LubeReportsService — findAll', () => {
       dateTo: '2026-06-02',
     });
 
-    const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as any;
-    expect(callArg.where.dispatchDate).toBeDefined();
-    expect(callArg.where.dispatchDate.gte).toBeInstanceOf(Date);
-    expect(callArg.where.dispatchDate.lte).toBeInstanceOf(Date);
+    const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as {
+      where: { AND: Array<{ dispatchDate?: { gte: Date; lte: Date } }> };
+    };
+    const dateClause = callArg.where.AND.find((c) => c.dispatchDate);
+    expect(dateClause?.dispatchDate?.gte).toBeInstanceOf(Date);
+    expect(dateClause?.dispatchDate?.lte).toBeInstanceOf(Date);
   });
 
   it('respeta la paginación: skip = (page-1) * pageSize', async () => {
     prisma.lubeReport.findMany.mockResolvedValue([] as never);
-    prisma.lubeReport.count.mockResolvedValue(0);
+    prisma.lubeReport.count.mockResolvedValue(30);
 
     await service.findAll(adminUser, { page: '3', pageSize: '10' } as any);
 
     expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 20, take: 10 }),
+    );
+  });
+
+  it('aplica búsqueda insensible en correlativo y relaciones', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([] as never);
+    prisma.lubeReport.count.mockResolvedValue(0);
+
+    await service.findAll(adminUser, { search: 'RCL-00042' });
+
+    const callArg = prisma.lubeReport.findMany.mock.calls[0][0] as {
+      where: { AND?: Array<{ OR?: unknown[] }> };
+    };
+    const andClause = callArg.where.AND ?? [];
+    const searchBlock = andClause.find((c) => Array.isArray(c.OR));
+    expect(searchBlock?.OR?.length).toBeGreaterThan(0);
+  });
+
+  it('ordena por campo y dirección solicitados', async () => {
+    prisma.lubeReport.findMany.mockResolvedValue([] as never);
+    prisma.lubeReport.count.mockResolvedValue(0);
+
+    await service.findAll(adminUser, {
+      sort: 'warehouseName',
+      dir: 'asc',
+    } as any);
+
+    expect(prisma.lubeReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { warehouse: { name: 'asc' } },
+      }),
     );
   });
 });

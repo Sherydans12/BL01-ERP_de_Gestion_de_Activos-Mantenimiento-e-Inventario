@@ -22,6 +22,90 @@ export interface ListLubeReportsQuery {
   equipmentId?: string;
   dateFrom?: string;
   dateTo?: string;
+  search?: string;
+  sort?: string;
+  dir?: string;
+}
+
+const LUBE_LIST_SORT_FIELDS = [
+  'dispatchDate',
+  'correlative',
+  'createdAt',
+  'meterReading',
+  'warehouseName',
+  'equipmentInternalId',
+  'userName',
+] as const;
+
+type LubeReportListSortField = (typeof LUBE_LIST_SORT_FIELDS)[number];
+
+const LUBE_LIST_SEARCH_MAX_LEN = 120;
+
+function isLubeReportListSortField(v: string): v is LubeReportListSortField {
+  return (LUBE_LIST_SORT_FIELDS as readonly string[]).includes(v);
+}
+
+function parseLubeReportListSort(
+  sort?: string,
+  dir?: string,
+): { field: LubeReportListSortField; order: 'asc' | 'desc' } {
+  const field: LubeReportListSortField =
+    sort && isLubeReportListSortField(sort) ? sort : 'dispatchDate';
+  if (dir === 'asc' || dir === 'desc') {
+    return { field, order: dir };
+  }
+  if (
+    field === 'dispatchDate' ||
+    field === 'createdAt' ||
+    field === 'meterReading'
+  ) {
+    return { field, order: 'desc' };
+  }
+  return { field, order: 'asc' };
+}
+
+function buildLubeReportListOrderBy(
+  field: LubeReportListSortField,
+  order: 'asc' | 'desc',
+): Prisma.LubeReportOrderByWithRelationInput {
+  switch (field) {
+    case 'correlative':
+      return { correlative: order };
+    case 'createdAt':
+      return { createdAt: order };
+    case 'meterReading':
+      return { meterReading: order };
+    case 'warehouseName':
+      return { warehouse: { name: order } };
+    case 'equipmentInternalId':
+      return { equipment: { internalId: order } };
+    case 'userName':
+      return { user: { name: order } };
+    case 'dispatchDate':
+    default:
+      return { dispatchDate: order };
+  }
+}
+
+function buildLubeReportSearchOr(term: string): Prisma.LubeReportWhereInput[] {
+  const contains = { contains: term, mode: 'insensitive' as const };
+  const or: Prisma.LubeReportWhereInput[] = [
+    { correlative: contains },
+    { notes: contains },
+    { equipment: { internalId: contains } },
+    { equipment: { brand: contains } },
+    { equipment: { model: contains } },
+    { equipment: { plate: contains } },
+    { warehouse: { code: contains } },
+    { warehouse: { name: contains } },
+    { user: { name: contains } },
+  ];
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidRe.test(term)) {
+    or.push({ id: term });
+  }
+  return or;
 }
 
 /** Tipo de referencia inyectado en InventoryTransaction para despachos de lubricante. */
@@ -29,7 +113,8 @@ const LUBE_DISPATCH_REFERENCE_TYPE = 'LUBE_DISPATCH';
 
 /** Prefijo del correlativo para reportes de consumo de lubricantes. */
 const LUBE_REPORT_PREFIX = 'RCL';
-const LUBE_REPORT_DOCUMENT_TYPE = 'LUBE_REPORT';
+/** Máx. 10 chars (`sequence_counters.document_type` VARCHAR(10)). */
+const LUBE_REPORT_DOCUMENT_TYPE = 'LUBE_RCL';
 
 @Injectable()
 export class LubeReportsService {
@@ -254,41 +339,63 @@ export class LubeReportsService {
   async findAll(user: any, query: ListLubeReportsQuery = {}) {
     const tenantId = user.tenantId as string;
 
-    const page = Math.max(1, parseInt(String(query.page ?? '1'), 10) || 1);
-    const pageSizeRaw = parseInt(String(query.pageSize ?? '25'), 10) || 25;
-    const pageSize = Math.min(100, Math.max(1, pageSizeRaw));
-    const skip = (page - 1) * pageSize;
+    const pageSize = Math.min(
+      100,
+      Math.max(1, parseInt(String(query.pageSize ?? '25'), 10) || 25),
+    );
+    const requestedPage = Math.max(
+      1,
+      parseInt(String(query.page ?? '1'), 10) || 1,
+    );
+    const { field: sortField, order: sortOrder } = parseLubeReportListSort(
+      query.sort,
+      query.dir,
+    );
 
-    const where: Prisma.LubeReportWhereInput = { tenantId };
+    const and: Prisma.LubeReportWhereInput[] = [{ tenantId }];
 
     if (query.warehouseId?.trim()) {
-      where.warehouseId = query.warehouseId.trim();
+      and.push({ warehouseId: query.warehouseId.trim() });
     }
     if (query.equipmentId?.trim()) {
-      where.equipmentId = query.equipmentId.trim();
+      and.push({ equipmentId: query.equipmentId.trim() });
     }
     if (query.dateFrom || query.dateTo) {
-      where.dispatchDate = {};
+      const dispatchDate: Prisma.DateTimeFilter = {};
       if (query.dateFrom) {
-        where.dispatchDate.gte = new Date(query.dateFrom);
+        dispatchDate.gte = new Date(query.dateFrom);
       }
       if (query.dateTo) {
         const to = new Date(query.dateTo);
         to.setHours(23, 59, 59, 999);
-        where.dispatchDate.lte = to;
+        dispatchDate.lte = to;
       }
+      and.push({ dispatchDate });
     }
 
-    const [rows, total] = await Promise.all([
-      this.prisma.lubeReport.findMany({
-        where,
-        include: this.listInclude,
-        orderBy: { dispatchDate: 'desc' },
-        skip,
-        take: pageSize,
-      }),
-      this.prisma.lubeReport.count({ where }),
-    ]);
+    const searchTerm =
+      typeof query.search === 'string'
+        ? query.search.trim().slice(0, LUBE_LIST_SEARCH_MAX_LEN)
+        : '';
+    if (searchTerm) {
+      and.push({ OR: buildLubeReportSearchOr(searchTerm) });
+    }
+
+    const where: Prisma.LubeReportWhereInput =
+      and.length === 1 ? and[0] : { AND: and };
+
+    const total = await this.prisma.lubeReport.count({ where });
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, maxPage);
+    const skip = (page - 1) * pageSize;
+
+    const rows = await this.prisma.lubeReport.findMany({
+      where,
+      include: this.listInclude,
+      orderBy: buildLubeReportListOrderBy(sortField, sortOrder),
+      skip,
+      take: pageSize,
+    });
 
     const data = rows.map(({ _count, ...rest }) => ({
       ...rest,

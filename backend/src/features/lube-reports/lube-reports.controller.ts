@@ -48,7 +48,7 @@ export class LubeReportsController {
    */
   /**
    * GET /api/lube-reports
-   * Listado paginado. Filtros opcionales: warehouseId, equipmentId, dateFrom, dateTo.
+   * Listado paginado. Filtros: warehouseId, equipmentId, dateFrom, dateTo, search, sort, dir.
    */
   @Get()
   @RequirePermissions(SystemPermissions.OPERATIONS_LUBE_REPORT_READ)

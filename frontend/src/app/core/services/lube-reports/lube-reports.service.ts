@@ -83,6 +83,15 @@ export interface LubeReportListResponse {
 
 // ── Parámetros de consulta ───────────────────────────────────────────────
 
+export type LubeReportListSortField =
+  | 'dispatchDate'
+  | 'correlative'
+  | 'createdAt'
+  | 'meterReading'
+  | 'warehouseName'
+  | 'equipmentInternalId'
+  | 'userName';
+
 export interface LubeReportListParams {
   page?: number;
   pageSize?: number;
@@ -90,6 +99,9 @@ export interface LubeReportListParams {
   equipmentId?: string;
   dateFrom?: string;
   dateTo?: string;
+  search?: string;
+  sort?: LubeReportListSortField;
+  dir?: 'asc' | 'desc';
 }
 
 @Injectable({ providedIn: 'root' })
@@ -109,6 +121,9 @@ export class LubeReportsService {
     if (params.equipmentId?.trim()) p = p.set('equipmentId', params.equipmentId.trim());
     if (params.dateFrom?.trim())    p = p.set('dateFrom',    params.dateFrom.trim());
     if (params.dateTo?.trim())      p = p.set('dateTo',      params.dateTo.trim());
+    if (params.search?.trim())      p = p.set('search',      params.search.trim());
+    if (params.sort)                p = p.set('sort',        params.sort);
+    if (params.dir)                 p = p.set('dir',         params.dir);
     return this.http.get<LubeReportListResponse>(this.apiUrl, { params: p });
   }
 
