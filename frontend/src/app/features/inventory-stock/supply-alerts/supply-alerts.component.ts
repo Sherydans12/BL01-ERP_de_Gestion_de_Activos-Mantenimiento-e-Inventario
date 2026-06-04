@@ -2,9 +2,14 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
+import { InventoryItemsService } from '../../../core/services/inventory-items/inventory-items.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { SkeletonRowComponent } from '../../../shared/components/skeleton-row/skeleton-row.component';
 import { EntityLinkComponent } from '../../../shared/components/entity-link/entity-link.component';
+import {
+  CatalogItemDetailModalComponent,
+  CatalogItemDetailRow,
+} from '../../inventory-items/catalog-item-detail-modal/catalog-item-detail-modal.component';
 
 export interface SupplyAlertRow {
   id: string;
@@ -34,16 +39,30 @@ export interface SupplyAlertRow {
 @Component({
   selector: 'app-supply-alerts',
   standalone: true,
-  imports: [CommonModule, RouterLink, SkeletonRowComponent, EntityLinkComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    SkeletonRowComponent,
+    EntityLinkComponent,
+    CatalogItemDetailModalComponent,
+  ],
   templateUrl: './supply-alerts.component.html',
 })
 export class SupplyAlertsComponent implements OnInit {
   private stockService = inject(InventoryStockService);
+  private inventoryItemsService = inject(InventoryItemsService);
   private notificationService = inject(NotificationService);
   private router = inject(Router);
 
   rows = signal<SupplyAlertRow[]>([]);
   loading = signal(true);
+
+  catalogDetailOpen = signal(false);
+  catalogDetailLoading = signal(false);
+  catalogDetailItem = signal<CatalogItemDetailRow | null>(null);
+  catalogDetailError = signal<string | null>(null);
+  catalogDetailLedgerWarehouseId = signal<string | null>(null);
+  catalogDetailLedgerWarehouseLabel = signal<string | null>(null);
   readonly skeletonRows = Array.from({ length: 10 }, (_, i) => i);
 
   ngOnInit() {
@@ -117,5 +136,37 @@ export class SupplyAlertsComponent implements OnInit {
     const s90 = r.consumptionLast90Days ?? 0;
     const pm = r.avgMonthlyConsumption ?? 0;
     return `Salidas registradas (90 días): ${s90.toLocaleString('es-CL', { maximumFractionDigits: 2 })} · Equiv. mensual: ${pm.toLocaleString('es-CL', { maximumFractionDigits: 2 })}`;
+  }
+
+  openCatalogDetailFromRow(r: SupplyAlertRow) {
+    this.catalogDetailLedgerWarehouseId.set(r.warehouse.id);
+    this.catalogDetailLedgerWarehouseLabel.set(
+      `${r.warehouse.code} — ${r.warehouse.name}`,
+    );
+    this.catalogDetailOpen.set(true);
+    this.catalogDetailLoading.set(true);
+    this.catalogDetailItem.set(null);
+    this.catalogDetailError.set(null);
+    this.inventoryItemsService.getItem(r.item.id).subscribe({
+      next: (row) => {
+        this.catalogDetailItem.set(row as CatalogItemDetailRow);
+        this.catalogDetailLoading.set(false);
+      },
+      error: (err) => {
+        this.catalogDetailError.set(
+          err.error?.message || 'No se pudo cargar el artículo.',
+        );
+        this.catalogDetailLoading.set(false);
+      },
+    });
+  }
+
+  closeCatalogDetail() {
+    this.catalogDetailOpen.set(false);
+    this.catalogDetailItem.set(null);
+    this.catalogDetailError.set(null);
+    this.catalogDetailLoading.set(false);
+    this.catalogDetailLedgerWarehouseId.set(null);
+    this.catalogDetailLedgerWarehouseLabel.set(null);
   }
 }
