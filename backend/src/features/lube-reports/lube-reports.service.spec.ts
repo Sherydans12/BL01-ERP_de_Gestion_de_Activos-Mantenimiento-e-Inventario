@@ -429,10 +429,7 @@ describe('LubeReportsService — findAll', () => {
       where: { AND: Array<Record<string, unknown>> };
     };
     expect(callArg.where.AND).toEqual(
-      expect.arrayContaining([
-        { tenantId },
-        { warehouseId },
-      ]),
+      expect.arrayContaining([{ tenantId }, { warehouseId }]),
     );
   });
 
@@ -446,10 +443,7 @@ describe('LubeReportsService — findAll', () => {
       where: { AND: Array<Record<string, unknown>> };
     };
     expect(callArg.where.AND).toEqual(
-      expect.arrayContaining([
-        { tenantId },
-        { equipmentId },
-      ]),
+      expect.arrayContaining([{ tenantId }, { equipmentId }]),
     );
   });
 

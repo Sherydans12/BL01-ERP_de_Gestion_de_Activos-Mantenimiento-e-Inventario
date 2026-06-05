@@ -567,9 +567,9 @@ describe('EquipmentAvailabilityService — getShiftBoard', () => {
       completionPct: 50,
     });
     expect(result.rows).toHaveLength(3);
-    expect(result.rows.find((r) => r.equipmentId === equipmentId)?.rowKind).toBe(
-      'REPORTED',
-    );
+    expect(
+      result.rows.find((r) => r.equipmentId === equipmentId)?.rowKind,
+    ).toBe('REPORTED');
     expect(result.rows.find((r) => r.equipmentId === eq2Id)?.rowKind).toBe(
       'PENDING',
     );

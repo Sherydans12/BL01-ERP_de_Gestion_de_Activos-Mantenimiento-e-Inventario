@@ -45,7 +45,10 @@ export function applyFullReportOptions(
   );
 
   const purchaseRequisitionExportRows = sections.purchases
-    ? (data.purchaseRequisitionExportRows ?? []).slice(0, limits.purchaseMaxRows)
+    ? (data.purchaseRequisitionExportRows ?? []).slice(
+        0,
+        limits.purchaseMaxRows,
+      )
     : [];
 
   if (!sections.itemDetail) {

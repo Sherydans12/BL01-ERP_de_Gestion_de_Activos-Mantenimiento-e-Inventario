@@ -1016,14 +1016,17 @@ export class InventoryAnalyticsService {
     }
 
     const pdfDetailCap =
-      reportOptions.limits.detailMaxRows ??
-      (format === 'pdf' ? 2500 : null);
-    const buffer = await generateValuationFullReportPdfBuffer(tenantName, data, {
-      tenantLogoDataUri,
-      tenantPrimaryColor,
-      sections: reportOptions.sections,
-      detailMaxRows: pdfDetailCap,
-    });
+      reportOptions.limits.detailMaxRows ?? (format === 'pdf' ? 2500 : null);
+    const buffer = await generateValuationFullReportPdfBuffer(
+      tenantName,
+      data,
+      {
+        tenantLogoDataUri,
+        tenantPrimaryColor,
+        sections: reportOptions.sections,
+        detailMaxRows: pdfDetailCap,
+      },
+    );
     return {
       buffer,
       filename: `valorizacion-maestro-${stamp}.pdf`,

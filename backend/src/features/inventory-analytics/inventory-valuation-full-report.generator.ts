@@ -178,9 +178,7 @@ function buildValuationFullReportHtml(
         .join('')
     : `<tr><td colspan="6" class="c muted">Sin stock muerto detectado (sin movimiento ≥ 6 meses)</td></tr>`;
 
-  const detailSlice = sections.itemDetail
-    ? data.lines.slice(0, detailCap)
-    : [];
+  const detailSlice = sections.itemDetail ? data.lines.slice(0, detailCap) : [];
   const detailOmitted = sections.itemDetail
     ? data.lines.length - detailSlice.length
     : 0;
@@ -384,9 +382,9 @@ export async function generateValuationFullReportXlsxBuffer(
       { header: 'Subcategoría', key: 'sub', width: 22 },
       { header: 'Cód. inventario', key: 'inv', width: 14 },
       { header: 'Nº parte', key: 'pn', width: 16 },
-    { header: 'Nombre', key: 'name', width: 28 },
-    { header: 'Descripción', key: 'desc', width: 32 },
-    { header: 'Stock total', key: 'qty', width: 12 },
+      { header: 'Nombre', key: 'name', width: 28 },
+      { header: 'Descripción', key: 'desc', width: 32 },
+      { header: 'Stock total', key: 'qty', width: 12 },
       { header: 'CPP', key: 'cpp', width: 14 },
       { header: 'Valor total', key: 'val', width: 16 },
     ];
@@ -403,10 +401,10 @@ export async function generateValuationFullReportXlsxBuffer(
         family: r.familyName,
         sub: r.subcategoryName,
         inv: r.inventoryCode || '—',
-      pn: r.partNumber || '—',
-      name: r.itemName,
-      desc: r.itemDescription,
-      qty: r.totalQty,
+        pn: r.partNumber || '—',
+        name: r.itemName,
+        desc: r.itemDescription,
+        qty: r.totalQty,
         cpp: r.cpp,
         val: r.lineValue,
       });
@@ -453,72 +451,75 @@ export async function generateValuationFullReportXlsxBuffer(
     sum.addRow([]);
   }
   if (sections.deadStock) {
-    sum.addRow(['Capital inmovilizado (stock muerto)', data.immobilizedCapital]);
+    sum.addRow([
+      'Capital inmovilizado (stock muerto)',
+      data.immobilizedCapital,
+    ]);
     sum.addRow([]);
   }
 
   if (sections.criticalItems) {
-  const wsCrit = wb.addWorksheet('Críticos', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  });
-  wsCrit.columns = [
-    { header: 'N° parte', key: 'pn', width: 14 },
-    { header: 'Nombre', key: 'name', width: 28 },
-    { header: 'Descripción', key: 'desc', width: 32 },
-    { header: 'Familia', key: 'fam', width: 22 },
-    { header: 'Stock', key: 'stk', width: 10 },
-    { header: 'Mínimo', key: 'min', width: 10 },
-    { header: 'Brecha', key: 'gap', width: 10 },
-  ];
-  const hc = wsCrit.getRow(1);
-  hc.font = { bold: true };
-  hc.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FFFEE2E2' },
-  };
-  for (const c of data.criticalItems) {
-    wsCrit.addRow({
-      pn: c.partNumber || '—',
-      name: c.itemName,
-      desc: c.itemDescription,
-      fam: c.familyName,
-      stk: c.currentStock,
-      min: c.minStock,
-      gap: c.riskGap,
+    const wsCrit = wb.addWorksheet('Críticos', {
+      views: [{ state: 'frozen', ySplit: 1 }],
     });
-  }
+    wsCrit.columns = [
+      { header: 'N° parte', key: 'pn', width: 14 },
+      { header: 'Nombre', key: 'name', width: 28 },
+      { header: 'Descripción', key: 'desc', width: 32 },
+      { header: 'Familia', key: 'fam', width: 22 },
+      { header: 'Stock', key: 'stk', width: 10 },
+      { header: 'Mínimo', key: 'min', width: 10 },
+      { header: 'Brecha', key: 'gap', width: 10 },
+    ];
+    const hc = wsCrit.getRow(1);
+    hc.font = { bold: true };
+    hc.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFEE2E2' },
+    };
+    for (const c of data.criticalItems) {
+      wsCrit.addRow({
+        pn: c.partNumber || '—',
+        name: c.itemName,
+        desc: c.itemDescription,
+        fam: c.familyName,
+        stk: c.currentStock,
+        min: c.minStock,
+        gap: c.riskGap,
+      });
+    }
   }
 
   if (sections.deadStock) {
-  const wsDead = wb.addWorksheet('Stock muerto', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  });
-  wsDead.columns = [
-    { header: 'N° parte', key: 'pn', width: 14 },
-    { header: 'Nombre', key: 'name', width: 28 },
-    { header: 'Descripción', key: 'desc', width: 32 },
-    { header: 'Familia', key: 'fam', width: 22 },
-    { header: 'Cantidad', key: 'qty', width: 12 },
-    { header: 'Valor', key: 'val', width: 14 },
-  ];
-  const hd = wsDead.getRow(1);
-  hd.font = { bold: true };
-  hd.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FFFEF3C7' },
-  };
-  for (const d of data.deadStockItems) {
-    wsDead.addRow({
-      pn: d.partNumber || '—',
-      name: d.itemName,
-      desc: d.itemDescription,
-      fam: d.familyName,
-      qty: d.quantity,
-      val: d.totalValue,
+    const wsDead = wb.addWorksheet('Stock muerto', {
+      views: [{ state: 'frozen', ySplit: 1 }],
     });
-  }
+    wsDead.columns = [
+      { header: 'N° parte', key: 'pn', width: 14 },
+      { header: 'Nombre', key: 'name', width: 28 },
+      { header: 'Descripción', key: 'desc', width: 32 },
+      { header: 'Familia', key: 'fam', width: 22 },
+      { header: 'Cantidad', key: 'qty', width: 12 },
+      { header: 'Valor', key: 'val', width: 14 },
+    ];
+    const hd = wsDead.getRow(1);
+    hd.font = { bold: true };
+    hd.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFEF3C7' },
+    };
+    for (const d of data.deadStockItems) {
+      wsDead.addRow({
+        pn: d.partNumber || '—',
+        name: d.itemName,
+        desc: d.itemDescription,
+        fam: d.familyName,
+        qty: d.quantity,
+        val: d.totalValue,
+      });
+    }
   }
 
   const prRows = sections.purchases

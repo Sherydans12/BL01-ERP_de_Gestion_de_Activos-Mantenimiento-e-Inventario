@@ -23,10 +23,7 @@ import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availabil
 import { UnreportedQueryDto } from './dto/unreported-query.dto';
 import { ExportAvailabilityQueryDto } from './dto/export-availability-query.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
-import {
-  ShiftBoardQueryDto,
-  ShiftBoardTab,
-} from './dto/shift-board-query.dto';
+import { ShiftBoardQueryDto, ShiftBoardTab } from './dto/shift-board-query.dto';
 import { BatchCreateAvailabilityDto } from './dto/batch-create-availability.dto';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -687,7 +684,9 @@ export class EquipmentAvailabilityService {
     });
 
     const operational = allRows.filter((r) => r.isOperational);
-    const reportedOperational = operational.filter((r) => r.rowKind === 'REPORTED');
+    const reportedOperational = operational.filter(
+      (r) => r.rowKind === 'REPORTED',
+    );
     const byStatus = this.emptyStatusCounts();
     for (const row of reportedOperational) {
       if (row.status) {
@@ -697,8 +696,12 @@ export class EquipmentAvailabilityService {
 
     const totalFleet = operational.length;
     const reportedCount = reportedOperational.length;
-    const unreportedCount = operational.filter((r) => r.rowKind === 'PENDING').length;
-    const excludedDownCount = allRows.filter((r) => r.rowKind === 'EXCLUDED').length;
+    const unreportedCount = operational.filter(
+      (r) => r.rowKind === 'PENDING',
+    ).length;
+    const excludedDownCount = allRows.filter(
+      (r) => r.rowKind === 'EXCLUDED',
+    ).length;
     const completionPct =
       totalFleet > 0 ? Math.round((reportedCount / totalFleet) * 100) : 100;
 
@@ -777,9 +780,7 @@ export class EquipmentAvailabilityService {
           user,
         );
         if (transition) {
-          sideEffects.push(
-            toAvailabilitySideEffect(transition, row.status),
-          );
+          sideEffects.push(toAvailabilitySideEffect(transition, row.status));
         }
         committed++;
       } catch (e) {
@@ -850,7 +851,11 @@ export class EquipmentAvailabilityService {
       this.prisma.equipmentAvailability.findMany({
         where,
         include: this.listInclude,
-        orderBy: [{ reportDate: 'desc' }, { shift: 'asc' }, { createdAt: 'desc' }],
+        orderBy: [
+          { reportDate: 'desc' },
+          { shift: 'asc' },
+          { createdAt: 'desc' },
+        ],
         skip,
         take: pageSize,
       }),
@@ -1597,9 +1602,7 @@ export class EquipmentAvailabilityService {
           user,
         );
         if (transition) {
-          sideEffects.push(
-            toAvailabilitySideEffect(transition, row.status),
-          );
+          sideEffects.push(toAvailabilitySideEffect(transition, row.status));
         }
         committed++;
       } catch (e) {

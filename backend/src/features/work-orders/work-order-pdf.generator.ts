@@ -76,7 +76,9 @@ export type WoPdfOrder = {
   } | null;
   createdByUser?: { name?: string | null; email?: string | null } | null;
   shiftSupervisorUser?: { name?: string | null; email?: string | null } | null;
-  systems: Array<{ catalogItem?: { name?: string | null; code?: string | null } | null }>;
+  systems: Array<{
+    catalogItem?: { name?: string | null; code?: string | null } | null;
+  }>;
   tasks: Array<{
     description: string;
     action?: string | null;
@@ -208,7 +210,7 @@ function availabilityLabelEs(v: string | null | undefined): string {
     NO: 'No afecta disponibilidad',
     STP: 'Standby / STP',
   };
-  return v ? map[v.trim().toUpperCase()] ?? v : '—';
+  return v ? (map[v.trim().toUpperCase()] ?? v) : '—';
 }
 
 function workLocationLabelEs(v: string | null | undefined): string {
@@ -216,7 +218,7 @@ function workLocationLabelEs(v: string | null | undefined): string {
     TALLER: 'Taller',
     TERRENO: 'Terreno',
   };
-  return v ? map[v.trim().toUpperCase()] ?? v : '—';
+  return v ? (map[v.trim().toUpperCase()] ?? v) : '—';
 }
 
 function workShiftLabelEs(v: string | null | undefined): string {
@@ -224,7 +226,7 @@ function workShiftLabelEs(v: string | null | undefined): string {
     DIA: 'Día',
     NOCHE: 'Noche',
   };
-  return v ? map[v.trim().toUpperCase()] ?? v : '—';
+  return v ? (map[v.trim().toUpperCase()] ?? v) : '—';
 }
 
 function classificationTagLabelEs(tag: string): string {
@@ -271,7 +273,7 @@ function taskActionLabelEs(a: string | null | undefined): string {
     CLEAN: 'Limpieza',
     LUBRICATE: 'Lubricación',
   };
-  return a ? map[a.trim().toUpperCase()] ?? a : '—';
+  return a ? (map[a.trim().toUpperCase()] ?? a) : '—';
 }
 
 function sampleStatusLabelEs(s: string): string {
@@ -335,7 +337,10 @@ function fmtOptDate(d: Date | null | undefined): string {
   return d ? formatDateTimeEs(d) : '—';
 }
 
-function narrativeBlock(label: string, text: string | null | undefined): string {
+function narrativeBlock(
+  label: string,
+  text: string | null | undefined,
+): string {
   const t = text?.trim();
   if (!t) return '';
   return `<div class="narrative"><span class="lbl-inline">${escapeHtml(label)}</span>${escapeHtml(t)}</div>`;
@@ -362,18 +367,21 @@ function buildWorkOrderHtml(order: WoPdfOrder, options: WoPdfOptions): string {
     ? [eq.contract.code, eq.contract.name].filter(Boolean).join(' — ').trim()
     : '';
   const subLine = order.subcontract
-    ? [order.subcontract.code, order.subcontract.name].filter(Boolean).join(' — ').trim()
+    ? [order.subcontract.code, order.subcontract.name]
+        .filter(Boolean)
+        .join(' — ')
+        .trim()
     : eq.subcontract
-      ? [eq.subcontract.code, eq.subcontract.name].filter(Boolean).join(' — ').trim()
+      ? [eq.subcontract.code, eq.subcontract.name]
+          .filter(Boolean)
+          .join(' — ')
+          .trim()
       : '';
 
   const tagsHtml =
     order.classificationTags?.length > 0
       ? `<ul class="tag-list">${order.classificationTags
-          .map(
-            (t) =>
-              `<li>${escapeHtml(classificationTagLabelEs(t))}</li>`,
-          )
+          .map((t) => `<li>${escapeHtml(classificationTagLabelEs(t))}</li>`)
           .join('')}</ul>`
       : '<span class="muted">Sin etiquetas de clasificación</span>';
 
@@ -422,8 +430,7 @@ function buildWorkOrderHtml(order: WoPdfOrder, options: WoPdfOptions): string {
             p.inventoryItem?.partNumber?.trim() ||
             p.inventoryItem?.inventoryCode?.trim() ||
             p.partNumber;
-          const lineTotal =
-            p.unitCost != null ? p.unitCost * p.quantity : null;
+          const lineTotal = p.unitCost != null ? p.unitCost * p.quantity : null;
           const itemName =
             p.inventoryItem?.name?.trim() || p.description?.trim() || '—';
           const itemDesc =

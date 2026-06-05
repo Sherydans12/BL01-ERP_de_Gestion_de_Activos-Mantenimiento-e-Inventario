@@ -1,10 +1,10 @@
 # CI — lint, build y suites unitarias (sin PostgreSQL).
 # Push/PR a main y develop.
 #
-# Paridad local antes de push (evita fallos prettier en Actions):
+# Paridad local antes de push (obligatorio si tocaste backend/src):
 #   cd backend  && npm run lint && npm run lint:ci && npm run test:domain
 #   cd frontend && npm run build && npm run test:ci
-# `npm run lint` aplica --fix; `lint:ci` es el gate estricto (sin --fix).
+# `npm run lint` aplica --fix (Prettier vía eslint-plugin-prettier); `lint:ci` es el gate estricto.
 name: CI
 
 on:
@@ -53,6 +53,17 @@ jobs:
       - name: Generate Prisma client
         working-directory: backend
         run: npx prisma generate
+
+      - name: Detect unformatted backend TS (Prettier drift)
+        working-directory: backend
+        run: |
+          npm run lint
+          cd ..
+          if ! git diff --quiet -- backend/src backend/test; then
+            echo "::error title=Prettier/ESLint drift::Ejecutá 'cd backend && npm run lint', commiteá y volvé a pushear."
+            git diff --stat -- backend/src backend/test
+            exit 1
+          fi
 
       - name: Lint backend (eslint + prettier, max-warnings 0)
         working-directory: backend

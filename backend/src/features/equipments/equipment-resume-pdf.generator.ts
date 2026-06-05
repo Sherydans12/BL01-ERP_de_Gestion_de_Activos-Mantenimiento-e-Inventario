@@ -147,15 +147,17 @@ function buildEquipmentResumeHtml(
     ? [eq.contract.code, eq.contract.name].filter(Boolean).join(' — ').trim()
     : '';
   const subLine = eq.subcontract
-    ? [eq.subcontract.code, eq.subcontract.name].filter(Boolean).join(' — ').trim()
+    ? [eq.subcontract.code, eq.subcontract.name]
+        .filter(Boolean)
+        .join(' — ')
+        .trim()
     : '';
 
   const woRows = payload.closedWorkOrders.length
     ? payload.closedWorkOrders
         .map((ot) => {
           const desc = ot.description?.trim() || '—';
-          const short =
-            desc.length > 120 ? `${desc.slice(0, 117)}…` : desc;
+          const short = desc.length > 120 ? `${desc.slice(0, 117)}…` : desc;
           const meter =
             ot.finalMeter != null
               ? formatNumberEs(ot.finalMeter, 0)

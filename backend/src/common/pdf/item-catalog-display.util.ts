@@ -11,9 +11,7 @@ export function catalogItemName(
   return f || '—';
 }
 
-export function catalogItemDescription(
-  description?: string | null,
-): string {
+export function catalogItemDescription(description?: string | null): string {
   const d = description?.trim();
   return d || '—';
 }
@@ -28,10 +26,7 @@ export function catalogItemLineLabel(opts: {
 }): string {
   const part = opts.partNumber?.trim() || opts.inventoryCode?.trim();
   const name = opts.name?.trim();
-  const desc =
-    opts.lineDescription?.trim() ||
-    opts.description?.trim() ||
-    '';
+  const desc = opts.lineDescription?.trim() || opts.description?.trim() || '';
   const parts: string[] = [];
   if (part) parts.push(`COD (${part})`);
   if (name) parts.push(name);

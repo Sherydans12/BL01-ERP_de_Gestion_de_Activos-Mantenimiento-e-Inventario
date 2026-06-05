@@ -10,7 +10,15 @@ import type {
 const SHIFT_HOURS = 12;
 const CACHE_TTL_MS = 60_000;
 
-const LITER_ABBREVS = new Set(['LT', 'L', 'LTR', 'LTS', 'LIT', 'LITRO', 'LITROS']);
+const LITER_ABBREVS = new Set([
+  'LT',
+  'L',
+  'LTR',
+  'LTS',
+  'LIT',
+  'LITRO',
+  'LITROS',
+]);
 
 function hoursBetween(a: Date, b: Date): number {
   return Math.abs(b.getTime() - a.getTime()) / 3_600_000;
@@ -129,76 +137,71 @@ export class KpiAnalyticsService {
     const eqFilter = this.equipmentAccessWhere(user, activeContract);
     const equipmentScope = eqFilter ? { equipment: eqFilter } : {};
 
-    const [
-      statusGroups,
-      otsInPeriod,
-      criticalFaults,
-      lubeReports,
-      meterLogs,
-    ] = await Promise.all([
-      this.prisma.equipmentAvailability.groupBy({
-        by: ['status'],
-        where: {
-          tenantId,
-          reportDate: { gte: from, lte: rangeEnd },
-          ...equipmentScope,
-        },
-        _count: { _all: true },
-      }),
-      this.prisma.workOrder.findMany({
-        where: {
-          tenantId,
-          status: 'CLOSED',
-          closedAt: { gte: from, lte: rangeEnd },
-          ...equipmentScope,
-        },
-        select: {
-          maintenanceType: true,
-          detentionStartedAt: true,
-          detentionEndedAt: true,
-        },
-      }),
-      this.prisma.faultReport.findMany({
-        where: {
-          tenantId,
-          criticality: 'HIGH',
-          eventDate: { gte: from, lte: rangeEnd },
-          ...equipmentScope,
-        },
-        select: { equipmentId: true, eventDate: true },
-        orderBy: { eventDate: 'asc' },
-      }),
-      this.prisma.lubeReport.findMany({
-        where: {
-          tenantId,
-          dispatchDate: { gte: from, lte: rangeEnd },
-          ...(activeContract && activeContract !== 'ALL'
-            ? { contractId: activeContract }
-            : eqFilter
-              ? { equipment: eqFilter }
-              : {}),
-        },
-        select: {
-          dispatchDate: true,
-          lines: {
-            select: {
-              quantity: true,
-              item: {
-                select: { unitOfMeasure: { select: { abbreviation: true } } },
+    const [statusGroups, otsInPeriod, criticalFaults, lubeReports, meterLogs] =
+      await Promise.all([
+        this.prisma.equipmentAvailability.groupBy({
+          by: ['status'],
+          where: {
+            tenantId,
+            reportDate: { gte: from, lte: rangeEnd },
+            ...equipmentScope,
+          },
+          _count: { _all: true },
+        }),
+        this.prisma.workOrder.findMany({
+          where: {
+            tenantId,
+            status: 'CLOSED',
+            closedAt: { gte: from, lte: rangeEnd },
+            ...equipmentScope,
+          },
+          select: {
+            maintenanceType: true,
+            detentionStartedAt: true,
+            detentionEndedAt: true,
+          },
+        }),
+        this.prisma.faultReport.findMany({
+          where: {
+            tenantId,
+            criticality: 'HIGH',
+            eventDate: { gte: from, lte: rangeEnd },
+            ...equipmentScope,
+          },
+          select: { equipmentId: true, eventDate: true },
+          orderBy: { eventDate: 'asc' },
+        }),
+        this.prisma.lubeReport.findMany({
+          where: {
+            tenantId,
+            dispatchDate: { gte: from, lte: rangeEnd },
+            ...(activeContract && activeContract !== 'ALL'
+              ? { contractId: activeContract }
+              : eqFilter
+                ? { equipment: eqFilter }
+                : {}),
+          },
+          select: {
+            dispatchDate: true,
+            lines: {
+              select: {
+                quantity: true,
+                item: {
+                  select: { unitOfMeasure: { select: { abbreviation: true } } },
+                },
               },
             },
           },
-        },
-      }),
-      this.prisma.equipmentMeterLog.findMany({
-        where: {
-          tenantId,
-          date: { gte: from, lte: rangeEnd },
-          ...equipmentScope,
-        },
-        select: { date: true, oldValue: true, newValue: true },
-      }),
-    ]);
+        }),
+        this.prisma.equipmentMeterLog.findMany({
+          where: {
+            tenantId,
+            date: { gte: from, lte: rangeEnd },
+            ...equipmentScope,
+          },
+          select: { date: true, oldValue: true, newValue: true },
+        }),
+      ]);
 
     let reportedShifts = 0;
     let operationalShifts = 0;
@@ -254,7 +257,10 @@ export class KpiAnalyticsService {
       );
       for (let i = 1; i < sorted.length; i++) {
         mtbfIntervals.push(
-          Math.max(0, hoursBetween(sorted[i - 1].eventDate, sorted[i].eventDate)),
+          Math.max(
+            0,
+            hoursBetween(sorted[i - 1].eventDate, sorted[i].eventDate),
+          ),
         );
       }
     }
@@ -291,7 +297,8 @@ export class KpiAnalyticsService {
     const lubeTrendMonthly: LubeTrendMonthPoint[] = [...allMonths]
       .sort()
       .map((month) => {
-        const totalLiters = Math.round((lubeByMonth.get(month) ?? 0) * 100) / 100;
+        const totalLiters =
+          Math.round((lubeByMonth.get(month) ?? 0) * 100) / 100;
         const machineHours =
           Math.round((hoursByMonth.get(month) ?? 0) * 100) / 100;
         return {

@@ -116,6 +116,9 @@ export class InventoryAnalyticsController {
     if (!query) {
       throw new BadRequestException('Debe indicar un término de búsqueda.');
     }
-    return this.inventoryAnalyticsService.globalSearch(req.user.tenantId, query);
+    return this.inventoryAnalyticsService.globalSearch(
+      req.user.tenantId,
+      query,
+    );
   }
 }

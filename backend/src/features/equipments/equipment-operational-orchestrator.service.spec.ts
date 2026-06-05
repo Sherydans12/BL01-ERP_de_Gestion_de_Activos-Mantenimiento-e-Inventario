@@ -76,10 +76,7 @@ describe('EquipmentOperationalOrchestratorService', () => {
       isOperational: false,
     } as never);
 
-    const result = await service.onOperationalStatusChange(
-      tx,
-      buildInput(),
-    );
+    const result = await service.onOperationalStatusChange(tx, buildInput());
 
     expect(result.createdFaultReport).toBe(true);
     expect(result.isOperational).toBe(false);
@@ -115,10 +112,7 @@ describe('EquipmentOperationalOrchestratorService', () => {
       isOperational: false,
     } as never);
 
-    const result = await service.onOperationalStatusChange(
-      tx,
-      buildInput(),
-    );
+    const result = await service.onOperationalStatusChange(tx, buildInput());
 
     expect(result.createdFaultReport).toBe(false);
     expect(result.skippedReason).toBe('ACTIVE_FAULT_EXISTS');
@@ -193,10 +187,7 @@ describe('EquipmentOperationalOrchestratorService', () => {
       isOperational: false,
     } as never);
 
-    const result = await service.onOperationalStatusChange(
-      tx,
-      buildInput(),
-    );
+    const result = await service.onOperationalStatusChange(tx, buildInput());
 
     expect(result.skippedReason).toBe('NO_CONTRACT_FOR_STUB');
     expect(result.createdFaultReport).toBe(false);

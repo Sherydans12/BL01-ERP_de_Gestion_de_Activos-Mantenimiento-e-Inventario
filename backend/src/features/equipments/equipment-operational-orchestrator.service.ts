@@ -81,7 +81,11 @@ export class EquipmentOperationalOrchestratorService {
   private async applyStopTransition(
     tx: Prisma.TransactionClient,
     input: OperationalTransitionInput,
-    equipment: { id: string; contractId: string | null; isOperational: boolean },
+    equipment: {
+      id: string;
+      contractId: string | null;
+      isOperational: boolean;
+    },
     base: OperationalTransitionResult,
   ): Promise<OperationalTransitionResult> {
     const activeFault = await this.findActiveFaultReport(
