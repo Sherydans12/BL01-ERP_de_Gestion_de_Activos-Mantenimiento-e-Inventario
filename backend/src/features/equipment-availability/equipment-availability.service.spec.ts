@@ -12,6 +12,7 @@ import { EquipmentOperationalOrchestratorService } from '../equipments/equipment
 import { EquipmentAvailabilityService } from './equipment-availability.service';
 import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availability.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
+import ExcelJS from 'exceljs';
 
 // ── Mock del helper de horómetro (mismo patrón que lube-reports.service.spec) ──
 jest.mock('../equipments/equipment-meter-sync', () => ({
@@ -1000,5 +1001,63 @@ describe('EquipmentAvailabilityService — hasNightShift guard (create / findUnr
         }),
       }),
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite: exportTemplate — plantilla Excel M2
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EquipmentAvailabilityService — exportTemplate', () => {
+  let service: EquipmentAvailabilityService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const opConfig = {
+    hasNightShift: true,
+    dayShiftStartTime: '08:00',
+    nightShiftStartTime: '20:00',
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
+    }).compile();
+
+    service = module.get(EquipmentAvailabilityService);
+
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      opConfig as never,
+    );
+    prisma.equipment.findMany.mockResolvedValue([
+      {
+        id: equipmentId,
+        internalId: 'EQ-001',
+        brand: 'Cat',
+        model: '793',
+        plate: 'ABCD12',
+        currentMeter: 1000,
+        meterType: 'HOURS',
+      },
+    ] as never);
+    prisma.equipmentAvailability.findMany.mockResolvedValue([] as never);
+    prisma.equipmentMeterLog.findMany.mockResolvedValue([] as never);
+  });
+
+  it('genera .xlsx con nombre de hoja válido cuando dayShiftStartTime incluye ":"', async () => {
+    const buffer = await service.exportTemplate(
+      { reportDate: '2026-06-04', shift: ShiftType.DAY },
+      adminUser,
+    );
+
+    expect(buffer.length).toBeGreaterThan(0);
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(
+      buffer as unknown as Parameters<typeof workbook.xlsx.load>[0],
+    );
+
+    expect(workbook.worksheets[0]?.name).toBe('Disponibilidad Día (08-00)');
+    expect(workbook.getWorksheet('_info')).toBeDefined();
   });
 });

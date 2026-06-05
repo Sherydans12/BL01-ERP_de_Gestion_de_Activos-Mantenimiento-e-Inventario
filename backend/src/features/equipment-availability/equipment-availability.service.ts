@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { sanitizeExcelWorksheetName } from '../../common/excel/excel-worksheet-name.util';
 import { EquipmentOperationalOrchestratorService } from '../equipments/equipment-operational-orchestrator.service';
 import {
   AvailabilitySideEffect,
@@ -988,7 +989,9 @@ export class EquipmentAvailabilityService {
         ? opConfig.dayShiftStartTime
         : opConfig.nightShiftStartTime;
     const ws = workbook.addWorksheet(
-      `Disponibilidad ${shiftLabel} (${shiftStartTime})`,
+      sanitizeExcelWorksheetName(
+        `Disponibilidad ${shiftLabel} (${shiftStartTime})`,
+      ),
       {
         pageSetup: { paperSize: 9, orientation: 'landscape' },
       },
