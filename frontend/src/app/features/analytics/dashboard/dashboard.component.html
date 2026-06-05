@@ -7,9 +7,9 @@
         Disponibilidad física (M2), confiabilidad (OT/M3) y consumo de lubricantes (M1).
       </p>
     </div>
-    @if (dashboard()?.meta.cached) {
+    @if (dashboard()?.meta?.cached) {
       <span class="text-xs font-mono text-muted border border-border rounded-lg px-2 py-1">
-        Caché servidor · {{ dashboard()!.meta.generatedAt | date:'short' }}
+        Caché servidor · {{ dashboard()?.meta?.generatedAt | date:'short' }}
       </span>
     }
   </div>
