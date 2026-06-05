@@ -1,12 +1,12 @@
 # Operaciones × Inventario — cobertura E2E Playwright y pendientes
 
-**Versión:** 1.2 · **Actualizado:** 2026-06-05
+**Versión:** 1.3 · **Actualizado:** 2026-06-05
 
 Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/resiliencia y ciclo de vida integrado (M1 → W2W → OT → medidor).
 
 ---
 
-## 1. Inventario actual (67 tests · suite completa)
+## 1. Inventario actual (69 tests · suite completa)
 
 | Paquete | Specs | Script npm | Qué valida |
 |---------|-------|------------|------------|
@@ -17,6 +17,7 @@ Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/
 | **Caos / resiliencia** | `tests/e2e-chaos-resilience.spec.ts` | `npm run test:chaos` | Concurrencia M1, cronología medidor, fuga stock OT, bulk-sync horómetro |
 | **P0 integridad** | `tests/e2e-operations-p0-integrity.spec.ts` | `npm run test:operations:p0` | `blockNegativeStock` M1+OT, M3 falla ALTA, correlativos `RCL-` / `RF-` |
 | **P1 M2 disponibilidad** | `tests/e2e-operations-p1-m2-availability.spec.ts` | `npm run test:operations:p1` | Monitor Pendientes→Reportados, batch 2 equipos, `hasNightShift=false`, toggles empresa |
+| **P2 inventario × ops** | `tests/e2e-operations-p2-inventory-cross.spec.ts` | `npm run test:operations:p2` | W2W parcial + M1 stock picker; PBAC lectura POST M1 → 403 |
 
 **Prerrequisitos locales:**
 
@@ -86,11 +87,13 @@ Implementado en `tests/e2e-operations-p1-m2-availability.spec.ts` (`npm run test
 
 Registro horas (salto regresivo) sigue cubierto parcialmente en **`test:chaos`** §4.
 
-### P2 — Inventario × operaciones
+### P2 — Inventario × operaciones — HECHO (2026-06-05)
 
-1. **W2W + M1 misma bodega móvil** — transferencia parcial luego despacho M1 (stock coherente en picker).
-2. **Consumo OT desde bodega otro contrato** — ya hay API en `cross-module-ot-inventory`; añadir variante UI planificador.
-3. **PBAC M1 lectura** — usuario solo lectura no puede POST `/lube-reports` (403), análogo inventario W2W.
+`tests/e2e-operations-p2-inventory-cross.spec.ts` (`npm run test:operations:p2`).
+
+1. ~~**W2W parcial + M1 misma bodega móvil**~~ — ingreso 100 → transferencia 30 → UI «Disponible: 30» → despacho 8,5 → stock móvil 21,5 (API).
+2. **Consumo OT desde bodega otro contrato (UI planificador)** — pendiente; API en `cross-module-ot-inventory`.
+3. ~~**PBAC M1 lectura**~~ — `pbac-inventario-lectura@test.com` → POST `/lube-reports` **403**.
 
 ### P3 — Roadmap integrado (ver [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md))
 
