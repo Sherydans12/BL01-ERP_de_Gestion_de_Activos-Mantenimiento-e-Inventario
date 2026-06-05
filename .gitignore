@@ -23,6 +23,7 @@ temp-everything-claude-code/
 temp-ecc-survey/
 temp-uiux-survey/
 temp-ecc-import/
+.codex-manual-cache/
 
 # Log local de hooks Cursor (memoria automática por máquina)
 docs/agentes/sesiones-auto.log.md

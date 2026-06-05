@@ -26,6 +26,12 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 Resumen: **`AGENTS.md`**, **`.cursor/rules/`**, **`docs/agentes/`** (`decisiones.md`, `glosario.md`), **@archivos** en chats críticos, y **Memoria de Cursor** solo para preferencias personales (no sustituye la doc del equipo).
 
+## Compatibilidad Codex
+
+Guia: [codex-compatibilidad.md](codex-compatibilidad.md).
+
+Codex debe usar `AGENTS.md` como entrada principal. Las skills repo-locales viven en `.agents/skills/` como wrappers que delegan a `.cursor/skills/`, para no mantener dos copias divergentes. La configuracion especifica de Codex vive en `.codex/config.toml`. Los hooks Cursor no fueron migrados automaticamente a Codex; si se agregan hooks Codex, documentar primero el mapeo en la guia.
+
 ## ui-ux-pro-max-skill
 
 Repositorio upstream: [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill).

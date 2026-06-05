@@ -1,0 +1,9 @@
+# Project-scoped Codex settings for BL01 / TPM.
+# Keep this file additive: Cursor continues to use `.cursor/`.
+
+# AGENTS.md is already concise, but this leaves room for future nested guidance.
+project_doc_max_bytes = 65536
+
+[features]
+# Hooks are enabled by default in Codex; no project hooks are configured yet.
+hooks = true
