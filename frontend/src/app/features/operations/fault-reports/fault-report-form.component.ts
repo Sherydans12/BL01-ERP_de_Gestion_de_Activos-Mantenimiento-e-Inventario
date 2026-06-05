@@ -7,11 +7,12 @@ import {
 } from '@angular/core';
 import { CommonModule, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { Observable, Subject, from, concatMap, catchError, of, tap } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { EquipmentAvailabilityService } from '../../../core/services/equipment-availability/equipment-availability.service';
 import {
   FaultReportsService,
   CreateFaultReportPayload,
@@ -57,6 +58,8 @@ export class FaultReportFormComponent implements OnInit {
 
   private faultService = inject(FaultReportsService);
   private fleetService = inject(FleetService);
+  private availabilityService = inject(EquipmentAvailabilityService);
+  private route = inject(ActivatedRoute);
   private notify       = inject(NotificationService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
 
@@ -90,6 +93,9 @@ export class FaultReportFormComponent implements OnInit {
   symptomDescription   = signal<string>('');
 
   isSubmitting = signal(false);
+
+  /** Banner cuando el formulario se abrió desde M2 (queryParam from=m2). */
+  prefillFromM2 = signal(false);
 
   selectedEquipmentLabel = computed(() => {
     const eq = this.equipments().find((e) => e.id === this.selectedEquipmentId());
@@ -150,10 +156,29 @@ export class FaultReportFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    const qp = this.route.snapshot.queryParamMap;
+    const equipmentId = qp.get('equipmentId');
+    const symptom = qp.get('symptom');
+    const meterRaw = qp.get('meter');
+    this.prefillFromM2.set(qp.get('from') === 'm2');
+
     this.fleetService.getEquipments({ limit: 300 }).subscribe({
       next: (res) => {
         this.equipments.set(res.data ?? res);
         this.equipLoading.set(false);
+
+        if (equipmentId) {
+          this.onSelectEquipment(equipmentId);
+        }
+        if (symptom) {
+          this.symptomDescription.set(symptom);
+        }
+        if (meterRaw) {
+          const meter = Number(meterRaw);
+          if (Number.isFinite(meter)) {
+            this.meterAtFault.set(meter);
+          }
+        }
       },
       error: () => {
         this.notify.error('No se pudieron cargar los equipos.');
@@ -331,12 +356,13 @@ export class FaultReportFormComponent implements OnInit {
       : '';
     this.notify.success(`Falla ${report.correlative} registrada.${woMsg}`);
 
-    // Invalida la caché del Maestro de Flota para que `isOperational` y `currentMeter`
-    // aparezcan actualizados al navegar a /flota, sin esperar a la re-creación del componente.
-    // HIGH muta isOperational=false; MEDIUM puede afectar el horómetro si se reportó meterAtFault.
-    // Ver MASTER-CONTEXT.md §2.4 y docs/agentes/decisiones.md «Integración Transversal».
-    if (criticality === 'HIGH' || criticality === 'MEDIUM') {
-      this.fleetService.invalidateCache();
+    // Invalida lista y revisión del modal de flota (isOperational, horómetro).
+    const eqId = this.selectedEquipmentId();
+    if (eqId && (criticality === 'HIGH' || criticality === 'MEDIUM')) {
+      this.fleetService.notifyEquipmentChanged(eqId);
+    }
+    if (eqId) {
+      this.availabilityService.clearPendingFaultRegistration(eqId);
     }
 
     this.resetForm();
@@ -354,6 +380,7 @@ export class FaultReportFormComponent implements OnInit {
     this.symptomDescription.set('');
     this.attachedFiles.set([]);
     this.uploadProgress.set(null);
+    this.prefillFromM2.set(false);
   }
 
   private nowIso(): string {

@@ -23,6 +23,12 @@
     </a>
   </div>
 
+  @if (prefillFromM2()) {
+    <div class="mb-5 max-w-2xl mx-auto rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-main">
+      El sistema ha pre-cargado la falla desde el Reporte de Disponibilidad. Por favor, confirme el sistema afectado y la criticidad.
+    </div>
+  }
+
   <div class="max-w-2xl mx-auto space-y-5">
 
     <!-- ── 1. Equipo ──────────────────────────────────────────────────────── -->

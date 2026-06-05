@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 import { NotificationService } from '../../../core/services/notification/notification.service';
@@ -18,6 +18,7 @@ import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-
 import {
   EquipmentAvailabilityService,
   CreateAvailabilityPayload,
+  AvailabilitySideEffect,
   SHIFTS,
   OPERATIONAL_STATUSES,
   SHIFT_LABELS,
@@ -28,6 +29,7 @@ import {
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
 import type { Contract, EquipmentMeterSnapshot } from '../../../core/models/types';
 import { O } from '../../../core/constants/operations-permissions';
 
@@ -71,6 +73,8 @@ export class AvailabilityFormComponent implements OnInit {
   private availabilityService = inject(EquipmentAvailabilityService);
   private contractsService = inject(ContractsService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private fleetService = inject(FleetService);
   private notify = inject(NotificationService);
   private meterSnapshotService = inject(EquipmentMeterSnapshotService);
   protected readonly shiftService = inject(ShiftService);
@@ -128,6 +132,12 @@ export class AvailabilityFormComponent implements OnInit {
 
   leaveConfirmOpen = signal(false);
   private leaveResult$ = new Subject<boolean>();
+
+  /** Modal M2→M3 tras detención por falla (sideEffects del orquestador). */
+  faultCompletionConfirmOpen = signal(false);
+  private pendingFaultSideEffect = signal<AvailabilitySideEffect | null>(null);
+  private pendingFaultSymptom = signal<string | undefined>(undefined);
+  private pendingFaultMeter = signal<number | undefined>(undefined);
 
   get maxDate(): string {
     return this.shiftService.todayIso();
@@ -262,6 +272,7 @@ export class AvailabilityFormComponent implements OnInit {
               `${result.errors.length} equipo(s) con error. Revisa e intenta de nuevo.`,
             );
           }
+          this.applyOperationalSideEffects(result.sideEffects);
           this.isSubmitting.set(false);
           this.loadPending();
         },
@@ -288,5 +299,53 @@ export class AvailabilityFormComponent implements OnInit {
   onLeaveCancelled(): void {
     this.leaveConfirmOpen.set(false);
     this.leaveResult$.next(false);
+  }
+
+  private applyOperationalSideEffects(
+    sideEffects: AvailabilitySideEffect[] | undefined,
+  ): void {
+    for (const se of sideEffects ?? []) {
+      this.fleetService.notifyEquipmentChanged(se.equipmentId);
+    }
+
+    const faultCompletion = (sideEffects ?? []).find(
+      (se) => se.requiresFaultCompletion,
+    );
+    if (!faultCompletion) return;
+
+    const draft = this.drafts()[faultCompletion.equipmentId];
+    this.pendingFaultSideEffect.set(faultCompletion);
+    this.pendingFaultSymptom.set(draft?.comments?.trim() || undefined);
+    this.pendingFaultMeter.set(
+      draft?.meterReading != null ? draft.meterReading : undefined,
+    );
+    this.faultCompletionConfirmOpen.set(true);
+  }
+
+  onFaultCompletionConfirmed(): void {
+    const se = this.pendingFaultSideEffect();
+    this.faultCompletionConfirmOpen.set(false);
+    this.pendingFaultSideEffect.set(null);
+    if (!se) return;
+
+    const queryParams: Record<string, string | number> = {
+      equipmentId: se.equipmentId,
+      from: 'm2',
+    };
+    const symptom = this.pendingFaultSymptom();
+    const meter = this.pendingFaultMeter();
+    if (symptom) queryParams['symptom'] = symptom;
+    if (meter != null) queryParams['meter'] = meter;
+
+    void this.router.navigate(['/app/operaciones/fallas/nuevo'], { queryParams });
+  }
+
+  onFaultCompletionDeclined(): void {
+    const se = this.pendingFaultSideEffect();
+    this.faultCompletionConfirmOpen.set(false);
+    this.pendingFaultSideEffect.set(null);
+    if (se) {
+      this.availabilityService.markPendingFaultRegistration(se.equipmentId);
+    }
   }
 }

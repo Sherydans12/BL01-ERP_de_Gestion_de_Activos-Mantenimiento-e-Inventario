@@ -44,6 +44,7 @@ const availabilityServiceSpy = jasmine.createSpyObj<EquipmentAvailabilityService
   {
     getShiftBoard: of(boardEmpty),
     exportTemplate: of(undefined),
+    hasPendingFaultRegistration: false,
   },
 );
 
@@ -52,7 +53,13 @@ const contractsSpy = jasmine.createSpyObj<ContractsService>('ContractsService', 
 });
 
 const authSpy = jasmine.createSpyObj<AuthService>('AuthService', [], {
-  currentUser: signal({ role: 'ADMIN' as const, allowedContracts: ['ALL'] }),
+  currentUser: signal({
+    id: 'usr-admin',
+    email: 'admin@test.cl',
+    name: 'Admin',
+    role: 'ADMIN' as const,
+    allowedContracts: ['ALL'],
+  }),
 });
 
 const shiftSpy = jasmine.createSpyObj<ShiftService>('ShiftService', [], {
@@ -73,6 +80,8 @@ describe('AvailabilityMonitorComponent', () => {
   let fixture: ComponentFixture<AvailabilityMonitorComponent>;
 
   beforeEach(async () => {
+    availabilityServiceSpy.getShiftBoard.and.returnValue(of(boardEmpty));
+
     await TestBed.configureTestingModule({
       imports: [AvailabilityMonitorComponent],
       providers: [

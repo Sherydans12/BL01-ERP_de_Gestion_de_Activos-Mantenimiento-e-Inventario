@@ -7,6 +7,8 @@ import {
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { OperationalStatus, Prisma, ShiftType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SequenceService } from '../../common/sequence/sequence.service';
+import { EquipmentOperationalOrchestratorService } from '../equipments/equipment-operational-orchestrator.service';
 import { EquipmentAvailabilityService } from './equipment-availability.service';
 import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availability.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
@@ -75,6 +77,22 @@ function buildDto(
   };
 }
 
+function availabilityTestProviders(
+  prisma: DeepMockProxy<PrismaService>,
+  sequenceService: { getNextCorrelative: jest.Mock },
+) {
+  return [
+    EquipmentAvailabilityService,
+    { provide: PrismaService, useValue: prisma },
+    EquipmentOperationalOrchestratorService,
+    { provide: SequenceService, useValue: sequenceService },
+  ];
+}
+
+const sequenceServiceStub = {
+  getNextCorrelative: jest.fn().mockResolvedValue('RF-00001'),
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Suite: create
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,17 +105,15 @@ describe('EquipmentAvailabilityService — create', () => {
     prisma = mockDeep<PrismaService>();
     tx = mockDeep<Prisma.TransactionClient>();
     mockApplyCurrentMeterChange.mockClear();
+    sequenceServiceStub.getNextCorrelative.mockClear();
+    sequenceServiceStub.getNextCorrelative.mockResolvedValue('RF-00001');
 
-    // Patrón estándar: $transaction delega al callback con el tx mock
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
 
     service = module.get(EquipmentAvailabilityService);
@@ -219,20 +235,37 @@ describe('EquipmentAvailabilityService — create', () => {
     expect(tx.equipmentAvailability.create).not.toHaveBeenCalled();
   });
 
-  it('isAvailable es false para estado DOWN_FAILURE', async () => {
+  it('isAvailable es false para estado DOWN_FAILURE y orquesta stub M3', async () => {
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
     tx.equipmentAvailability.create.mockResolvedValue({
       ...createdRecord,
       status: OperationalStatus.DOWN_FAILURE,
     } as never);
+    tx.faultReport.findFirst
+      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce(null as never);
+    tx.faultReport.create.mockResolvedValue({
+      id: 'fr-stub-1',
+      correlative: 'RF-00001',
+    } as never);
+    tx.equipment.update.mockResolvedValue({
+      ...validEquipment,
+      isOperational: false,
+    } as never);
 
     const result = await service.create(
-      buildDto({ status: OperationalStatus.DOWN_FAILURE }),
+      buildDto({
+        status: OperationalStatus.DOWN_FAILURE,
+        comments: 'Fuga hidráulica en terreno.',
+      }),
       adminUser,
     );
 
     expect(result.status).toBe(OperationalStatus.DOWN_FAILURE);
     expect(result.isAvailable).toBe(false);
+    expect(result.operationalTransition?.createdFaultReport).toBe(true);
+    expect(result.operationalTransition?.isOperational).toBe(false);
+    expect(result.operationalTransition?.faultReportId).toBe('fr-stub-1');
   });
 });
 
@@ -275,10 +308,7 @@ describe('EquipmentAvailabilityService — findUnreported', () => {
     prisma = mockDeep<PrismaService>();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
 
     service = module.get(EquipmentAvailabilityService);
@@ -408,10 +438,7 @@ describe('EquipmentAvailabilityService — findAll', () => {
     prisma = mockDeep<PrismaService>();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
 
     service = module.get(EquipmentAvailabilityService);
@@ -506,10 +533,7 @@ describe('EquipmentAvailabilityService — getShiftBoard', () => {
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
     service = module.get(EquipmentAvailabilityService);
   });
@@ -597,10 +621,7 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
     service = module.get(EquipmentAvailabilityService);
   });
@@ -608,7 +629,9 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
   it('persiste filas válidas y acumula errores por fila fallida', async () => {
     tx.equipment.findFirst
       .mockResolvedValueOnce(validEquipment as never)
+      .mockResolvedValueOnce(validEquipment as never)
       .mockRejectedValueOnce(new NotFoundException('Equipo no encontrado'));
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
     tx.equipmentAvailability.upsert.mockResolvedValue(createdRecord as never);
 
     const result = await service.batchCreate(
@@ -671,10 +694,7 @@ describe('EquipmentAvailabilityService — commitImport', () => {
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
 
     service = module.get(EquipmentAvailabilityService);
@@ -682,6 +702,7 @@ describe('EquipmentAvailabilityService — commitImport', () => {
 
   it('happy path: guarda todas las filas y retorna committed=2 con errores vacíos', async () => {
     tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
     tx.equipmentAvailability.upsert.mockResolvedValue(upsertedRecord as never);
 
     const result = await service.commitImport(baseDtoTwoRows, adminUser);
@@ -692,10 +713,11 @@ describe('EquipmentAvailabilityService — commitImport', () => {
   });
 
   it('éxito parcial: guarda la primera fila y reporta el error de la segunda sin abortar el lote', async () => {
-    // Primera fila válida, segunda con equipo inexistente
     tx.equipment.findFirst
       .mockResolvedValueOnce(validEquipment as never)
+      .mockResolvedValueOnce(validEquipment as never)
       .mockResolvedValueOnce(null as never);
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
     tx.equipmentAvailability.upsert.mockResolvedValue(upsertedRecord as never);
 
     const result = await service.commitImport(baseDtoTwoRows, adminUser);
@@ -713,6 +735,7 @@ describe('EquipmentAvailabilityService — commitImport', () => {
       ...validEquipment,
       currentMeter: 1000,
     } as never);
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
     tx.equipmentAvailability.upsert.mockResolvedValue({
       ...upsertedRecord,
       meterReading: 1350,
@@ -811,10 +834,7 @@ describe('EquipmentAvailabilityService — hasNightShift guard (create / findUnr
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EquipmentAvailabilityService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
 
     service = module.get(EquipmentAvailabilityService);

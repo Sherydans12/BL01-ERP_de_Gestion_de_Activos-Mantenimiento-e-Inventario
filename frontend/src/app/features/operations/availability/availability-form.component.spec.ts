@@ -14,6 +14,7 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
 
 const twoEquipments: UnreportedEquipment[] = [
   { id: 'eq-1', internalId: 'EQ-001', brand: 'CAT', model: '330', plate: 'A-001', contractId: 'c-1' },
@@ -32,6 +33,7 @@ const availabilityServiceSpy = jasmine.createSpyObj<EquipmentAvailabilityService
   {
     getUnreported: of(paginatedResponse),
     batchCreate: of({ committed: 1, errors: [] }),
+    markPendingFaultRegistration: undefined,
   },
 );
 
@@ -45,7 +47,13 @@ const contractsSpy = jasmine.createSpyObj<ContractsService>('ContractsService', 
 });
 
 const authSpy = jasmine.createSpyObj<AuthService>('AuthService', [], {
-  currentUser: signal({ role: 'ADMIN' as const, allowedContracts: ['ALL'] }),
+  currentUser: signal({
+    id: 'usr-admin',
+    email: 'admin@test.cl',
+    name: 'Admin',
+    role: 'ADMIN' as const,
+    allowedContracts: ['ALL'],
+  }),
 });
 
 const shiftSpy = jasmine.createSpyObj<ShiftService>('ShiftService', [], {
@@ -53,6 +61,10 @@ const shiftSpy = jasmine.createSpyObj<ShiftService>('ShiftService', [], {
   currentShift: signal<'DAY' | 'NIGHT'>('DAY'),
   hasNightShift: signal(true),
 });
+
+const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', [
+  'notifyEquipmentChanged',
+]);
 
 describe('AvailabilityFormComponent (Bulk Grid)', () => {
   let component: AvailabilityFormComponent;
@@ -77,6 +89,7 @@ describe('AvailabilityFormComponent (Bulk Grid)', () => {
         { provide: ContractsService, useValue: contractsSpy },
         { provide: AuthService, useValue: authSpy },
         { provide: ShiftService, useValue: shiftSpy },
+        { provide: FleetService, useValue: fleetSpy },
       ],
     }).compileComponents();
 
@@ -104,5 +117,34 @@ describe('AvailabilityFormComponent (Bulk Grid)', () => {
     component.updateDraft('eq-1', { status: 'OPERATIONAL' });
     component.submitAll();
     expect(availabilityServiceSpy.batchCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('muestra confirm modal cuando batchCreate devuelve sideEffects con requiresFaultCompletion', () => {
+    availabilityServiceSpy.batchCreate.and.returnValue(
+      of({
+        committed: 1,
+        errors: [],
+        sideEffects: [
+          {
+            equipmentId: 'eq-1',
+            status: 'DOWN_FAILURE',
+            isOperational: false,
+            createdFaultReport: true,
+            requiresFaultCompletion: true,
+            faultReportId: 'fr-1',
+          },
+        ],
+      }),
+    );
+
+    component.updateDraft('eq-1', {
+      status: 'DOWN_FAILURE',
+      comments: 'Fuga hidráulica en bomba principal',
+      meterReading: 12450,
+    });
+    component.submitAll();
+
+    expect(component.faultCompletionConfirmOpen()).toBeTrue();
+    expect(fleetSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-1');
   });
 });

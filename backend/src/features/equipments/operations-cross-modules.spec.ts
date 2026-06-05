@@ -31,6 +31,7 @@ import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
 import { EquipmentAvailabilityService } from '../equipment-availability/equipment-availability.service';
+import { EquipmentOperationalOrchestratorService } from './equipment-operational-orchestrator.service';
 import { LubeReportsService } from '../lube-reports/lube-reports.service';
 import { FaultReportsService } from '../fault-reports/fault-reports.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
@@ -254,6 +255,11 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
         providers: [
           EquipmentAvailabilityService,
           { provide: PrismaService, useValue: prisma },
+          EquipmentOperationalOrchestratorService,
+          {
+            provide: SequenceService,
+            useValue: sequenceService,
+          },
         ],
       }).compile(),
       Test.createTestingModule({

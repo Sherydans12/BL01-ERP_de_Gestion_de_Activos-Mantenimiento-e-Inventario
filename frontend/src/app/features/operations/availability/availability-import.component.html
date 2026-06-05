@@ -621,3 +621,9 @@
   } <!-- end @if !== done -->
 
 </div>
+
+<app-confirm-modal [isOpen]="faultCompletionConfirmOpen()"
+  title="Completar registro de falla"
+  message="Se ha registrado la detención del equipo. ¿Desea continuar al registro de falla para completar el diagnóstico?"
+  confirmText="Sí, registrar falla" cancelText="Ahora no"
+  (confirm)="onFaultCompletionConfirmed()" (cancel)="onFaultCompletionDeclined()" />

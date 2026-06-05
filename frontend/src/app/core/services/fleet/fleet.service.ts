@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, signal, computed, Signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
@@ -34,12 +34,38 @@ export class FleetService {
   private readonly _listVersion = signal(0);
   readonly listVersion = this._listVersion.asReadonly();
 
+  /** Revisión por equipo — modales abiertos observan esto para refetch. */
+  private readonly _equipmentRevision = signal<Record<string, number>>({});
+
+  /**
+   * Señal de revisión para un equipo concreto (p. ej. modal de detalle).
+   */
+  equipmentRevision(equipmentId: string): Signal<number> {
+    return computed(() => this._equipmentRevision()[equipmentId] ?? 0);
+  }
+
   /**
    * Marca la lista de equipos como obsoleta. La señal `listVersion` cambia y cualquier
    * componente que la lea dentro de un `effect()` (p. ej. `FleetMasterComponent`) recargará.
    */
   invalidateCache(): void {
     this._listVersion.update((v) => v + 1);
+  }
+
+  /**
+   * Invalida la lista y bump de revisión para un equipo (M2 detención, M3, OT).
+   */
+  notifyEquipmentChanged(equipmentId: string): void {
+    this.invalidateCache();
+    this._equipmentRevision.update((m) => ({
+      ...m,
+      [equipmentId]: (m[equipmentId] ?? 0) + 1,
+    }));
+  }
+
+  /** Alias semántico de `notifyEquipmentChanged`. */
+  bumpEquipmentRevision(equipmentId: string): void {
+    this.notifyEquipmentChanged(equipmentId);
   }
 
   /**

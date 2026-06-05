@@ -13,7 +13,7 @@
 | **Flota / Equipos** | ✅ completo | ✅ Centro de Mando | — | ✅ OT lista en modal | ✅ Costos en modal |
 | **OT (Work Orders)** | ✅ completo | ✅ completo | ✅ `isOperational` + horómetro | — | ✅ consumo en cierre + **`app-fluid-quantity-row`** |
 | **M1 · Lubricantes** | ✅ completo | ✅ completo | ✅ horómetro + banner referencia | — | ✅ kardex `LUBE_DISPATCH` vía **`performTransactionCore`** + UI stock |
-| **M2 · Disponibilidad** | ✅ completo | ✅ tablero turno + historial | ✅ lee `isOperational` | — | — |
+| **M2 · Disponibilidad** | ✅ completo | ✅ tablero turno + historial | ✅ lee `isOperational` | ❌ **`DOWN_FAILURE` no dispara M3** (ortogonal por diseño; ver P4 E2E backlog) | — |
 | **M3 · Fallas** | ✅ completo | ✅ completo + `invalidateCache` | ✅ `isOperational` + OT auto | ✅ OT no programada auto | — |
 | **Inventario / Kardex** | ✅ completo | ✅ completo | parcial (solo en modal) | ✅ `WORK_ORDER_ISSUE` | — |
 | **Compras P2P** | ✅ completo | ✅ completo | parcial (costos en modal) | ✅ `AssetCostRecord` en cierre | ✅ recepción → stock |
@@ -158,7 +158,9 @@ El sistema se considera integrado como una unidad cuando:
 - [ ] El planificador crea una OT y ya sabe cuál es el stock disponible de los repuestos que necesita.
 - [ ] El supervisor reporta disponibilidad y el dashboard se actualiza sin recargar la página. _(Parcial: monitor auto-refresh 5 min; dashboard KPI unreported al cargar.)_
 
-**Cobertura E2E Playwright (63 tests):** ciclo M1/W2W/OT, caos y **P0 integridad** en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md). Siguiente backlog E2E: P1 M2 tablero / ajustes empresa.
+**Cobertura E2E Playwright (69 tests):** ciclo M1/W2W/OT, caos, **P0** integridad, **P1** M2 monitor/batch, **P2** inventario×ops — ver [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) §1.1 (qué **no** cubren P0–P2).
+
+**Siguiente backlog:** **P3** dashboard KPIs smoke; **P4** puente M2 `DOWN_FAILURE` → M3 → Flota (producto + código); P2.2 OT × bodega otro contrato (UI).
 
 ---
 

@@ -279,4 +279,8 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
       .map((status) => ({ status, count: summary.byStatus[status] }))
       .filter((e) => e.count > 0);
   }
+
+  hasPendingFaultRegistration(equipmentId: string): boolean {
+    return this.availabilityService.hasPendingFaultRegistration(equipmentId);
+  }
 }

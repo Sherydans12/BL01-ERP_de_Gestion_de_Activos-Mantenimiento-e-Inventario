@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map, tap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
@@ -72,6 +72,26 @@ export interface AvailabilityUserRef {
   name: string;
 }
 
+export interface AvailabilitySideEffect {
+  equipmentId: string;
+  status: OperationalStatus;
+  isOperational: boolean;
+  faultReportId?: string;
+  faultReportCorrelative?: string;
+  createdFaultReport: boolean;
+  requiresFaultCompletion: boolean;
+}
+
+export interface OperationalTransitionResult {
+  equipmentId: string;
+  isOperational: boolean;
+  faultReportId?: string;
+  faultReportCorrelative?: string;
+  createdFaultReport: boolean;
+  requiresFaultCompletion: boolean;
+  skippedReason?: string;
+}
+
 export interface AvailabilityRecord {
   id: string;
   tenantId: string;
@@ -88,6 +108,8 @@ export interface AvailabilityRecord {
   updatedAt: string;
   equipment: AvailabilityEquipmentRef;
   reportedBy: AvailabilityUserRef;
+  /** Presente en POST unitario cuando el orquestador aplicó transición. */
+  operationalTransition?: OperationalTransitionResult;
 }
 
 export interface AvailabilityListResponse {
@@ -173,6 +195,7 @@ export interface BatchAvailabilityRow {
 export interface BatchCreateResult {
   committed: number;
   errors: Array<{ equipmentId: string; reason: string }>;
+  sideEffects?: AvailabilitySideEffect[];
 }
 
 // ── Parámetros de consulta ─────────────────────────────────────────────────
@@ -263,6 +286,7 @@ export interface ImportRowCommit {
 export interface ImportCommitResult {
   committed: number;
   errors: Array<{ equipmentId: string; reason: string }>;
+  sideEffects?: AvailabilitySideEffect[];
 }
 
 // ── Servicio ──────────────────────────────────────────────────────────────
@@ -271,6 +295,32 @@ export interface ImportCommitResult {
 export class EquipmentAvailabilityService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/equipment-availability`;
+
+  /** Equipos con registro de falla pendiente tras rechazar el redirect M2→M3. */
+  private readonly _pendingFaultRegistrations = signal<ReadonlySet<string>>(
+    new Set(),
+  );
+  readonly pendingFaultRegistrations = this._pendingFaultRegistrations.asReadonly();
+
+  markPendingFaultRegistration(equipmentId: string): void {
+    this._pendingFaultRegistrations.update((s) => {
+      const next = new Set(s);
+      next.add(equipmentId);
+      return next;
+    });
+  }
+
+  clearPendingFaultRegistration(equipmentId: string): void {
+    this._pendingFaultRegistrations.update((s) => {
+      const next = new Set(s);
+      next.delete(equipmentId);
+      return next;
+    });
+  }
+
+  hasPendingFaultRegistration(equipmentId: string): boolean {
+    return this._pendingFaultRegistrations().has(equipmentId);
+  }
 
   // ── Existing methods ────────────────────────────────────────────────────
 

@@ -166,6 +166,9 @@ export class EquipmentDetailModalComponent {
   otsLoading = signal(false);
   private otsLoadedFor: string | null = null;
 
+  /** Última revisión observada por equipo (evita doble fetch al abrir). */
+  private lastRevisionByEquipment = new Map<string, number>();
+
   // Modal de detalle de OT embebido (no se pierde el contexto del equipo).
   showOtDetail = signal(false);
   selectedOtId = signal<string | null>(null);
@@ -623,6 +626,27 @@ export class EquipmentDetailModalComponent {
         { injector: this.injector },
       );
     });
+
+    effect(
+      () => {
+        const id = this.equipmentId();
+        const open = this.isOpen();
+        if (!id || !open) return;
+
+        const rev = this.fleetService.equipmentRevision(id)();
+        const prev = this.lastRevisionByEquipment.get(id) ?? 0;
+        if (rev <= prev) return;
+        this.lastRevisionByEquipment.set(id, rev);
+        if (prev === 0 && rev === 0) return;
+
+        this.loadAnalytics(id);
+        this.resetCrossModuleState();
+        if (this.activeTab() === 'salud') {
+          this.loadHealth(id);
+        }
+      },
+      { allowSignalWrites: true },
+    );
   }
 
   private loadAnalytics(id: string): void {

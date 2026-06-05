@@ -9,6 +9,33 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-05 — P4 Sprint 1 backend: orquestador M2 detención → stub M3 + isOperational
+
+- **Contexto:** Backlog P4 §3 — unificar estado operativo al reportar `DOWN_FAILURE` / `DOWN_MAINTENANCE` en M2.
+- **Decisión:**
+  - Nuevo `EquipmentOperationalOrchestratorService` (`onOperationalStatusChange` dentro de la misma `$transaction` que el parte).
+  - `DOWN_FAILURE` / `DOWN_MAINTENANCE`: `isOperational=false`; si no hay RF activo (OPEN o LINKED con OT no cerrada), crea stub `FaultReport` OPEN/LOW (`FAULT_REP`); si hay RF activo, no duplica.
+  - `OPERATIONAL` tras parte previo `DOWN_*` en el mismo turno: `isOperational=true`.
+  - Hook en `EquipmentAvailabilityService` (`create`, `upsertRow` → `batchCreate` / `commitImport`); respuesta con `operationalTransition` (unitario) y `sideEffects[]` (lote).
+- **Consecuencias:** Suite dominio **403 tests** (+6 orchestrator). Frontend Sprint 2 pendiente. Actualizar `MASTER-CONTEXT.md` §2.4 al cerrar P4 completo.
+
+## 2026-06-05 — Auditoría M2 `DOWN_FAILURE` vs. entregas P0–P2 (no es lo mismo)
+
+- **Contexto:** Tras commits `6838b31` (P1 M2) y `489cba5` (P2 inventario×ops), se reportó que «Detenido por Falla» en Disponibilidad no actualiza Maestro de Flota ni crea RF en M3. Había que distinguir **regresión E2E** de **gap de integración producto**.
+- **Decisión:**
+  - **P0–P2 no resuelven ese gap.** P0 prueba M3 **directo** (API HIGH → `isOperational=false`). P1 prueba monitor/batch con status **`OPERATIONAL`**. P2 es inventario×M1. Ninguno asserta M2 `DOWN_FAILURE` → M3 → Flota.
+  - El comportamiento actual sigue siendo **coherente con arquitectura documentada** (`MASTER-CONTEXT.md` §2.4): M2 declarativo, `isOperational` imperativo (M3 ALTA + OT). La UX del dropdown «Detenido por Falla» **genera expectativa incorrecta** hasta implementar puente (backlog **P4** en `operaciones-e2e-cobertura-y-pendientes.md`).
+  - **Pendiente producto+código:** orquestador / redirect M2→M3, invalidación Flota desde M2, modal con refresh; E2E `test:operations:p4`.
+- **Consecuencias:** Doc §1.1 en cobertura E2E; fila M2 actualizada en `sistema-integrado-roadmap.md`. **P3** (dashboard KPIs) sigue siendo el siguiente paquete E2E acordado; **P4** es el track de integración M2↔M3.
+
+## 2026-06-05 — E2E P1 M2 disponibilidad + P2 inventario×operaciones
+
+- **Contexto:** Backlog P1–P2 en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md).
+- **Decisión:**
+  - **P1** (`6838b31`, `npm run test:operations:p1`, 4 tests): monitor Pendientes→Reportar (link fila, turno **DAY** fijo), batch API 2 equipos, `hasNightShift=false`, toggles ajustes empresa.
+  - **P2** (`489cba5`, `npm run test:operations:p2`, 2 tests): W2W parcial 30/100 + M1 «Disponible: 30»; PBAC lectura POST M1 → 403.
+- **Consecuencias:** Suite E2E documentada **69 tests**. Pendiente: P3 dashboard, P4 M2↔M3, P2.2 OT bodega otro contrato (UI).
+
 ## 2026-06-05 — E2E P0 integridad transversal (blockNegativeStock, M3 ALTA, correlativos)
 
 - **Contexto:** Backlog P0 en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) tras estabilización chaos/lifecycle.

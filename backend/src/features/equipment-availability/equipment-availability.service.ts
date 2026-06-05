@@ -13,6 +13,12 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { EquipmentOperationalOrchestratorService } from '../equipments/equipment-operational-orchestrator.service';
+import {
+  AvailabilitySideEffect,
+  OperationalTransitionResult,
+  toAvailabilitySideEffect,
+} from '../equipments/operational-transition.types';
 import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availability.dto';
 import { UnreportedQueryDto } from './dto/unreported-query.dto';
 import { ExportAvailabilityQueryDto } from './dto/export-availability-query.dto';
@@ -159,6 +165,8 @@ export interface ImportValidationResult {
 export interface ImportCommitResult {
   committed: number;
   errors: Array<{ equipmentId: string; reason: string }>;
+  /** Efectos colaterales (M2 detención → M3 stub / isOperational). */
+  sideEffects?: AvailabilitySideEffect[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,7 +310,10 @@ type OperationalConfigShape = typeof OPERATIONAL_DEFAULTS;
 
 @Injectable()
 export class EquipmentAvailabilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly operationalOrchestrator: EquipmentOperationalOrchestratorService,
+  ) {}
 
   // ── Helpers: operational config & shift resolution ────────────────────────
 
@@ -513,7 +524,24 @@ export class EquipmentAvailabilityService {
           });
         }
 
-        return { ...record, isAvailable: isAvailableStatus(record.status) };
+        const operationalTransition =
+          await this.operationalOrchestrator.onOperationalStatusChange(tx, {
+            tenantId,
+            equipmentId: dto.equipmentId,
+            availabilityId: record.id,
+            newStatus: dto.status,
+            previousStatus: null,
+            meterReading: dto.meterReading ?? null,
+            comments: dto.comments ?? null,
+            reportDate: dto.reportDate,
+            reportedById: userId,
+          });
+
+        return {
+          ...record,
+          isAvailable: isAvailableStatus(record.status),
+          operationalTransition,
+        };
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -733,10 +761,11 @@ export class EquipmentAvailabilityService {
 
     let committed = 0;
     const errors: ImportCommitResult['errors'] = [];
+    const sideEffects: AvailabilitySideEffect[] = [];
 
     for (const row of dto.rows) {
       try {
-        await this.upsertRow(
+        const transition = await this.upsertRow(
           {
             equipmentId: row.equipmentId,
             reportDate: dto.reportDate,
@@ -747,6 +776,11 @@ export class EquipmentAvailabilityService {
           },
           user,
         );
+        if (transition) {
+          sideEffects.push(
+            toAvailabilitySideEffect(transition, row.status),
+          );
+        }
         committed++;
       } catch (e) {
         const reason =
@@ -757,7 +791,11 @@ export class EquipmentAvailabilityService {
       }
     }
 
-    return { committed, errors };
+    return {
+      committed,
+      errors,
+      ...(sideEffects.length > 0 ? { sideEffects } : {}),
+    };
   }
 
   /**
@@ -1543,10 +1581,11 @@ export class EquipmentAvailabilityService {
 
     let committed = 0;
     const errors: ImportCommitResult['errors'] = [];
+    const sideEffects: AvailabilitySideEffect[] = [];
 
     for (const row of dto.rows) {
       try {
-        await this.upsertRow(
+        const transition = await this.upsertRow(
           {
             equipmentId: row.equipmentId,
             reportDate: dto.reportDate,
@@ -1557,6 +1596,11 @@ export class EquipmentAvailabilityService {
           },
           user,
         );
+        if (transition) {
+          sideEffects.push(
+            toAvailabilitySideEffect(transition, row.status),
+          );
+        }
         committed++;
       } catch (e) {
         const reason =
@@ -1567,7 +1611,11 @@ export class EquipmentAvailabilityService {
       }
     }
 
-    return { committed, errors };
+    return {
+      committed,
+      errors,
+      ...(sideEffects.length > 0 ? { sideEffects } : {}),
+    };
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1592,13 +1640,12 @@ export class EquipmentAvailabilityService {
       comments?: string | null;
     },
     user: any,
-  ): Promise<void> {
+  ): Promise<OperationalTransitionResult | null> {
     const tenantId = user.tenantId as string;
     const userId = (user.id ?? user.sub) as string;
 
-    await this.prisma.$transaction(
+    return this.prisma.$transaction(
       async (tx) => {
-        // ── 1. Validate equipment belongs to tenant ──────────────────────────
         const equipment = await tx.equipment.findFirst({
           where: { id: dto.equipmentId, tenantId },
           select: { id: true, currentMeter: true, contractId: true },
@@ -1609,9 +1656,21 @@ export class EquipmentAvailabilityService {
           );
         }
 
-        // ── 2. Upsert availability record ────────────────────────────────────
         const reportDate = new Date(dto.reportDate);
         reportDate.setUTCHours(0, 0, 0, 0);
+
+        const existing = await tx.equipmentAvailability.findUnique({
+          where: {
+            tenantId_equipmentId_reportDate_shift: {
+              tenantId,
+              equipmentId: dto.equipmentId,
+              reportDate,
+              shift: dto.shift,
+            },
+          },
+          select: { status: true },
+        });
+        const previousStatus = existing?.status ?? null;
 
         const record = await tx.equipmentAvailability.upsert({
           where: {
@@ -1641,7 +1700,6 @@ export class EquipmentAvailabilityService {
           },
         });
 
-        // ── 3. Advance meter only if new reading is higher (silent-skip otherwise)
         if (
           dto.meterReading != null &&
           dto.meterReading > equipment.currentMeter
@@ -1656,6 +1714,18 @@ export class EquipmentAvailabilityService {
             userId,
           });
         }
+
+        return this.operationalOrchestrator.onOperationalStatusChange(tx, {
+          tenantId,
+          equipmentId: dto.equipmentId,
+          availabilityId: record.id,
+          newStatus: dto.status,
+          previousStatus,
+          meterReading: dto.meterReading ?? null,
+          comments: dto.comments ?? null,
+          reportDate: dto.reportDate,
+          reportedById: userId,
+        });
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,

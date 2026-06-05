@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { of } from 'rxjs';
 
 import { EquipmentDetailModalComponent } from './equipment-detail-modal.component';
@@ -28,7 +29,21 @@ const MOCK_ANALYTICS: any = {
   meterLogs:        [],
 };
 
-const fleetSpy       = jasmine.createSpyObj<FleetService>('FleetService',                     { getEquipmentAnalytics: of(MOCK_ANALYTICS) });
+const revisionByEquipment = new Map<string, ReturnType<typeof signal<number>>>();
+
+function equipmentRevisionSignal(id: string) {
+  if (!revisionByEquipment.has(id)) {
+    revisionByEquipment.set(id, signal(0));
+  }
+  return revisionByEquipment.get(id)!;
+}
+
+const fleetSpy = {
+  getEquipmentAnalytics: jasmine
+    .createSpy('getEquipmentAnalytics')
+    .and.returnValue(of(MOCK_ANALYTICS)),
+  equipmentRevision: (id: string) => equipmentRevisionSignal(id),
+} as unknown as FleetService;
 const faultSpy       = jasmine.createSpyObj<FaultReportsService>('FaultReportsService',       { getReports: of({ data: [], total: 0, page: 1, pageSize: 1 }) });
 const availSpy       = jasmine.createSpyObj<EquipmentAvailabilityService>('EquipmentAvailabilityService', { getAll: of({ data: [], total: 0, page: 1, pageSize: 1 }) });
 const lubeSpy        = jasmine.createSpyObj<LubeReportsService>('LubeReportsService',         { getReports: of({ data: [], total: 0, page: 1, pageSize: 5 }) });
@@ -41,6 +56,9 @@ describe('EquipmentDetailModalComponent', () => {
   let fixture: ComponentFixture<EquipmentDetailModalComponent>;
 
   beforeEach(async () => {
+    revisionByEquipment.clear();
+    (fleetSpy.getEquipmentAnalytics as jasmine.Spy).calls.reset();
+
     await TestBed.configureTestingModule({
       imports: [EquipmentDetailModalComponent],
       providers: [
@@ -240,6 +258,19 @@ describe('EquipmentDetailModalComponent', () => {
     component['analytics'].set(MOCK_ANALYTICS);
     expect(component.costTotal()).toBe(0);
     expect(component.costByType()).toEqual([]);
+  });
+
+  it('bump de revisión del equipo vuelve a disparar getEquipmentAnalytics', () => {
+    fixture.componentRef.setInput('equipmentId', 'eq-001');
+    fixture.componentRef.setInput('isOpen', true);
+    fixture.detectChanges();
+
+    expect(fleetSpy.getEquipmentAnalytics).toHaveBeenCalledTimes(1);
+
+    equipmentRevisionSignal('eq-001').set(1);
+    fixture.detectChanges();
+
+    expect(fleetSpy.getEquipmentAnalytics).toHaveBeenCalledTimes(2);
   });
 });
 

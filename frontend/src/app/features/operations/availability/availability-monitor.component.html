@@ -217,6 +217,11 @@
                       <span class="w-2 h-2 rounded-full" [ngClass]="STATUS_DOT[row.status]"></span>
                       {{ STATUS_LABELS[row.status] }}
                     </span>
+                    @if (hasPendingFaultRegistration(row.equipmentId)) {
+                      <span class="mt-1 inline-flex items-center rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                        Acción pendiente: Registrar falla
+                      </span>
+                    }
                   } @else if (row.rowKind === 'PENDING') {
                     <span class="text-xs font-medium text-red-400">Sin reporte</span>
                   } @else {

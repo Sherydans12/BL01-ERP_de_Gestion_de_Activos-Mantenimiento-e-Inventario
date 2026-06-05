@@ -7,10 +7,11 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 
 import {
   EquipmentAvailabilityService,
+  AvailabilitySideEffect,
   ImportCommitResult,
   ImportRowCommit,
   ImportValidationResult,
@@ -21,6 +22,8 @@ import {
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 
 export type ImportPageState =
   | 'idle'
@@ -32,7 +35,7 @@ export type ImportPageState =
 @Component({
   selector: 'app-availability-import',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, ConfirmModalComponent],
   templateUrl: './availability-import.component.html',
 })
 export class AvailabilityImportComponent {
@@ -42,6 +45,8 @@ export class AvailabilityImportComponent {
 
   private availabilityService = inject(EquipmentAvailabilityService);
   private notify = inject(NotificationService);
+  private router = inject(Router);
+  private fleetService = inject(FleetService);
   protected readonly shiftService = inject(ShiftService);
 
   @ViewChild('fileInput') fileInputRef!: ElementRef<HTMLInputElement>;
@@ -68,6 +73,11 @@ export class AvailabilityImportComponent {
 
   /** Resultado de la confirmación de importación. */
   commitResult = signal<ImportCommitResult | null>(null);
+
+  faultCompletionConfirmOpen = signal(false);
+  private pendingFaultSideEffect = signal<AvailabilitySideEffect | null>(null);
+  private pendingFaultSymptom = signal<string | undefined>(undefined);
+  private pendingFaultMeter = signal<number | undefined>(undefined);
 
   // ── Computed ──────────────────────────────────────────────────────────────
 
@@ -199,6 +209,12 @@ export class AvailabilityImportComponent {
       next: (result) => {
         this.commitResult.set(result);
         this.pageState.set('done');
+        if (result.committed > 0) {
+          this.notify.success(
+            `${result.committed} equipo${result.committed > 1 ? 's' : ''} importado${result.committed > 1 ? 's' : ''} correctamente.`,
+          );
+        }
+        this.applyOperationalSideEffects(result.sideEffects, p.rows);
       },
       error: () => {
         this.notify.error('Error al importar. Verifica tu conexión e intenta de nuevo.');
@@ -214,6 +230,55 @@ export class AvailabilityImportComponent {
     this.pageState.set('idle');
     this.preview.set(null);
     this.commitResult.set(null);
+  }
+
+  onFaultCompletionConfirmed(): void {
+    const se = this.pendingFaultSideEffect();
+    this.faultCompletionConfirmOpen.set(false);
+    this.pendingFaultSideEffect.set(null);
+    if (!se) return;
+
+    const queryParams: Record<string, string | number> = {
+      equipmentId: se.equipmentId,
+      from: 'm2',
+    };
+    const symptom = this.pendingFaultSymptom();
+    const meter = this.pendingFaultMeter();
+    if (symptom) queryParams['symptom'] = symptom;
+    if (meter != null) queryParams['meter'] = meter;
+
+    void this.router.navigate(['/app/operaciones/fallas/nuevo'], { queryParams });
+  }
+
+  onFaultCompletionDeclined(): void {
+    const se = this.pendingFaultSideEffect();
+    this.faultCompletionConfirmOpen.set(false);
+    this.pendingFaultSideEffect.set(null);
+    if (se) {
+      this.availabilityService.markPendingFaultRegistration(se.equipmentId);
+    }
+  }
+
+  private applyOperationalSideEffects(
+    sideEffects: AvailabilitySideEffect[] | undefined,
+    importRows: ImportValidationResult['rows'],
+  ): void {
+    for (const se of sideEffects ?? []) {
+      this.fleetService.notifyEquipmentChanged(se.equipmentId);
+    }
+
+    const faultCompletion = (sideEffects ?? []).find(
+      (se) => se.requiresFaultCompletion,
+    );
+    if (!faultCompletion) return;
+
+    const row = importRows.find((r) => r.equipmentId === faultCompletion.equipmentId);
+    this.pendingFaultSideEffect.set(faultCompletion);
+    this.pendingFaultSymptom.set(row?.comments?.trim() || undefined);
+    this.pendingFaultMeter.set(
+      row?.meterReading != null ? row.meterReading : undefined,
+    );
+    this.faultCompletionConfirmOpen.set(true);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
