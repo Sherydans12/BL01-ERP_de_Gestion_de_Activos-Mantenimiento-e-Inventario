@@ -3,6 +3,7 @@ import {
   ElementRef,
   ViewChild,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -79,6 +80,14 @@ export class AvailabilityImportComponent {
   private pendingFaultSymptom = signal<string | undefined>(undefined);
   private pendingFaultMeter = signal<number | undefined>(undefined);
 
+  constructor() {
+    effect(() => {
+      if (!this.shiftService.hasNightShift() && this.shift() === 'NIGHT') {
+        this.shift.set('DAY');
+      }
+    });
+  }
+
   // ── Computed ──────────────────────────────────────────────────────────────
 
   /**
@@ -114,7 +123,9 @@ export class AvailabilityImportComponent {
   exportTemplate(): void {
     if (this.isExporting()) return;
     this.isExporting.set(true);
-    this.availabilityService.exportTemplate(this.reportDate(), this.shift()).subscribe({
+    this.availabilityService
+      .exportTemplate(this.reportDate(), this.shiftService.coerceShift(this.shift()))
+      .subscribe({
       next: () => this.isExporting.set(false),
       error: () => {
         this.notify.error('No se pudo generar la plantilla. Intenta de nuevo.');

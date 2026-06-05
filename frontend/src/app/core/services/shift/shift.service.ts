@@ -13,6 +13,9 @@ import { TenantService } from '../tenant/tenant.service';
  *
  * Regla inquebrantable: si hasNightShift === false, currentShift() devuelve
  * siempre 'DAY' sin importar la hora del reloj.
+ *
+ * Mientras operationalConfig no está cargado, hasNightShift se trata como false
+ * para no enviar NIGHT al backend antes de conocer la política del tenant.
  */
 @Injectable({ providedIn: 'root' })
 export class ShiftService {
@@ -31,9 +34,11 @@ export class ShiftService {
 
   // ── Configuración operativa leída del tenant (con defaults seguros) ────────
 
-  readonly hasNightShift = computed(
-    () => this.tenantService.currentTenant()?.operationalConfig?.hasNightShift ?? true,
-  );
+  readonly hasNightShift = computed(() => {
+    const cfg = this.tenantService.currentTenant()?.operationalConfig;
+    if (cfg == null) return false;
+    return cfg.hasNightShift;
+  });
 
   private readonly _dayStartHour = computed(() => {
     const time =
@@ -60,18 +65,15 @@ export class ShiftService {
   // ── Señales públicas ───────────────────────────────────────────────────────
 
   readonly currentShift = computed((): ShiftType => {
-    // Regla inquebrantable: sin turno noche → siempre DAY.
     if (!this.hasNightShift()) return 'DAY';
 
     const h = this._now().getHours();
     const dayH = this._dayStartHour();
     const nightH = this._nightStartHour();
 
-    // Caso normal: dayH < nightH (ej. 08–20)
     if (dayH < nightH) {
       return h >= dayH && h < nightH ? 'DAY' : 'NIGHT';
     }
-    // Caso invertido (rarísimo, pero seguro): dayH >= nightH
     return h >= dayH || h < nightH ? 'DAY' : 'NIGHT';
   });
 
@@ -96,4 +98,20 @@ export class ShiftService {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   });
+
+  /**
+   * Normaliza un turno para APIs y filtros: NIGHT → DAY si el tenant no opera noche.
+   * Sin valor explícito usa el turno vigente según reloj y configuración.
+   */
+  coerceShift(shift?: ShiftType | string | null): ShiftType {
+    const candidate: ShiftType =
+      shift === 'NIGHT' || shift === 'DAY' ? shift : this.currentShift();
+    if (candidate === 'NIGHT' && !this.hasNightShift()) return 'DAY';
+    return candidate;
+  }
+
+  /** Turnos mostrables en selectores (historial, import, etc.). */
+  readonly selectableShifts = computed((): ShiftType[] =>
+    this.hasNightShift() ? ['DAY', 'NIGHT'] : ['DAY'],
+  );
 }

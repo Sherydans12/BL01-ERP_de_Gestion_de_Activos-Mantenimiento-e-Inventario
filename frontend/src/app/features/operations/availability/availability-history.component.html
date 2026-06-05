@@ -36,7 +36,7 @@
         <select [ngModel]="filterShift()" (ngModelChange)="filterShift.set($event)"
           class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main">
           <option value="">Todos</option>
-          @for (s of SHIFTS; track s) {
+          @for (s of shiftFilterOptions(); track s) {
             <option [value]="s">{{ SHIFT_LABELS[s] }}</option>
           }
         </select>

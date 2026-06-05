@@ -60,7 +60,7 @@ export class DashboardComponent implements OnInit {
    */
   loadUnreported() {
     const date = this.shiftService.todayIso();
-    const shift = this.shiftService.currentShift();
+    const shift = this.shiftService.coerceShift(this.shiftService.currentShift());
     this.availabilityService
       .getUnreported({ date, shift, page: 1, pageSize: 1 })
       .subscribe({

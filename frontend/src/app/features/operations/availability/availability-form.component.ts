@@ -2,6 +2,7 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -143,10 +144,19 @@ export class AvailabilityFormComponent implements OnInit {
     return this.shiftService.todayIso();
   }
 
+  constructor() {
+    effect(() => {
+      if (!this.shiftService.hasNightShift() && this.shift() === 'NIGHT') {
+        this.shift.set('DAY');
+        this.loadPending();
+      }
+    });
+  }
+
   ngOnInit(): void {
     const qp = this.route.snapshot.queryParamMap;
     this.reportDate.set(qp.get('date') ?? this.shiftService.todayIso());
-    this.shift.set((qp.get('shift') as ShiftType) ?? this.shiftService.currentShift());
+    this.shift.set(this.shiftService.coerceShift(qp.get('shift')));
     this.highlightEquipmentId.set(qp.get('equipmentId'));
 
     this.contractsService.findAll().subscribe({

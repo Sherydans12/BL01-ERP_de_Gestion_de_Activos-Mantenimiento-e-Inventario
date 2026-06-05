@@ -23,6 +23,7 @@ import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { ShiftService } from '../../../core/services/shift/shift.service';
 import type { Contract } from '../../../core/models/types';
 import { O } from '../../../core/constants/operations-permissions';
 
@@ -45,7 +46,12 @@ export class AvailabilityHistoryComponent implements OnInit {
   private fleetSvc = inject(FleetService);
   private contractsService = inject(ContractsService);
   private notify = inject(NotificationService);
+  protected readonly shiftService = inject(ShiftService);
   protected readonly authService = inject(AuthService);
+
+  protected readonly shiftFilterOptions = computed(() =>
+    this.shiftService.selectableShifts(),
+  );
 
   equipments = signal<Array<{ id: string; internalId: string; brand: string; model: string }>>([]);
   contracts = signal<Contract[]>([]);
@@ -91,7 +97,9 @@ export class AvailabilityHistoryComponent implements OnInit {
       page: this.page(),
       pageSize: PAGE_SIZE,
       equipmentId: this.filterEquipmentId() || undefined,
-      shift: (this.filterShift() as ShiftType) || undefined,
+      shift: this.filterShift()
+        ? this.shiftService.coerceShift(this.filterShift())
+        : undefined,
       contractId: this.filterContractId() || undefined,
       dateFrom: this.filterDateFrom() || undefined,
       dateTo: this.filterDateTo() || undefined,

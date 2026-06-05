@@ -334,9 +334,9 @@ export class EquipmentAvailabilityService {
   }
 
   /**
-   * Resolves the effective ShiftType for a request:
-   *  - defaults to DAY when not provided.
-   *  - throws BadRequestException when NIGHT is requested and the tenant has it disabled.
+   * Turno efectivo para lecturas/escrituras operativas.
+   * - Por defecto DAY si no se envía shift.
+   * - Si el tenant no opera turno noche, NIGHT se normaliza a DAY (operación 24h en un solo turno).
    */
   private async resolveShift(
     tenantId: string,
@@ -346,9 +346,7 @@ export class EquipmentAvailabilityService {
     if (shift === ShiftType.NIGHT) {
       const config = await this.getOperationalConfig(tenantId);
       if (!config.hasNightShift) {
-        throw new BadRequestException(
-          'El turno noche no está habilitado para esta organización.',
-        );
+        return ShiftType.DAY;
       }
     }
     return shift;
@@ -1257,14 +1255,12 @@ export class EquipmentAvailabilityService {
           'Descarga una nueva plantilla.',
       );
     }
-    // Guard: reject NIGHT-shift files when the tenant has night shift disabled.
+    // Sin turno noche: plantillas antiguas con NIGHT se tratan como DAY.
+    let effectiveStoredShift = storedShift as ShiftType;
     if (storedShift === ShiftType.NIGHT) {
       const opConfig = await this.getOperationalConfig(tenantId);
       if (!opConfig.hasNightShift) {
-        throw new BadRequestException(
-          'El turno noche no está habilitado para esta organización. ' +
-            'Descarga una nueva plantilla de Turno Día.',
-        );
+        effectiveStoredShift = ShiftType.DAY;
       }
     }
 
@@ -1304,7 +1300,7 @@ export class EquipmentAvailabilityService {
         },
       }),
       this.prisma.equipmentAvailability.findMany({
-        where: { tenantId, reportDate, shift: storedShift },
+        where: { tenantId, reportDate, shift: effectiveStoredShift },
         select: {
           equipmentId: true,
           status: true,
@@ -1557,7 +1553,7 @@ export class EquipmentAvailabilityService {
 
     return {
       reportDate: storedReportDate,
-      shift: storedShift,
+      shift: effectiveStoredShift,
       rows,
       summary,
       ...(missingEquipmentWarning

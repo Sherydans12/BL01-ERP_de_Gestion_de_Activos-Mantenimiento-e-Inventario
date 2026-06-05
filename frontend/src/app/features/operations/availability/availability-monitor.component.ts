@@ -3,6 +3,7 @@ import {
   OnDestroy,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -122,10 +123,19 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
     return this.shiftService.todayIso();
   }
 
+  constructor() {
+    effect(() => {
+      if (!this.shiftService.hasNightShift() && this.filterShift() === 'NIGHT') {
+        this.filterShift.set('DAY');
+        this.query(false);
+      }
+    });
+  }
+
   ngOnInit(): void {
     const qp = this.route.snapshot.queryParamMap;
     this.filterDate.set(qp.get('date') ?? this.shiftService.todayIso());
-    this.filterShift.set((qp.get('shift') as ShiftType) ?? this.shiftService.currentShift());
+    this.filterShift.set(this.shiftService.coerceShift(qp.get('shift')));
     const tab = qp.get('tab');
     if (tab === 'PENDING' || tab === 'REPORTED' || tab === 'EXCLUDED' || tab === 'ALL') {
       this.filterTab.set(tab);
@@ -162,7 +172,7 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
   }
 
   onShiftChange(v: ShiftType): void {
-    this.filterShift.set(v);
+    this.filterShift.set(this.shiftService.coerceShift(v));
   }
 
   onContractChange(v: string): void {
