@@ -9,6 +9,15 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-05 — E2E P0 integridad transversal (blockNegativeStock, M3 ALTA, correlativos)
+
+- **Contexto:** Backlog P0 en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) tras estabilización chaos/lifecycle.
+- **Decisión:**
+  - Nuevo spec `e2e/tests/e2e-operations-p0-integrity.spec.ts` (`npm run test:operations:p0`, 4 tests): `blockNegativeStock` M1 (API 400 + UI POST rechazado o botón deshabilitado), OT cierre fluidos 400 sin kardex, M3 HIGH → `isOperational=false` + `NO_PROGRAMADA_REACTIVA`, smoke `RCL-` / `RF-`.
+  - Helpers: `api-tenant-config.ts`, `api-fault-reports.ts`.
+  - Frontend: `lube-report-form` refresca `GET /tenant-config` al abrir (JWT sin `operationalConfig`); `auth.service` preserva `operationalConfig` al rehidratar tenant desde JWT.
+- **Consecuencias:** Suite E2E **63/63**. `test:domain` **397/397**. P1 (M2 tablero, ajustes empresa) sigue pendiente.
+
 ## 2026-06-04 — E2E operaciones: estabilización caos/lifecycle + correlativos M1/M3
 
 - **Contexto:** Suite nueva (`e2e-chaos-resilience`, `e2e-operations-lifecycle`) fallaba por desalineación de contrato PBAC, Reactive Forms en Playwright, parseo es-CL en historial de medidor, kardex `WORK_ORDER_ISSUE` omitido en helpers, y tipos de documento &gt; 10 chars en `sequence_counters`.

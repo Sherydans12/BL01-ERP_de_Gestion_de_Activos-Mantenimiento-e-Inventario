@@ -13,6 +13,7 @@
     "test:operaciones:ot-inventory": "playwright test tests/operaciones/cross-module-ot-inventory.spec.ts",
     "test:operations:lifecycle": "playwright test tests/e2e-operations-lifecycle.spec.ts",
     "test:chaos": "playwright test tests/e2e-chaos-resilience.spec.ts",
+    "test:operations:p0": "playwright test tests/e2e-operations-p0-integrity.spec.ts",
     "test:ui": "playwright test --ui",
     "install:browsers": "playwright install chromium"
   },

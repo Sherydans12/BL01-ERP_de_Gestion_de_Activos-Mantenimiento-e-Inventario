@@ -158,7 +158,7 @@ El sistema se considera integrado como una unidad cuando:
 - [ ] El planificador crea una OT y ya sabe cuál es el stock disponible de los repuestos que necesita.
 - [ ] El supervisor reporta disponibilidad y el dashboard se actualiza sin recargar la página. _(Parcial: monitor auto-refresh 5 min; dashboard KPI unreported al cargar.)_
 
-**Cobertura E2E Playwright (59 tests):** ciclo M1/W2W/OT y caos documentados en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md). Pendientes P0: `blockNegativeStock`, M3 falla ALTA, M2 tablero.
+**Cobertura E2E Playwright (63 tests):** ciclo M1/W2W/OT, caos y **P0 integridad** en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md). Siguiente backlog E2E: P1 M2 tablero / ajustes empresa.
 
 ---
 

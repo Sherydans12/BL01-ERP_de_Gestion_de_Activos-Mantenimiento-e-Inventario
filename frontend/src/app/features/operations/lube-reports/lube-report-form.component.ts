@@ -159,9 +159,18 @@ export class LubeReportFormComponent implements OnInit {
   );
 
   ngOnInit(): void {
+    this.ensureTenantOperationalConfig();
     this.loadWarehouses();
     this.loadEquipments();
     this.resolveLubeFamily();
+  }
+
+  /** Refresca `operationalConfig` (blockNegativeStock, turnos) — el JWT puede hidratar el tenant sin esa porción. */
+  private ensureTenantOperationalConfig(): void {
+    this.tenantService.getTenantConfig().subscribe({
+      next: (config) => this.tenantService.setTenant(config),
+      error: () => {},
+    });
   }
 
   private loadWarehouses(): void {

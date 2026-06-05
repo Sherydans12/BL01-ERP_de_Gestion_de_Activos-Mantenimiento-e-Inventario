@@ -1,12 +1,12 @@
 # Operaciones × Inventario — cobertura E2E Playwright y pendientes
 
-**Versión:** 1.0 · **Actualizado:** 2026-06-04
+**Versión:** 1.1 · **Actualizado:** 2026-06-05
 
 Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/resiliencia y ciclo de vida integrado (M1 → W2W → OT → medidor).
 
 ---
 
-## 1. Inventario actual (59 tests · suite completa)
+## 1. Inventario actual (63 tests · suite completa)
 
 | Paquete | Specs | Script npm | Qué valida |
 |---------|-------|------------|------------|
@@ -15,6 +15,7 @@ Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/
 | **OT × Inventario** | `tests/operaciones/cross-module-ot-inventory.spec.ts` | `npm run test:operaciones:ot-inventory` | Reserva → consumo → `WORK_ORDER_ISSUE`, aislamiento contrato |
 | **Ciclo integrado** | `tests/e2e-operations-lifecycle.spec.ts` | `npm run test:operations:lifecycle` | Bodega móvil → ingreso → W2W → **M1 UI** → OT → historial medidor |
 | **Caos / resiliencia** | `tests/e2e-chaos-resilience.spec.ts` | `npm run test:chaos` | Concurrencia M1, cronología medidor, fuga stock OT, bulk-sync horómetro |
+| **P0 integridad** | `tests/e2e-operations-p0-integrity.spec.ts` | `npm run test:operations:p0` | `blockNegativeStock` M1+OT, M3 falla ALTA, correlativos `RCL-` / `RF-` |
 
 **Prerrequisitos locales:**
 
@@ -24,7 +25,7 @@ cd backend && npm run seed:inventario-pbac-personas && npm run seed:operaciones-
 cd e2e && E2E_SKIP_WEBSERVER=1 npm test
 ```
 
-**Helpers clave:** `e2e/helpers/api-operations-lifecycle.ts` (`resolveE2EPrimaryContractId`, `x-site-id` en OT), `operations-lifecycle.pom.ts` (`setReactiveInput`, modal flota **VER** → Historial de Medidores), `ui.ts` (`parseUiNumber` es-CL).
+**Helpers clave:** `e2e/helpers/api-operations-lifecycle.ts` (`resolveE2EPrimaryContractId`, `x-site-id` en OT), `api-tenant-config.ts` (`patchOperationalConfig`), `api-fault-reports.ts`, `operations-lifecycle.pom.ts` (`setReactiveInput`, modal flota **VER** → Historial de Medidores), `ui.ts` (`parseUiNumber` es-CL).
 
 ---
 
@@ -36,9 +37,9 @@ Estos huecos motivaron fallos reales o riesgo de regresión; parte ya está cubi
 
 | Punto ciego | Riesgo | Mitigación actual | Spec E2E pendiente |
 |-------------|--------|-------------------|-------------------|
-| **`sequence_counters.document_type` VARCHAR(10)** | POST M1/M3 → P2000 si el tipo supera 10 chars (`LUBE_REPORT`, `FAULT_REPORT`) | Códigos **`LUBE_RCL`**, **`FAULT_REP`** en servicios | API: crear M1 + falla ALTA en fixture efímero; assert correlativo 201 |
+| **`sequence_counters.document_type` VARCHAR(10)** | POST M1/M3 → P2000 si el tipo supera 10 chars (`LUBE_REPORT`, `FAULT_REPORT`) | Códigos **`LUBE_RCL`**, **`FAULT_REP`** en servicios | **`test:operations:p0`** §4 smoke `RCL-` / `RF-` |
 | **Contrato del fixture ≠ contrato planificador** | OT creada OK pero PATCH/status → «Orden no encontrada» (PBAC `allowedContracts`) | Bootstrap alineado vía `resolveE2EPrimaryContractId()` + header `x-site-id` | — (cubierto en chaos/lifecycle) |
-| **`blockNegativeStock` por tenant** | M1/OT rechazan o permiten saldo negativo según toggle | Solo tests unitarios dominio | E2E: tenant strict vs legacy en M1 y cierre OT |
+| **`blockNegativeStock` por tenant** | M1/OT rechazan o permiten saldo negativo según toggle | **`test:operations:p0`** (API + UI M1) | — |
 | **Reserva OT vs consumo real** | Patch qty > reserva + cierre silencioso | Chaos #3 (API) | UI: editar repuestos en OT en curso con badge stock |
 
 ### 2.2 Frontend / Playwright
@@ -62,19 +63,14 @@ Estos huecos motivaron fallos reales o riesgo de regresión; parte ya está cubi
 
 ## 3. Pruebas críticas a crear (prioridad sugerida)
 
-### P0 — Integridad transversal (siguiente sprint E2E)
+### P0 — Integridad transversal — HECHO (2026-06-05)
 
-1. **`blockNegativeStock=true` — M1 rechazo UI**  
-   Seed config operacional → despacho > stock → botón Guardar bloqueado o error API; stock sin movimiento.
+Implementado en `tests/e2e-operations-p0-integrity.spec.ts` (`npm run test:operations:p0`). `beforeAll` activa `blockNegativeStock` vía API y restaura al finalizar.
 
-2. **`blockNegativeStock=true` — OT cierre fluidos**  
-   OT con línea fluido > disponible → cierre 400 con mensaje stock; kardex delta 0.
-
-3. **M3 falla ALTA → `isOperational=false` + OT auto**  
-   API: crear `FaultReport` HIGH; assert equipo + OT `NO_PROGRAMADA_REACTIVA`. UI opcional: badge en flota.
-
-4. **Correlativos M1/M3 tras deploy**  
-   Smoke API post-migración: un POST `/lube-reports` y uno `/fault-reports` (permisos seed) → status &lt; 300 y prefijo `RCL-` / `RF-`.
+1. ~~**`blockNegativeStock=true` — M1**~~ — API 400 + UI (botón deshabilitado o POST rechazado); kardex sin movimiento.
+2. ~~**`blockNegativeStock=true` — OT cierre**~~ — consumo &gt; disponible → cierre 400; kardex delta 0.
+3. ~~**M3 falla ALTA**~~ — `isOperational=false` + OT `NO_PROGRAMADA_REACTIVA`.
+4. ~~**Correlativos M1/M3**~~ — smoke `RCL-` / `RF-`.
 
 ### P1 — Módulos operaciones aún sin Playwright dedicado
 

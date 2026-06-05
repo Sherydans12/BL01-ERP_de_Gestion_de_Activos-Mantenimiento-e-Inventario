@@ -453,11 +453,13 @@ export class AuthService {
       this.tenantService.currentTenant.set(null);
       return;
     }
+    const prevOperational = this.tenantService.currentTenant()?.operationalConfig;
     this.tenantService.setTenant({
       id: t.id,
       code: (t.code && t.code.trim()) || '—',
       name: t.name,
       logoUrl: t.logoUrl ?? null,
+      ...(prevOperational ? { operationalConfig: prevOperational } : {}),
     });
   }
 
