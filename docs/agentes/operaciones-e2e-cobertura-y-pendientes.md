@@ -1,12 +1,12 @@
 # Operaciones × Inventario — cobertura E2E Playwright y pendientes
 
-**Versión:** 1.1 · **Actualizado:** 2026-06-05
+**Versión:** 1.2 · **Actualizado:** 2026-06-05
 
 Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/resiliencia y ciclo de vida integrado (M1 → W2W → OT → medidor).
 
 ---
 
-## 1. Inventario actual (63 tests · suite completa)
+## 1. Inventario actual (67 tests · suite completa)
 
 | Paquete | Specs | Script npm | Qué valida |
 |---------|-------|------------|------------|
@@ -16,6 +16,7 @@ Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/
 | **Ciclo integrado** | `tests/e2e-operations-lifecycle.spec.ts` | `npm run test:operations:lifecycle` | Bodega móvil → ingreso → W2W → **M1 UI** → OT → historial medidor |
 | **Caos / resiliencia** | `tests/e2e-chaos-resilience.spec.ts` | `npm run test:chaos` | Concurrencia M1, cronología medidor, fuga stock OT, bulk-sync horómetro |
 | **P0 integridad** | `tests/e2e-operations-p0-integrity.spec.ts` | `npm run test:operations:p0` | `blockNegativeStock` M1+OT, M3 falla ALTA, correlativos `RCL-` / `RF-` |
+| **P1 M2 disponibilidad** | `tests/e2e-operations-p1-m2-availability.spec.ts` | `npm run test:operations:p1` | Monitor Pendientes→Reportados, batch 2 equipos, `hasNightShift=false`, toggles empresa |
 
 **Prerrequisitos locales:**
 
@@ -25,7 +26,7 @@ cd backend && npm run seed:inventario-pbac-personas && npm run seed:operaciones-
 cd e2e && E2E_SKIP_WEBSERVER=1 npm test
 ```
 
-**Helpers clave:** `e2e/helpers/api-operations-lifecycle.ts` (`resolveE2EPrimaryContractId`, `x-site-id` en OT), `api-tenant-config.ts` (`patchOperationalConfig`), `api-fault-reports.ts`, `operations-lifecycle.pom.ts` (`setReactiveInput`, modal flota **VER** → Historial de Medidores), `ui.ts` (`parseUiNumber` es-CL).
+**Helpers clave:** `e2e/helpers/api-operations-lifecycle.ts` (`resolveE2EPrimaryContractId`, `x-site-id` en OT), `api-tenant-config.ts` (`patchOperationalConfig`), `api-fault-reports.ts`, `api-equipment-availability.ts` (`getShiftBoard`, `batchCreateAvailability`), `operations-lifecycle.pom.ts` (`setReactiveInput`, modal flota **VER** → Historial de Medidores), `ui.ts` (`parseUiNumber` es-CL).
 
 ---
 
@@ -72,15 +73,18 @@ Implementado en `tests/e2e-operations-p0-integrity.spec.ts` (`npm run test:opera
 3. ~~**M3 falla ALTA**~~ — `isOperational=false` + OT `NO_PROGRAMADA_REACTIVA`.
 4. ~~**Correlativos M1/M3**~~ — smoke `RCL-` / `RF-`.
 
-### P1 — Módulos operaciones aún sin Playwright dedicado
+### P1 — M2 Disponibilidad y ajustes empresa — HECHO (2026-06-05)
 
-| Módulo | Escenario mínimo | Persona seed |
-|--------|------------------|--------------|
-| **M2 Disponibilidad** | Tablero turno: tab Pendientes → reportar 1 equipo → aparece en Reportados | Admin o rol con `OPERATIONS_AVAILABILITY_*` |
-| **M2 batch** | Formulario paginado: batch create 2 equipos mismo `OperationalStatus` | Idem |
-| **M2 `hasNightShift=false`** | Tenant sin noche → solo turno DAY en API/UI | `PATCH /tenant-config/operational` en beforeAll |
-| **Registro horas** | Salto regresivo: sync disabled (ya parcial en chaos #4) | Admin |
-| **Ajustes empresa** | Toggle turnos + `blockNegativeStock` persisten tras reload | Admin |
+Implementado en `tests/e2e-operations-p1-m2-availability.spec.ts` (`npm run test:operations:p1`). Turno **DAY** fijado en monitor/form para evitar desalineación nocturna; query `?tab=REPORTED` soportada en monitor.
+
+| Ítem | Escenario | Estado |
+|------|-----------|--------|
+| 5 | Tab Pendientes → link **Reportar** (fila) → batch → tab Reportados | ✓ |
+| 6 | Batch API 2 equipos `OPERATIONAL` en shift-board | ✓ |
+| 7 | `hasNightShift=false` — sin selector turno; NIGHT → 400 | ✓ |
+| 8 | Ajustes empresa: toggles persisten tras reload | ✓ |
+
+Registro horas (salto regresivo) sigue cubierto parcialmente en **`test:chaos`** §4.
 
 ### P2 — Inventario × operaciones
 

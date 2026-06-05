@@ -126,8 +126,9 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
     const qp = this.route.snapshot.queryParamMap;
     this.filterDate.set(qp.get('date') ?? this.shiftService.todayIso());
     this.filterShift.set((qp.get('shift') as ShiftType) ?? this.shiftService.currentShift());
-    if (qp.get('tab') === 'PENDING') {
-      this.filterTab.set('PENDING');
+    const tab = qp.get('tab');
+    if (tab === 'PENDING' || tab === 'REPORTED' || tab === 'EXCLUDED' || tab === 'ALL') {
+      this.filterTab.set(tab);
     }
 
     this.contractsService.findAll().subscribe({
