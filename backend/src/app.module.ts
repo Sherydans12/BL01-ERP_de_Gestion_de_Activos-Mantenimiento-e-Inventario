@@ -32,6 +32,7 @@ import { NotificationSettingsModule } from './features/notification-settings/not
 import { LubeReportsModule } from './features/lube-reports/lube-reports.module';
 import { EquipmentAvailabilityModule } from './features/equipment-availability/equipment-availability.module';
 import { FaultReportsModule } from './features/fault-reports/fault-reports.module';
+import { KpiAnalyticsModule } from './features/kpi-analytics/kpi-analytics.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { FaultReportsModule } from './features/fault-reports/fault-reports.modul
     LubeReportsModule,
     EquipmentAvailabilityModule,
     FaultReportsModule,
+    KpiAnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

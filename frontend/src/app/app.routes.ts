@@ -152,6 +152,15 @@ export const routes: Routes = [
             (m) => m.WorkOrderAnalyticsDashboardComponent,
           ),
       },
+      {
+        path: 'operaciones/analytics',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_READ, pageTitle: 'KPIs Operativos' },
+        loadComponent: () =>
+          import('./features/analytics/dashboard/dashboard.component').then(
+            (m) => m.OperationsKpiDashboardComponent,
+          ),
+      },
       // ── Módulo: Despacho de Lubricantes ──────────────────────────────────
       {
         path: 'operaciones/lubricantes',

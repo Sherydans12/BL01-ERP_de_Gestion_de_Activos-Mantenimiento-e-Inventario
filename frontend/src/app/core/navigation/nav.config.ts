@@ -169,6 +169,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: O.WORK_ORDER_READ,
       },
       {
+        label: 'KPIs Operativos',
+        route: '/app/operaciones/analytics',
+        icon: ICONS.chartBar,
+        permissions: O.WORK_ORDER_READ,
+      },
+      {
         label: 'Despacho de Lubricantes',
         route: '/app/operaciones/lubricantes',
         icon: ICONS.droplet,
