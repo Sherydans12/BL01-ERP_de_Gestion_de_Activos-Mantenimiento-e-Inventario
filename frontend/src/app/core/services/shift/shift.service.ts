@@ -34,6 +34,11 @@ export class ShiftService {
 
   // ── Configuración operativa leída del tenant (con defaults seguros) ────────
 
+  /** true cuando GET /tenant-config ya hidrató operationalConfig en el tenant. */
+  readonly operationalConfigLoaded = computed(
+    () => this.tenantService.currentTenant()?.operationalConfig != null,
+  );
+
   readonly hasNightShift = computed(() => {
     const cfg = this.tenantService.currentTenant()?.operationalConfig;
     if (cfg == null) return false;
@@ -108,6 +113,18 @@ export class ShiftService {
       shift === 'NIGHT' || shift === 'DAY' ? shift : this.currentShift();
     if (candidate === 'NIGHT' && !this.hasNightShift()) return 'DAY';
     return candidate;
+  }
+
+  /**
+   * Tras cargar la config del tenant: alinea al turno del reloj salvo que la URL
+   * fijara ?shift= explícitamente.
+   */
+  alignShiftAfterConfigLoad(
+    current: ShiftType,
+    pinnedByUrl: boolean,
+  ): ShiftType {
+    if (pinnedByUrl) return this.coerceShift(current);
+    return this.coerceShift(this.currentShift());
   }
 
   /** Turnos mostrables en selectores (historial, import, etc.). */

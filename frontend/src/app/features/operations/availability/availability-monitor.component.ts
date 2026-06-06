@@ -96,6 +96,8 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
 
   private searchSubject = new Subject<string>();
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private shiftPinnedByUrl = false;
+  private autoShiftAligned = false;
 
   totalPages = computed(() =>
     Math.max(1, Math.ceil(this.totalRows() / PAGE_SIZE)),
@@ -125,8 +127,26 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      if (!this.shiftService.hasNightShift() && this.filterShift() === 'NIGHT') {
-        this.filterShift.set('DAY');
+      const coerced = this.shiftService.coerceShift(this.filterShift());
+      if (coerced !== this.filterShift()) {
+        this.filterShift.set(coerced);
+        this.query(false);
+        return;
+      }
+      if (
+        !this.shiftService.operationalConfigLoaded() ||
+        this.shiftPinnedByUrl ||
+        this.autoShiftAligned
+      ) {
+        return;
+      }
+      this.autoShiftAligned = true;
+      const aligned = this.shiftService.alignShiftAfterConfigLoad(
+        this.filterShift(),
+        false,
+      );
+      if (aligned !== this.filterShift()) {
+        this.filterShift.set(aligned);
         this.query(false);
       }
     });
@@ -134,6 +154,7 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     const qp = this.route.snapshot.queryParamMap;
+    this.shiftPinnedByUrl = qp.has('shift');
     this.filterDate.set(qp.get('date') ?? this.shiftService.todayIso());
     this.filterShift.set(this.shiftService.coerceShift(qp.get('shift')));
     const tab = qp.get('tab');

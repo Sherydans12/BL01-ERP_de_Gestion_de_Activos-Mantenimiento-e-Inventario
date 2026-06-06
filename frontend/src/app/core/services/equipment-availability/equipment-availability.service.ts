@@ -2,6 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map, tap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { ShiftService } from '../shift/shift.service';
 
 // ── Enums (espejados desde el backend — deben estar sincronizados con Prisma) ──
 
@@ -294,7 +295,13 @@ export interface ImportCommitResult {
 @Injectable({ providedIn: 'root' })
 export class EquipmentAvailabilityService {
   private http = inject(HttpClient);
+  private shiftService = inject(ShiftService);
   private apiUrl = `${environment.apiUrl}/equipment-availability`;
+
+  /** Última línea de defensa: NIGHT → DAY si el tenant no opera noche. */
+  private apiShift(shift?: ShiftType | null): ShiftType {
+    return this.shiftService.coerceShift(shift ?? undefined);
+  }
 
   /** Equipos con registro de falla pendiente tras rechazar el redirect M2→M3. */
   private readonly _pendingFaultRegistrations = signal<ReadonlySet<string>>(
@@ -325,7 +332,10 @@ export class EquipmentAvailabilityService {
   // ── Existing methods ────────────────────────────────────────────────────
 
   create(payload: CreateAvailabilityPayload): Observable<AvailabilityRecord> {
-    return this.http.post<AvailabilityRecord>(this.apiUrl, payload);
+    return this.http.post<AvailabilityRecord>(this.apiUrl, {
+      ...payload,
+      shift: this.apiShift(payload.shift),
+    });
   }
 
   getAll(params: AvailabilityListParams = {}): Observable<AvailabilityListResponse> {
@@ -333,7 +343,7 @@ export class EquipmentAvailabilityService {
     if (params.page != null)        p = p.set('page',        String(params.page));
     if (params.pageSize != null)    p = p.set('pageSize',    String(params.pageSize));
     if (params.equipmentId?.trim()) p = p.set('equipmentId', params.equipmentId.trim());
-    if (params.shift)               p = p.set('shift',       params.shift);
+    if (params.shift)               p = p.set('shift',       this.apiShift(params.shift));
     if (params.dateFrom?.trim())    p = p.set('dateFrom',    params.dateFrom.trim());
     if (params.dateTo?.trim())      p = p.set('dateTo',      params.dateTo.trim());
     if (params.contractId?.trim())  p = p.set('contractId',  params.contractId.trim());
@@ -348,7 +358,7 @@ export class EquipmentAvailabilityService {
   getUnreported(params: UnreportedParams): Observable<PaginatedUnreportedResponse> {
     let p = new HttpParams()
       .set('date', params.date)
-      .set('shift', params.shift);
+      .set('shift', this.apiShift(params.shift));
     if (params.contractId) p = p.set('contractId', params.contractId);
     if (params.search?.trim()) p = p.set('search', params.search.trim());
     if (params.page != null) p = p.set('page', String(params.page));
@@ -362,7 +372,7 @@ export class EquipmentAvailabilityService {
   getShiftBoard(params: ShiftBoardParams): Observable<ShiftBoardResponse> {
     let p = new HttpParams()
       .set('date', params.date)
-      .set('shift', params.shift);
+      .set('shift', this.apiShift(params.shift));
     if (params.contractId) p = p.set('contractId', params.contractId);
     if (params.search?.trim()) p = p.set('search', params.search.trim());
     if (params.tab) p = p.set('tab', params.tab);
@@ -378,7 +388,7 @@ export class EquipmentAvailabilityService {
   ): Observable<BatchCreateResult> {
     return this.http.post<BatchCreateResult>(`${this.apiUrl}/batch`, {
       reportDate,
-      shift,
+      shift: this.apiShift(shift),
       rows,
     });
   }
@@ -397,9 +407,10 @@ export class EquipmentAvailabilityService {
     shift: ShiftType,
     contractId?: string,
   ): Observable<void> {
+    const effectiveShift = this.apiShift(shift);
     let p = new HttpParams()
       .set('reportDate', reportDate)
-      .set('shift', shift);
+      .set('shift', effectiveShift);
     if (contractId) p = p.set('contractId', contractId);
 
     return this.http
@@ -409,7 +420,7 @@ export class EquipmentAvailabilityService {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `disponibilidad-${shift === 'DAY' ? 'DIA' : 'NOCHE'}-${reportDate}.xlsx`;
+          a.download = `disponibilidad-${effectiveShift === 'DAY' ? 'DIA' : 'NOCHE'}-${reportDate}.xlsx`;
           a.click();
           URL.revokeObjectURL(url);
         }),
@@ -447,7 +458,7 @@ export class EquipmentAvailabilityService {
   ): Observable<ImportCommitResult> {
     return this.http.post<ImportCommitResult>(
       `${this.apiUrl}/import/commit`,
-      { reportDate, shift, rows },
+      { reportDate, shift: this.apiShift(shift), rows },
     );
   }
 }

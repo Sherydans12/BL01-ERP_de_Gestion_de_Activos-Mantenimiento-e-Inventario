@@ -139,6 +139,8 @@ export class AvailabilityFormComponent implements OnInit {
   private pendingFaultSideEffect = signal<AvailabilitySideEffect | null>(null);
   private pendingFaultSymptom = signal<string | undefined>(undefined);
   private pendingFaultMeter = signal<number | undefined>(undefined);
+  private shiftPinnedByUrl = false;
+  private autoShiftAligned = false;
 
   get maxDate(): string {
     return this.shiftService.todayIso();
@@ -146,8 +148,23 @@ export class AvailabilityFormComponent implements OnInit {
 
   constructor() {
     effect(() => {
-      if (!this.shiftService.hasNightShift() && this.shift() === 'NIGHT') {
-        this.shift.set('DAY');
+      const coerced = this.shiftService.coerceShift(this.shift());
+      if (coerced !== this.shift()) {
+        this.shift.set(coerced);
+        this.loadPending();
+        return;
+      }
+      if (
+        !this.shiftService.operationalConfigLoaded() ||
+        this.shiftPinnedByUrl ||
+        this.autoShiftAligned
+      ) {
+        return;
+      }
+      this.autoShiftAligned = true;
+      const aligned = this.shiftService.alignShiftAfterConfigLoad(this.shift(), false);
+      if (aligned !== this.shift()) {
+        this.shift.set(aligned);
         this.loadPending();
       }
     });
@@ -155,6 +172,7 @@ export class AvailabilityFormComponent implements OnInit {
 
   ngOnInit(): void {
     const qp = this.route.snapshot.queryParamMap;
+    this.shiftPinnedByUrl = qp.has('shift');
     this.reportDate.set(qp.get('date') ?? this.shiftService.todayIso());
     this.shift.set(this.shiftService.coerceShift(qp.get('shift')));
     this.highlightEquipmentId.set(qp.get('equipmentId'));

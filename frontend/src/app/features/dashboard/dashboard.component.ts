@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, effect, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { WorkOrdersService } from '../../core/services/work-orders/work-orders.service';
@@ -35,6 +35,15 @@ export class DashboardComponent implements OnInit {
 
   showOtDetail = signal(false);
   detailOtId = signal<string | null>(null);
+
+  constructor() {
+    effect(() => {
+      if (!this.shiftService.operationalConfigLoaded()) return;
+      this.shiftService.currentShift();
+      this.shiftService.todayIso();
+      this.loadUnreported();
+    });
+  }
 
   ngOnInit() {
     this.loadStats();
