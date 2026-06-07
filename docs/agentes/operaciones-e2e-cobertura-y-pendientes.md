@@ -1,12 +1,14 @@
 # Operaciones × Inventario — cobertura E2E Playwright y pendientes
 
-**Versión:** 1.4 · **Actualizado:** 2026-06-05
+**Versión:** 1.5 · **Actualizado:** 2026-06-06
 
 Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/resiliencia y ciclo de vida integrado (M1 → W2W → OT → medidor).
 
 ---
 
-## 1. Inventario actual (69 tests · suite completa)
+## 1. Inventario actual (~73 tests · suite completa)
+
+> Conteo aproximado tras P1b shift-policy (+4 tests). Ejecutar `npx playwright test --list` en `e2e/` para cifra exacta.
 
 | Paquete | Specs | Script npm | Qué valida |
 |---------|-------|------------|------------|
@@ -17,6 +19,7 @@ Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/
 | **Caos / resiliencia** | `tests/e2e-chaos-resilience.spec.ts` | `npm run test:chaos` | Concurrencia M1, cronología medidor, fuga stock OT, bulk-sync horómetro |
 | **P0 integridad** | `tests/e2e-operations-p0-integrity.spec.ts` | `npm run test:operations:p0` | `blockNegativeStock` M1+OT, M3 falla ALTA, correlativos `RCL-` / `RF-` |
 | **P1 M2 disponibilidad** | `tests/e2e-operations-p1-m2-availability.spec.ts` | `npm run test:operations:p1` | Monitor Pendientes→Reportados, batch 2 equipos, `hasNightShift=false`, toggles empresa |
+| **P1b Política turnos** | `tests/e2e-operations-shift-policy.spec.ts` | `npm run test:operations:shift` | JWT `operationalConfig`, API/UI `hasNightShift` true/false, export con `NIGHT` coercido, monitor sin esperar tenant-config |
 | **P2 inventario × ops** | `tests/e2e-operations-p2-inventory-cross.spec.ts` | `npm run test:operations:p2` | W2W parcial + M1 stock picker; PBAC lectura POST M1 → 403 |
 
 **Prerrequisitos locales:**

@@ -468,10 +468,11 @@ Base: `environment.apiUrl` + interceptores JWT y contrato activo.
 | Mecanismo | Implementación |
 |-----------|----------------|
 | Login | [`auth.service.ts`](../backend/src/features/auth/auth.service.ts) — anti-enumeración |
-| JWT | Bearer; `sub`, `role`, `permissions[]`, `jti` |
+| JWT | Bearer; `sub`, `role`, `permissions[]`, `jti`, `operationalConfig` (`hasNightShift`, horarios, `blockNegativeStock`) — ver `jwt-operational-config.util.ts` |
 | Sesiones | [`user-session.service.ts`](../backend/src/features/auth/user-session.service.ts) |
 | 2FA | TOTP + email 2FA + step-up — [seguridad-auth.md](agentes/seguridad-auth.md) |
-| SUPER_ADMIN tenant | Header `x-tenant-id` en [`jwt.strategy.ts`](../backend/src/features/auth/strategies/jwt.strategy.ts) |
+| SUPER_ADMIN tenant | Header `x-tenant-id` en [`jwt.strategy.ts`](../backend/src/features/auth/strategies/jwt.strategy.ts); sin `operationalConfig` en JWT — hidratar vía `GET /tenant-config` al elegir tenant |
+| Turnos M2 (frontend) | [`ShiftService`](../frontend/src/app/core/services/shift/shift.service.ts): `hasNightShift`, `coerceShift()`, `currentShift()`; API coerciona `NIGHT`→`DAY` si no hay turno noche |
 | Auditoría | `AuthAuditLog` |
 
 ### 4.2 Multi-tenant y aislamiento por empresa/contrato

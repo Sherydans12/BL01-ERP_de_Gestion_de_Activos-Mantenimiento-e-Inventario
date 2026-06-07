@@ -9,6 +9,16 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-06 — Turnos M2: JWT operationalConfig + coerción NIGHT→DAY + E2E P1b
+
+- **Contexto:** Con `hasNightShift=false`, de noche el frontend infería `NIGHT` antes de cargar config y el backend respondía 400. Tras el fix inicial (`e71f1e1`), quedaban gaps de hidratación y regresión E2E.
+- **Decisión:**
+  - **Backend:** `resolveShift()` normaliza `NIGHT` → `DAY` si el tenant no opera turno noche (sin 400). Import Excel: plantillas con `NIGHT` en `_info` se tratan como `DAY`.
+  - **Frontend:** `ShiftService.coerceShift()`, coerción central en `EquipmentAvailabilityService`, alineación post-config en monitor/reporte (`4172ffc`).
+  - **JWT (`a69c2f5`):** Login y activación incluyen `operationalConfig` en payload JWT y `user.tenant`; `AuthService` fusiona al restaurar sesión; `company-config` llama `patchSessionOperationalConfig` al guardar turnos.
+  - **E2E:** `e2e/tests/e2e-operations-shift-policy.spec.ts` (`npm run test:operations:shift`) — JWT alineado, API/UI con `hasNightShift` true/false.
+- **Consecuencias:** `GET /tenant-config` sigue siendo fuente completa de branding; JWT cubre turnos para arranque inmediato de M2. SUPER_ADMIN sin `tenantId` en JWT sigue dependiendo de `x-tenant-id` + tenant-config. Pendientes menores: frontera HH:mm, auto-filtro 20:00, CI E2E (plan T3–T7).
+
 ## 2026-06-05 — P4 Sprint 1 backend: orquestador M2 detención → stub M3 + isOperational
 
 - **Contexto:** Backlog P4 §3 — unificar estado operativo al reportar `DOWN_FAILURE` / `DOWN_MAINTENANCE` en M2.
@@ -42,7 +52,7 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:**
   - Nuevo spec `e2e/tests/e2e-operations-p0-integrity.spec.ts` (`npm run test:operations:p0`, 4 tests): `blockNegativeStock` M1 (API 400 + UI POST rechazado o botón deshabilitado), OT cierre fluidos 400 sin kardex, M3 HIGH → `isOperational=false` + `NO_PROGRAMADA_REACTIVA`, smoke `RCL-` / `RF-`.
   - Helpers: `api-tenant-config.ts`, `api-fault-reports.ts`.
-  - Frontend: `lube-report-form` refresca `GET /tenant-config` al abrir (JWT sin `operationalConfig`); `auth.service` preserva `operationalConfig` al rehidratar tenant desde JWT.
+  - Frontend: `lube-report-form` puede refrescar `GET /tenant-config` al abrir; desde 2026-06-06 el JWT incluye `operationalConfig` en login (ver entrada turnos M2).
 - **Consecuencias:** Suite E2E **63/63**. `test:domain` **397/397**. P1 (M2 tablero, ajustes empresa) sigue pendiente.
 
 ## 2026-06-04 — E2E operaciones: estabilización caos/lifecycle + correlativos M1/M3
@@ -88,9 +98,9 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:**
   - **Separación 1:1 (`TenantOperationalConfig`):** Se creó una tabla independiente vinculada a `Tenant` por FK única, con campos `hasNightShift: Boolean @default(true)`, `dayShiftStartTime`, `nightShiftStartTime` y, desde 2026-06-04, `blockNegativeStock: Boolean @default(false)` para controlar stock negativo en M1/OT/inventario.
   - **Lazy-creation:** El registro solo se crea en base de datos al primer `PATCH /tenant-config/operational`; mientras no exista, el backend lee los defaults en memoria (`hasNightShift=true`, `08:00`, `20:00`). Esto evita backfill en tenants existentes.
-  - **Backend defensivo (`shift` opcional → default `DAY`):** Los DTOs de disponibilidad (`create`, `export`, `unreported`, `import`) declaran `shift?: ShiftType` con `@IsOptional()`. El helper privado `resolveShift(tenantId, provided?)` en `EquipmentAvailabilityService` aplica la regla: si `hasNightShift=false` e `shift` no se provee → inyecta `DAY`; si se provee `NIGHT` explícitamente → `BadRequestException`. +7 tests en `equipment-availability.service.spec.ts`.
-  - **Frontend reactivo via `ShiftService`:** `ShiftService` consume `TenantService.currentTenant()?.operationalConfig` mediante `computed()`. La regla es inquebrantable: si `hasNightShift()===false`, `currentShift()` retorna siempre `'DAY'` sin evaluar el reloj. Los componentes `AvailabilityFormComponent`, `AvailabilityMonitorComponent` y `AvailabilityImportComponent` envuelven sus selectores con `@if (shiftService.hasNightShift()) { … }`. `ShiftBadgeComponent` oculta el ícono de luna y muestra chip «Único» cuando corresponde.
-- **Consecuencias:** Sin cambios de schema aditivos para tenants existentes. La configuración operativa viaja en `GET /tenant-config` (payload `operationalConfig`) que ya se llama al iniciar sesión; no se engrosa el JWT. Suite dominio backend: **383 tests · 22 suites · 0 fallos**. Suite frontend: **176 tests · 0 fallos**.
+  - **Backend defensivo (`shift` opcional → default `DAY`):** Los DTOs declaran `shift?: ShiftType` con `@IsOptional()`. `resolveShift()` aplica `DAY` por defecto; si `hasNightShift=false` y llega `NIGHT`, **normaliza a `DAY`** (actualizado 2026-06-06 — ver entrada «JWT operationalConfig»).
+  - **Frontend reactivo via `ShiftService`:** `ShiftService` consume `operationalConfig` desde JWT (login) y `GET /tenant-config` (layout). Si `hasNightShift()===false`, `currentShift()` siempre `'DAY'`. Selectores de turno envueltos en `@if (shiftService.hasNightShift())`.
+- **Consecuencias:** Sin cambios de schema aditivos para tenants existentes. Config operativa: JWT (arranque) + `GET /tenant-config` (branding y refresh). Ver commits `e71f1e1`, `4172ffc`, `a69c2f5`.
 
 ## 2026-06-03 — Sprint 3 Sistema Integrado: lifecycle cost en modal (2.2) + stock en form de OT (2.3)
 
