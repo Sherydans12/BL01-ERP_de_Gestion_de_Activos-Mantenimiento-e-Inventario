@@ -65,6 +65,18 @@ Mantener **transacciones** y **invalidación de sesiones** al desactivar factore
 | GET | `/api/users` (paginado) | Cada ítem: `emailStepUpPolicyApplies`, `totpEnabled` (y columnas de siempre). |
 | GET/PATCH | `/api/admin/security/global-auth-settings` | Lectura ADMIN+; solo SUPER_ADMIN modifica. Incluye `superAdminTotpEnabledCount` y `superAdminCount`. |
 
+## JWT — `operationalConfig` (turnos M2)
+
+Desde 2026-06-06 el login emite en el JWT (y en `user.tenant`) un snapshot de `TenantOperationalConfig`: `hasNightShift`, horarios de turno y `blockNegativeStock`. Fuente de implementación: `jwt-operational-config.util.ts` + `mergeUserWithJwtPermissions` en el front.
+
+| Aspecto | Comportamiento |
+|---------|----------------|
+| Vigencia | Misma expiración que el access token (~8 h). Cambios en **Ajustes → Operación** no reescriben el JWT hasta **re-login** o refresh futuro. |
+| Misma pestaña | `patchSessionOperationalConfig` actualiza `tpm_user`, `TenantService` y notifica otras pestañas. |
+| Multi-pestaña | `BroadcastChannel` (`tpm-operational-config-v1`) + clave `tpm_operational_config_rev` en `localStorage` (evento `storage`) para alinear `ShiftService` sin recargar. |
+| SUPER_ADMIN | El JWT **no** incluye `operationalConfig` (sin `tenantId` fijo). Tras elegir empresa (`x-tenant-id`), `GET /tenant-config` hidrata turnos vía `ingestTenantOperationalConfig`; no se reutiliza config de otra empresa en memoria. |
+| Fuente completa | Branding, logos y refresh operativo siguen en `GET /tenant-config` (layout al iniciar). |
+
 ## Migraciones
 
 Al añadir carpetas bajo `backend/prisma/migrations/`, aplicar en local (ver regla en `.cursor/rules/erp-bl01-context.mdc`). En producción, Coolify ejecuta el deploy con `prisma migrate deploy` según el flujo del equipo.
