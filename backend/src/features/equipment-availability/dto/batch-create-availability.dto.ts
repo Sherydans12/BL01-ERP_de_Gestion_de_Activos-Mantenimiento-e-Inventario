@@ -36,6 +36,11 @@ export class BatchCreateAvailabilityDto {
   @IsDateString()
   reportDate: string;
 
+  /**
+   * Turno del lote: DAY o NIGHT.
+   * Opcional — `resolveShift()` aplica DAY si se omite.
+   * Si `hasNightShift=false` y llega NIGHT, el servicio normaliza a DAY (sin 400).
+   */
   @IsOptional()
   @IsEnum(ShiftType)
   shift?: ShiftType;

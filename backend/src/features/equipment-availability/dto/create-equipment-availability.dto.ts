@@ -21,8 +21,8 @@ export class CreateEquipmentAvailabilityDto {
 
   /**
    * Turno: Día (DAY) o Noche (NIGHT).
-   * Opcional — si se omite el servicio aplica DAY como default.
-   * Si se envía NIGHT y el tenant tiene hasNightShift=false, se rechaza con 400.
+   * Opcional — `resolveShift()` aplica DAY si se omite.
+   * Si `hasNightShift=false` y llega NIGHT, el servicio normaliza a DAY (sin 400).
    */
   @IsOptional()
   @IsEnum(ShiftType)

@@ -21,6 +21,11 @@ export class ShiftBoardQueryDto {
   @IsDateString()
   date: string;
 
+  /**
+   * Turno del tablero: DAY o NIGHT.
+   * Opcional — `resolveShift()` aplica DAY si se omite.
+   * Si `hasNightShift=false` y llega NIGHT, el servicio normaliza a DAY (sin 400).
+   */
   @IsOptional()
   @IsEnum(ShiftType)
   shift?: ShiftType;
