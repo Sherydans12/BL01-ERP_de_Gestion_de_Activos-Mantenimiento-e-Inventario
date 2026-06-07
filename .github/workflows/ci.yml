@@ -1,9 +1,10 @@
-# CI — lint, build y suites unitarias (sin PostgreSQL).
+# CI — lint, build, suites unitarias y E2E focalizado (shift policy M2).
 # Push/PR a main y develop.
 #
 # Paridad local antes de push (obligatorio si tocaste backend/src):
 #   cd backend  && npm run lint && npm run lint:ci && npm run test:domain
 #   cd frontend && npm run build && npm run test:ci
+# E2E shift (requiere Postgres + seeds): ver job e2e-operations-shift
 # `npm run lint` aplica --fix (Prettier vía eslint-plugin-prettier); `lint:ci` es el gate estricto.
 name: CI
 
@@ -99,5 +100,93 @@ jobs:
       - name: Run frontend unit tests (ChromeHeadless)
         working-directory: frontend
         run: npm run test:ci
+        env:
+          CHROMIUM_FLAGS: "--no-sandbox --disable-gpu --disable-dev-shm-usage"
+
+  e2e-operations-shift:
+    name: E2E — M2 shift policy (P1b)
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: erp_admin
+          POSTGRES_PASSWORD: supersecretpassword
+          POSTGRES_DB: erp_database
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U erp_admin -d erp_database"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CI: true
+      DATABASE_URL: postgresql://erp_admin:supersecretpassword@localhost:5432/erp_database?schema=public
+      JWT_SECRET: ci-e2e-jwt-secret-change-in-prod-min-32
+      FRONTEND_URL: http://localhost:4200
+      AUTH_STEP_UP_BYPASS: "true"
+      STORAGE_DRIVER: local
+      UPLOAD_PATH: ./uploads
+      TENANT_CODE: TPM
+      PBAC_TEST_PASSWORD: Test1234!
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --legacy-peer-deps
+
+      - name: Migrate database
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Seed E2E data (tenant, contrato, PBAC)
+        working-directory: backend
+        run: npm run seed:ci-e2e
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          npm run start:prod &
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:3000/api/auth/captcha >/dev/null; then
+              echo "Backend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Backend no respondió en :3000"
+          exit 1
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run shift policy E2E
+        working-directory: e2e
+        run: npm run test:operations:shift
         env:
           CHROMIUM_FLAGS: "--no-sandbox --disable-gpu --disable-dev-shm-usage"

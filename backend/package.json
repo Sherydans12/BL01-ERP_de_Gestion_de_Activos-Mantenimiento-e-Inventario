@@ -33,6 +33,7 @@
     "seed:inventario-pbac-personas": "node scripts/seed-inventario-pbac-personas.mjs",
     "simulate:inventario-pbac": "node scripts/simulate-inventario-pbac.mjs",
     "seed:operaciones-pbac-personas": "node scripts/seed-operaciones-pbac-personas.mjs",
+    "seed:ci-e2e": "npm run seed:super-admin && node scripts/ci-e2e-ensure-contract.mjs && npm run seed:catalog-masters && npm run seed:inventario-pbac-personas && npm run seed:operaciones-pbac-personas",
     "seed:catalog-masters": "ts-node prisma/seed-catalog-masters.ts",
     "seed:super-admin": "node scripts/seed-super-admin.mjs",
     "seed:load-test-items": "ts-node prisma/seed-load-test-items.ts",
