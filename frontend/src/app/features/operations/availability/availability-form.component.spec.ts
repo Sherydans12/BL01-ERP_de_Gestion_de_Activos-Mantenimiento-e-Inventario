@@ -46,21 +46,34 @@ const contractsSpy = jasmine.createSpyObj<ContractsService>('ContractsService', 
   findAll: of([]),
 });
 
-const authSpy = jasmine.createSpyObj<AuthService>('AuthService', [], {
-  currentUser: signal({
-    id: 'usr-admin',
-    email: 'admin@test.cl',
-    name: 'Admin',
-    role: 'ADMIN' as const,
-    allowedContracts: ['ALL'],
-  }),
-});
+const authSpy = jasmine.createSpyObj<AuthService>(
+  'AuthService',
+  { hasPermission: true, hasPermissionAny: true },
+  {
+    currentUser: signal({
+      id: 'usr-admin',
+      email: 'admin@test.cl',
+      name: 'Admin',
+      role: 'ADMIN' as const,
+      allowedContracts: ['ALL'],
+    }),
+    userPermissions: signal<string[]>([]),
+  },
+);
 
-const shiftSpy = jasmine.createSpyObj<ShiftService>('ShiftService', [], {
-  todayIso: signal('2026-06-04'),
-  currentShift: signal<'DAY' | 'NIGHT'>('DAY'),
-  hasNightShift: signal(true),
-});
+const shiftSpy = jasmine.createSpyObj<ShiftService>(
+  'ShiftService',
+  {
+    coerceShift: 'DAY',
+    alignShiftAfterConfigLoad: 'DAY',
+  },
+  {
+    todayIso: signal('2026-06-04'),
+    currentShift: signal<'DAY' | 'NIGHT'>('DAY'),
+    hasNightShift: signal(true),
+    operationalConfigLoaded: signal(true),
+  },
+);
 
 const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', [
   'notifyEquipmentChanged',
@@ -82,7 +95,11 @@ describe('AvailabilityFormComponent (Bulk Grid)', () => {
         provideRouter([]),
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { queryParamMap: { get: () => null } } },
+          useValue: {
+            snapshot: {
+              queryParamMap: { get: () => null, has: () => false },
+            },
+          },
         },
         { provide: EquipmentAvailabilityService, useValue: availabilityServiceSpy },
         { provide: NotificationService, useValue: notifySpy },

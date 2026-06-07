@@ -42,6 +42,7 @@ describe('LubeReportFormComponent', () => {
 
   const fleetServiceSpy = jasmine.createSpyObj<FleetService>('FleetService', {
     getEquipments: of({ data: [], total: 0, page: 1, limit: 200 }),
+    notifyEquipmentChanged: undefined,
   });
 
   const inventoryItemsServiceSpy = jasmine.createSpyObj<InventoryItemsService>(
@@ -60,7 +61,12 @@ describe('LubeReportFormComponent', () => {
   ]);
 
   beforeEach(async () => {
+    lubeServiceSpy.createReport.calls.reset();
+    lubeServiceSpy.createReport.and.returnValue(of({ correlative: 'RCL-00001' } as any));
+    fleetServiceSpy.notifyEquipmentChanged.calls.reset();
     meterSnapSpy.getSnapshot.calls.reset();
+    notifySpy.success.calls.reset();
+    notifySpy.error.calls.reset();
 
     await TestBed.configureTestingModule({
       imports: [LubeReportFormComponent],
@@ -140,5 +146,39 @@ describe('LubeReportFormComponent', () => {
     component.submit();
     expect(lubeServiceSpy.createReport).not.toHaveBeenCalled();
     expect(notifySpy.error).toHaveBeenCalled();
+  });
+
+  it('notifica a Flota al registrar un despacho exitoso', () => {
+    component.onEquipmentChange('eq-1');
+    component.selectedWarehouseId.set('wh-1');
+    component.selectedContractId.set('c-1');
+    component.dispatchDate.set('2026-06-03');
+    component.lines.set([
+      {
+        itemId: 'item-1',
+        name: 'Aceite',
+        partNumber: null,
+        inventoryCode: null,
+        unitAbbr: 'L',
+        allowsDecimals: false,
+        stockAvailable: 10,
+        quantityControl: new FormControl(1),
+        confirmedLargeDispatch: false,
+      },
+    ]);
+    component.lineValidations.set({
+      'item-1': {
+        valid: true,
+        blocking: false,
+        formatError: false,
+        exceedsStock: false,
+        needsLargeConfirm: false,
+      },
+    });
+
+    component.submit();
+
+    expect(lubeServiceSpy.createReport).toHaveBeenCalled();
+    expect(fleetServiceSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-1');
   });
 });

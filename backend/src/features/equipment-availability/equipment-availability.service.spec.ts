@@ -709,6 +709,58 @@ describe('EquipmentAvailabilityService — commitImport', () => {
     expect(tx.equipmentAvailability.upsert).toHaveBeenCalledTimes(2);
   });
 
+  it('restaura isOperational=true cuando un parte OPERATIONAL sigue al último M2 DOWN previo', async () => {
+    tx.equipment.findFirst.mockResolvedValue({
+      ...validEquipment,
+      isOperational: false,
+    } as never);
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
+    tx.equipmentAvailability.findFirst.mockResolvedValue({
+      status: OperationalStatus.DOWN_FAILURE,
+    } as never);
+    tx.equipmentAvailability.upsert.mockResolvedValue({
+      ...upsertedRecord,
+      reportDate: new Date('2026-06-03'),
+      status: OperationalStatus.OPERATIONAL,
+    } as never);
+    tx.equipment.update.mockResolvedValue({
+      ...validEquipment,
+      isOperational: true,
+    } as never);
+
+    const result = await service.commitImport(
+      {
+        reportDate: '2026-06-03',
+        shift: ShiftType.DAY,
+        rows: [{ equipmentId, status: OperationalStatus.OPERATIONAL }],
+      },
+      adminUser,
+    );
+
+    expect(result.committed).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    expect(tx.equipmentAvailability.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId,
+          equipmentId,
+          reportDate: { lt: new Date('2026-06-03') },
+        }),
+      }),
+    );
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipmentId },
+      data: { isOperational: true },
+    });
+    expect(result.sideEffects?.[0]).toEqual(
+      expect.objectContaining({
+        equipmentId,
+        status: OperationalStatus.OPERATIONAL,
+        isOperational: true,
+      }),
+    );
+  });
+
   it('éxito parcial: guarda la primera fila y reporta el error de la segunda sin abortar el lote', async () => {
     tx.equipment.findFirst
       .mockResolvedValueOnce(validEquipment as never)

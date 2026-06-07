@@ -6,7 +6,7 @@ export interface OperationalTransitionInput {
   equipmentId: string;
   availabilityId: string;
   newStatus: OperationalStatus;
-  /** Estado del mismo turno/fecha antes del upsert; null en create nuevo. */
+  /** Estado M2 anterior resuelto por disponibilidad; null si no hay historial. */
   previousStatus: OperationalStatus | null;
   meterReading?: number | null;
   comments?: string | null;

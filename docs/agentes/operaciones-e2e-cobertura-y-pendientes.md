@@ -1,6 +1,6 @@
 # Operaciones × Inventario — cobertura E2E Playwright y pendientes
 
-**Versión:** 1.5 · **Actualizado:** 2026-06-06
+**Versión:** 1.6 · **Actualizado:** 2026-06-07
 
 Guía para continuar la suite **Playwright** (`e2e/`) tras el hardening de caos/resiliencia y ciclo de vida integrado (M1 → W2W → OT → medidor).
 
@@ -34,18 +34,18 @@ cd e2e && E2E_SKIP_WEBSERVER=1 npm test
 
 ---
 
-## 1.1 Qué cubren P0–P3 vs. qué **no** cubren (integración M2 ↔ M3)
+## 1.1 Cobertura P0–P3 y estado de integración M2 ↔ M3
 
-Los paquetes **P0–P2** (commits `f8c64a7` P0, `6838b31` P1, `489cba5` P2) son **regresión E2E** sobre flujos ya implementados. **No** implementan ni prueban el puente «Detenido por Falla» (M2) → Registro de Fallas (M3) → `isOperational` en Flota.
+Los paquetes **P0–P2** (commits `f8c64a7` P0, `6838b31` P1, `489cba5` P2) son **regresión E2E** sobre flujos ya implementados. La integración M2 `DOWN_*` → RF stub LOW → `isOperational` quedó cubierta por specs unitarios/backend y refresh frontend en 2026-06-07; falta cerrar un E2E P4 dedicado.
 
 | Paquete | Qué valida | Qué **no** valida |
 |---------|------------|-------------------|
-| **P0** | M3 **directo** (API `POST /fault-reports` HIGH) → `isOperational=false` + OT reactiva; `blockNegativeStock`; correlativos | M2 `DOWN_FAILURE` no dispara M3 ni muta `isOperational` |
-| **P1** | Monitor M2: Pendientes → Reportar → Reportados; batch con status **`OPERATIONAL`**; `hasNightShift`; toggles empresa | Estado `DOWN_FAILURE` en formulario/monitor; coherencia con Maestro de Flota |
+| **P0** | M3 **directo** (API `POST /fault-reports` HIGH) → `isOperational=false` + OT reactiva; `blockNegativeStock`; correlativos | M2 `DOWN_FAILURE` → stub RF/Flota |
+| **P1** | Monitor M2: Pendientes → Reportar → Reportados; batch con status **`OPERATIONAL`**; `hasNightShift`; toggles empresa | E2E de estado `DOWN_FAILURE` en formulario/monitor y coherencia con Maestro de Flota |
 | **P2** | W2W parcial + stock M1; PBAC lectura POST M1 → 403 | — |
 | **P3** (pendiente) | Smoke dashboard KPIs + deep links | Integración M2→M3 |
 
-**Gap de producto vigente (2026-06-05):** por diseño (`MASTER-CONTEXT.md` §2.4, `glosario.md`), `EquipmentAvailability.status` (M2) es **declarativo** y **`Equipment.isOperational`** es **imperativo** (M3 ALTA + OT). Reportar «Detenido por Falla» en M2 **solo** persiste el parte de turno; el Maestro de Flota y el badge del modal siguen leyendo `isOperational` hasta que exista un RF en M3 (o una OT con impacto). Ver backlog **P4** §3.
+**Estado funcional (2026-06-07):** M2 `DOWN_FAILURE` / `DOWN_MAINTENANCE` marca `Equipment.isOperational=false` y crea un RF stub LOW si no hay RF activo. M2 `OPERATIONAL` restaura `isOperational=true` cuando el estado M2 anterior resuelto era `DOWN_*` (misma celda editada, DAY→NIGHT o último parte previo). El frontend ya invalida Maestro/modal desde M2 `sideEffects[]`, M1 exitoso y M3 en todas las criticidades. Ver backlog **P4** §3 para el E2E pendiente.
 
 ---
 
@@ -119,22 +119,22 @@ Registro horas (salto regresivo) sigue cubierto parcialmente en **`test:chaos`**
 - Push **EQUIPMENT_DOWN** / Sprint 4.2 anti-spam — fuera de Playwright; tests unitarios + contract API.
 - Compras × flota (`AssetCostRecord` visible en modal) — assert en pestaña Consumos.
 
-### P4 — Integración M2 `DOWN_FAILURE` ↔ M3 ↔ Flota — **PENDIENTE (producto + código)**
+### P4 — Integración M2 `DOWN_FAILURE` ↔ M3 ↔ Flota — **IMPLEMENTADO EN CÓDIGO · E2E PENDIENTE**
 
 **No confundir con P1:** P1 prueba el **circuito feliz** M2 con equipos `OPERATIONAL`; este ítem cierra la desincronización cuando el supervisor elige «Detenido por Falla».
 
 | Fase | Entrega | Tipo |
 |------|---------|------|
-| **P4.0** | Decisión producto: redirect obligatorio a M3 vs. stub RF + completar (no auto-HIGH ciego) | ADR / `decisiones.md` |
-| **P4.1** | Backend: `EquipmentOperationalOrchestrator` o hook en `EquipmentAvailabilityService` tras `DOWN_FAILURE` | Nest + Prisma (FK opcional `availability ↔ fault`) |
-| **P4.2** | Frontend: post-batch M2 → modal/deep-link M3 pre-rellenado; `fleetService.invalidateCache()` desde M2; modal escucha `listVersion` | Angular |
-| **P4.3** | E2E `test:operations:p4`: M2 `DOWN_FAILURE` → completar M3 HIGH → flota/modal muestran `isOperational=false` | Playwright |
+| **P4.0** | Decisión producto: stub RF LOW + completar en M3 (no auto-HIGH ciego) | Hecho — `decisiones.md` 2026-06-05 / 2026-06-07 |
+| **P4.1** | Backend: `EquipmentOperationalOrchestratorService` + resolución de último M2 para restaurar `OPERATIONAL` | Hecho — Nest + Prisma |
+| **P4.2** | Frontend: invalidación Flota/modal desde M2 `sideEffects[]`, M1 exitoso y M3 LOW/MEDIUM/HIGH | Hecho — Angular |
+| **P4.3** | E2E `test:operations:p4`: M2 `DOWN_FAILURE` → RF stub → flota/modal; luego M2 `OPERATIONAL` → vuelve a operativo | Pendiente — Playwright |
 
 Escenarios E2E propuestos:
 
-1. API: `batchCreate` con `DOWN_FAILURE` → **no** cambia `GET /equipments/:id.isOperational` hasta `POST /fault-reports` HIGH (estado actual documentado).
-2. Tras P4.2: mismo flujo UI → redirect M3 → HIGH → Maestro de Flota fila «FUERA DE SERVICIO».
-3. Regresión: M2 `OPERATIONAL` no crea RF.
+1. API/UI: `batchCreate` con `DOWN_FAILURE` → `GET /equipments/:id.isOperational=false`, `sideEffects[].createdFaultReport=true`, Maestro fila «FUERA DE SERVICIO» y modal Salud con última falla.
+2. Regresión: repetir `DOWN_FAILURE` con RF activo no duplica RF (`skippedReason=ACTIVE_FAULT_EXISTS`) y sigue refrescando Flota.
+3. Recuperación: nuevo parte M2 `OPERATIONAL` tras último `DOWN_*` → `isOperational=true` y Maestro/modal vuelven a operativo.
 
 ---
 

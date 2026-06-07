@@ -2,7 +2,9 @@
 
 Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El **foco actual del proyecto** está en el backend de dominio (212 tests); el frontend tiene sobre todo **smoke** (`should be created`).
 
-**Última actualización:** 2026-06-04 (integridad fluidos — `app-fluid-quantity-row` en M1/OT)
+**Última actualización:** 2026-06-07 (refresh Flota — notificaciones M1/M3)
+
+**Suite ejecutable hoy:** **182 tests** verificados con `npm run test:ci` el 2026-06-07.
 
 ---
 
@@ -37,11 +39,12 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `features/maintenance-kits/kit-form.component.spec.ts` | Componente | Smoke |
 | `features/maintenance-kits/kit-list.component.spec.ts` | Componente | Smoke |
 | `features/operations/lube-reports/lube-report-list.component.spec.ts` | Componente | Smoke |
-| `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke + horómetro regresivo; líneas con `FormControl` |
+| `features/operations/lube-reports/lube-report-form.component.spec.ts` | Componente | Smoke + horómetro regresivo; líneas con `FormControl`; notifica `FleetService.notifyEquipmentChanged` tras despacho exitoso (8 tests) |
 | `shared/components/fluid-quantity-row/` | Componente | *(sin spec dedicado aún — validación vía formularios M1/OT)* |
-| `features/operations/availability/availability-form.component.spec.ts` | Componente | Smoke |
-| `features/operations/availability/availability-monitor.component.spec.ts` | Componente | Smoke |
-| `features/operations/fault-reports/fault-report-form.component.spec.ts` | Componente | Smoke + `invalidateCache` HIGH/LOW (14 tests) |
+| `features/operations/availability/availability-form.component.spec.ts` | Componente | Bulk grid, `queryParamMap`, `ShiftService.coerceShift`, `batchCreate`, `sideEffects` y refresh Flota |
+| `features/operations/availability/availability-monitor.component.spec.ts` | Componente | Shift-board, summary, pendientes, mocks `ShiftService`/Auth alineados |
+| `features/operations/availability/availability-import.component.spec.ts` | Componente | Export/preview/commit Excel, coerción de turno, mocks `ShiftService`/Flota |
+| `features/operations/fault-reports/fault-report-form.component.spec.ts` | Componente | Smoke + `notifyEquipmentChanged` HIGH/LOW y limpieza de pendiente M2 (18 tests) |
 | `features/operations/fault-reports/fault-report-list.component.spec.ts` | Componente | Smoke |
 | `features/fleet/fleet-master/fleet-master.component.spec.ts` | Componente | Smoke — `openDetail`, `fleet()`, `currentPage` (7 tests) |
 | `features/fleet/equipment-detail-modal/equipment-detail-modal.component.spec.ts` | Componente | Smoke — `operationalStatus` HIGH/LOW, tabs lazy, M1/M2/M3, **tab OTs + modal OT embebido**, **consumos `partsConsumed`/`partsTotalCost`**, **costos `costTotal`/`costByType`/`costRecordsSorted`**, **Fase 3 `meterHistoryRows`: delta, orden ASC, traducción fuentes, userLabel, previewRows** (42 tests) |

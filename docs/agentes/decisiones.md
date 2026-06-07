@@ -9,6 +9,15 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-07 — P4 refresh Flota: M1/M2/M3 actualizan Maestro y modal
+
+- **Contexto:** Al reportar disponibilidad y luego revisar Maestro de Flota o el modal de equipo, algunos estados quedaban obsoletos. El backend ya tenía orquestación M2 `DOWN_*`, pero `OPERATIONAL` solo restauraba si el parte previo era de la misma fecha/turno; además M1 y M3 LOW no notificaban cambios a Flota.
+- **Decisión:**
+  - **Backend M2:** `EquipmentAvailabilityService` resuelve `previousStatus` con prioridad: registro editado de la misma celda; DAY del mismo día cuando se graba NIGHT; último parte previo del equipo. Así `OPERATIONAL` tras último M2 `DOWN_FAILURE` / `DOWN_MAINTENANCE` restaura `Equipment.isOperational=true` en `create`, `batchCreate` y `commitImport`.
+  - **Frontend:** `lube-report-form` llama `FleetService.notifyEquipmentChanged(equipmentId)` tras despacho exitoso. `fault-report-form` notifica en todas las criticidades, incluyendo LOW, porque la ficha de salud/historial del modal cambió aunque `isOperational` no lo haga.
+  - **Contrato UI:** M2 sigue propagando `sideEffects[]` y `AvailabilityForm/Import` notifican por equipo; `FleetMasterComponent` escucha `listVersion` y `EquipmentDetailModalComponent` escucha `equipmentRevision`.
+- **Consecuencias:** Maestro de Flota y modal vuelven a consultar datos actuales tras M1, M2 y M3. Specs focalizados agregan regresión para M2 `OPERATIONAL` posterior a `DOWN_*` y notificaciones M1/M3.
+
 ## 2026-06-06 — Turnos M2: JWT operationalConfig + coerción NIGHT→DAY + E2E P1b
 
 - **Contexto:** Con `hasNightShift=false`, de noche el frontend infería `NIGHT` antes de cargar config y el backend respondía 400. Tras el fix inicial (`e71f1e1`), quedaban gaps de hidratación y regresión E2E.
@@ -25,9 +34,9 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Decisión:**
   - Nuevo `EquipmentOperationalOrchestratorService` (`onOperationalStatusChange` dentro de la misma `$transaction` que el parte).
   - `DOWN_FAILURE` / `DOWN_MAINTENANCE`: `isOperational=false`; si no hay RF activo (OPEN o LINKED con OT no cerrada), crea stub `FaultReport` OPEN/LOW (`FAULT_REP`); si hay RF activo, no duplica.
-  - `OPERATIONAL` tras parte previo `DOWN_*` en el mismo turno: `isOperational=true`.
+  - `OPERATIONAL` tras parte previo `DOWN_*`: `isOperational=true` (ampliado el 2026-06-07 para resolver el último parte del equipo, no solo la misma fecha/turno).
   - Hook en `EquipmentAvailabilityService` (`create`, `upsertRow` → `batchCreate` / `commitImport`); respuesta con `operationalTransition` (unitario) y `sideEffects[]` (lote).
-- **Consecuencias:** Suite dominio **403 tests** (+6 orchestrator). Frontend Sprint 2 pendiente. Actualizar `MASTER-CONTEXT.md` §2.4 al cerrar P4 completo.
+- **Consecuencias:** Suite dominio **403 tests** (+6 orchestrator). Frontend Sprint 2 pendiente hasta el refresh Flota del 2026-06-07. `MASTER-CONTEXT.md` §2.4 actualizado al cerrar P4 funcional.
 
 ## 2026-06-05 — Auditoría M2 `DOWN_FAILURE` vs. entregas P0–P2 (no es lo mismo)
 
@@ -157,7 +166,7 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
   7. **Fix tipo `MeterLogSource`** en `types.ts`: añadidos `'AVAILABILITY_REPORT' | 'FAULT_REPORT'` (faltaban y causaban error TS en compilación). Etiquetas legibles añadidas al historial de medidores.
 
 - **Decisión (Fase 3 — Invalidación push desde M3):**
-  8. **`FaultReportFormComponent.onSubmitSuccess`** llama `fleetService.invalidateCache()` cuando la criticidad es `HIGH` o `MEDIUM`. `HIGH` muta `isOperational=false` en la transacción del backend; `MEDIUM` puede avanzar el horómetro. La señal `listVersion` cambia y el `effect()` del Maestro de Flota dispara la recarga aunque el componente ya esté activo. `FleetService` ya estaba inyectado en el formulario; solo se activó la llamada.
+  8. **`FaultReportFormComponent.onSubmitSuccess`** llama `fleetService.notifyEquipmentChanged(equipmentId)`. Inicialmente se activó para `HIGH`/`MEDIUM` (`HIGH` muta `isOperational=false`; `MEDIUM` puede avanzar horómetro); desde 2026-06-07 también aplica a `LOW` porque cambia historial de salud del modal. La señal `listVersion` cambia y el `effect()` del Maestro de Flota dispara la recarga aunque el componente ya esté activo.
 
 - **Consecuencias:**
   - Build Angular: `exit 0` — *Application bundle generation complete*. Sin cambios de schema, backend ni migraciones.

@@ -107,6 +107,7 @@ Object.defineProperty(catalogSpy, 'systems', {
 });
 const authSpy = {
   currentUser: signal(null).asReadonly(),
+  userPermissions: signal<string[]>([]).asReadonly(),
   hasPermission: jasmine.createSpy('hasPermission').and.returnValue(true),
   hasPermissionAny: jasmine.createSpy('hasPermissionAny').and.returnValue(true),
 } as unknown as AuthService;

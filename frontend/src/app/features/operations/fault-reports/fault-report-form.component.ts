@@ -356,12 +356,10 @@ export class FaultReportFormComponent implements OnInit {
       : '';
     this.notify.success(`Falla ${report.correlative} registrada.${woMsg}`);
 
-    // Invalida lista y revisión del modal de flota (isOperational, horómetro).
+    // Invalida lista y revisión del modal de flota (isOperational, horómetro, salud).
     const eqId = this.selectedEquipmentId();
-    if (eqId && (criticality === 'HIGH' || criticality === 'MEDIUM')) {
-      this.fleetService.notifyEquipmentChanged(eqId);
-    }
     if (eqId) {
+      this.fleetService.notifyEquipmentChanged(eqId);
       this.availabilityService.clearPendingFaultRegistration(eqId);
     }
 

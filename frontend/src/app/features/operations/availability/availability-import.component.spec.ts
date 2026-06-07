@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -11,6 +12,8 @@ import {
   ImportValidationResult,
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
+import { ShiftService } from '../../../core/services/shift/shift.service';
+import { FleetService } from '../../../core/services/fleet/fleet.service';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +115,16 @@ const notifySpy = jasmine.createSpyObj<NotificationService>('NotificationService
   'warning',
 ]);
 
+const shiftSpy = jasmine.createSpyObj<ShiftService>(
+  'ShiftService',
+  { coerceShift: 'NIGHT' },
+  { hasNightShift: signal(true) },
+);
+
+const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', [
+  'notifyEquipmentChanged',
+]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('AvailabilityImportComponent', () => {
@@ -124,6 +137,10 @@ describe('AvailabilityImportComponent', () => {
     availabilityServiceSpy.commitImport.calls.reset();
     notifySpy.error.calls.reset();
     notifySpy.success.calls.reset();
+    shiftSpy.coerceShift.calls.reset();
+    shiftSpy.coerceShift.and.callFake((value: 'DAY' | 'NIGHT' | null) =>
+      value === 'NIGHT' ? 'NIGHT' : 'DAY',
+    );
 
     // Reset return values to defaults
     availabilityServiceSpy.exportTemplate.and.returnValue(of(void 0));
@@ -138,6 +155,8 @@ describe('AvailabilityImportComponent', () => {
         provideRouter([]),
         { provide: EquipmentAvailabilityService, useValue: availabilityServiceSpy },
         { provide: NotificationService, useValue: notifySpy },
+        { provide: ShiftService, useValue: shiftSpy },
+        { provide: FleetService, useValue: fleetSpy },
       ],
     }).compileComponents();
 

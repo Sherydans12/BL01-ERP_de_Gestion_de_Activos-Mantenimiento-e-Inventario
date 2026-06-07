@@ -25,8 +25,10 @@ const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', {
 
 const authSpy = {
   hasPermission: jasmine.createSpy('hasPermission').and.returnValue(true),
+  hasPermissionAny: jasmine.createSpy('hasPermissionAny').and.returnValue(true),
   currentContractId: signal('ALL').asReadonly(),
   currentUser: signal(null).asReadonly(),
+  userPermissions: signal<string[]>([]).asReadonly(),
 } as unknown as AuthService;
 
 const catalogSpy = jasmine.createSpyObj<CatalogService>('CatalogService', {

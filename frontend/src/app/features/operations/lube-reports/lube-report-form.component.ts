@@ -355,9 +355,13 @@ export class LubeReportFormComponent implements OnInit {
 
     this.lubeService.createReport(payload).subscribe({
       next: (report) => {
+        const equipmentId = payload.equipmentId;
         this.notify.success(
           `Despacho ${report.correlative} registrado con éxito.`,
         );
+        if (equipmentId) {
+          this.fleetService.notifyEquipmentChanged(equipmentId);
+        }
         if (keepContext) {
           this.onEquipmentChange('');
           this.equipSearch.set('');

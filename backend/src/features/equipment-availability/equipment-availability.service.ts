@@ -439,6 +439,63 @@ export class EquipmentAvailabilityService {
     }
   }
 
+  private normalizeReportDate(value: string | Date): Date {
+    const reportDate = value instanceof Date ? new Date(value) : new Date(value);
+    reportDate.setUTCHours(0, 0, 0, 0);
+    return reportDate;
+  }
+
+  /**
+   * Estado operativo anterior para side-effects de M2.
+   *
+   * La edición de la misma celda (fecha + turno) usa su status previo real.
+   * Un parte nuevo toma el parte inmediatamente anterior del equipo: DAY para
+   * NIGHT del mismo día, o el último parte de días previos.
+   */
+  private async resolvePreviousAvailabilityStatus(
+    tx: Prisma.TransactionClient,
+    input: {
+      tenantId: string;
+      equipmentId: string;
+      reportDate: Date;
+      shift: ShiftType;
+      currentStatus?: OperationalStatus | null;
+    },
+  ): Promise<OperationalStatus | null> {
+    if (input.currentStatus != null) {
+      return input.currentStatus;
+    }
+
+    if (input.shift === ShiftType.NIGHT) {
+      const sameDayDay = await tx.equipmentAvailability.findUnique({
+        where: {
+          tenantId_equipmentId_reportDate_shift: {
+            tenantId: input.tenantId,
+            equipmentId: input.equipmentId,
+            reportDate: input.reportDate,
+            shift: ShiftType.DAY,
+          },
+        },
+        select: { status: true },
+      });
+      if (sameDayDay?.status) {
+        return sameDayDay.status;
+      }
+    }
+
+    const previous = await tx.equipmentAvailability.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        equipmentId: input.equipmentId,
+        reportDate: { lt: input.reportDate },
+      },
+      select: { status: true },
+      orderBy: [{ reportDate: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    return previous?.status ?? null;
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // EXISTING METHODS (unchanged)
   // ───────────────────────────────────────────────────────────────────────────
@@ -475,6 +532,14 @@ export class EquipmentAvailabilityService {
           );
         }
 
+        const reportDate = this.normalizeReportDate(dto.reportDate);
+        const previousStatus = await this.resolvePreviousAvailabilityStatus(tx, {
+          tenantId,
+          equipmentId: dto.equipmentId,
+          reportDate,
+          shift: effectiveShift,
+        });
+
         // ── 2. Crear el registro de disponibilidad ────────────────────────────
         // La restricción @@unique del modelo atrapa duplicados a nivel de DB.
         let record: Prisma.EquipmentAvailabilityGetPayload<object>;
@@ -485,7 +550,7 @@ export class EquipmentAvailabilityService {
               contractId: equipment.contractId ?? null,
               equipmentId: dto.equipmentId,
               reportedById: userId,
-              reportDate: new Date(dto.reportDate),
+              reportDate,
               shift: effectiveShift,
               status: dto.status,
               meterReading: dto.meterReading ?? null,
@@ -526,7 +591,7 @@ export class EquipmentAvailabilityService {
             equipmentId: dto.equipmentId,
             availabilityId: record.id,
             newStatus: dto.status,
-            previousStatus: null,
+            previousStatus,
             meterReading: dto.meterReading ?? null,
             comments: dto.comments ?? null,
             reportDate: dto.reportDate,
@@ -1658,8 +1723,7 @@ export class EquipmentAvailabilityService {
           );
         }
 
-        const reportDate = new Date(dto.reportDate);
-        reportDate.setUTCHours(0, 0, 0, 0);
+        const reportDate = this.normalizeReportDate(dto.reportDate);
 
         const existing = await tx.equipmentAvailability.findUnique({
           where: {
@@ -1672,7 +1736,13 @@ export class EquipmentAvailabilityService {
           },
           select: { status: true },
         });
-        const previousStatus = existing?.status ?? null;
+        const previousStatus = await this.resolvePreviousAvailabilityStatus(tx, {
+          tenantId,
+          equipmentId: dto.equipmentId,
+          reportDate,
+          shift: dto.shift,
+          currentStatus: existing?.status ?? null,
+        });
 
         const record = await tx.equipmentAvailability.upsert({
           where: {

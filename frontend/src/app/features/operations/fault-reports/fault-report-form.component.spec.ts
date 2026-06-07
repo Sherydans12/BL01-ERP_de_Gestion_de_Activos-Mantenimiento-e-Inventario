@@ -80,6 +80,14 @@ describe('FaultReportFormComponent', () => {
   let fixture: ComponentFixture<FaultReportFormComponent>;
 
   beforeEach(async () => {
+    faultServiceSpy.create.calls.reset();
+    faultServiceSpy.create.and.returnValue(of(MOCK_REPORT));
+    fleetServiceSpy.notifyEquipmentChanged.calls.reset();
+    availabilitySpy.clearPendingFaultRegistration.calls.reset();
+    notifySpy.success.calls.reset();
+    notifySpy.error.calls.reset();
+    meterSnapSpy.getSnapshot.calls.reset();
+
     await TestBed.configureTestingModule({
       imports: [FaultReportFormComponent],
       providers: [
@@ -206,8 +214,7 @@ describe('FaultReportFormComponent', () => {
     expect(availabilitySpy.clearPendingFaultRegistration).toHaveBeenCalledWith('eq-uuid-001');
   });
 
-  it('NO llama a FleetService.notifyEquipmentChanged al guardar una falla LOW', () => {
-    fleetServiceSpy.notifyEquipmentChanged.calls.reset();
+  it('llama a FleetService.notifyEquipmentChanged al guardar una falla LOW', () => {
     faultServiceSpy.create.and.returnValue(of(MOCK_REPORT)); // LOW por defecto
 
     component.onSelectEquipment('eq-uuid-001');
@@ -216,7 +223,8 @@ describe('FaultReportFormComponent', () => {
     component.symptomDescription.set('Pequeña fuga de aire en neumático trasero derecho');
     component.submit();
 
-    expect(fleetServiceSpy.notifyEquipmentChanged).not.toHaveBeenCalled();
+    expect(fleetServiceSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-uuid-001');
+    expect(availabilitySpy.clearPendingFaultRegistration).toHaveBeenCalledWith('eq-uuid-001');
   });
 
   it('resetForm limpia todos los signals al estado vacío', () => {

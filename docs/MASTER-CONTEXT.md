@@ -361,18 +361,19 @@ Consecuencia transversal: cualquier reporte en terreno (un despacho de aceite, u
 
 #### B) Control de `isOperational` (quién lo mueve)
 
-`isOperational` es **mutado únicamente** por el ciclo de OT y por fallas ALTAS; M1 y M2 **no lo escriben** (M2 solo lo *lee*):
+`isOperational` es la señal imperativa que consumen Maestro de Flota, tablero y modal de equipo. La mutan los flujos que representan entrada/salida real de servicio:
 
 | Origen | Evento | Efecto sobre `isOperational` |
 |--------|--------|------------------------------|
 | **M3 Falla ALTA (`HIGH`)** | `FaultReportsService.create` | `false` + crea `WorkOrder(NO_PROGRAMADA_REACTIVA, affectsAvailability=SI, detentionStartedAt=eventDate)` en la misma `$transaction` Serializable |
 | **M3 Falla MEDIA (`MEDIUM`)** | `FaultReportsService.create` | **Sin cambio** — crea `WorkOrder(NO_PROGRAMADA_CORRECTIVA, affectsAvailability=NO)` |
 | **M3 Falla BAJA (`LOW`)** | `FaultReportsService.create` | **Sin cambio** — solo registra el reporte (`OPEN`) |
+| **M2 Disponibilidad `DOWN_FAILURE` / `DOWN_MAINTENANCE`** | `EquipmentOperationalOrchestratorService` dentro de `EquipmentAvailabilityService` | `false`; si no existe RF activo (`OPEN` o `LINKED` con OT no cerrada), crea stub `FaultReport` `OPEN/LOW` (`FAULT_REP`) para completar diagnóstico |
+| **M2 Disponibilidad `OPERATIONAL`** | Nuevo parte o edición tras último M2 `DOWN_*` | `true`; el estado anterior se resuelve desde el mismo turno editado, el turno DAY del mismo día para NIGHT, o el último parte previo del equipo |
 | **OT** | `updateStatus → IN_PROGRESS` con `affectsAvailability=SI` | `false` |
 | **OT** | `updateStatus → CLOSED` | `isOperational = closureEquipmentOperational` (booleano obligatorio); si `affectsAvailability=SI` acumula `cumulativeDowntimeHours += metricHm` |
-| **M2 Disponibilidad** | `EquipmentAvailabilityService` | **Solo lectura** — `GET /unreported` filtra `isOperational: true` para no exigir parte a equipos ya detenidos |
 
-**Relación M3 ↔ M2 (ortogonal):** una falla ALTA marca `isOperational=false` de forma imperativa (señal del sistema), mientras que `EquipmentAvailability` es **declarativo** (lo confirma el supervisor por turno). M2 *lee* `isOperational` pero no lo sincroniza de vuelta. Ver decisión [2026-06-02 — Módulo 3](agentes/decisiones.md).
+**Relación M3 ↔ M2:** M3 sigue siendo el flujo rico de diagnóstico/OT por criticidad. M2 puede declarar indisponibilidad operacional de turno y crear un RF stub LOW para no perder trazabilidad; el supervisor o mantenedor completa el detalle en M3. `GET /unreported` sigue filtrando `isOperational: true` para no exigir parte a equipos detenidos, salvo que vuelvan a quedar operativos por M2 `OPERATIONAL` u OT cerrada.
 
 ```mermaid
 flowchart TD
@@ -387,10 +388,13 @@ flowchart TD
   MC --> EQ[(Equipment.currentMeter)]
   M3 -->|HIGH| OPF[isOperational = false]
   M3 -->|HIGH/MEDIUM| OT[WorkOrder no programada]
+  M2 -->|DOWN_*| OPD[isOperational = false + RF LOW stub]
+  M2 -->|OPERATIONAL tras último DOWN_*| OPU[isOperational = true]
   OT -->|IN_PROGRESS affectsAvailability=SI| OPF
   OT -->|CLOSED closureEquipmentOperational| EQOP[(Equipment.isOperational)]
   OPF --> EQOP
-  M2 -.lee.-> EQOP
+  OPD --> EQOP
+  OPU --> EQOP
 ```
 
 #### C) Costeo e inventario (M1 y fluidos OT)
@@ -410,7 +414,7 @@ Flag en [`TenantOperationalConfig`](../backend/prisma/schema.prisma) (`block_neg
 
 #### D) Implicancia para la UI (SSOT en frontend)
 
-El Maestro de Flota y el modal de detalle de equipo deben **reaccionar centralizadamente** a `isOperational` (destacar equipos `false` como "fuera de servicio") y mostrar `currentMeter` actualizado. Como estas señales cambian desde rutas distintas (`/fallas`, `/operaciones/disponibilidad`, `/operaciones/lubricantes`, `/ots`), la lista de equipos debe **invalidar caché / refetch** al re-entrar a `/flota`. Ver decisión [2026-06-03 — Integración Transversal de Operaciones](agentes/decisiones.md).
+El Maestro de Flota y el modal de detalle de equipo reaccionan centralizadamente a `isOperational`, `currentMeter` e historial operacional con `FleetService.notifyEquipmentChanged(equipmentId)` / `listVersion` / `equipmentRevision`. M2 aplica `sideEffects[]` desde batch/import, M1 notifica tras despacho exitoso y M3 notifica en todas las criticidades porque puede cambiar `isOperational`, horómetro o historial de salud. Ver decisiones [2026-06-03 — Integración Transversal de Operaciones](agentes/decisiones.md) y [2026-06-07 — P4 refresh Flota](agentes/decisiones.md).
 
 ---
 
