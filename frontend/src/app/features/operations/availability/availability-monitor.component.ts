@@ -97,7 +97,7 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
   private searchSubject = new Subject<string>();
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private shiftPinnedByUrl = false;
-  private autoShiftAligned = false;
+  private lastClockShift: ShiftType | null = null;
 
   totalPages = computed(() =>
     Math.max(1, Math.ceil(this.totalRows() / PAGE_SIZE)),
@@ -133,20 +133,26 @@ export class AvailabilityMonitorComponent implements OnInit, OnDestroy {
         this.query(false);
         return;
       }
-      if (
-        !this.shiftService.operationalConfigLoaded() ||
-        this.shiftPinnedByUrl ||
-        this.autoShiftAligned
-      ) {
+      if (!this.shiftService.operationalConfigLoaded() || this.shiftPinnedByUrl) {
         return;
       }
-      this.autoShiftAligned = true;
-      const aligned = this.shiftService.alignShiftAfterConfigLoad(
-        this.filterShift(),
-        false,
-      );
-      if (aligned !== this.filterShift()) {
-        this.filterShift.set(aligned);
+      const clockShift = this.shiftService.currentShift();
+      if (this.lastClockShift === null) {
+        this.lastClockShift = clockShift;
+        const aligned = this.shiftService.alignShiftAfterConfigLoad(
+          this.filterShift(),
+          false,
+        );
+        if (aligned !== this.filterShift()) {
+          this.filterShift.set(aligned);
+          this.query(false);
+        }
+        return;
+      }
+      if (clockShift === this.lastClockShift) return;
+      this.lastClockShift = clockShift;
+      if (this.filterShift() !== clockShift) {
+        this.filterShift.set(clockShift);
         this.query(false);
       }
     });

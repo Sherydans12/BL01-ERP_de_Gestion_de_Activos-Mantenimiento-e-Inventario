@@ -140,7 +140,7 @@ export class AvailabilityFormComponent implements OnInit {
   private pendingFaultSymptom = signal<string | undefined>(undefined);
   private pendingFaultMeter = signal<number | undefined>(undefined);
   private shiftPinnedByUrl = false;
-  private autoShiftAligned = false;
+  private lastClockShift: ShiftType | null = null;
 
   get maxDate(): string {
     return this.shiftService.todayIso();
@@ -154,17 +154,23 @@ export class AvailabilityFormComponent implements OnInit {
         this.loadPending();
         return;
       }
-      if (
-        !this.shiftService.operationalConfigLoaded() ||
-        this.shiftPinnedByUrl ||
-        this.autoShiftAligned
-      ) {
+      if (!this.shiftService.operationalConfigLoaded() || this.shiftPinnedByUrl) {
         return;
       }
-      this.autoShiftAligned = true;
-      const aligned = this.shiftService.alignShiftAfterConfigLoad(this.shift(), false);
-      if (aligned !== this.shift()) {
-        this.shift.set(aligned);
+      const clockShift = this.shiftService.currentShift();
+      if (this.lastClockShift === null) {
+        this.lastClockShift = clockShift;
+        const aligned = this.shiftService.alignShiftAfterConfigLoad(this.shift(), false);
+        if (aligned !== this.shift()) {
+          this.shift.set(aligned);
+          this.loadPending();
+        }
+        return;
+      }
+      if (clockShift === this.lastClockShift) return;
+      this.lastClockShift = clockShift;
+      if (this.shift() !== clockShift) {
+        this.shift.set(clockShift);
         this.loadPending();
       }
     });
