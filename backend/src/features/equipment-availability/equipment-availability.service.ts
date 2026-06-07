@@ -440,7 +440,8 @@ export class EquipmentAvailabilityService {
   }
 
   private normalizeReportDate(value: string | Date): Date {
-    const reportDate = value instanceof Date ? new Date(value) : new Date(value);
+    const reportDate =
+      value instanceof Date ? new Date(value) : new Date(value);
     reportDate.setUTCHours(0, 0, 0, 0);
     return reportDate;
   }
@@ -533,12 +534,15 @@ export class EquipmentAvailabilityService {
         }
 
         const reportDate = this.normalizeReportDate(dto.reportDate);
-        const previousStatus = await this.resolvePreviousAvailabilityStatus(tx, {
-          tenantId,
-          equipmentId: dto.equipmentId,
-          reportDate,
-          shift: effectiveShift,
-        });
+        const previousStatus = await this.resolvePreviousAvailabilityStatus(
+          tx,
+          {
+            tenantId,
+            equipmentId: dto.equipmentId,
+            reportDate,
+            shift: effectiveShift,
+          },
+        );
 
         // ── 2. Crear el registro de disponibilidad ────────────────────────────
         // La restricción @@unique del modelo atrapa duplicados a nivel de DB.
@@ -1736,13 +1740,16 @@ export class EquipmentAvailabilityService {
           },
           select: { status: true },
         });
-        const previousStatus = await this.resolvePreviousAvailabilityStatus(tx, {
-          tenantId,
-          equipmentId: dto.equipmentId,
-          reportDate,
-          shift: dto.shift,
-          currentStatus: existing?.status ?? null,
-        });
+        const previousStatus = await this.resolvePreviousAvailabilityStatus(
+          tx,
+          {
+            tenantId,
+            equipmentId: dto.equipmentId,
+            reportDate,
+            shift: dto.shift,
+            currentStatus: existing?.status ?? null,
+          },
+        );
 
         const record = await tx.equipmentAvailability.upsert({
           where: {
