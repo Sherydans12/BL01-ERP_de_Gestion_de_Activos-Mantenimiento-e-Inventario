@@ -820,9 +820,7 @@ export class AuthService {
 
     const permissions = this.resolveJwtPermissions(user);
     const activationTenantId =
-      updatedUser.role === ('SUPER_ADMIN' as any)
-        ? null
-        : updatedUser.tenantId;
+      updatedUser.role === ('SUPER_ADMIN' as any) ? null : updatedUser.tenantId;
     const operationalConfig = await loadOperationalConfigForJwt(
       this.prisma,
       activationTenantId,

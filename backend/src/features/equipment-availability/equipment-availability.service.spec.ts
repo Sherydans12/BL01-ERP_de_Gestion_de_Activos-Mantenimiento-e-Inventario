@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { OperationalStatus, Prisma, ShiftType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';

@@ -1256,7 +1256,7 @@ export class EquipmentAvailabilityService {
       );
     }
     // Sin turno noche: plantillas antiguas con NIGHT se tratan como DAY.
-    let effectiveStoredShift = storedShift as ShiftType;
+    let effectiveStoredShift = storedShift;
     if (storedShift === ShiftType.NIGHT) {
       const opConfig = await this.getOperationalConfig(tenantId);
       if (!opConfig.hasNightShift) {
