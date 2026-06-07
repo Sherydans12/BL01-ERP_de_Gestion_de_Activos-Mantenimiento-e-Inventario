@@ -134,6 +134,8 @@ describe('EquipmentDetailModalComponent', () => {
     expect(status.label).toBe('Standby');
     expect(status.color).toBe('text-blue-400');
     expect(status.dotColor).toBe('bg-blue-400');
+    expect(status.borderColor).toBe('border-blue-500/40');
+    expect(status.description).toContain('Standby');
   });
 
   it('formatDateOnly muestra la fecha de negocio sin desfase por zona horaria', () => {

@@ -396,14 +396,18 @@ export class EquipmentDetailModalComponent {
         label: 'Sin datos',
         color: 'text-muted',
         bgColor: 'bg-dark',
+        borderColor: 'border-border',
         dotColor: 'bg-muted',
+        description: 'Sin información operacional disponible.',
       };
     if (eq.isOperational === false) {
       return {
         label: 'FUERA DE SERVICIO',
         color: 'text-error',
         bgColor: 'bg-error/10',
+        borderColor: 'border-error/40',
         dotColor: 'bg-error',
+        description: 'Detenido por OT activa o falla crítica (ALTA).',
       };
     }
 
@@ -415,14 +419,18 @@ export class EquipmentDetailModalComponent {
             label: AVAILABILITY_STATUS_LABELS.STANDBY,
             color: 'text-blue-400',
             bgColor: 'bg-blue-500/10',
+            borderColor: 'border-blue-500/40',
             dotColor: 'bg-blue-400',
+            description: 'En Standby según el último reporte de disponibilidad.',
           };
         case 'RESERVE_NO_OPERATOR':
           return {
             label: AVAILABILITY_STATUS_LABELS.RESERVE_NO_OPERATOR,
             color: 'text-warning',
             bgColor: 'bg-warning/10',
+            borderColor: 'border-warning/40',
             dotColor: 'bg-warning',
+            description: 'En reserva sin operador según el último reporte de disponibilidad.',
           };
         case 'DOWN_FAILURE':
         case 'DOWN_MAINTENANCE':
@@ -430,7 +438,9 @@ export class EquipmentDetailModalComponent {
             label: AVAILABILITY_STATUS_LABELS[lastM2.status],
             color: 'text-error',
             bgColor: 'bg-error/10',
+            borderColor: 'border-error/40',
             dotColor: 'bg-error',
+            description: 'Detenido según el último reporte de disponibilidad.',
           };
         default:
           break;
@@ -441,7 +451,9 @@ export class EquipmentDetailModalComponent {
       label: 'OPERATIVO',
       color: 'text-success',
       bgColor: 'bg-success/10',
+      borderColor: 'border-success/40',
       dotColor: 'bg-success',
+      description: 'Disponible para operación.',
     };
   });
 
