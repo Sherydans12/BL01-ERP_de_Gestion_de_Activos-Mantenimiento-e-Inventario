@@ -392,10 +392,57 @@ export class EquipmentDetailModalComponent {
   operationalStatus = computed(() => {
     const eq = this.equipment();
     if (!eq)
-      return { label: 'Sin datos', color: 'text-muted', bgColor: 'bg-dark' };
-    return eq.isOperational === false
-      ? { label: 'FUERA DE SERVICIO', color: 'text-error', bgColor: 'bg-error/10' }
-      : { label: 'OPERATIVO', color: 'text-success', bgColor: 'bg-success/10' };
+      return {
+        label: 'Sin datos',
+        color: 'text-muted',
+        bgColor: 'bg-dark',
+        dotColor: 'bg-muted',
+      };
+    if (eq.isOperational === false) {
+      return {
+        label: 'FUERA DE SERVICIO',
+        color: 'text-error',
+        bgColor: 'bg-error/10',
+        dotColor: 'bg-error',
+      };
+    }
+
+    const lastM2 = this.lastAvailability();
+    if (lastM2) {
+      switch (lastM2.status) {
+        case 'STANDBY':
+          return {
+            label: AVAILABILITY_STATUS_LABELS.STANDBY,
+            color: 'text-blue-400',
+            bgColor: 'bg-blue-500/10',
+            dotColor: 'bg-blue-400',
+          };
+        case 'RESERVE_NO_OPERATOR':
+          return {
+            label: AVAILABILITY_STATUS_LABELS.RESERVE_NO_OPERATOR,
+            color: 'text-warning',
+            bgColor: 'bg-warning/10',
+            dotColor: 'bg-warning',
+          };
+        case 'DOWN_FAILURE':
+        case 'DOWN_MAINTENANCE':
+          return {
+            label: AVAILABILITY_STATUS_LABELS[lastM2.status],
+            color: 'text-error',
+            bgColor: 'bg-error/10',
+            dotColor: 'bg-error',
+          };
+        default:
+          break;
+      }
+    }
+
+    return {
+      label: 'OPERATIVO',
+      color: 'text-success',
+      bgColor: 'bg-success/10',
+      dotColor: 'bg-success',
+    };
   });
 
   documentItems = computed<DocItem[]>(() => {
@@ -641,9 +688,7 @@ export class EquipmentDetailModalComponent {
 
         this.loadAnalytics(id);
         this.resetCrossModuleState();
-        if (this.activeTab() === 'salud') {
-          this.loadHealth(id);
-        }
+        this.loadHealth(id);
       },
       { allowSignalWrites: true },
     );
@@ -655,6 +700,7 @@ export class EquipmentDetailModalComponent {
       next: (data) => {
         this.analytics.set(data);
         this.loading.set(false);
+        this.loadHealth(id);
       },
       error: () => this.loading.set(false),
     });
@@ -786,6 +832,22 @@ export class EquipmentDetailModalComponent {
       default:
         return 'bg-muted';
     }
+  }
+
+  formatDateOnly(value: string | Date | null | undefined): string {
+    if (!value) return '—';
+
+    if (typeof value === 'string') {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${day}/${month}/${year}`;
   }
 
   formatNumber(value: number): string {

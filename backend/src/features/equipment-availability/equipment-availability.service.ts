@@ -917,7 +917,7 @@ export class EquipmentAvailabilityService {
         include: this.listInclude,
         orderBy: [
           { reportDate: 'desc' },
-          { shift: 'asc' },
+          { shift: 'desc' },
           { createdAt: 'desc' },
         ],
         skip,

@@ -16,6 +16,9 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
   - **Backend M2:** `EquipmentAvailabilityService` resuelve `previousStatus` con prioridad: registro editado de la misma celda; DAY del mismo día cuando se graba NIGHT; último parte previo del equipo. Así `OPERATIONAL` tras último M2 `DOWN_FAILURE` / `DOWN_MAINTENANCE` restaura `Equipment.isOperational=true` en `create`, `batchCreate` y `commitImport`.
   - **Frontend:** `lube-report-form` llama `FleetService.notifyEquipmentChanged(equipmentId)` tras despacho exitoso. `fault-report-form` notifica en todas las criticidades, incluyendo LOW, porque la ficha de salud/historial del modal cambió aunque `isOperational` no lo haga.
   - **Contrato UI:** M2 sigue propagando `sideEffects[]` y `AvailabilityForm/Import` notifican por equipo; `FleetMasterComponent` escucha `listVersion` y `EquipmentDetailModalComponent` escucha `equipmentRevision`.
+  - **Modal de Flota:** el badge de estado operativo prioriza el último parte M2 visible (`STANDBY`, `RESERVE_NO_OPERATOR`, `DOWN_*`) cuando `Equipment.isOperational` no está en falso; si está falso, mantiene `FUERA DE SERVICIO` como estado imperativo.
+  - **Último M2:** `findAll` ordena por `reportDate desc`, `shift desc`, `createdAt desc`; así el turno Noche queda después de Día para la misma fecha al pedir `pageSize=1`.
+  - **Fechas M2 en modal:** `reportDate` se muestra como fecha lógica de negocio (`dd/MM/yyyy`) sin pipe `date` local, para evitar que `2026-06-07T00:00:00Z` se renderice como `06/06/2026` en Chile/UTC-4.
 - **Consecuencias:** Maestro de Flota y modal vuelven a consultar datos actuales tras M1, M2 y M3. Specs focalizados agregan regresión para M2 `OPERATIONAL` posterior a `DOWN_*` y notificaciones M1/M3.
 
 ## 2026-06-06 — Turnos M2: JWT operationalConfig + coerción NIGHT→DAY + E2E P1b

@@ -58,6 +58,8 @@ describe('EquipmentDetailModalComponent', () => {
   beforeEach(async () => {
     revisionByEquipment.clear();
     (fleetSpy.getEquipmentAnalytics as jasmine.Spy).calls.reset();
+    availSpy.getAll.calls.reset();
+    availSpy.getAll.and.returnValue(of({ data: [], total: 0, page: 1, pageSize: 1 }));
 
     await TestBed.configureTestingModule({
       imports: [EquipmentDetailModalComponent],
@@ -99,6 +101,44 @@ describe('EquipmentDetailModalComponent', () => {
     const status = component.operationalStatus();
     expect(status.label).toBe('OPERATIVO');
     expect(status.color).toBe('text-success');
+  });
+
+  it('operationalStatus muestra el último estado M2 STANDBY aunque isOperational sea true', () => {
+    component['analytics'].set(MOCK_ANALYTICS);
+    component.lastAvailability.set({
+      id: 'avail-1',
+      tenantId: 'tenant-1',
+      contractId: 'contract-1',
+      equipmentId: 'eq-001',
+      reportedById: 'usr-1',
+      reportDate: '2026-06-07',
+      shift: 'DAY',
+      status: 'STANDBY',
+      meterReading: null,
+      comments: null,
+      isAvailable: true,
+      createdAt: '2026-06-07T00:59:00.000Z',
+      updatedAt: '2026-06-07T00:59:00.000Z',
+      equipment: {
+        id: 'eq-001',
+        internalId: 'EC-3005',
+        brand: 'Caterpillar',
+        model: '980G',
+        plate: 'AB-1234',
+      },
+      reportedBy: { id: 'usr-1', name: 'Nicolás Admin' },
+    });
+
+    const status = component.operationalStatus();
+
+    expect(status.label).toBe('Standby');
+    expect(status.color).toBe('text-blue-400');
+    expect(status.dotColor).toBe('bg-blue-400');
+  });
+
+  it('formatDateOnly muestra la fecha de negocio sin desfase por zona horaria', () => {
+    expect(component.formatDateOnly('2026-06-07T00:00:00.000Z')).toBe('07/06/2026');
+    expect(component.formatDateOnly('2026-06-07')).toBe('07/06/2026');
   });
 
   it('operationalStatus muestra "FUERA DE SERVICIO" cuando isOperational es false', () => {

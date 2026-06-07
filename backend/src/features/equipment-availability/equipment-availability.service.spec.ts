@@ -471,6 +471,23 @@ describe('EquipmentAvailabilityService — findAll', () => {
     );
   });
 
+  it('ordena el historial por fecha, turno noche sobre día y creación reciente', async () => {
+    prisma.equipmentAvailability.findMany.mockResolvedValue([rowStub] as never);
+    prisma.equipmentAvailability.count.mockResolvedValue(1);
+
+    await service.findAll(adminUser, { equipmentId });
+
+    expect(prisma.equipmentAvailability.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [
+          { reportDate: 'desc' },
+          { shift: 'desc' },
+          { createdAt: 'desc' },
+        ],
+      }),
+    );
+  });
+
   it('supervisor: filtra historial por allowedContracts vía relación equipment', async () => {
     prisma.equipmentAvailability.findMany.mockResolvedValue([] as never);
     prisma.equipmentAvailability.count.mockResolvedValue(0);

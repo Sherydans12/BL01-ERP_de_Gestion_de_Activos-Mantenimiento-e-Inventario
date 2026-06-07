@@ -159,9 +159,9 @@
         <div class="flex items-center gap-2">
           <span class="relative flex h-2.5 w-2.5">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                  [class]="operationalStatus().color === 'text-success' ? 'bg-success' : 'bg-error'"></span>
+                  [class]="operationalStatus().dotColor"></span>
             <span class="relative inline-flex rounded-full h-2.5 w-2.5"
-                  [class]="operationalStatus().color === 'text-success' ? 'bg-success' : 'bg-error'"></span>
+                  [class]="operationalStatus().dotColor"></span>
           </span>
           <span class="text-sm font-bold" [class]="operationalStatus().color">
             {{ operationalStatus().label }}
@@ -485,7 +485,7 @@
                   <dl class="space-y-1.5 text-sm">
                     <div class="flex justify-between gap-3">
                       <dt class="text-muted">Fecha</dt>
-                      <dd class="text-main">{{ a.reportDate | date:'dd/MM/yyyy' }}</dd>
+                      <dd class="text-main">{{ formatDateOnly(a.reportDate) }}</dd>
                     </div>
                     <div class="flex justify-between gap-3">
                       <dt class="text-muted">Turno</dt>
