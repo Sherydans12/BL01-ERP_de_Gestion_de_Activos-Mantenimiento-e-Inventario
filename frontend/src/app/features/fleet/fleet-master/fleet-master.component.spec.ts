@@ -19,6 +19,8 @@ const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', {
   getEquipments: of({ data: [], total: 0, page: 1, limit: 10 }),
   getEquipmentResumePdf: of(new Blob()),
   invalidateCache: undefined,
+  notifyEquipmentChanged: undefined,
+  updateEquipment: of({}),
 });
 // Exponer listVersion como signal de sólo lectura que devuelve 0
 (fleetSpy as any).listVersion = signal(0).asReadonly();
@@ -51,6 +53,10 @@ describe('FleetMasterComponent', () => {
   let fixture: ComponentFixture<FleetMasterComponent>;
 
   beforeEach(async () => {
+    fleetSpy.getEquipments.calls.reset();
+    fleetSpy.updateEquipment.calls.reset();
+    fleetSpy.notifyEquipmentChanged.calls.reset();
+
     await TestBed.configureTestingModule({
       imports: [FleetMasterComponent],
       providers: [
@@ -101,5 +107,27 @@ describe('FleetMasterComponent', () => {
     component.openDetail(eq);
     expect(component.selectedEquipmentId()).toBe('eq-001');
     expect(component.showDetailModal()).toBeTrue();
+  });
+
+  it('notifica a Flota al editar un equipo y cambiar datos del medidor', () => {
+    component.isEditMode = true;
+    component.currentEditId = 'eq-001';
+    component.equipmentForm.patchValue({
+      contractId: 'contract-1',
+      internalId: 'EC-3005',
+      type: 'Camión',
+      brand: 'CAT',
+      model: '793F',
+      meterType: 'HOURS',
+      currentMeter: 1600,
+    });
+
+    component.onSubmit();
+
+    expect(fleetSpy.updateEquipment).toHaveBeenCalledWith(
+      'eq-001',
+      jasmine.objectContaining({ currentMeter: 1600 }),
+    );
+    expect(fleetSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-001');
   });
 });

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { signal } from '@angular/core';
 import { of } from 'rxjs';
 
@@ -77,9 +77,12 @@ const OPEN_FAULT: FaultReportRow = {
 
 const woSpy = jasmine.createSpyObj('WorkOrdersService', {
   getWorkOrdersFiltered: of({ data: [], total: 0 }),
+  patchWorkOrder: of({}),
+  updateStatus: of({}),
 });
 const fleetSpy = jasmine.createSpyObj('FleetService', {
   getEquipments: of({ data: [EQ], total: 1, page: 1, limit: 1000 }),
+  notifyEquipmentChanged: undefined,
 });
 const faultSpy = jasmine.createSpyObj('FaultReportsService', {
   getReports: of({ data: [OPEN_FAULT], total: 1, page: 1, pageSize: 5 }),
@@ -127,6 +130,9 @@ describe('WorkOrderFormComponent — banner fallas OPEN (1.3)', () => {
 
   beforeEach(async () => {
     faultSpy.getReports.calls.reset();
+    woSpy.patchWorkOrder.calls.reset();
+    woSpy.updateStatus.calls.reset();
+    fleetSpy.notifyEquipmentChanged.calls.reset();
 
     await TestBed.configureTestingModule({
       imports: [WorkOrderFormComponent],
@@ -151,6 +157,7 @@ describe('WorkOrderFormComponent — banner fallas OPEN (1.3)', () => {
 
     // Instanciar sin renderizar el template (componente muy grande): probamos la lógica.
     component = TestBed.createComponent(WorkOrderFormComponent).componentInstance;
+    spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
     component.ngOnInit();
   });
 
@@ -180,6 +187,35 @@ describe('WorkOrderFormComponent — banner fallas OPEN (1.3)', () => {
     // Equipo que no está en la flota cargada → rama de limpieza.
     component.otForm.get('equipmentId')?.setValue('eq-inexistente');
     expect(component.openFaults()).toEqual([]);
+  });
+
+  it('notifica a Flota al cerrar una OT con medidor final', () => {
+    component.mode = 'EDITING';
+    component.otId = 'wo-1';
+    component.otForm.patchValue({
+      equipmentId: 'eq-001',
+      detentionStartedAt: '2026-06-01T08:00',
+      detentionInitialMeter: 1500,
+      detentionFinalMeter: 1510,
+      mechanicAttentionStartedAt: '2026-06-01T08:30',
+      mechanicAttentionEndedAt: '2026-06-01T10:00',
+      affectsAvailability: 'SI',
+      symptomsText: 'Ruido anormal',
+      workPerformedDescription: 'Inspección y prueba operacional',
+      responsibleMechanicName: 'Mecánico',
+    });
+
+    component.closeWorkOrderAfterOperationalAnswer(true);
+
+    expect(woSpy.updateStatus).toHaveBeenCalledWith(
+      'wo-1',
+      'CLOSED',
+      undefined,
+      true,
+      false,
+      false,
+    );
+    expect(fleetSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-001');
   });
 
   // ── Sprint 2.3: stock disponible al agregar repuestos ──
@@ -230,6 +266,7 @@ describe('WorkOrderFormComponent — banner medidor OT', () => {
 
   beforeEach(async () => {
     meterSnapSpy.getSnapshot.and.returnValue(of(METER_SNAPSHOT));
+    fleetSpy.notifyEquipmentChanged.calls.reset();
 
     await TestBed.configureTestingModule({
       imports: [WorkOrderFormComponent],
@@ -253,6 +290,7 @@ describe('WorkOrderFormComponent — banner medidor OT', () => {
     }).compileComponents();
 
     component = TestBed.createComponent(WorkOrderFormComponent).componentInstance;
+    spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
     component.ngOnInit();
     component.otForm.get('equipmentId')?.setValue('eq-001');
   });

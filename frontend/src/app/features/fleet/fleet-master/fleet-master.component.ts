@@ -553,6 +553,7 @@ export class FleetMasterComponent implements OnInit {
     if (this.isEditMode && this.currentEditId) {
       this.fleetService.updateEquipment(this.currentEditId, payload).subscribe({
         next: () => {
+          this.fleetService.notifyEquipmentChanged(this.currentEditId!);
           this.loadFleet();
           this.closeModal();
           this.notificationService.success('Equipo actualizado exitosamente.');

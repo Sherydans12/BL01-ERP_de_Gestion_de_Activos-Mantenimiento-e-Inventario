@@ -45,6 +45,7 @@ const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', {
       },
     ],
   }),
+  notifyEquipmentChanged: undefined,
 });
 
 const catalogSpy = jasmine.createSpyObj<CatalogService>(
@@ -88,6 +89,7 @@ describe('RegistroHorasComponent', () => {
   beforeEach(async () => {
     fleetSpy.getMeterCaptureBoard.calls.reset();
     fleetSpy.bulkSyncMeterReadings.calls.reset();
+    fleetSpy.notifyEquipmentChanged.calls.reset();
     notifySpy.error.calls.reset();
     deviceStub.isMobile.set(false);
 
@@ -196,5 +198,12 @@ describe('RegistroHorasComponent', () => {
     );
     const call = fleetSpy.bulkSyncMeterReadings.calls.mostRecent().args[0];
     expect(call.items[0].confirmedLargeJump).toBeUndefined();
+  });
+
+  it('notifica a Flota por cada equipo con lectura aplicada', () => {
+    component.updateReading('eq-1', '1010');
+    component.syncReadings();
+
+    expect(fleetSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-1');
   });
 });

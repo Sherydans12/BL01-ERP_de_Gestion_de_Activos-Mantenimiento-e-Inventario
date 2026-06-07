@@ -19,7 +19,8 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
   - **Modal de Flota:** el badge de estado operativo prioriza el último parte M2 visible (`STANDBY`, `RESERVE_NO_OPERATOR`, `DOWN_*`) cuando `Equipment.isOperational` no está en falso; si está falso, mantiene `FUERA DE SERVICIO` como estado imperativo.
   - **Último M2:** `findAll` ordena por `reportDate desc`, `shift desc`, `createdAt desc`; así el turno Noche queda después de Día para la misma fecha al pedir `pageSize=1`.
   - **Fechas M2 en modal:** `reportDate` se muestra como fecha lógica de negocio (`dd/MM/yyyy`) sin pipe `date` local, para evitar que `2026-06-07T00:00:00Z` se renderice como `06/06/2026` en Chile/UTC-4.
-- **Consecuencias:** Maestro de Flota y modal vuelven a consultar datos actuales tras M1, M2 y M3. Specs focalizados agregan regresión para M2 `OPERATIONAL` posterior a `DOWN_*` y notificaciones M1/M3.
+  - **Horómetro transversal:** Registro de Horas (`bulkSyncMeterReadings`), cierre de OT (`finalMeter`) y edición directa de equipo en Maestro notifican `FleetService.notifyEquipmentChanged(equipmentId)` cuando pueden cambiar `currentMeter`. M1/M2/M3 ya usaban el mismo contrato.
+- **Consecuencias:** Maestro de Flota y modal vuelven a consultar datos actuales tras M1, M2, M3, captura de horómetro, cierre de OT y edición manual de equipo. Specs focalizados agregan regresión para M2 `OPERATIONAL` posterior a `DOWN_*`, notificaciones M1/M3 y refresh de horómetro.
 
 ## 2026-06-06 — Turnos M2: JWT operationalConfig + coerción NIGHT→DAY + E2E P1b
 

@@ -469,6 +469,9 @@ export class RegistroHorasComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           const appliedIds = res.applied.map((a) => a.equipmentId);
+          for (const equipmentId of new Set(appliedIds)) {
+            this.fleet.notifyEquipmentChanged(equipmentId);
+          }
           this.clearDraftEntries(appliedIds);
           this.largeJumpPreviewRows.set([]);
 

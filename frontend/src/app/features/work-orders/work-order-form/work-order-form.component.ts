@@ -1258,6 +1258,12 @@ export class WorkOrderFormComponent implements OnInit {
       )
       .subscribe({
         next: () => {
+          const equipmentId = String(
+            this.otForm.get('equipmentId')?.value ?? '',
+          ).trim();
+          if (equipmentId) {
+            this.fleetService.notifyEquipmentChanged(equipmentId);
+          }
           this.notificationService.success('OT cerrada.');
           this.router.navigate(['/app/ots']);
         },
