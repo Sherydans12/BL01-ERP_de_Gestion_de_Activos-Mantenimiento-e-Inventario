@@ -1,6 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { ShiftService } from './shift.service';
+import {
+  ShiftService,
+  parseShiftTimeToMinutes,
+  resolveClockShift,
+} from './shift.service';
 import { TenantService, Tenant } from '../tenant/tenant.service';
 
 function tenantWithNightShift(hasNightShift: boolean): Tenant {
@@ -72,5 +76,18 @@ describe('ShiftService', () => {
     expect(service.alignShiftAfterConfigLoad('DAY', false)).toBe(
       service.currentShift(),
     );
+  });
+
+  it('parseShiftTimeToMinutes interpreta HH:mm completo', () => {
+    expect(parseShiftTimeToMinutes('08:30')).toBe(8 * 60 + 30);
+    expect(parseShiftTimeToMinutes('20:15')).toBe(20 * 60 + 15);
+    expect(parseShiftTimeToMinutes('invalid')).toBe(0);
+  });
+
+  it('resolveClockShift respeta minutos en frontera nocturna', () => {
+    const dayM = parseShiftTimeToMinutes('08:30');
+    const nightM = parseShiftTimeToMinutes('20:15');
+    expect(resolveClockShift(20 * 60 + 14, dayM, nightM)).toBe('DAY');
+    expect(resolveClockShift(20 * 60 + 15, dayM, nightM)).toBe('NIGHT');
   });
 });

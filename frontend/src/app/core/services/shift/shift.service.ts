@@ -4,6 +4,32 @@ import { interval, map, startWith } from 'rxjs';
 import type { ShiftType } from '../equipment-availability/equipment-availability.service';
 import { TenantService } from '../tenant/tenant.service';
 
+/** Minutos desde medianoche (HH:mm). Partes inválidas → 0. */
+export function parseShiftTimeToMinutes(hhmm: string): number {
+  const [hRaw, mRaw] = hhmm.split(':');
+  const h = parseInt(hRaw ?? '', 10);
+  const m = parseInt(mRaw ?? '', 10);
+  const hours = Number.isFinite(h) ? h : 0;
+  const mins = Number.isFinite(m) ? m : 0;
+  return hours * 60 + mins;
+}
+
+/** Turno según minutos de reloj y fronteras configuradas (sin política hasNightShift). */
+export function resolveClockShift(
+  nowMinutes: number,
+  dayStartMinutes: number,
+  nightStartMinutes: number,
+): ShiftType {
+  if (dayStartMinutes < nightStartMinutes) {
+    return nowMinutes >= dayStartMinutes && nowMinutes < nightStartMinutes
+      ? 'DAY'
+      : 'NIGHT';
+  }
+  return nowMinutes >= dayStartMinutes || nowMinutes < nightStartMinutes
+    ? 'DAY'
+    : 'NIGHT';
+}
+
 /**
  * Turno operativo activo derivado de la hora local y la configuración del tenant.
  *
@@ -45,17 +71,19 @@ export class ShiftService {
     return cfg.hasNightShift;
   });
 
-  private readonly _dayStartHour = computed(() => {
-    const time =
-      this.tenantService.currentTenant()?.operationalConfig?.dayShiftStartTime ?? '08:00';
-    return parseInt(time.split(':')[0], 10);
-  });
+  private readonly _dayStartMinutes = computed(() =>
+    parseShiftTimeToMinutes(
+      this.tenantService.currentTenant()?.operationalConfig?.dayShiftStartTime ??
+        '08:00',
+    ),
+  );
 
-  private readonly _nightStartHour = computed(() => {
-    const time =
-      this.tenantService.currentTenant()?.operationalConfig?.nightShiftStartTime ?? '20:00';
-    return parseInt(time.split(':')[0], 10);
-  });
+  private readonly _nightStartMinutes = computed(() =>
+    parseShiftTimeToMinutes(
+      this.tenantService.currentTenant()?.operationalConfig?.nightShiftStartTime ??
+        '20:00',
+    ),
+  );
 
   private readonly _dayStartTime = computed(
     () =>
@@ -72,14 +100,13 @@ export class ShiftService {
   readonly currentShift = computed((): ShiftType => {
     if (!this.hasNightShift()) return 'DAY';
 
-    const h = this._now().getHours();
-    const dayH = this._dayStartHour();
-    const nightH = this._nightStartHour();
-
-    if (dayH < nightH) {
-      return h >= dayH && h < nightH ? 'DAY' : 'NIGHT';
-    }
-    return h >= dayH || h < nightH ? 'DAY' : 'NIGHT';
+    const now = this._now();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    return resolveClockShift(
+      nowMinutes,
+      this._dayStartMinutes(),
+      this._nightStartMinutes(),
+    );
   });
 
   readonly shiftLabel = computed(() =>
