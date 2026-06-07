@@ -288,6 +288,9 @@ export class PlatformDataAdminService {
         d.purchaseDocuments = (
           await tx.purchaseDocument.deleteMany({ where: { tenantId } })
         ).count;
+        d.purchaseCreditNotes = (
+          await tx.purchaseCreditNote.deleteMany({ where: { tenantId } })
+        ).count;
         d.purchaseInvoices = (
           await tx.purchaseInvoice.deleteMany({ where: { tenantId } })
         ).count;

@@ -4,6 +4,7 @@
  *
  * Catálogos maestros (diccionarios): npm run seed:catalog-masters
  * Limpieza + usuarios TPM: npm run db:clean-bootstrap-tpm
+ * Demo local completo (limpieza + maestros + PBAC): npm run seed:advanced
  */
 try {
   console.log(
