@@ -189,7 +189,12 @@ export class LayoutComponent implements OnInit {
     this.pushNotificationsBlocked.set(PushNotificationsService.notificationsDenied());
 
     this.tenantService.getTenantConfig().subscribe({
-      next: (config) => this.tenantService.setTenant(config),
+      next: (config) => {
+        this.tenantService.setTenant(config);
+        if (config.operationalConfig) {
+          this.authService.ingestTenantOperationalConfig(config.operationalConfig);
+        }
+      },
       error: (err) => console.error('Error cargando la config del Tenant', err),
     });
 
@@ -293,6 +298,12 @@ export class LayoutComponent implements OnInit {
 
   selectTenant(tenantId: string) {
     this.tenantService.setSuperAdminTenantId(tenantId);
+    this.tenantService.setTenant({
+      id: tenantId,
+      code: '—',
+      name: 'Cargando...',
+      operationalConfig: null,
+    });
     window.location.reload();
   }
 
