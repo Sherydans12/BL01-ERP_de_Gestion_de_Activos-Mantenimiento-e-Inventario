@@ -5,7 +5,10 @@ import { Router } from '@angular/router';
 import { environment } from '../../../../environments/environment';
 import { tap, finalize } from 'rxjs/operators';
 import { NotificationService } from '../notification/notification.service';
-import { TenantService } from '../tenant/tenant.service';
+import {
+  TenantService,
+  type TenantOperationalConfig,
+} from '../tenant/tenant.service';
 
 /** Respuesta de POST /auth/login: JWT o requisito de segundo factor (Super Admin). */
 export type LoginApiResult =
@@ -55,6 +58,7 @@ export interface UserPayload {
     code?: string;
     name: string;
     logoUrl?: string | null;
+    operationalConfig?: TenantOperationalConfig;
   };
 }
 
@@ -63,6 +67,7 @@ interface JwtPayload {
   exp?: number;
   iat?: number;
   permissions?: unknown;
+  operationalConfig?: unknown;
 }
 
 function decodeJwtPayload(token: string): JwtPayload | null {
@@ -86,6 +91,32 @@ function parsePermissionsFromJwt(token: string): string[] {
   return payload.permissions.filter((p): p is string => typeof p === 'string');
 }
 
+function isTenantOperationalConfig(v: unknown): v is TenantOperationalConfig {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o['hasNightShift'] === 'boolean' &&
+    typeof o['dayShiftStartTime'] === 'string' &&
+    typeof o['nightShiftStartTime'] === 'string'
+  );
+}
+
+function parseOperationalConfigFromJwt(
+  token: string,
+): TenantOperationalConfig | undefined {
+  const payload = decodeJwtPayload(token);
+  const raw = payload?.operationalConfig;
+  if (!isTenantOperationalConfig(raw)) return undefined;
+  return {
+    hasNightShift: raw.hasNightShift,
+    dayShiftStartTime: raw.dayShiftStartTime,
+    nightShiftStartTime: raw.nightShiftStartTime,
+    ...(typeof raw.blockNegativeStock === 'boolean'
+      ? { blockNegativeStock: raw.blockNegativeStock }
+      : {}),
+  };
+}
+
 function mergeUserWithJwtPermissions(
   user: UserPayload,
   token: string,
@@ -95,7 +126,18 @@ function mergeUserWithJwtPermissions(
     ? user.permissions.filter((p): p is string => typeof p === 'string')
     : [];
   const permissions = fromJwt.length > 0 ? fromJwt : fromUser;
-  return { ...user, permissions };
+  const operationalConfig =
+    parseOperationalConfigFromJwt(token) ?? user.tenant?.operationalConfig;
+  return {
+    ...user,
+    permissions,
+    tenant: user.tenant
+      ? {
+          ...user.tenant,
+          ...(operationalConfig ? { operationalConfig } : {}),
+        }
+      : user.tenant,
+  };
 }
 
 /** Margen ante desfase de reloj (segundos). */
@@ -453,13 +495,15 @@ export class AuthService {
       this.tenantService.currentTenant.set(null);
       return;
     }
-    const prevOperational = this.tenantService.currentTenant()?.operationalConfig;
+    const operationalConfig =
+      t.operationalConfig ??
+      this.tenantService.currentTenant()?.operationalConfig;
     this.tenantService.setTenant({
       id: t.id,
       code: (t.code && t.code.trim()) || '—',
       name: t.name,
       logoUrl: t.logoUrl ?? null,
-      ...(prevOperational ? { operationalConfig: prevOperational } : {}),
+      ...(operationalConfig ? { operationalConfig } : {}),
     });
   }
 
@@ -616,6 +660,21 @@ export class AuthService {
   /** Inventario: costos unitarios, CPP y valorización. */
   canViewInventoryCost(): boolean {
     return this.hasPermission('inventory:stock:view_cost');
+  }
+
+  /** Tras PATCH /tenant-config/operational — alinea sesión local (tpm_user + tenant). */
+  patchSessionOperationalConfig(cfg: TenantOperationalConfig): void {
+    const user = this.currentUser();
+    if (!user?.tenant) return;
+    const updated: UserPayload = {
+      ...user,
+      tenant: { ...user.tenant, operationalConfig: cfg },
+    };
+    this.currentUser.set(updated);
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.setItem('tpm_user', JSON.stringify(updated));
+    }
+    this.syncTenantContextFromUser(updated);
   }
 
   forceLogout() {

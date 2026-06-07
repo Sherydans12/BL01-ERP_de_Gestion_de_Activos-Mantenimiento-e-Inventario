@@ -15,6 +15,7 @@
     "test:chaos": "playwright test tests/e2e-chaos-resilience.spec.ts",
     "test:operations:p0": "playwright test tests/e2e-operations-p0-integrity.spec.ts",
     "test:operations:p1": "playwright test tests/e2e-operations-p1-m2-availability.spec.ts",
+    "test:operations:shift": "playwright test tests/e2e-operations-shift-policy.spec.ts",
     "test:operations:p2": "playwright test tests/e2e-operations-p2-inventory-cross.spec.ts",
     "test:ui": "playwright test --ui",
     "install:browsers": "playwright install chromium"

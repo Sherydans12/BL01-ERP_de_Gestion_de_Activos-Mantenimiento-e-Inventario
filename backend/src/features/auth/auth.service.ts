@@ -31,6 +31,7 @@ import { LoginStepUpService } from './login-step-up.service';
 import { StepUpPolicyService } from './step-up-policy.service';
 import { TotpService } from './totp.service';
 import { parseTenantRolePermissions } from './permissions.util';
+import { loadOperationalConfigForJwt } from './jwt-operational-config.util';
 
 /** Hash bcrypt fijo para igualar tiempo de CPU cuando el usuario no existe (mitiga timing). */
 const BCRYPT_DUMMY_HASH =
@@ -605,6 +606,10 @@ export class AuthService {
       user.role === 'SUPER_ADMIN' ? null : (jwtTenantId ?? user.tenantId);
 
     const permissions = this.resolveJwtPermissions(user);
+    const operationalConfig = await loadOperationalConfigForJwt(
+      this.prisma,
+      tokenTenantId,
+    );
 
     const payload = {
       email: user.email,
@@ -615,6 +620,7 @@ export class AuthService {
       customRoleId: user.customRoleId ?? null,
       permissions,
       jti,
+      ...(operationalConfig ? { operationalConfig } : {}),
     };
 
     return {
@@ -639,6 +645,7 @@ export class AuthService {
               code: tenantForResponse.code,
               name: tenantForResponse.name,
               logoUrl: tenantForResponse.logoUrl,
+              ...(operationalConfig ? { operationalConfig } : {}),
             }
           : null,
         allowedContracts,
@@ -812,19 +819,25 @@ export class AuthService {
     });
 
     const permissions = this.resolveJwtPermissions(user);
+    const activationTenantId =
+      updatedUser.role === ('SUPER_ADMIN' as any)
+        ? null
+        : updatedUser.tenantId;
+    const operationalConfig = await loadOperationalConfigForJwt(
+      this.prisma,
+      activationTenantId,
+    );
 
     const payload = {
       email: updatedUser.email,
       sub: updatedUser.id,
       role: updatedUser.role,
-      tenantId:
-        updatedUser.role === ('SUPER_ADMIN' as any)
-          ? null
-          : updatedUser.tenantId,
+      tenantId: activationTenantId,
       allowedContracts,
       customRoleId: user.customRoleId ?? null,
       permissions,
       jti,
+      ...(operationalConfig ? { operationalConfig } : {}),
     };
 
     return {
@@ -850,6 +863,7 @@ export class AuthService {
               code: user.tenant.code,
               name: user.tenant.name,
               logoUrl: user.tenant.logoUrl,
+              ...(operationalConfig ? { operationalConfig } : {}),
             }
           : null,
         allowedContracts, // Corregido

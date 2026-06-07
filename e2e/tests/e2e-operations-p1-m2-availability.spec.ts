@@ -242,7 +242,7 @@ test.describe('P1 — M2 Disponibilidad y ajustes empresa', () => {
       expect(patch.status).toBeLessThan(300);
     });
 
-    test('UI sin selector de turno; API DAY implícito y NIGHT rechazado', async ({
+    test('UI sin selector de turno; API normaliza NIGHT a DAY', async ({
       page,
     }) => {
       const runId = Date.now().toString(36);
@@ -276,17 +276,16 @@ test.describe('P1 — M2 Disponibilidad y ajustes empresa', () => {
           page.locator('label').filter({ has: page.getByText(/^Día$/) }),
         ).toHaveCount(0);
 
-        const nightBad = await batchCreateAvailability(adminToken, {
+        const nightCoerced = await batchCreateAvailability(adminToken, {
           reportDate,
           shift: 'NIGHT',
           rows: [{ equipmentId: eq!.id, status: 'OPERATIONAL' }],
         });
-        expect(nightBad.status).toBeGreaterThanOrEqual(400);
-        expect(JSON.stringify(nightBad.body)).toMatch(/noche|NIGHT|turno/i);
+        expect(nightCoerced.status).toBeLessThan(300);
 
         const dayOk = await batchCreateAvailability(adminToken, {
           reportDate,
-          rows: [{ equipmentId: eq!.id, status: 'OPERATIONAL' }],
+          rows: [{ equipmentId: eq!.id, status: 'STANDBY' }],
         });
         expect(dayOk.status).toBeLessThan(300);
       } finally {

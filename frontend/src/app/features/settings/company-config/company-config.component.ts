@@ -194,6 +194,7 @@ export class CompanyConfigComponent implements OnInit {
         if (current) {
           this.tenantService.setTenant({ ...current, operationalConfig: cfg });
         }
+        this.authService.patchSessionOperationalConfig(cfg);
         this.patchOperationalForm(cfg);
         this.notification.success('Configuración de turnos guardada');
         this.isSavingOperational.set(false);

@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test';
 
+import type { TenantOperationalSnapshot } from './api-tenant-config';
+
 export const API_BASE = (process.env.E2E_API_BASE || 'http://localhost:3000/api').replace(/\/$/, '');
 export const TENANT_CODE = (process.env.TENANT_CODE || 'TPM').trim().toUpperCase();
 export const PASSWORD = (process.env.PBAC_TEST_PASSWORD || 'Test1234!').trim();
@@ -92,11 +94,48 @@ async function fetchCaptcha(attempt = 0) {
   return { challengeId: data.challengeId, answer: Number(m[1]) + Number(m[2]) };
 }
 
+export function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) base64 += '=';
+    return JSON.parse(Buffer.from(base64, 'base64').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return null;
+  }
+}
+
+export function decodeJwtOperationalConfig(
+  token: string,
+): TenantOperationalSnapshot | null {
+  const payload = decodeJwtPayload(token);
+  const raw = payload?.operationalConfig;
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.hasNightShift !== 'boolean') return null;
+  return {
+    hasNightShift: o.hasNightShift,
+    dayShiftStartTime:
+      typeof o.dayShiftStartTime === 'string' ? o.dayShiftStartTime : undefined,
+    nightShiftStartTime:
+      typeof o.nightShiftStartTime === 'string'
+        ? o.nightShiftStartTime
+        : undefined,
+    blockNegativeStock:
+      typeof o.blockNegativeStock === 'boolean'
+        ? o.blockNegativeStock
+        : undefined,
+  };
+}
+
 function decodeJwtPermissions(token: string): string[] {
-  const part = token.split('.')[1];
-  const json = Buffer.from(part, 'base64url').toString('utf8');
-  const payload = JSON.parse(json) as { permissions?: string[] };
-  return Array.isArray(payload.permissions) ? payload.permissions : [];
+  const payload = decodeJwtPayload(token);
+  if (!Array.isArray(payload?.permissions)) return [];
+  return payload.permissions.filter((p): p is string => typeof p === 'string');
 }
 
 export async function apiLogin(email: string, attempt = 0) {

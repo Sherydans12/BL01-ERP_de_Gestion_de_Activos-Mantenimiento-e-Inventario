@@ -69,8 +69,18 @@ describe('AuthService — login', () => {
     contractAccess: [{ contractId }],
   };
 
+  const operationalConfigRow = {
+    hasNightShift: false,
+    dayShiftStartTime: '08:00',
+    nightShiftStartTime: '20:00',
+    blockNegativeStock: true,
+  };
+
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
+    prisma.tenantOperationalConfig.findUnique.mockResolvedValue(
+      operationalConfigRow as never,
+    );
     jwtSign = jest.fn().mockReturnValue('signed-jwt-token');
     recordLoginFailure = jest.fn().mockResolvedValue(undefined);
     mockBcryptCompare.mockReset();
@@ -163,8 +173,10 @@ describe('AuthService — login', () => {
         ],
         allowedContracts: [contractId],
         customRoleId: 'role-uuid-1',
+        operationalConfig: operationalConfigRow,
       }),
     );
+    expect(result.user.tenant?.operationalConfig).toEqual(operationalConfigRow);
     expect(jwtSign.mock.calls[0][0]).not.toHaveProperty('MECHANIC');
     expect(jwtSign.mock.calls[0][0].role).not.toMatch(/MECHANIC|SUPERVISOR/);
   });
