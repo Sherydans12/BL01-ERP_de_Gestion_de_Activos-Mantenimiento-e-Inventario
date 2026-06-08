@@ -23,6 +23,7 @@ import {
 } from '../equipments/operational-transition.types';
 import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availability.dto';
 import { UnreportedQueryDto } from './dto/unreported-query.dto';
+import { resolveReturnToService } from '../equipments/operational-blockers';
 import { ExportAvailabilityQueryDto } from './dto/export-availability-query.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
 import { ShiftBoardQueryDto, ShiftBoardTab } from './dto/shift-board-query.dto';
@@ -164,7 +165,12 @@ export interface ImportValidationResult {
 
 export interface ImportCommitResult {
   committed: number;
-  errors: Array<{ equipmentId: string; reason: string }>;
+  errors: Array<{
+    equipmentId: string;
+    reason: string;
+    code?: string;
+    blockers?: import('../equipments/operational-blockers').OperationalBlocker[];
+  }>;
   /** Efectos colaterales (M2 detención → M3 stub / isOperational). */
   sideEffects?: AvailabilitySideEffect[];
 }
@@ -578,6 +584,28 @@ export class EquipmentAvailabilityService {
           },
         );
 
+        let validatedReturnDecision;
+        if (
+          dto.status === OperationalStatus.OPERATIONAL &&
+          previousStatus != null &&
+          (previousStatus === OperationalStatus.DOWN_FAILURE ||
+            previousStatus === OperationalStatus.DOWN_MAINTENANCE)
+        ) {
+          validatedReturnDecision = await resolveReturnToService(
+            tx,
+            tenantId,
+            dto.equipmentId,
+          );
+          if (!validatedReturnDecision.allowed) {
+            throw new ConflictException({
+              code: 'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED',
+              message:
+                'El equipo no puede ser declarado operativo porque tiene causas de detención activas.',
+              blockers: validatedReturnDecision.blockers,
+            });
+          }
+        }
+
         // ── 2. Crear el registro de disponibilidad ────────────────────────────
         // La restricción @@unique del modelo atrapa duplicados a nivel de DB.
         let record: Prisma.EquipmentAvailabilityGetPayload<object>;
@@ -651,6 +679,7 @@ export class EquipmentAvailabilityService {
             comments: dto.comments ?? null,
             reportDate: dto.reportDate,
             reportedById: userId,
+            validatedReturnDecision,
           });
 
         return {
@@ -902,12 +931,29 @@ export class EquipmentAvailabilityService {
           sideEffects.push(toAvailabilitySideEffect(transition, row.status));
         }
         committed++;
-      } catch (e) {
+      } catch (e: any) {
+        const isBlockerException =
+          e.status === 409 &&
+          typeof e.getResponse === 'function' &&
+          (e.getResponse() as any)?.code ===
+            'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED';
+
         const reason =
           e instanceof Error
             ? e.message
             : 'Error desconocido al guardar el registro.';
-        errors.push({ equipmentId: row.equipmentId, reason });
+
+        if (isBlockerException) {
+          const response = e.getResponse() as any;
+          errors.push({
+            equipmentId: row.equipmentId,
+            reason: response.message || reason,
+            code: response.code,
+            blockers: response.blockers,
+          });
+        } else {
+          errors.push({ equipmentId: row.equipmentId, reason });
+        }
       }
     }
 
@@ -1764,12 +1810,29 @@ export class EquipmentAvailabilityService {
           sideEffects.push(toAvailabilitySideEffect(transition, row.status));
         }
         committed++;
-      } catch (e) {
+      } catch (e: any) {
+        const isBlockerException =
+          e.status === 409 &&
+          typeof e.getResponse === 'function' &&
+          (e.getResponse() as any)?.code ===
+            'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED';
+
         const reason =
           e instanceof Error
             ? e.message
             : 'Error desconocido al guardar el registro.';
-        errors.push({ equipmentId: row.equipmentId, reason });
+
+        if (isBlockerException) {
+          const response = e.getResponse() as any;
+          errors.push({
+            equipmentId: row.equipmentId,
+            reason: response.message || reason,
+            code: response.code,
+            blockers: response.blockers,
+          });
+        } else {
+          errors.push({ equipmentId: row.equipmentId, reason });
+        }
       }
     }
 
@@ -1845,6 +1908,27 @@ export class EquipmentAvailabilityService {
             currentStatus: existing?.status ?? null,
           },
         );
+        let validatedReturnDecision;
+        if (
+          dto.status === OperationalStatus.OPERATIONAL &&
+          previousStatus != null &&
+          (previousStatus === OperationalStatus.DOWN_FAILURE ||
+            previousStatus === OperationalStatus.DOWN_MAINTENANCE)
+        ) {
+          validatedReturnDecision = await resolveReturnToService(
+            tx,
+            tenantId,
+            dto.equipmentId,
+          );
+          if (!validatedReturnDecision.allowed) {
+            throw new ConflictException({
+              code: 'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED',
+              message:
+                'El equipo no puede ser declarado operativo porque tiene causas de detención activas.',
+              blockers: validatedReturnDecision.blockers,
+            });
+          }
+        }
 
         const record = await tx.equipmentAvailability.upsert({
           where: {
@@ -1912,6 +1996,7 @@ export class EquipmentAvailabilityService {
           comments: dto.comments ?? null,
           reportDate: dto.reportDate,
           reportedById: userId,
+          validatedReturnDecision,
         });
       },
       {

@@ -13,12 +13,18 @@ export interface OperationalTransitionInput {
   /** ISO date (yyyy-mm-dd) del turno reportado. */
   reportDate: string;
   reportedById: string;
+  /**
+   * Decisión previa de bloqueadores para evitar doble consulta si
+   * M2 ya evaluó el retorno a servicio de manera temprana.
+   */
+  validatedReturnDecision?: import('./operational-blockers').ReturnToServiceDecision;
 }
 
 export type OperationalTransitionSkipReason =
   | 'ACTIVE_FAULT_EXISTS'
   | 'NOT_APPLICABLE_STATUS'
-  | 'NO_CONTRACT_FOR_STUB';
+  | 'NO_CONTRACT_FOR_STUB'
+  | 'BLOCKED_BY_ACTIVE_CAUSES';
 
 /** Resultado de dominio devuelto por el orquestador. */
 export interface OperationalTransitionResult {
@@ -29,6 +35,8 @@ export interface OperationalTransitionResult {
   createdFaultReport: boolean;
   requiresFaultCompletion: boolean;
   skippedReason?: OperationalTransitionSkipReason;
+  /** Causas activas que impidieron la reactivación (solo presente si skippedReason = BLOCKED_BY_ACTIVE_CAUSES). */
+  blockers?: import('./operational-blockers').OperationalBlocker[];
 }
 
 /** Contrato API para el frontend (batch / import / create). */

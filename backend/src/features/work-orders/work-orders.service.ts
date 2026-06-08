@@ -29,6 +29,7 @@ import {
 } from '@prisma/client';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
 import { getMeterJumpLimit } from '../equipments/meter-jump-limits.util';
+import { resolveReturnToService } from '../equipments/operational-blockers';
 import {
   buildEquipmentContractAccessOr,
   buildPurchaseContractScopeFilter,
@@ -2232,10 +2233,22 @@ export class WorkOrdersService {
               where: { workOrderId: workOrder.id },
             });
 
+            // ── P0: evaluar bloqueadores antes de reactivar ─────────────────
+            let effectiveOperational = false;
+            if (closureEquipmentOperational === true) {
+              const decision = await resolveReturnToService(
+                tx,
+                tenantId,
+                workOrder.equipmentId,
+                { excludeWorkOrderId: workOrder.id },
+              );
+              effectiveOperational = decision.allowed;
+            }
+
             await tx.equipment.update({
               where: { id: workOrder.equipmentId },
               data: {
-                isOperational: closureEquipmentOperational === true,
+                isOperational: effectiveOperational,
                 ...(workOrder.affectsAvailability === 'SI'
                   ? {
                       cumulativeDowntimeHours: {

@@ -11,14 +11,19 @@ import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availabil
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
 import ExcelJS from 'exceljs';
 
-// ── Mock del helper de horómetro (mismo patrón que lube-reports.service.spec) ──
+// ── Mock del helper de horómetro y bloqueadores ──
 jest.mock('../equipments/equipment-meter-sync', () => ({
   applyCurrentMeterChange: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../equipments/operational-blockers', () => ({
+  resolveReturnToService: jest.fn().mockResolvedValue({ tenantId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', equipmentId: 'cccccccc-cccc-cccc-cccc-cccccccccccc', allowed: true, blockers: [] }),
+}));
 
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { resolveReturnToService } from '../equipments/operational-blockers';
 
 const mockApplyCurrentMeterChange = jest.mocked(applyCurrentMeterChange);
+const mockResolveReturnToService = jest.mocked(resolveReturnToService);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures reutilizables
@@ -104,6 +109,8 @@ describe('EquipmentAvailabilityService — create', () => {
     prisma = mockDeep<PrismaService>();
     tx = mockDeep<Prisma.TransactionClient>();
     mockApplyCurrentMeterChange.mockClear();
+    mockResolveReturnToService.mockClear();
+    mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
     sequenceServiceStub.getNextCorrelative.mockClear();
     sequenceServiceStub.getNextCorrelative.mockResolvedValue('RF-00001');
 
@@ -265,6 +272,44 @@ describe('EquipmentAvailabilityService — create', () => {
     expect(result.operationalTransition?.createdFaultReport).toBe(true);
     expect(result.operationalTransition?.isOperational).toBe(false);
     expect(result.operationalTransition?.faultReportId).toBe('fr-stub-1');
+  });
+  it('P0 individual: no escribe snapshot ni evento ni horómetro si existen bloqueadores activos', async () => {
+    tx.equipment.findFirst.mockResolvedValue(validEquipment as never);
+    tx.equipmentAvailability.findFirst.mockResolvedValue({
+      status: OperationalStatus.DOWN_FAILURE,
+    } as never);
+    mockResolveReturnToService.mockResolvedValueOnce({
+      tenantId,
+      equipmentId,
+      allowed: false,
+      blockers: [
+        {
+          type: 'HIGH_FAULT',
+          sourceId: 'fr-1',
+          correlative: 'RF-0001',
+          status: 'OPEN',
+        },
+      ],
+    });
+
+    const dto: CreateEquipmentAvailabilityDto = {
+      equipmentId,
+      reportDate: '2026-06-02',
+      shift: ShiftType.DAY,
+      status: OperationalStatus.OPERATIONAL,
+      meterReading: 1100,
+    };
+
+    await expect(service.create(dto, adminUser)).rejects.toThrow(ConflictException);
+
+    expect(mockResolveReturnToService).toHaveBeenCalledWith(
+      tx,
+      tenantId,
+      equipmentId,
+    );
+    expect(tx.equipmentAvailability.create).not.toHaveBeenCalled();
+    expect(tx.availabilityEvent.create).not.toHaveBeenCalled();
+    expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
   });
 });
 
@@ -635,6 +680,8 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
+    mockResolveReturnToService.mockClear();
+    mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: availabilityTestProviders(prisma, sequenceServiceStub),
@@ -665,6 +712,72 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
     expect(result.committed).toBe(1);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].equipmentId).toBe(eq2Id);
+  });
+
+  it('P0 batch: fila bloqueada no persiste nada y se añade a errores; la fila válida persiste correctamente', async () => {
+    tx.equipment.findFirst.mockImplementation(async (args) => {
+      if (args.where?.id === equipmentId) return validEquipment as never;
+      if (args.where?.id === eq2Id)
+        return { ...validEquipment, id: eq2Id, currentMeter: 500 } as never;
+      return null as never;
+    });
+    // El primero está bloqueado, el segundo es válido
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
+    // previous status findFirst mock (for resolvePreviousAvailabilityStatus)
+    tx.equipmentAvailability.findFirst.mockImplementation(async (args) => {
+      if (args.where?.equipmentId === equipmentId) {
+        return { status: OperationalStatus.DOWN_FAILURE } as never;
+      }
+      return { status: OperationalStatus.OPERATIONAL } as never;
+    });
+
+    mockResolveReturnToService.mockImplementation(async (txArg, tId, eqId) => {
+      if (eqId === equipmentId) {
+        return {
+          tenantId: tId,
+          equipmentId: eqId,
+          allowed: false,
+          blockers: [{ type: 'HIGH_FAULT', sourceId: '1', correlative: 'RF-1', status: 'OPEN' }],
+        };
+      }
+      return { tenantId: tId, equipmentId: eqId, allowed: true, blockers: [] };
+    });
+
+    tx.equipmentAvailability.upsert.mockResolvedValue(createdRecord as never);
+
+    const result = await service.batchCreate(
+      {
+        shift: ShiftType.DAY,
+        reportDate: '2026-06-03',
+        rows: [
+          { equipmentId, status: OperationalStatus.OPERATIONAL, meterReading: 1500 }, // Fila A
+          { equipmentId: eq2Id, status: OperationalStatus.OPERATIONAL, meterReading: 600 }, // Fila B
+        ],
+      },
+      adminUser,
+    );
+
+    // Verificamos respuesta
+    expect(result.committed).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].equipmentId).toBe(equipmentId);
+    expect(result.errors[0].code).toBe('EQUIPMENT_RETURN_TO_SERVICE_BLOCKED');
+    expect(result.errors[0].blockers).toHaveLength(1);
+
+    // Verificamos que no se escribió nada para equipmentId
+    expect(tx.equipmentAvailability.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.equipmentAvailability.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ equipmentId: eq2Id }),
+      }),
+    );
+
+    // Verificamos que se avanzó el medidor de eq2Id pero no de equipmentId
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledTimes(1);
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ equipmentId: eq2Id, newMeter: 600 }),
+    );
   });
 });
 
@@ -708,6 +821,12 @@ describe('EquipmentAvailabilityService — commitImport', () => {
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
+    mockResolveReturnToService.mockClear();
+    mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
+
+    // P0: mocks por defecto para resolveReturnToService (sin bloqueadores)
+    tx.faultReport.findMany.mockResolvedValue([] as never);
+    tx.workOrder.findMany.mockResolvedValue([] as never);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: availabilityTestProviders(prisma, sequenceServiceStub),
@@ -875,6 +994,72 @@ describe('EquipmentAvailabilityService — commitImport', () => {
     expect(result.errors).toHaveLength(2);
     expect(tx.equipmentAvailability.upsert).not.toHaveBeenCalled();
     expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
+  });
+
+  it('P0 import: fila bloqueada no persiste nada y se añade a errores; la fila válida persiste correctamente', async () => {
+    tx.equipment.findFirst.mockImplementation(async (args) => {
+      if (args.where?.id === equipmentId) return validEquipment as never;
+      if (args.where?.id === eq2Id)
+        return { ...validEquipment, id: eq2Id, currentMeter: 500 } as never;
+      return null as never;
+    });
+    // El primero está bloqueado, el segundo es válido
+    tx.equipmentAvailability.findUnique.mockResolvedValue(null as never);
+    // previous status findFirst mock (for resolvePreviousAvailabilityStatus)
+    tx.equipmentAvailability.findFirst.mockImplementation(async (args) => {
+      if (args.where?.equipmentId === equipmentId) {
+        return { status: OperationalStatus.DOWN_FAILURE } as never;
+      }
+      return { status: OperationalStatus.OPERATIONAL } as never;
+    });
+
+    mockResolveReturnToService.mockImplementation(async (txArg, tId, eqId) => {
+      if (eqId === equipmentId) {
+        return {
+          tenantId: tId,
+          equipmentId: eqId,
+          allowed: false,
+          blockers: [{ type: 'HIGH_FAULT', sourceId: '1', correlative: 'RF-1', status: 'OPEN' }],
+        };
+      }
+      return { tenantId: tId, equipmentId: eqId, allowed: true, blockers: [] };
+    });
+
+    tx.equipmentAvailability.upsert.mockResolvedValue(createdRecord as never);
+
+    const result = await service.commitImport(
+      {
+        shift: ShiftType.DAY,
+        reportDate: '2026-06-03',
+        rows: [
+          { equipmentId, status: OperationalStatus.OPERATIONAL, meterReading: 1500 }, // Fila A
+          { equipmentId: eq2Id, status: OperationalStatus.OPERATIONAL, meterReading: 600 }, // Fila B
+        ],
+      },
+      adminUser,
+    );
+
+    // Verificamos respuesta
+    expect(result.committed).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].equipmentId).toBe(equipmentId);
+    expect(result.errors[0].code).toBe('EQUIPMENT_RETURN_TO_SERVICE_BLOCKED');
+    expect(result.errors[0].blockers).toHaveLength(1);
+
+    // Verificamos que no se escribió nada para equipmentId
+    expect(tx.equipmentAvailability.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.equipmentAvailability.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ equipmentId: eq2Id }),
+      }),
+    );
+
+    // Verificamos que se avanzó el medidor de eq2Id pero no de equipmentId
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledTimes(1);
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ equipmentId: eq2Id, newMeter: 600 }),
+    );
   });
 });
 

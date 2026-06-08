@@ -9,6 +9,21 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-08 — P0: Proteger transición de equipo hacia operativo (bloqueadores operacionales)
+
+- **Contexto:** Auditoría del flujo M2·M3·OT confirmó que `Equipment.isOperational` podía ser forzado a `true` por dos rutas independientes sin verificar causas activas de detención: (1) el Orquestador M2 reactivaba al recibir `OPERATIONAL` tras `DOWN_*` sin consultar FaultReports ni WorkOrders; (2) el cierre de OT escribía `isOperational = closureEquipmentOperational` directamente desde el flag del usuario, ignorando otros bloqueadores del mismo equipo.
+- **Decisión:**
+  - **Función pura `resolveReturnToService`** en `equipments/operational-blockers.ts`: consulta transaccional de FaultReports HIGH activas (OPEN o LINKED con OT no cerrada) y WorkOrders con `affectsAvailability=SI` no cerradas. Recibe `tx: Prisma.TransactionClient` para ejecutarse dentro de la transacción Serializable del llamador.
+  - **Orquestador M2** (`onOperationalStatusChange`): antes de escribir `isOperational: true`, evalúa `resolveReturnToService`. Si hay bloqueadores, retorna `{ isOperational: false, skippedReason: 'BLOCKED_BY_ACTIVE_CAUSES', blockers }` sin mutar el equipo. El snapshot M2 y el AvailabilityEvent ya están persistidos (Alternativa 2 — registrar intención del supervisor, mantener maestro detenido).
+  - **Cierre de OT** (`WorkOrdersService.updateStatus`): si `closureEquipmentOperational=true`, evalúa `resolveReturnToService` con `excludeWorkOrderId` para no bloquearse a sí misma. Si existen otros bloqueadores, escribe `isOperational: false` aunque el usuario haya indicado operativo.
+  - **Opción C (función pura) vs A/B**: se eligió función pura exportada para evitar acoplamiento de módulos Nest — `WorkOrdersModule` no importa `EquipmentsModule` y sigue sin necesitarlo; ambos consumidores importan la función directamente.
+  - **Sin migración**: los índices `@@index([tenantId, equipmentId])` y `@@index([tenantId, criticality, status])` de FaultReport cubren las consultas; el volumen de fallas/OTs activas por equipo es < 5.
+- **Consecuencias:**
+  - Suite dominio: 421 tests (25 suites), 0 fallos. Tests P0 nuevos: 16 en `operational-blockers.spec.ts`, 5 en orchestrator, 4 en work-orders.
+  - El equipo ya no puede ser reactivado mientras existan fallas HIGH abiertas u OTs con impacto de disponibilidad activas.
+  - El snapshot M2 OPERATIONAL con bloqueadores se registra pero no reactiva al equipo — el `sideEffects[]` existente informa al frontend.
+  - Pendiente: cierre de OT no actualiza `FaultReportStatus → CLOSED` (sincronización FaultReport ← WorkOrder, fuera del alcance P0).
+
 ## 2026-06-08 — Sanity Check: Persistencia M2↔M3 y Modelo Híbrido (Snapshot + Ledger)
 
 - **Contexto:** Al navegar de M2 (Disponibilidad) a M3 (Registro de Fallas) mediante el redireccionamiento asistido (cuando un equipo se reporta como detenido/falla), el refresco de página (F5) no debe causar pérdida de los datos pre-rellenados. Asimismo, se requería consolidar la documentación sobre el modelo híbrido de disponibilidad (Snapshot diario para performance de reportes + Ledger de `AvailabilityEvent` para auditoría temporal) y la centralización de mutación de estados operacionales.

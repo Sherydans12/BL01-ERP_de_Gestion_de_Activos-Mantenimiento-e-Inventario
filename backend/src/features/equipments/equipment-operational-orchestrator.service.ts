@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import {
   AffectedSystem,
   FaultCriticality,
@@ -12,6 +12,7 @@ import {
   OperationalTransitionInput,
   OperationalTransitionResult,
 } from './operational-transition.types';
+import { resolveReturnToService } from './operational-blockers';
 
 /** Máx. 10 chars (`sequence_counters.document_type` VARCHAR(10)). */
 const FR_DOCUMENT_TYPE = 'FAULT_REP';
@@ -65,6 +66,34 @@ export class EquipmentOperationalOrchestratorService {
       input.previousStatus != null &&
       isStopStatus(input.previousStatus)
     ) {
+      // ── P0: evaluar bloqueadores antes de reactivar ─────────────────────
+      let decision = input.validatedReturnDecision;
+      if (
+        decision &&
+        (decision.tenantId !== input.tenantId ||
+          decision.equipmentId !== input.equipmentId)
+      ) {
+        // Ignorar decisión provista si no coincide el contexto
+        decision = undefined;
+      }
+
+      if (!decision) {
+        decision = await resolveReturnToService(
+          tx,
+          input.tenantId,
+          input.equipmentId,
+        );
+      }
+
+      if (!decision.allowed) {
+        return {
+          ...base,
+          isOperational: false,
+          skippedReason: 'BLOCKED_BY_ACTIVE_CAUSES',
+          blockers: decision.blockers,
+        };
+      }
+
       await tx.equipment.update({
         where: { id: input.equipmentId },
         data: { isOperational: true },

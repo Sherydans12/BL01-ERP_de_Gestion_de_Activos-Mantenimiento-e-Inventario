@@ -121,6 +121,9 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     };
     mockApplyCurrentMeterChange.mockClear();
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    // P0: mock por defecto para resolveReturnToService (sin bloqueadores)
+    tx.faultReport.findMany.mockResolvedValue([] as never);
+    tx.workOrder.findMany.mockResolvedValue([] as never);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -700,6 +703,175 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         subject: expect.stringContaining('OT-100'),
       }),
     );
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // P0 — Bloqueadores operacionales al cerrar OT
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('P0: cierre con closureEquipmentOperational=true y otra falla HIGH activa mantiene equipo detenido', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      // P0: falla HIGH activa impide reactivación
+      tx.faultReport.findMany.mockResolvedValue([
+        { id: 'fr-block', correlative: 'RF-00050', status: 'OPEN' },
+      ] as never);
+      tx.workOrder.findMany.mockResolvedValue([] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    // Equipment debe mantenerse isOperational=false porque existe bloqueador
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+      }),
+    });
+  });
+
+  it('P0: cierre con closureEquipmentOperational=true y otra OT bloqueante mantiene equipo detenido', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      tx.faultReport.findMany.mockResolvedValue([] as never);
+      // P0: otra OT con affectsAvailability=SI sigue activa
+      tx.workOrder.findMany.mockResolvedValue([
+        {
+          id: 'wo-other',
+          correlative: 'OT-2026-099',
+          status: 'IN_PROGRESS',
+          affectsAvailability: 'SI',
+        },
+      ] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+      }),
+    });
+  });
+
+  it('P0: cierre con closureEquipmentOperational=false mantiene equipo detenido sin consultar bloqueadores', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: false,
+    });
+
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+      }),
+    });
+    // No se debe consultar bloqueadores si el usuario indica que el equipo queda detenido
+    expect(tx.faultReport.findMany).not.toHaveBeenCalled();
+  });
+
+  it('P0: acumula downtime aunque el equipo siga detenido por bloqueadores', async () => {
+    const wo = openWorkOrder({ parts: [], affectsAvailability: 'SI' });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      // Bloqueador: otra falla HIGH
+      tx.faultReport.findMany.mockResolvedValue([
+        { id: 'fr-x', correlative: 'RF-00099', status: 'OPEN' },
+      ] as never);
+      tx.workOrder.findMany.mockResolvedValue([] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    // Downtime se acumula independientemente del resultado de bloqueadores
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+        cumulativeDowntimeHours: { increment: 4 },
+      }),
+    });
   });
 });
 
