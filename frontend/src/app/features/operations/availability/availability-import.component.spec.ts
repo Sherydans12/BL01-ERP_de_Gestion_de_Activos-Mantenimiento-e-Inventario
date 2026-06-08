@@ -13,7 +13,6 @@ import {
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
-import { FleetService } from '../../../core/services/fleet/fleet.service';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -121,10 +120,6 @@ const shiftSpy = jasmine.createSpyObj<ShiftService>(
   { hasNightShift: signal(true) },
 );
 
-const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', [
-  'notifyEquipmentChanged',
-]);
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('AvailabilityImportComponent', () => {
@@ -156,7 +151,6 @@ describe('AvailabilityImportComponent', () => {
         { provide: EquipmentAvailabilityService, useValue: availabilityServiceSpy },
         { provide: NotificationService, useValue: notifySpy },
         { provide: ShiftService, useValue: shiftSpy },
-        { provide: FleetService, useValue: fleetSpy },
       ],
     }).compileComponents();
 

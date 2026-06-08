@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map, tap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { ShiftService } from '../shift/shift.service';
+import { FleetStateService } from '../fleet-state/fleet-state.service';
 
 // ── Enums (espejados desde el backend — deben estar sincronizados con Prisma) ──
 
@@ -296,6 +297,7 @@ export interface ImportCommitResult {
 export class EquipmentAvailabilityService {
   private http = inject(HttpClient);
   private shiftService = inject(ShiftService);
+  private fleetState = inject(FleetStateService);
   private apiUrl = `${environment.apiUrl}/equipment-availability`;
 
   /** Última línea de defensa: NIGHT → DAY si el tenant no opera noche. */
@@ -332,10 +334,12 @@ export class EquipmentAvailabilityService {
   // ── Existing methods ────────────────────────────────────────────────────
 
   create(payload: CreateAvailabilityPayload): Observable<AvailabilityRecord> {
-    return this.http.post<AvailabilityRecord>(this.apiUrl, {
-      ...payload,
-      shift: this.apiShift(payload.shift),
-    });
+    return this.http
+      .post<AvailabilityRecord>(this.apiUrl, {
+        ...payload,
+        shift: this.apiShift(payload.shift),
+      })
+      .pipe(tap(() => this.fleetState.notify(payload.equipmentId)));
   }
 
   getAll(params: AvailabilityListParams = {}): Observable<AvailabilityListResponse> {
@@ -386,11 +390,17 @@ export class EquipmentAvailabilityService {
     shift: ShiftType,
     rows: BatchAvailabilityRow[],
   ): Observable<BatchCreateResult> {
-    return this.http.post<BatchCreateResult>(`${this.apiUrl}/batch`, {
-      reportDate,
-      shift: this.apiShift(shift),
-      rows,
-    });
+    return this.http
+      .post<BatchCreateResult>(`${this.apiUrl}/batch`, {
+        reportDate,
+        shift: this.apiShift(shift),
+        rows,
+      })
+      .pipe(
+        tap((result) => {
+          this.notifyCommittedRows(rows, result.errors);
+        }),
+      );
   }
 
   // ── Excel Export ─────────────────────────────────────────────────────────
@@ -456,9 +466,28 @@ export class EquipmentAvailabilityService {
     shift: ShiftType,
     rows: ImportRowCommit[],
   ): Observable<ImportCommitResult> {
-    return this.http.post<ImportCommitResult>(
-      `${this.apiUrl}/import/commit`,
-      { reportDate, shift: this.apiShift(shift), rows },
-    );
+    return this.http
+      .post<ImportCommitResult>(`${this.apiUrl}/import/commit`, {
+        reportDate,
+        shift: this.apiShift(shift),
+        rows,
+      })
+      .pipe(
+        tap((result) => {
+          this.notifyCommittedRows(rows, result.errors);
+        }),
+      );
+  }
+
+  private notifyCommittedRows(
+    rows: Array<{ equipmentId: string }>,
+    errors: Array<{ equipmentId: string; reason: string }> = [],
+  ): void {
+    const failed = new Set(errors.map((e) => e.equipmentId));
+    for (const row of rows) {
+      if (!failed.has(row.equipmentId)) {
+        this.fleetState.notify(row.equipmentId);
+      }
+    }
   }
 }

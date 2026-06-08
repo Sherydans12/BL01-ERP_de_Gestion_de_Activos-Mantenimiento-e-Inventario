@@ -71,6 +71,10 @@ export interface Equipment {
 
   /** Indisponibilidad por OT en curso con impacto en disponibilidad (fuera de servicio). */
   isOperational?: boolean;
+  /** Hay RF OPEN/LINKED sin último M2 en DOWN_MAINTENANCE. */
+  actionRequiredFault?: boolean;
+  activeFaultReportStatus?: 'OPEN' | 'LINKED' | null;
+  activeFaultReportCorrelative?: string | null;
   cumulativeDowntimeHours?: string | number;
 
   // Relaciones Pobladas

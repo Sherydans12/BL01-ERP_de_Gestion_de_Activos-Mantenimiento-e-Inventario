@@ -14,7 +14,6 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 import { AuthService } from '../../../core/services/auth/auth.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
-import { FleetService } from '../../../core/services/fleet/fleet.service';
 
 const twoEquipments: UnreportedEquipment[] = [
   { id: 'eq-1', internalId: 'EQ-001', brand: 'CAT', model: '330', plate: 'A-001', contractId: 'c-1' },
@@ -75,10 +74,6 @@ const shiftSpy = jasmine.createSpyObj<ShiftService>(
   },
 );
 
-const fleetSpy = jasmine.createSpyObj<FleetService>('FleetService', [
-  'notifyEquipmentChanged',
-]);
-
 describe('AvailabilityFormComponent (Bulk Grid)', () => {
   let component: AvailabilityFormComponent;
   let fixture: ComponentFixture<AvailabilityFormComponent>;
@@ -106,7 +101,6 @@ describe('AvailabilityFormComponent (Bulk Grid)', () => {
         { provide: ContractsService, useValue: contractsSpy },
         { provide: AuthService, useValue: authSpy },
         { provide: ShiftService, useValue: shiftSpy },
-        { provide: FleetService, useValue: fleetSpy },
       ],
     }).compileComponents();
 
@@ -162,6 +156,5 @@ describe('AvailabilityFormComponent (Bulk Grid)', () => {
     component.submitAll();
 
     expect(component.faultCompletionConfirmOpen()).toBeTrue();
-    expect(fleetSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-1');
   });
 });

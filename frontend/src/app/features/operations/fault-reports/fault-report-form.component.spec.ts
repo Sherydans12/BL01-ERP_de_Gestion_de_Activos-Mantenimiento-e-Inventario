@@ -82,7 +82,6 @@ describe('FaultReportFormComponent', () => {
   beforeEach(async () => {
     faultServiceSpy.create.calls.reset();
     faultServiceSpy.create.and.returnValue(of(MOCK_REPORT));
-    fleetServiceSpy.notifyEquipmentChanged.calls.reset();
     availabilitySpy.clearPendingFaultRegistration.calls.reset();
     notifySpy.success.calls.reset();
     notifySpy.error.calls.reset();
@@ -200,7 +199,7 @@ describe('FaultReportFormComponent', () => {
     expect(component.meterAtFaultRegressiveMessage()).toContain('verifique');
   });
 
-  it('llama a FleetService.notifyEquipmentChanged al guardar una falla HIGH', () => {
+  it('limpia pendiente M2 al guardar una falla HIGH', () => {
     const highReport: FaultReportRow = { ...MOCK_REPORT, criticality: 'HIGH', status: 'LINKED' };
     faultServiceSpy.create.and.returnValue(of(highReport));
 
@@ -210,11 +209,10 @@ describe('FaultReportFormComponent', () => {
     component.symptomDescription.set('Motor fundido — equipo detenido de urgencia');
     component.submit();
 
-    expect(fleetServiceSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-uuid-001');
     expect(availabilitySpy.clearPendingFaultRegistration).toHaveBeenCalledWith('eq-uuid-001');
   });
 
-  it('llama a FleetService.notifyEquipmentChanged al guardar una falla LOW', () => {
+  it('limpia pendiente M2 al guardar una falla LOW', () => {
     faultServiceSpy.create.and.returnValue(of(MOCK_REPORT)); // LOW por defecto
 
     component.onSelectEquipment('eq-uuid-001');
@@ -223,7 +221,6 @@ describe('FaultReportFormComponent', () => {
     component.symptomDescription.set('Pequeña fuga de aire en neumático trasero derecho');
     component.submit();
 
-    expect(fleetServiceSpy.notifyEquipmentChanged).toHaveBeenCalledWith('eq-uuid-001');
     expect(availabilitySpy.clearPendingFaultRegistration).toHaveBeenCalledWith('eq-uuid-001');
   });
 

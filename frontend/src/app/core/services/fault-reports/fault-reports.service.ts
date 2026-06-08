@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { FleetStateService } from '../fleet-state/fleet-state.service';
 
 // ── Enums (espejo del backend) ────────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ export interface FaultWorkOrderRef {
 
 export interface FaultReportRow {
   id: string;
+  equipmentId?: string;
   correlative: string;
   eventDate: string;
   meterAtFault: number | null;
@@ -149,11 +151,14 @@ export interface FaultReportListParams {
 
 @Injectable({ providedIn: 'root' })
 export class FaultReportsService {
-  private http   = inject(HttpClient);
+  private http = inject(HttpClient);
+  private fleetState = inject(FleetStateService);
   private apiUrl = `${environment.apiUrl}/fault-reports`;
 
   create(payload: CreateFaultReportPayload): Observable<FaultReportRow> {
-    return this.http.post<FaultReportRow>(this.apiUrl, payload);
+    return this.http
+      .post<FaultReportRow>(this.apiUrl, payload)
+      .pipe(tap(() => this.fleetState.notify(payload.equipmentId)));
   }
 
   getReports(params: FaultReportListParams = {}): Observable<FaultReportListResponse> {
@@ -174,7 +179,14 @@ export class FaultReportsService {
 
   /** Escala un reporte BAJA a OT correctiva (requiere FAULT_REPORT_MANAGE). */
   createWorkOrder(id: string): Observable<FaultReportRow> {
-    return this.http.post<FaultReportRow>(`${this.apiUrl}/${id}/create-work-order`, {});
+    return this.http
+      .post<FaultReportRow>(`${this.apiUrl}/${id}/create-work-order`, {})
+      .pipe(
+        tap((row) => {
+          const equipmentId = row.equipment?.id ?? row.equipmentId;
+          if (equipmentId) this.fleetState.notify(equipmentId);
+        }),
+      );
   }
 
   /**

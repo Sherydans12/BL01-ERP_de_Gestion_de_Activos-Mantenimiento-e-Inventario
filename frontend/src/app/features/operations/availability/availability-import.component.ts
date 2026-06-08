@@ -23,7 +23,6 @@ import {
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ShiftService } from '../../../core/services/shift/shift.service';
-import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 
 export type ImportPageState =
@@ -47,7 +46,6 @@ export class AvailabilityImportComponent {
   private availabilityService = inject(EquipmentAvailabilityService);
   private notify = inject(NotificationService);
   private router = inject(Router);
-  private fleetService = inject(FleetService);
   protected readonly shiftService = inject(ShiftService);
 
   @ViewChild('fileInput') fileInputRef!: ElementRef<HTMLInputElement>;
@@ -274,10 +272,6 @@ export class AvailabilityImportComponent {
     sideEffects: AvailabilitySideEffect[] | undefined,
     importRows: ImportValidationResult['rows'],
   ): void {
-    for (const se of sideEffects ?? []) {
-      this.fleetService.notifyEquipmentChanged(se.equipmentId);
-    }
-
     const faultCompletion = (sideEffects ?? []).find(
       (se) => se.requiresFaultCompletion,
     );

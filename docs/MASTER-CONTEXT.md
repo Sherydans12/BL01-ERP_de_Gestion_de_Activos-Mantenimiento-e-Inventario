@@ -417,7 +417,7 @@ Flag en [`TenantOperationalConfig`](../backend/prisma/schema.prisma) (`block_neg
 
 #### D) Implicancia para la UI (SSOT en frontend)
 
-El Maestro de Flota y el modal de detalle de equipo reaccionan centralizadamente a `isOperational`, `currentMeter` e historial operacional con `FleetService.notifyEquipmentChanged(equipmentId)` / `listVersion` / `equipmentRevision`. M2 aplica `sideEffects[]` desde batch/import, M1 notifica tras despacho exitoso y M3 notifica en todas las criticidades porque puede cambiar `isOperational`, horómetro o historial de salud. Ver decisiones [2026-06-03 — Integración Transversal de Operaciones](agentes/decisiones.md) y [2026-06-07 — P4 refresh Flota](agentes/decisiones.md).
+El Maestro de Flota y el modal de detalle de equipo reaccionan centralizadamente a `isOperational`, `currentMeter` e historial operacional con `FleetStateService.equipmentUpdated$` (Subject local + BroadcastChannel/localStorage para otras pestañas). `FleetService.notifyEquipmentChanged(equipmentId)` se conserva como alias de compatibilidad y bump de `listVersion` / `equipmentRevision`. M2 emite desde `EquipmentAvailabilityService` tras create/batch/import exitosos; M3 emite desde `FaultReportsService` tras create/escalamiento; M1/OT siguen usando `FleetService.notifyEquipmentChanged`. Además, `GET /equipments` enriquece cada fila con `actionRequiredFault` cuando existe RF `OPEN`/`LINKED` y el último M2 no está en `DOWN_MAINTENANCE`, para visibilidad inmediata en el Maestro. Ver decisiones [2026-06-03 — Integración Transversal de Operaciones](agentes/decisiones.md) y [2026-06-07 — P4 refresh Flota](agentes/decisiones.md).
 
 ---
 

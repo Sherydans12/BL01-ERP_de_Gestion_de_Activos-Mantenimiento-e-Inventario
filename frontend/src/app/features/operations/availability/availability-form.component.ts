@@ -30,7 +30,6 @@ import {
 } from '../../../core/services/equipment-availability/equipment-availability.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
-import { FleetService } from '../../../core/services/fleet/fleet.service';
 import type { Contract, EquipmentMeterSnapshot } from '../../../core/models/types';
 import { O } from '../../../core/constants/operations-permissions';
 
@@ -75,7 +74,6 @@ export class AvailabilityFormComponent implements OnInit {
   private contractsService = inject(ContractsService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private fleetService = inject(FleetService);
   private notify = inject(NotificationService);
   private meterSnapshotService = inject(EquipmentMeterSnapshotService);
   protected readonly shiftService = inject(ShiftService);
@@ -338,10 +336,6 @@ export class AvailabilityFormComponent implements OnInit {
   private applyOperationalSideEffects(
     sideEffects: AvailabilitySideEffect[] | undefined,
   ): void {
-    for (const se of sideEffects ?? []) {
-      this.fleetService.notifyEquipmentChanged(se.equipmentId);
-    }
-
     const faultCompletion = (sideEffects ?? []).find(
       (se) => se.requiresFaultCompletion,
     );

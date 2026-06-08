@@ -2,6 +2,7 @@ import { Injectable, inject, signal, computed, Signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { FleetStateService } from '../fleet-state/fleet-state.service';
 import {
   Equipment,
   EquipmentAnalytics,
@@ -23,6 +24,7 @@ export interface PaginatedEquipments {
 })
 export class FleetService {
   private http = inject(HttpClient);
+  private fleetState = inject(FleetStateService);
   private apiUrl = `${environment.apiUrl}/equipments`;
 
   /**
@@ -57,6 +59,7 @@ export class FleetService {
    */
   notifyEquipmentChanged(equipmentId: string): void {
     this.invalidateCache();
+    this.fleetState.notify(equipmentId);
     this._equipmentRevision.update((m) => ({
       ...m,
       [equipmentId]: (m[equipmentId] ?? 0) + 1,

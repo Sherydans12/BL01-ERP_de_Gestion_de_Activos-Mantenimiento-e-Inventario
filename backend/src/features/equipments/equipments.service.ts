@@ -13,7 +13,12 @@ import {
   generateEquipmentResumePdfBuffer,
   type EquipmentResumePdfPayload,
 } from './equipment-resume-pdf.generator';
-import { MeterLogSource, Prisma } from '@prisma/client';
+import {
+  FaultReportStatus,
+  MeterLogSource,
+  OperationalStatus,
+  Prisma,
+} from '@prisma/client';
 import { pickEquipmentWritablePayload } from './equipment-write-keys';
 import { applyCurrentMeterChange } from './equipment-meter-sync';
 import { BulkSyncMeterReadingsDto } from './dto/bulk-sync-meter-readings.dto';
@@ -277,7 +282,75 @@ export class EquipmentsService {
       this.prisma.equipment.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    const equipmentIds = data.map((eq) => eq.id);
+    const [activeFaultRows, availabilityRows] = equipmentIds.length
+      ? await this.prisma.$transaction([
+          this.prisma.faultReport.findMany({
+            where: {
+              tenantId,
+              equipmentId: { in: equipmentIds },
+              status: {
+                in: [FaultReportStatus.OPEN, FaultReportStatus.LINKED],
+              },
+            },
+            orderBy: { eventDate: 'desc' },
+            select: {
+              equipmentId: true,
+              status: true,
+              correlative: true,
+            },
+          }),
+          this.prisma.equipmentAvailability.findMany({
+            where: {
+              tenantId,
+              equipmentId: { in: equipmentIds },
+            },
+            orderBy: [
+              { reportDate: 'desc' },
+              { shift: 'desc' },
+              { updatedAt: 'desc' },
+            ],
+            select: {
+              equipmentId: true,
+              status: true,
+            },
+          }),
+        ])
+      : [[], []];
+
+    const activeFaultByEquipment = new Map<
+      string,
+      { status: FaultReportStatus; correlative: string }
+    >();
+    for (const fault of activeFaultRows) {
+      if (!activeFaultByEquipment.has(fault.equipmentId)) {
+        activeFaultByEquipment.set(fault.equipmentId, {
+          status: fault.status,
+          correlative: fault.correlative,
+        });
+      }
+    }
+
+    const latestM2ByEquipment = new Map<string, OperationalStatus>();
+    for (const availability of availabilityRows) {
+      if (!latestM2ByEquipment.has(availability.equipmentId)) {
+        latestM2ByEquipment.set(availability.equipmentId, availability.status);
+      }
+    }
+
+    const enrichedData = data.map((eq) => {
+      const activeFault = activeFaultByEquipment.get(eq.id);
+      const latestM2 = latestM2ByEquipment.get(eq.id);
+      return {
+        ...eq,
+        actionRequiredFault:
+          Boolean(activeFault) && latestM2 !== OperationalStatus.DOWN_MAINTENANCE,
+        activeFaultReportStatus: activeFault?.status ?? null,
+        activeFaultReportCorrelative: activeFault?.correlative ?? null,
+      };
+    });
+
+    return { data: enrichedData, total, page, limit };
   }
 
   async getAnalytics(user: any, id: string, siteHeader?: string) {

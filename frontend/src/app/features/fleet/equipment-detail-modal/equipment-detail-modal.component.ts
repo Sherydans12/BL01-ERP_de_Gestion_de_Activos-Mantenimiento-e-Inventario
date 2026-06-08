@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -11,10 +12,12 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule, DatePipe } from '@angular/common';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { FleetStateService } from '../../../core/services/fleet-state/fleet-state.service';
 import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import {
@@ -127,7 +130,9 @@ interface TimelineEvent {
 })
 export class EquipmentDetailModalComponent {
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
   private fleetService = inject(FleetService);
+  private fleetState = inject(FleetStateService);
   // ── Servicios transversales de Operaciones (M1·M2·M3) ──
   private faultService = inject(FaultReportsService);
   private availabilityService = inject(EquipmentAvailabilityService);
@@ -704,17 +709,38 @@ export class EquipmentDetailModalComponent {
       },
       { allowSignalWrites: true },
     );
+
+    this.fleetState.equipmentUpdated$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((equipmentId) => {
+        const currentId = this.equipmentId();
+        if (!this.isOpen() || !currentId || currentId !== equipmentId) return;
+
+        this.loadAnalytics(currentId, { silent: true });
+        this.healthLoadedFor = null;
+        this.lastFault.set(null);
+        this.lastAvailability.set(null);
+        this.loadHealth(currentId);
+      });
   }
 
-  private loadAnalytics(id: string): void {
-    this.loading.set(true);
+  private loadAnalytics(id: string, options?: { silent?: boolean }): void {
+    if (!options?.silent) {
+      this.loading.set(true);
+    }
     this.fleetService.getEquipmentAnalytics(id).subscribe({
       next: (data) => {
         this.analytics.set(data);
-        this.loading.set(false);
+        if (!options?.silent) {
+          this.loading.set(false);
+        }
         this.loadHealth(id);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        if (!options?.silent) {
+          this.loading.set(false);
+        }
+      },
     });
   }
 

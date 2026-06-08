@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   OnInit,
@@ -10,6 +11,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { O } from '../../../core/constants/operations-permissions';
 import { CommonModule } from '@angular/common';
@@ -27,6 +29,7 @@ import { NotificationService } from '../../../core/services/notification/notific
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { EquipmentDetailModalComponent } from '../equipment-detail-modal/equipment-detail-modal.component';
 import { ExportService } from '../../../core/services/export/export.service';
+import { FleetStateService } from '../../../core/services/fleet-state/fleet-state.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
@@ -67,9 +70,11 @@ export class FleetMasterComponent implements OnInit {
   protected readonly o = O;
 
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
   private fb = inject(FormBuilder);
   private catalogService = inject(CatalogService);
   private fleetService = inject(FleetService);
+  private fleetState = inject(FleetStateService);
   private contractsService = inject(ContractsService);
   private notificationService = inject(NotificationService);
   private exportService = inject(ExportService);
@@ -218,6 +223,14 @@ export class FleetMasterComponent implements OnInit {
       },
       { allowSignalWrites: true },
     );
+
+    this.fleetState.equipmentUpdated$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((equipmentId) => {
+        if (this.fleet().some((eq) => eq.id === equipmentId)) {
+          this.loadFleet();
+        }
+      });
   }
 
   /** Evita doble carga: el effect reactivo omite su primera ejecución. */
