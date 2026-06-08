@@ -2,6 +2,7 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -62,6 +63,31 @@ export class FaultReportFormComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private notify       = inject(NotificationService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
+
+  constructor() {
+    effect(() => {
+      const draft = {
+        equipmentId: this.selectedEquipmentId(),
+        eventDate: this.eventDate(),
+        meterAtFault: this.meterAtFault(),
+        system: this.selectedSystem(),
+        criticality: this.selectedCriticality(),
+        symptom: this.symptomDescription(),
+        prefillFromM2: this.prefillFromM2(),
+      };
+      if (
+        draft.equipmentId ||
+        draft.system ||
+        draft.criticality ||
+        draft.symptom.trim() ||
+        draft.meterAtFault !== null
+      ) {
+        localStorage.setItem('tpm_fault_report_draft', JSON.stringify(draft));
+      } else {
+        localStorage.removeItem('tpm_fault_report_draft');
+      }
+    });
+  }
 
   meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
   meterSnapshotLoading = signal(false);
@@ -160,12 +186,46 @@ export class FaultReportFormComponent implements OnInit {
     const equipmentId = qp.get('equipmentId');
     const symptom = qp.get('symptom');
     const meterRaw = qp.get('meter');
-    this.prefillFromM2.set(qp.get('from') === 'm2');
+    const fromM2 = qp.get('from') === 'm2';
+
+    this.prefillFromM2.set(fromM2);
 
     this.fleetService.getEquipments({ limit: 300 }).subscribe({
       next: (res) => {
         this.equipments.set(res.data ?? res);
         this.equipLoading.set(false);
+
+        // Intenta cargar borrador de localStorage primero
+        const saved = localStorage.getItem('tpm_fault_report_draft');
+        if (saved) {
+          try {
+            const draft = JSON.parse(saved);
+            if (draft.equipmentId) {
+              this.onSelectEquipment(draft.equipmentId);
+            }
+            if (draft.eventDate) {
+              this.eventDate.set(draft.eventDate);
+            }
+            if (draft.meterAtFault !== null && draft.meterAtFault !== undefined) {
+              this.meterAtFault.set(draft.meterAtFault);
+            }
+            if (draft.system) {
+              this.selectedSystem.set(draft.system);
+            }
+            if (draft.criticality) {
+              this.selectedCriticality.set(draft.criticality);
+            }
+            if (draft.symptom) {
+              this.symptomDescription.set(draft.symptom);
+            }
+            if (draft.prefillFromM2 !== undefined) {
+              this.prefillFromM2.set(draft.prefillFromM2);
+            }
+            return;
+          } catch (e) {
+            // ignore parsing errors
+          }
+        }
 
         if (equipmentId) {
           this.onSelectEquipment(equipmentId);
@@ -361,12 +421,14 @@ export class FaultReportFormComponent implements OnInit {
       this.availabilityService.clearPendingFaultRegistration(eqId);
     }
 
+    localStorage.removeItem('tpm_fault_report_draft');
     this.resetForm();
     this.isSubmitting.set(false);
     this.uploadProgress.set(null);
   }
 
   resetForm(): void {
+    localStorage.removeItem('tpm_fault_report_draft');
     this.onSelectEquipment('');
     this.equipSearch.set('');
     this.eventDate.set(this.nowIso());

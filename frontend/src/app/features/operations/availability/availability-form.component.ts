@@ -365,6 +365,9 @@ export class AvailabilityFormComponent implements OnInit {
     if (symptom) queryParams['symptom'] = symptom;
     if (meter != null) queryParams['meter'] = meter;
 
+    this.notify.info(
+      'Estado actualizado: Equipo detenido. Registre la falla para completar el proceso.',
+    );
     void this.router.navigate(['/app/operaciones/fallas/nuevo'], { queryParams });
   }
 

@@ -9,6 +9,16 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-08 — Sanity Check: Persistencia M2↔M3 y Modelo Híbrido (Snapshot + Ledger)
+
+- **Contexto:** Al navegar de M2 (Disponibilidad) a M3 (Registro de Fallas) mediante el redireccionamiento asistido (cuando un equipo se reporta como detenido/falla), el refresco de página (F5) no debe causar pérdida de los datos pre-rellenados. Asimismo, se requería consolidar la documentación sobre el modelo híbrido de disponibilidad (Snapshot diario para performance de reportes + Ledger de `AvailabilityEvent` para auditoría temporal) y la centralización de mutación de estados operacionales.
+- **Decisión:**
+  - **Persistencia de Formulario (M3):** Se implementó una directiva reactiva (utilizando Angular Signals `effect`) en `FaultReportFormComponent` que respalda el borrador del formulario en `localStorage` (`tpm_fault_report_draft`). Al cargar el componente (`ngOnInit`), se intenta recuperar de `localStorage` antes de recurrir a los parámetros de URL (`queryParams`), asegurando persistencia absoluta en refrescos accidentales (F5). El borrador se purga automáticamente al enviar con éxito o limpiar el formulario.
+  - **UX Feedback:** Al confirmar el redireccionamiento M2 ➔ M3, se agregó un toast informativo a través de `NotificationService` indicando al usuario la necesidad de registrar la falla para completar la detención del equipo.
+  - **Centralización (Orquestador):** Se formalizó en `MASTER-CONTEXT.md` que `EquipmentOperationalOrchestratorService` actúa como la única entidad autorizada para mutar el estado `isOperational` y emitir `AvailabilityEvent` en el Ledger híbrido, erradicando modificaciones directas dispersas en otros servicios.
+  - **Modelo Híbrido:** Se documentó el acoplamiento Snapshot (`EquipmentAvailability` por turno) + Ledger (`AvailabilityEvent` mutable cronológicamente) para paridad de datos históricos.
+- **Consecuencias:** Mayor resiliencia en terreno frente a caídas de red o refrescos de pantalla. La trazabilidad y las métricas operativas de la flota cuentan ahora con una arquitectura centralizada y documentada, evitando drifts de estado.
+
 ## 2026-06-07 — P4 refresh Flota: M1/M2/M3 actualizan Maestro y modal
 
 - **Contexto:** Al reportar disponibilidad y luego revisar Maestro de Flota o el modal de equipo, algunos estados quedaban obsoletos. El backend ya tenía orquestación M2 `DOWN_*`, pero `OPERATIONAL` solo restauraba si el parte previo era de la misma fecha/turno; además M1 y M3 LOW no notificaban cambios a Flota.

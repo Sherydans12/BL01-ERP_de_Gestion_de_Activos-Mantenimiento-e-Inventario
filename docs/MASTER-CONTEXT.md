@@ -362,7 +362,9 @@ Consecuencia transversal: cualquier reporte en terreno (un despacho de aceite, u
 
 #### B) Control de `isOperational` (quién lo mueve)
 
-`isOperational` es la señal imperativa que consumen Maestro de Flota, tablero y modal de equipo. La mutan los flujos que representan entrada/salida real de servicio:
+`isOperational` es la señal imperativa que consumen Maestro de Flota, tablero y modal de equipo. Para garantizar la consistencia e integridad transaccional del estado de los equipos, el **`EquipmentOperationalOrchestratorService` es el único punto de mutación autorizada** de este atributo en la base de datos (encargado de actualizar `isOperational`, registrar `AvailabilityEvent` en el Ledger, gatillar stubs de fallas M3, y emitir alertas a través del dispatcher).
+
+Los flujos coordinados por el orquestador son:
 
 | Origen | Evento | Efecto sobre `isOperational` |
 |--------|--------|------------------------------|
