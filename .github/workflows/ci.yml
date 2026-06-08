@@ -3,7 +3,7 @@
 #
 # Paridad local antes de push (obligatorio si tocaste backend/src):
 #   cd backend  && npm run lint && npm run lint:ci && npm run test:domain
-#   cd frontend && npm run build && npm run test:ci
+#   cd frontend && npm run build:csr && npm run test:ci
 # E2E shift (requiere Postgres + seeds): ver job e2e-operations-shift
 # `npm run lint` aplica --fix (Prettier vía eslint-plugin-prettier); `lint:ci` es el gate estricto.
 name: CI
@@ -95,7 +95,7 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
+        run: npm run build:csr -- --progress=false
 
       - name: Run frontend unit tests (ChromeHeadless)
         working-directory: frontend

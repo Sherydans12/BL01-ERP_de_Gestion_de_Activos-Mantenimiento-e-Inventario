@@ -17,7 +17,7 @@ RUN if [ "$ANGULAR_BUILD_CONFIGURATION" = "qa" ]; then \
       sed -i "s|__QA_VAPID_PUBLIC_KEY__|${QA_VAPID_PUBLIC_KEY}|g" src/environments/environment.qa.ts; \
     fi
 
-RUN npm run build -- --configuration=${ANGULAR_BUILD_CONFIGURATION}
+RUN npm run build:csr -- --configuration=${ANGULAR_BUILD_CONFIGURATION}
 
 # Nginx sin privilegios (puerto interno 8080; ver nginx.conf)
 FROM nginxinc/nginx-unprivileged:stable-alpine
@@ -27,9 +27,8 @@ RUN rm -rf /usr/share/nginx/html/* \
 
 COPY --from=builder /app/dist/frontend/browser /usr/share/nginx/html
 
-# CSR shell → index.html servido por Nginx
-RUN cp /usr/share/nginx/html/index.csr.html /usr/share/nginx/html/index.html \
-  && chmod -R a+rX /usr/share/nginx/html
+# CSR shell servido por Nginx.
+RUN chmod -R a+rX /usr/share/nginx/html
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
