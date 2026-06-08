@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import {
+  AvailabilityEventSource,
   MeterLogSource,
   OperationalStatus,
   Prisma,
@@ -26,6 +27,7 @@ import { ExportAvailabilityQueryDto } from './dto/export-availability-query.dto'
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
 import { ShiftBoardQueryDto, ShiftBoardTab } from './dto/shift-board-query.dto';
 import { BatchCreateAvailabilityDto } from './dto/batch-create-availability.dto';
+import { AvailabilityEventService } from './availability-event.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & types shared with controller / frontend interface
@@ -311,6 +313,7 @@ export class EquipmentAvailabilityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly operationalOrchestrator: EquipmentOperationalOrchestratorService,
+    private readonly availabilityEvents: AvailabilityEventService,
   ) {}
 
   // ── Helpers: operational config & shift resolution ────────────────────────
@@ -446,6 +449,34 @@ export class EquipmentAvailabilityService {
     return reportDate;
   }
 
+  private resolveShiftStartAt(
+    reportDate: Date,
+    shift: ShiftType,
+    opConfig: OperationalConfigShape,
+  ): Date {
+    const [hoursRaw, minutesRaw] =
+      shift === ShiftType.DAY
+        ? opConfig.dayShiftStartTime.split(':')
+        : opConfig.nightShiftStartTime.split(':');
+    const eventAt = new Date(reportDate);
+    eventAt.setUTCHours(
+      Number.parseInt(hoursRaw ?? '0', 10) || 0,
+      Number.parseInt(minutesRaw ?? '0', 10) || 0,
+      0,
+      0,
+    );
+    return eventAt;
+  }
+
+  private parseTimelineDateRange(query: ListAvailabilityQuery) {
+    const dateFrom = query.dateFrom ? new Date(query.dateFrom) : undefined;
+    const dateTo = query.dateTo ? new Date(query.dateTo) : undefined;
+    if (dateTo) {
+      dateTo.setUTCHours(23, 59, 59, 999);
+    }
+    return { dateFrom, dateTo };
+  }
+
   /**
    * Estado operativo anterior para side-effects de M2.
    *
@@ -517,8 +548,11 @@ export class EquipmentAvailabilityService {
     const tenantId = user.tenantId as string;
     const userId = (user.id ?? user.sub) as string;
 
-    // Resolve & validate shift outside the serializable transaction (no DB contention).
-    const effectiveShift = await this.resolveShift(tenantId, dto.shift);
+    // Resolve shift + config outside the serializable transaction (no DB contention).
+    const [effectiveShift, opConfig] = await Promise.all([
+      this.resolveShift(tenantId, dto.shift),
+      this.getOperationalConfig(tenantId),
+    ]);
 
     return this.prisma.$transaction(
       async (tx) => {
@@ -572,6 +606,23 @@ export class EquipmentAvailabilityService {
           }
           throw e;
         }
+
+        await this.availabilityEvents.register(tx, {
+          tenantId,
+          availabilityId: record.id,
+          equipmentId: dto.equipmentId,
+          reportedById: userId,
+          status: dto.status,
+          previousStatus,
+          meterReading: dto.meterReading ?? null,
+          comments: dto.comments ?? null,
+          eventAt: this.resolveShiftStartAt(
+            reportDate,
+            effectiveShift,
+            opConfig,
+          ),
+          source: AvailabilityEventSource.MANUAL,
+        });
 
         // ── 3. Actualizar horómetro solo si avanza (silent ignore si retrocede) ─
         if (
@@ -935,7 +986,47 @@ export class EquipmentAvailabilityService {
       isAvailable: isAvailableStatus(row.status),
     }));
 
-    return { data, total, page, pageSize };
+    if (!query.equipmentId?.trim()) {
+      return { data, total, page, pageSize };
+    }
+
+    const currentSnapshot = await this.prisma.equipmentAvailability.findFirst({
+      where: {
+        tenantId,
+        equipmentId: query.equipmentId.trim(),
+        ...(Object.keys(searchMerged).length > 0
+          ? { equipment: searchMerged }
+          : {}),
+      },
+      include: this.listInclude,
+      orderBy: [
+        { reportDate: 'desc' },
+        { shift: 'desc' },
+        { updatedAt: 'desc' },
+      ],
+    });
+    const { dateFrom, dateTo } = this.parseTimelineDateRange(query);
+    const timeline = currentSnapshot
+      ? await this.availabilityEvents.findTimeline(
+          tenantId,
+          query.equipmentId.trim(),
+          { dateFrom, dateTo },
+        )
+      : [];
+
+    return {
+      data,
+      total,
+      page,
+      pageSize,
+      currentSnapshot: currentSnapshot
+        ? {
+            ...currentSnapshot,
+            isAvailable: isAvailableStatus(currentSnapshot.status),
+          }
+        : null,
+      timeline,
+    };
   }
 
   /**
@@ -1714,6 +1805,7 @@ export class EquipmentAvailabilityService {
   ): Promise<OperationalTransitionResult | null> {
     const tenantId = user.tenantId as string;
     const userId = (user.id ?? user.sub) as string;
+    const opConfig = await this.getOperationalConfig(tenantId);
 
     return this.prisma.$transaction(
       async (tx) => {
@@ -1738,8 +1830,11 @@ export class EquipmentAvailabilityService {
               shift: dto.shift,
             },
           },
-          select: { status: true },
+          select: { id: true, status: true },
         });
+        const eventAt = existing
+          ? new Date()
+          : this.resolveShiftStartAt(reportDate, dto.shift, opConfig);
         const previousStatus = await this.resolvePreviousAvailabilityStatus(
           tx,
           {
@@ -1777,6 +1872,19 @@ export class EquipmentAvailabilityService {
             comments: dto.comments ?? null,
             reportedById: userId,
           },
+        });
+
+        await this.availabilityEvents.register(tx, {
+          tenantId,
+          availabilityId: record.id,
+          equipmentId: dto.equipmentId,
+          reportedById: userId,
+          status: dto.status,
+          previousStatus,
+          meterReading: dto.meterReading ?? null,
+          comments: dto.comments ?? null,
+          eventAt,
+          source: AvailabilityEventSource.MANUAL,
         });
 
         if (

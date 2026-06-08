@@ -2,7 +2,7 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-06-04 |
+| **Última modificación** | 2026-06-08 |
 | **Versión documento** | 1.1 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
@@ -77,6 +77,7 @@ API de contratos: [`SitesController`](../backend/src/features/sites/sites.contro
 | `Equipment` | `equipments` | N→1 `Tenant`; N→0..1 `Contract`; N→0..1 `Subcontract` |
 | `MeterAdjustment` | `meter_adjustments` | N→1 `Equipment`, `User` |
 | `EquipmentMeterLog` | `equipment_meter_logs` | N→1 `Tenant`, `Equipment`, `User` (fuente: `OT`, `MANUAL`, `TELEMETRY`) |
+| `EquipmentAvailability` / `AvailabilityEvent` | `equipment_availabilities` / `availability_events` | Snapshot único por turno + ledger 1→N de eventos M2 (`MANUAL`, `OT`, `FAULT_REPORT`, `LEGACY_SNAPSHOT`) |
 | `AssetCostRecord` | `asset_cost_records` | N→1 `Equipment`; opcional `PurchaseOrder`, `WorkOrder`, `WarehouseReceipt` |
 
 **Reglas de datos:** `@@unique([tenantId, internalId])`, placas y VIN únicos por tenant. `isOperational` y `cumulativeDowntimeHours` reflejan indisponibilidad por OT y por **fallas ALTAS** (M3). `currentMeter` es alimentado por OT, M1 (lubricantes), M2 (disponibilidad) y M3 (fallas) vía `applyCurrentMeterChange` — ver §2.4 «Ecosistema de Operaciones y Flota».
@@ -374,6 +375,8 @@ Consecuencia transversal: cualquier reporte en terreno (un despacho de aceite, u
 | **OT** | `updateStatus → CLOSED` | `isOperational = closureEquipmentOperational` (booleano obligatorio); si `affectsAvailability=SI` acumula `cumulativeDowntimeHours += metricHm` |
 
 **Relación M3 ↔ M2:** M3 sigue siendo el flujo rico de diagnóstico/OT por criticidad. M2 puede declarar indisponibilidad operacional de turno y crear un RF stub LOW para no perder trazabilidad; el supervisor o mantenedor completa el detalle en M3. `GET /unreported` sigue filtrando `isOperational: true` para no exigir parte a equipos detenidos, salvo que vuelvan a quedar operativos por M2 `OPERATIONAL` u OT cerrada.
+
+**Modelo híbrido M2 (2026-06-08):** `EquipmentAvailability` permanece como snapshot por `(tenantId, equipmentId, reportDate, shift)` y mantiene el cálculo actual de PA% del dashboard. Cada alta/edición de M2 inserta además un `AvailabilityEvent` en la misma transacción, con `previousStatus`, `eventAt`, `source` y `elapsedMinutes` para habilitar futuras métricas PA% basadas en duración real. La migración `20260608_add_availability_events` backfillea snapshots previos como `LEGACY_SNAPSHOT` de forma idempotente.
 
 ```mermaid
 flowchart TD

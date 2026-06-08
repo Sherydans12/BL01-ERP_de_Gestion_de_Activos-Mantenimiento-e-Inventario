@@ -5,6 +5,7 @@ import { OperationalStatus, Prisma, ShiftType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { EquipmentOperationalOrchestratorService } from '../equipments/equipment-operational-orchestrator.service';
+import { AvailabilityEventService } from './availability-event.service';
 import { EquipmentAvailabilityService } from './equipment-availability.service';
 import { CreateEquipmentAvailabilityDto } from './dto/create-equipment-availability.dto';
 import { ImportAvailabilityCommitDto } from './dto/import-availability-commit.dto';
@@ -80,6 +81,7 @@ function availabilityTestProviders(
 ) {
   return [
     EquipmentAvailabilityService,
+    AvailabilityEventService,
     { provide: PrismaService, useValue: prisma },
     EquipmentOperationalOrchestratorService,
     { provide: SequenceService, useValue: sequenceService },

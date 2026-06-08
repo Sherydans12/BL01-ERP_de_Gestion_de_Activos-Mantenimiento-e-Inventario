@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EquipmentAvailabilityController } from './equipment-availability.controller';
+import { AvailabilityEventService } from './availability-event.service';
 import { EquipmentAvailabilityService } from './equipment-availability.service';
 import { EquipmentsModule } from '../equipments/equipments.module';
 
@@ -11,7 +12,7 @@ import { EquipmentsModule } from '../equipments/equipments.module';
 @Module({
   imports: [EquipmentsModule],
   controllers: [EquipmentAvailabilityController],
-  providers: [EquipmentAvailabilityService],
-  exports: [EquipmentAvailabilityService],
+  providers: [EquipmentAvailabilityService, AvailabilityEventService],
+  exports: [EquipmentAvailabilityService, AvailabilityEventService],
 })
 export class EquipmentAvailabilityModule {}

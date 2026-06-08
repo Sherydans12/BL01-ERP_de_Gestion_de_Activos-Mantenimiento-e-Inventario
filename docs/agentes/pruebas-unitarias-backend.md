@@ -4,19 +4,19 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-06-07 (P4 refresh Flota — M2 `OPERATIONAL` tras último `DOWN_*`)
+**Última actualización:** 2026-06-08 (M2 Snapshot + Event Ledger)
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **408 tests** en **24** archivos (sin PostgreSQL real; verificado con `npm run test:domain` el 2026-06-07).
+**Suite ejecutable hoy:** **412 tests** en **25** archivos (sin PostgreSQL real; verificado con `npm run test:domain` el 2026-06-08).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
 | **Horómetro — helper `applyCurrentMeterChange`** | 100 % | 7 | Casos 1–7: happy path, silent skip (`oldMeter === newMeter`), fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL, fecha explícita, orden log→update (§3.12 — nuevo) |
 | **Horómetro — integración transversal M1/M2/M3** | 100 % | 4 | Caos en Terreno (5000→5050→5100 con M1 rechazado), lenient M2, lenient M3, doble avance secuencial (§3.13 — nuevo) |
-| **Disponibilidad operativa diaria** | ~98 % | 31 | `create`/`findUnreported`/`commitImport` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, `findUnreported` diff Set, `findAll` paginado, **guard hasNightShift=false** y restauración `OPERATIONAL` tras último M2 `DOWN_*` |
+| **Disponibilidad operativa diaria** | ~98 % | 34 | `create`/`findUnreported`/`commitImport` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, ledger `AvailabilityEvent`, `findUnreported` diff Set, `findAll` paginado, **guard hasNightShift=false** y restauración `OPERATIONAL` tras último M2 `DOWN_*` |
 | **Lubricantes — reporte consumo** | ~95 % núcleo `createReport` | 18 | Happy path vía `performTransactionCore`, stock negativo, `blockNegativeStock`, fracciones UoM, `confirmedLargeDispatch`, horómetro, bodega/equipo (§3.10) |
 | **Inventario — stock/kardex** | ~90 % del núcleo | 42 | Stock, `blockNegativeStock` en OUT, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
@@ -47,6 +47,11 @@ npm run test:domain:watch
 
 - **`EquipmentAvailabilityService.commitImport`** (+1): cubre que un parte `OPERATIONAL` posterior al último M2 `DOWN_FAILURE` restaura `Equipment.isOperational=true` y retorna `sideEffects[]` para refrescar Maestro/modal.
 - Regla backend asociada: `previousStatus` de M2 se resuelve desde la misma celda editada, DAY del mismo día para NIGHT o el último parte previo del equipo.
+
+### Iteración 2026-06-08 — M2 Snapshot + Event Ledger
+
+- **`AvailabilityEventService`** (+3): eventos múltiples por un mismo snapshot, timeline ASC por `eventAt` y migración backfill `LEGACY_SNAPSHOT` idempotente sin mutar snapshots.
+- `npm run test:domain` suma `availability-event.service.spec` al bloque crítico.
 
 ### Iteración N+12 (2026-06-03) — hecho
 
