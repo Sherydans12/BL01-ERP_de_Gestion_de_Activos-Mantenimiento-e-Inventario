@@ -201,6 +201,7 @@ export class StockDashboardComponent implements OnInit {
 
   valuationLoading = signal(false);
   summaryReportBusy = signal(false);
+  isExportingMasterExcel = signal(false);
   valuationGrandTotal = signal<number>(0);
   valuationByFamily = signal<
     { familyId: string; familyName: string; totalValue: number }[]
@@ -598,6 +599,26 @@ export class StockDashboardComponent implements OnInit {
 
   exportValuationExcel() {
     this.downloadValuationSummaryReport('xlsx');
+  }
+
+  exportMasterExcel() {
+    this.isExportingMasterExcel.set(true);
+    this.itemsService
+      .downloadInventoryMasterExcel()
+      .pipe(finalize(() => this.isExportingMasterExcel.set(false)))
+      .subscribe({
+        next: (blob) => {
+          const stamp = new Date().toISOString().slice(0, 10);
+          this.triggerBlobDownload(
+            blob,
+            `baselogic-maestro-inventario-${stamp}.xlsx`,
+          );
+          this.notificationService.success('Excel maestro de inventario generado.');
+        },
+        error: () => {
+          this.notificationService.error('No se pudo generar el Excel maestro.');
+        },
+      });
   }
 
   exportValuationPdf() {

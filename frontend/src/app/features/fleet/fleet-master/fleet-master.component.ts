@@ -15,6 +15,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { O } from '../../../core/constants/operations-permissions';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import {
   FormBuilder,
   FormGroup,
@@ -28,7 +29,6 @@ import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { EquipmentDetailModalComponent } from '../equipment-detail-modal/equipment-detail-modal.component';
-import { ExportService } from '../../../core/services/export/export.service';
 import { FleetStateService } from '../../../core/services/fleet-state/fleet-state.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
@@ -47,6 +47,7 @@ import { Equipment, MeterType, Contract } from '../../../core/models/types';
     ConfirmModalComponent,
     EquipmentDetailModalComponent,
     HasPermissionDirective,
+    RouterLink,
   ],
   templateUrl: './fleet-master.component.html',
   styles: [
@@ -77,7 +78,6 @@ export class FleetMasterComponent implements OnInit {
   private fleetState = inject(FleetStateService);
   private contractsService = inject(ContractsService);
   private notificationService = inject(NotificationService);
-  private exportService = inject(ExportService);
   authService = inject(AuthService);
 
   readonly isEquipmentFormReadOnly = computed(() => {
@@ -115,6 +115,7 @@ export class FleetMasterComponent implements OnInit {
 
   hasDuplicateError = signal(false);
   isDownloadingPdf = signal<string | null>(null);
+  isExportingExcel = signal(false);
 
   // Modal Confirmación
   showConfirmModal = signal(false);
@@ -590,36 +591,40 @@ export class FleetMasterComponent implements OnInit {
   }
 
   exportToExcel() {
-    const data = this.fleet();
-    if (data.length === 0) {
-      this.notificationService.warning('No hay datos para exportar.');
-      return;
-    }
+    if (this.isExportingExcel()) return;
 
-    const headersMap = {
-      mineInternalId: 'N° int. mina',
-      internalId: 'N° Interno',
-      plate: 'Patente',
-      ownership: 'Tipo de propiedad',
-      isSubleased: 'Subarriendo',
-      subleaseCompanyName: 'Empresa subarriendo',
-      type: 'Tipo',
-      brand: 'Marca',
-      model: 'Modelo',
-      meterType: 'Medición',
-      currentMeter: 'Medidor Actual',
-      vin: 'VIN',
-      engineNumber: 'N° Motor',
-      serialNumber: 'N° Serie',
-      year: 'Año',
-      techReviewExp: 'Vence RT',
-      circPermitExp: 'Vence P. Circ',
-      soapExp: 'Vence SOAP',
-      mechanicalCertExp: 'Vence Cert. Mec',
-      liabilityPolicyExp: 'Vence Póliza RC',
-    };
+    this.isExportingExcel.set(true);
+    const contractId = this.authService.currentContractId();
+    this.fleetService
+      .downloadFleetMasterExcel({
+        contractId: contractId && contractId !== 'ALL' ? contractId : null,
+      })
+      .pipe(finalize(() => this.isExportingExcel.set(false)))
+      .subscribe({
+        next: (blob) => {
+          if (!blob?.size) {
+            this.notificationService.error('El Excel generado está vacío.');
+            return;
+          }
+          this.downloadBlob(
+            blob,
+            `BaseLogic_Maestro_Flota_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          );
+          this.notificationService.success('Excel maestro de flota generado.');
+        },
+        error: () => {
+          this.notificationService.error('No se pudo generar el Excel de flota.');
+        },
+      });
+  }
 
-    this.exportService.exportToExcel(data, 'Maestro_Flota', headersMap);
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   downloadResume(eq: Equipment) {

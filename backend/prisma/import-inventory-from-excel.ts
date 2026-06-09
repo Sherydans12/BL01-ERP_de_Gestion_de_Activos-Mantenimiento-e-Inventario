@@ -23,6 +23,9 @@ const INTERNAL_CONTRACT_NAME = 'ADMINISTRACIÓN INTERNA';
 const GENERAL_WAREHOUSE_NAME = 'Bodega General';
 const GENERAL_WAREHOUSE_CODE = 'BOD-GENERAL';
 const DEFAULT_SUBCATEGORY_NAME = 'General';
+const CONSOLIDADO_DEFAULT_CONTRACT_CODE = '395';
+const CONSOLIDADO_DEFAULT_WAREHOUSE_CODE = '395';
+const CONSOLIDADO_DEFAULT_WAREHOUSE_NAME = 'Bodega 395';
 const PRESERVED_CONTRACT_CODES = [
   '395',
   '448',
@@ -114,7 +117,14 @@ const HEADER_CANDIDATES = {
     'coordenada',
   ],
   contract: ['contrato'],
-  category: ['categoria', 'categoría', 'familia', 'grupo', 'recursos operativos', 'recurso operativo'],
+  category: [
+    'categoria',
+    'categoría',
+    'familia',
+    'grupo',
+    'recursos operativos',
+    'recurso operativo',
+  ],
   subfamily: ['subdivision', 'subfamilia', 'sub familia', 'sub-familia'],
   supplier: ['proveedor', 'supplier', 'proveedor habitual'],
   // sin "unidad" suelto para evitar colisión con "precio por unidad"
@@ -211,6 +221,37 @@ function normalizeInventoryCode(code: string): string {
     }
   }
   return normalized;
+}
+
+function extractInventoryCodeNumber(
+  code: string | null | undefined,
+): number | null {
+  const match = normalizeInventoryCode(code ?? '').match(/^IN(\d+)$/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function unitAllowsDecimals(abbreviation: string): boolean {
+  return ['KG', 'LT', 'LTS', 'MT'].includes(normalizeKey(abbreviation));
+}
+
+function normalizeWarehouseCodeForConsolidado(codeRaw: string): string {
+  const code = normalizeText(codeRaw);
+  return code || CONSOLIDADO_DEFAULT_WAREHOUSE_CODE;
+}
+
+function inferContractCodeFromWarehouseCode(codeRaw: string): string {
+  const code = normalizeWarehouseCodeForConsolidado(codeRaw);
+  const match = code.match(/\b\d{3}(?:-\d{3})?\b/);
+  return match?.[0] ?? CONSOLIDADO_DEFAULT_CONTRACT_CODE;
+}
+
+function slugBinCode(value: string): string {
+  const slug = normalizeKey(value)
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return (slug || 'GENERAL').slice(0, 50);
 }
 
 function shouldSkipCodeLikeRow(name: string, description: string): boolean {
@@ -653,6 +694,60 @@ async function getOrCreateInsumosWarehouse(
   });
 }
 
+async function getOrCreateConsolidadoWarehouse(
+  tenantId: string,
+  codeRaw: string,
+) {
+  const code = normalizeWarehouseCodeForConsolidado(codeRaw).slice(0, 50);
+  const contractCode = inferContractCodeFromWarehouseCode(code);
+  const contract = await getOrCreateContractByCode(
+    tenantId,
+    contractCode.startsWith('448') ? '448' : '395',
+  );
+  const name =
+    code === CONSOLIDADO_DEFAULT_WAREHOUSE_CODE
+      ? CONSOLIDADO_DEFAULT_WAREHOUSE_NAME
+      : `Bodega ${code}`;
+
+  return prisma.warehouse.upsert({
+    where: { tenantId_code: { tenantId, code } },
+    update: {
+      name: name.slice(0, 100),
+      contractId: contract.id,
+      isActive: true,
+    },
+    create: {
+      tenantId,
+      contractId: contract.id,
+      code,
+      name: name.slice(0, 100),
+      type: 'PHYSICAL',
+      isActive: true,
+    },
+    select: { id: true, code: true },
+  });
+}
+
+async function getOrCreateWarehouseBin(
+  warehouseId: string,
+  locationRaw: string,
+): Promise<string | null> {
+  const label = normalizeText(locationRaw);
+  if (!label) return null;
+  const code = slugBinCode(label);
+  const bin = await prisma.warehouseBin.upsert({
+    where: { warehouseId_code: { warehouseId, code } },
+    update: { label: label.slice(0, 100) },
+    create: {
+      warehouseId,
+      code,
+      label: label.slice(0, 100),
+    },
+    select: { id: true },
+  });
+  return bin.id;
+}
+
 async function getOrCreateInsumosCategoryPath(
   tenantId: string,
   subKey: 'INVENTARIO_PERSONAL' | 'JAULAS' | 'PAÑOL',
@@ -701,11 +796,15 @@ async function resolveUom(
   const abbr = abbreviation.slice(0, 20);
   return prisma.unitOfMeasure.upsert({
     where: { tenantId_abbreviation: { tenantId, abbreviation: abbr } },
-    update: { name: displayName.slice(0, 80) },
+    update: {
+      name: displayName.slice(0, 80),
+      allowsDecimals: unitAllowsDecimals(abbr),
+    },
     create: {
       tenantId,
       name: displayName.slice(0, 80),
       abbreviation: abbr,
+      allowsDecimals: unitAllowsDecimals(abbr),
     },
     select: { id: true },
   });
@@ -1374,8 +1473,16 @@ export async function importFromExcel(
                   abbreviation: uomAbbreviation,
                 },
               },
-              update: { name: rawUom },
-              create: { tenantId, name: rawUom, abbreviation: uomAbbreviation },
+              update: {
+                name: rawUom,
+                allowsDecimals: unitAllowsDecimals(uomAbbreviation),
+              },
+              create: {
+                tenantId,
+                name: rawUom,
+                abbreviation: uomAbbreviation,
+                allowsDecimals: unitAllowsDecimals(uomAbbreviation),
+              },
               select: { id: true },
             });
 
@@ -1496,21 +1603,271 @@ export async function importFromExcel(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Importador específico para el formato "Consolidado de Inventario BaseLogic"
-// Hoja única: "Lista de inventario" — encabezados en fila 6, datos desde fila 7.
+// Hoja única: "Lista de inventario" — detecta la fila real de encabezados.
 // ─────────────────────────────────────────────────────────────────────────────
+function buildRowsConsolidado(mx: SheetMatrix): {
+  rows: RawRow[];
+  headerRowIndex: number;
+  headerRow: unknown[];
+} {
+  /**
+   * Detector de encabezados específico para el formato Consolidado BaseLogic.
+   * Busca la primera fila que contenga celdas con COINCIDENCIA EXACTA a los
+   * headers conocidos: "BODEGA", "MARCA", "PRECIO POR UNIDAD", etc.
+   * Esto diferencia la fila real de headers de filas de notas/descripciones.
+   */
+  const EXACT_MARKERS = ['BODEGA', 'MARCA', 'SUBDIVISION', 'PROVEEDOR'];
+  let headerIdx = -1;
+
+  for (let i = 0; i < Math.min(20, mx.length); i++) {
+    const cells = (mx[i] ?? []).map((c) => normalizeKey(c));
+    const exactMatches = EXACT_MARKERS.filter((marker) =>
+      cells.some((c) => c === marker),
+    );
+    if (exactMatches.length >= 2) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  if (headerIdx < 0) {
+    const fallbackRows = buildRowsFromDiscoveredHeader(mx);
+    const fallbackIdx = discoverHeaderRowIndex(mx);
+    return {
+      rows: fallbackRows,
+      headerRowIndex: fallbackIdx,
+      headerRow: mx[fallbackIdx] ?? [],
+    };
+  }
+
+  const headerRow = mx[headerIdx] ?? [];
+  const builtRows: RawRow[] = [];
+  for (let i = headerIdx + 1; i < mx.length; i++) {
+    const dataRow = mx[i] ?? [];
+    if (dataRow.every((cell) => normalizeText(cell) === '')) continue;
+    const row: RawRow = {};
+    for (let col = 0; col < headerRow.length; col++) {
+      const key = normalizeText(headerRow[col]);
+      if (!key) continue;
+      row[key] = dataRow[col] ?? '';
+    }
+    if (Object.keys(row).length > 0) builtRows.push(row);
+  }
+  return { rows: builtRows, headerRowIndex: headerIdx, headerRow };
+}
+
+function resolveKeyFromSample(
+  sample: RawRow,
+  exactCandidates: string[],
+  fuzzyCandidates: readonly string[],
+): string | null {
+  for (const key of Object.keys(sample)) {
+    for (const exact of exactCandidates) {
+      if (normalizeKey(key) === normalizeKey(exact)) return key;
+    }
+  }
+  return getColumnKey(sample, fuzzyCandidates);
+}
+
+async function analyzeConsolidadoFromExcel(filePath: string): Promise<void> {
+  const workbook = XLSX.readFile(resolve(filePath));
+  const sheetName =
+    workbook.SheetNames.find(
+      (s) =>
+        normalizeSheetKey(s).includes('LISTA') ||
+        normalizeSheetKey(s).includes('INVENTARIO') ||
+        normalizeSheetKey(s).includes('CONSOLIDADO'),
+    ) ?? workbook.SheetNames[0];
+
+  if (!sheetName)
+    throw new Error('No se encontró hoja de inventario en el archivo.');
+
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) throw new Error(`Hoja "${sheetName}" vacía.`);
+
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+  });
+  const { rows, headerRowIndex, headerRow } = buildRowsConsolidado(matrix);
+  if (rows.length === 0) throw new Error('La hoja no tiene filas de datos.');
+
+  const sample = rows[0];
+  const keys = {
+    inventoryCode: resolveKeyFromSample(
+      sample,
+      ['Identificador de inventario', 'Identificador Inventario'],
+      HEADER_CANDIDATES.inventoryCode,
+    ),
+    name: resolveKeyFromSample(
+      sample,
+      [
+        'Nombre del Articulo',
+        'Nombre del Artículo',
+        'Nombre del Item',
+        'Nombre Artículo',
+      ],
+      HEADER_CANDIDATES.item,
+    ),
+    unitCost: resolveKeyFromSample(
+      sample,
+      ['Precio por unidad', 'Precio Por Unidad'],
+      HEADER_CANDIDATES.unitCost,
+    ),
+    stock: resolveKeyFromSample(
+      sample,
+      ['Cantidad en existencias', 'Cantidad En Existencias'],
+      HEADER_CANDIDATES.stock,
+    ),
+    minStock: resolveKeyFromSample(
+      sample,
+      ['Stock critico', 'Stock crítico', 'Stock Critico'],
+      HEADER_CANDIDATES.minStock,
+    ),
+    warehouse: resolveKeyFromSample(
+      sample,
+      ['Bodega'],
+      HEADER_CANDIDATES.sector,
+    ),
+    category: resolveKeyFromSample(
+      sample,
+      ['Recursos Operativos'],
+      HEADER_CANDIDATES.category,
+    ),
+    subfamily: resolveKeyFromSample(
+      sample,
+      ['subdivision', 'Subdivision', 'Subdivisión'],
+      HEADER_CANDIDATES.subfamily,
+    ),
+    location: resolveKeyFromSample(
+      sample,
+      ['Ubicación', 'Ubicacion'],
+      HEADER_CANDIDATES.stockLocation,
+    ),
+    uom: resolveKeyFromSample(
+      sample,
+      ['Unidad de Medida (UN/KG/LT/MT)', 'Unidad de Medida', 'Unidad Medida'],
+      HEADER_CANDIDATES.uom,
+    ),
+    supplier: resolveKeyFromSample(
+      sample,
+      ['Proveedor'],
+      HEADER_CANDIDATES.supplier,
+    ),
+  };
+
+  const inventoryCodes = new Set<string>();
+  const duplicatedInventoryCodes = new Set<string>();
+  const warehouses = new Set<string>();
+  const categories = new Set<string>();
+  const subfamilies = new Set<string>();
+  const locations = new Set<string>();
+  const uoms = new Set<string>();
+  const suppliers = new Set<string>();
+  let blankNameRows = 0;
+  let missingWarehouseRows = 0;
+  let zeroOrMissingCostRows = 0;
+  let totalQuantity = 0;
+  let totalValueFromQtyCost = 0;
+
+  for (const row of rows) {
+    const inventoryCode = keys.inventoryCode
+      ? normalizeText(row[keys.inventoryCode])
+      : '';
+    if (inventoryCode) {
+      if (inventoryCodes.has(inventoryCode)) {
+        duplicatedInventoryCodes.add(inventoryCode);
+      }
+      inventoryCodes.add(inventoryCode);
+    }
+
+    if (!normalizeText(keys.name ? row[keys.name] : '')) blankNameRows += 1;
+    const warehouse = normalizeWarehouseCodeForConsolidado(
+      keys.warehouse ? normalizeText(row[keys.warehouse]) : '',
+    );
+    if (!normalizeText(keys.warehouse ? row[keys.warehouse] : '')) {
+      missingWarehouseRows += 1;
+    }
+    warehouses.add(warehouse);
+
+    const unitCost = parseNumber(keys.unitCost ? row[keys.unitCost] : null);
+    if (unitCost == null || unitCost === 0) zeroOrMissingCostRows += 1;
+    const quantity = parseQuantity(keys.stock ? row[keys.stock] : null);
+    totalQuantity += quantity;
+    totalValueFromQtyCost += quantity * (unitCost ?? 0);
+
+    const category = normalizeText(keys.category ? row[keys.category] : '');
+    const subfamily = normalizeText(keys.subfamily ? row[keys.subfamily] : '');
+    const location = normalizeText(keys.location ? row[keys.location] : '');
+    const uom = normalizeText(keys.uom ? row[keys.uom] : '');
+    const supplier = normalizeText(keys.supplier ? row[keys.supplier] : '');
+    if (category) categories.add(category);
+    if (subfamily) subfamilies.add(subfamily);
+    if (location) locations.add(location);
+    if (uom) uoms.add(uom);
+    if (supplier) suppliers.add(supplier);
+  }
+
+  console.log('🔎 Preflight importación Consolidado');
+  console.log(`- Archivo: ${filePath}`);
+  console.log(`- Hoja: ${sheetName}`);
+  console.log(`- Fila de encabezados: ${headerRowIndex + 1}`);
+  console.log(`- Filas de datos detectadas: ${rows.length}`);
+  console.log('- Columnas detectadas:');
+  for (const [label, key] of Object.entries(keys)) {
+    console.log(`  • ${label}: ${key ?? 'NO DETECTADA'}`);
+  }
+  console.log('- Notas fila 1:');
+  const rowOne = matrix[0] ?? [];
+  for (let i = 0; i < headerRow.length; i++) {
+    const note = normalizeText(rowOne[i]);
+    if (note) {
+      console.log(
+        `  • ${normalizeText(headerRow[i]) || `Col ${i + 1}`}: ${note}`,
+      );
+    }
+  }
+  console.log('- Resumen:');
+  console.log(`  • Filas sin nombre: ${blankNameRows}`);
+  console.log(
+    `  • Filas sin bodega explícita (se usaría ${CONSOLIDADO_DEFAULT_WAREHOUSE_CODE}): ${missingWarehouseRows}`,
+  );
+  console.log(`  • Costo $0/sin valor: ${zeroOrMissingCostRows}`);
+  console.log(`  • InventoryCode duplicados: ${duplicatedInventoryCodes.size}`);
+  console.log(`  • Cantidad total: ${totalQuantity}`);
+  console.log(
+    `  • Valor total calculado cantidad×costo: ${totalValueFromQtyCost.toFixed(2)}`,
+  );
+  console.log(`  • Bodegas: ${Array.from(warehouses).join(', ') || '—'}`);
+  console.log(`  • Familias: ${Array.from(categories).join(', ') || '—'}`);
+  console.log(`  • Subfamilias: ${Array.from(subfamilies).join(', ') || '—'}`);
+  console.log(`  • UoM: ${Array.from(uoms).join(', ') || '—'}`);
+  console.log(`  • Ubicaciones únicas: ${locations.size}`);
+  console.log(`  • Proveedores únicos: ${suppliers.size}`);
+  if (duplicatedInventoryCodes.size > 0) {
+    console.log(
+      `  • Duplicados: ${Array.from(duplicatedInventoryCodes).slice(0, 20).join(', ')}`,
+    );
+  }
+}
+
 export async function importConsolidadoFromExcel(
   filePath: string,
   tenantId: string,
 ): Promise<void> {
   const workbook = XLSX.readFile(resolve(filePath));
 
-  const sheetName = workbook.SheetNames.find((s) =>
-    normalizeSheetKey(s).includes('LISTA') ||
-    normalizeSheetKey(s).includes('INVENTARIO') ||
-    normalizeSheetKey(s).includes('CONSOLIDADO'),
-  ) ?? workbook.SheetNames[0];
+  const sheetName =
+    workbook.SheetNames.find(
+      (s) =>
+        normalizeSheetKey(s).includes('LISTA') ||
+        normalizeSheetKey(s).includes('INVENTARIO') ||
+        normalizeSheetKey(s).includes('CONSOLIDADO'),
+    ) ?? workbook.SheetNames[0];
 
-  if (!sheetName) throw new Error('No se encontró hoja de inventario en el archivo.');
+  if (!sheetName)
+    throw new Error('No se encontró hoja de inventario en el archivo.');
 
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) throw new Error(`Hoja "${sheetName}" vacía.`);
@@ -1521,53 +1878,9 @@ export async function importConsolidadoFromExcel(
     raw: false,
   });
 
-  /**
-   * Detector de encabezados específico para el formato Consolidado BaseLogic.
-   * Busca la primera fila que contenga celdas con COINCIDENCIA EXACTA a los
-   * headers conocidos: "BODEGA", "MARCA", "PRECIO POR UNIDAD", etc.
-   * Esto diferencia la fila real de headers (ROW6 con "Bodega") de la fila
-   * de descripciones (ROW5 con "Cantidad de articulos en bodega, puede ser...").
-   */
-  function buildRowsConsolidado(mx: SheetMatrix): RawRow[] {
-    // Requiere coincidencia EXACTA (igualdad) con al menos 2 de estos marcadores.
-    const EXACT_MARKERS = ['BODEGA', 'MARCA', 'SUBDIVISION', 'PROVEEDOR'];
-    let headerIdx = -1;
-
-    for (let i = 0; i < Math.min(20, mx.length); i++) {
-      const cells = (mx[i] ?? []).map((c) => normalizeKey(c));
-      const exactMatches = EXACT_MARKERS.filter((marker) =>
-        cells.some((c) => c === marker),
-      );
-      if (exactMatches.length >= 2) {
-        headerIdx = i;
-        break;
-      }
-    }
-
-    if (headerIdx < 0) {
-      // fallback al detector genérico
-      return buildRowsFromDiscoveredHeader(mx);
-    }
-
-    const headerRow = mx[headerIdx] ?? [];
-    const builtRows: RawRow[] = [];
-    for (let i = headerIdx + 1; i < mx.length; i++) {
-      const dataRow = mx[i] ?? [];
-      if (dataRow.every((cell) => normalizeText(cell) === '')) continue;
-      const row: RawRow = {};
-      for (let col = 0; col < headerRow.length; col++) {
-        const key = normalizeText(headerRow[col]);
-        if (!key) continue;
-        row[key] = dataRow[col] ?? '';
-      }
-      if (Object.keys(row).length > 0) builtRows.push(row);
-    }
-    return builtRows;
-  }
-
   let rows: RawRow[];
   try {
-    rows = buildRowsConsolidado(matrix);
+    rows = buildRowsConsolidado(matrix).rows;
   } catch (e) {
     throw new Error(
       `No se detectó fila de encabezados en "${sheetName}": ${e instanceof Error ? e.message : '?'}`,
@@ -1586,59 +1899,52 @@ export async function importConsolidadoFromExcel(
    * Esto evita que columnas como "Artículos marcados que van a volver a pedirse"
    * capturen erróneamente el slot de "Nombre del Articulo" por contener "ARTICULO".
    */
-  function resolveConsolidadoKey(
+  const resolveConsolidadoKey = (
     exactCandidates: string[],
     fuzzyCandidates: readonly string[],
-  ): string | null {
-    for (const key of Object.keys(sample)) {
-      for (const exact of exactCandidates) {
-        if (normalizeKey(key) === normalizeKey(exact)) return key;
-      }
-    }
-    return getColumnKey(sample, fuzzyCandidates);
-  }
+  ): string | null =>
+    resolveKeyFromSample(sample, exactCandidates, fuzzyCandidates);
 
-  const itemKey      = resolveConsolidadoKey(
-    ['Nombre del Articulo', 'Nombre del Artículo', 'Nombre del Item', 'Nombre Artículo'],
+  const itemKey = resolveConsolidadoKey(
+    [
+      'Nombre del Articulo',
+      'Nombre del Artículo',
+      'Nombre del Item',
+      'Nombre Artículo',
+    ],
     HEADER_CANDIDATES.item,
   );
-  const invCodeKey   = resolveConsolidadoKey(
+  const invCodeKey = resolveConsolidadoKey(
     ['Identificador de inventario', 'Identificador Inventario'],
     HEADER_CANDIDATES.inventoryCode,
   );
-  const partKey      = resolveConsolidadoKey(
+  const partKey = resolveConsolidadoKey(
     ['Numero de Parte', 'Número de Parte', 'Número Parte'],
     HEADER_CANDIDATES.partNumber,
   );
-  const descKey      = resolveConsolidadoKey(
+  const descKey = resolveConsolidadoKey(
     ['Descripción', 'Descripcion'],
     HEADER_CANDIDATES.description,
   );
-  const uomKey       = resolveConsolidadoKey(
+  const uomKey = resolveConsolidadoKey(
     ['Unidad de Medida (UN/KG/LT/MT)', 'Unidad de Medida', 'Unidad Medida'],
     HEADER_CANDIDATES.uom,
   );
-  const brandKey     = resolveConsolidadoKey(
-    ['Marca'],
-    HEADER_CANDIDATES.brand,
-  );
-  const unitCostKey  = resolveConsolidadoKey(
+  const brandKey = resolveConsolidadoKey(['Marca'], HEADER_CANDIDATES.brand);
+  const unitCostKey = resolveConsolidadoKey(
     ['Precio por unidad', 'Precio Por Unidad'],
     HEADER_CANDIDATES.unitCost,
   );
-  const stockKey     = resolveConsolidadoKey(
+  const stockKey = resolveConsolidadoKey(
     ['Cantidad en existencias', 'Cantidad En Existencias'],
     HEADER_CANDIDATES.stock,
   );
-  const minStockKey  = resolveConsolidadoKey(
+  const minStockKey = resolveConsolidadoKey(
     ['Stock critico', 'Stock crítico', 'Stock Critico'],
     HEADER_CANDIDATES.minStock,
   );
-  const sectorKey    = resolveConsolidadoKey(
-    ['Bodega'],
-    HEADER_CANDIDATES.sector,
-  );
-  const categoryKey  = resolveConsolidadoKey(
+  const sectorKey = resolveConsolidadoKey(['Bodega'], HEADER_CANDIDATES.sector);
+  const categoryKey = resolveConsolidadoKey(
     ['Recursos Operativos'],
     HEADER_CANDIDATES.category,
   );
@@ -1646,48 +1952,81 @@ export async function importConsolidadoFromExcel(
     ['subdivision', 'Subdivision', 'Subdivisión'],
     HEADER_CANDIDATES.subfamily,
   );
-  const supplierKey  = resolveConsolidadoKey(
+  const supplierKey = resolveConsolidadoKey(
     ['Proveedor'],
     HEADER_CANDIDATES.supplier,
   );
-  const stockLocKey  = resolveConsolidadoKey(
+  const stockLocKey = resolveConsolidadoKey(
     ['Ubicación', 'Ubicacion'],
     HEADER_CANDIDATES.stockLocation,
   );
 
   if (!itemKey) throw new Error('Columna "Nombre del artículo" no detectada.');
 
-  const uomCache        = new Map<string, string>(); // abbreviation → id
-  const categoryCache   = new Map<string, string>(); // "family|sub" → subcategoryId
-  const supplierCache   = new Map<string, string>(); // name → id
-  const warehouseCache  = new Map<string, string>(); // code → id
+  const uomCache = new Map<string, string>(); // abbreviation → id
+  const categoryCache = new Map<string, string>(); // "family|sub" → subcategoryId
+  const supplierCache = new Map<string, string>(); // name → id
+  const warehouseCache = new Map<string, string>(); // code → id
+
+  const existingInventoryCodes = await prisma.inventoryItem.findMany({
+    where: { tenantId, inventoryCode: { not: null } },
+    select: { inventoryCode: true },
+  });
+  const excelInventoryCodeNumbers = rows
+    .map((row) =>
+      extractInventoryCodeNumber(
+        invCodeKey ? normalizeText(row[invCodeKey]) : '',
+      ),
+    )
+    .filter((value): value is number => value != null);
+  let nextGeneratedInventoryCode = Math.max(
+    0,
+    ...existingInventoryCodes
+      .map((row) => extractInventoryCodeNumber(row.inventoryCode))
+      .filter((value): value is number => value != null),
+    ...excelInventoryCodeNumbers,
+  );
+
+  function buildNextInventoryCode(): string {
+    nextGeneratedInventoryCode += 1;
+    return `IN${String(nextGeneratedInventoryCode).padStart(4, '0')}`;
+  }
 
   let created = 0;
   let skipped = 0;
+  let generatedInventoryCodes = 0;
   const zeroCost: string[] = [];
-  let assignedToFallback = 0;
+  let assignedToDefaultWarehouse = 0;
 
   async function resolveUomByAbbr(raw: string): Promise<string> {
     const abbr = normalizeKey(raw).slice(0, 20) || 'UN';
     if (uomCache.has(abbr)) return uomCache.get(abbr)!;
     const rec = await prisma.unitOfMeasure.upsert({
       where: { tenantId_abbreviation: { tenantId, abbreviation: abbr } },
-      update: {},
-      create: { tenantId, name: abbr, abbreviation: abbr },
+      update: { allowsDecimals: unitAllowsDecimals(abbr) },
+      create: {
+        tenantId,
+        name: abbr,
+        abbreviation: abbr,
+        allowsDecimals: unitAllowsDecimals(abbr),
+      },
       select: { id: true },
     });
     uomCache.set(abbr, rec.id);
     return rec.id;
   }
 
-  async function resolveCategoryPath(familyRaw: string, subRaw: string): Promise<string> {
+  async function resolveCategoryPath(
+    familyRaw: string,
+    subRaw: string,
+  ): Promise<string> {
     const familyName = normalizeText(familyRaw).toUpperCase() || 'GENERAL';
-    const subName    = normalizeText(subRaw) || 'General';
-    const cacheKey   = `${familyName}|${subName}`;
+    const subName = normalizeText(subRaw) || 'General';
+    const cacheKey = `${familyName}|${subName}`;
     if (categoryCache.has(cacheKey)) return categoryCache.get(cacheKey)!;
 
     const family = await findOrCreateCategory(tenantId, familyName, null);
-    const sub    = await findOrCreateCategory(tenantId, subName, family.id);
+    const sub = await findOrCreateCategory(tenantId, subName, family.id);
     categoryCache.set(cacheKey, sub.id);
     return sub.id;
   }
@@ -1706,26 +2045,8 @@ export async function importConsolidadoFromExcel(
     return rec.id;
   }
 
-  /** Bodega de fallback para ítems sin bodega asignada en el Excel. */
-  const FALLBACK_WAREHOUSE_CODE = 'PEND-01';
-  let fallbackWarehouseId: string | null = null;
-  {
-    const fw = await prisma.warehouse.findFirst({
-      where: { tenantId, code: FALLBACK_WAREHOUSE_CODE },
-      select: { id: true },
-    });
-    fallbackWarehouseId = fw?.id ?? null;
-    if (!fallbackWarehouseId) {
-      console.warn(`  ⚠️  Bodega fallback "${FALLBACK_WAREHOUSE_CODE}" no encontrada. Ítems sin bodega no tendrán stock.`);
-    }
-  }
-
-  async function resolveWarehouseByCode(codeRaw: string): Promise<string | null> {
-    const code = normalizeText(codeRaw);
-    if (!code) {
-      if (fallbackWarehouseId) return fallbackWarehouseId;
-      return null;
-    }
+  async function resolveWarehouseByCode(codeRaw: string): Promise<string> {
+    const code = normalizeWarehouseCodeForConsolidado(codeRaw);
     if (warehouseCache.has(code)) return warehouseCache.get(code)!;
 
     // Candidatos de búsqueda: código tal cual + prefijo antes del guión (ej: "448-Cover" → "448")
@@ -1748,12 +2069,9 @@ export async function importConsolidadoFromExcel(
     }
 
     if (!wh) {
-      console.warn(`  ⚠️  Bodega "${code}" no encontrada — se usará fallback PEND-01.`);
-      if (fallbackWarehouseId) {
-        warehouseCache.set(code, fallbackWarehouseId);
-        return fallbackWarehouseId;
-      }
-      return null;
+      const created = await getOrCreateConsolidadoWarehouse(tenantId, code);
+      warehouseCache.set(code, created.id);
+      return created.id;
     }
     warehouseCache.set(code, wh.id);
     return wh.id;
@@ -1761,28 +2079,33 @@ export async function importConsolidadoFromExcel(
 
   for (const row of rows) {
     const name = normalizeText(itemKey ? row[itemKey] : '');
-    if (!name) { skipped++; continue; }
+    if (!name) {
+      skipped++;
+      continue;
+    }
 
     const rawInvCode = invCodeKey ? normalizeText(row[invCodeKey]) : '';
-    const inventoryCode = rawInvCode ? normalizeInventoryCode(rawInvCode).slice(0, 60) : null;
+    const inventoryCode = rawInvCode
+      ? normalizeInventoryCode(rawInvCode).slice(0, 60)
+      : buildNextInventoryCode();
+    if (!rawInvCode) generatedInventoryCodes += 1;
 
     const rawPart = partKey ? normalizeText(row[partKey]) : '';
-    const partNumber = rawPart && !isGenericPartToken(rawPart)
-      ? rawPart.slice(0, 50)
-      : null;
+    const partNumber =
+      rawPart && !isGenericPartToken(rawPart) ? rawPart.slice(0, 50) : null;
 
     const description = descKey ? normalizeText(row[descKey]) : null;
-    const brand       = brandKey ? normalizeText(row[brandKey]) : null;
+    const brand = brandKey ? normalizeText(row[brandKey]) : null;
 
-    const rawUom   = uomKey ? normalizeText(row[uomKey]) : 'UN';
-    const uomId    = await resolveUomByAbbr(rawUom);
+    const rawUom = uomKey ? normalizeText(row[uomKey]) : 'UN';
+    const uomId = await resolveUomByAbbr(rawUom);
 
-    const rawFamily  = categoryKey  ? normalizeText(row[categoryKey])  : '';
-    const rawSubfam  = subfamilyKey ? normalizeText(row[subfamilyKey]) : '';
+    const rawFamily = categoryKey ? normalizeText(row[categoryKey]) : '';
+    const rawSubfam = subfamilyKey ? normalizeText(row[subfamilyKey]) : '';
     const categoryId = await resolveCategoryPath(rawFamily, rawSubfam);
 
     const rawSupplier = supplierKey ? normalizeText(row[supplierKey]) : '';
-    const supplierId  = await resolveSupplierByName(rawSupplier);
+    const supplierId = await resolveSupplierByName(rawSupplier);
 
     // Buscar o crear el InventoryItem ─────────────────────────────────────────
     let itemId: string | null = null;
@@ -1858,19 +2181,22 @@ export async function importConsolidadoFromExcel(
     // Stock ───────────────────────────────────────────────────────────────────
     const rawWarehouseCode = sectorKey ? normalizeText(row[sectorKey]) : '';
     const warehouseId = await resolveWarehouseByCode(rawWarehouseCode);
-    if (warehouseId === fallbackWarehouseId && !rawWarehouseCode) assignedToFallback++;
+    if (!rawWarehouseCode) assignedToDefaultWarehouse++;
 
     if (warehouseId) {
-      const qty      = parseQuantity(stockKey ? row[stockKey] : null);
+      const qty = parseQuantity(stockKey ? row[stockKey] : null);
       const minStock = parseQuantity(minStockKey ? row[minStockKey] : null);
-      const rawCost  = unitCostKey ? row[unitCostKey] : null;
+      const rawCost = unitCostKey ? row[unitCostKey] : null;
       const parsedCost = parseNumber(rawCost);
-      const costNum    = parsedCost != null && parsedCost >= 0 ? parsedCost : 0;
+      const costNum = parsedCost != null && parsedCost >= 0 ? parsedCost : 0;
       if (parsedCost == null || isMissingUnitPrice(rawCost)) {
         zeroCost.push(`${inventoryCode ?? partNumber ?? name}`);
       }
       const unitCost = new Prisma.Decimal(costNum).toDecimalPlaces(2);
       const location = stockLocKey ? normalizeText(row[stockLocKey]) : null;
+      const binId = location
+        ? await getOrCreateWarehouseBin(warehouseId, location)
+        : null;
 
       const prev = await prisma.itemStock.findUnique({
         where: { warehouseId_itemId: { warehouseId, itemId } },
@@ -1880,10 +2206,17 @@ export async function importConsolidadoFromExcel(
 
       await prisma.itemStock.upsert({
         where: { warehouseId_itemId: { warehouseId, itemId } },
-        update: { quantity: qty, minStock, unitCost, location: location?.slice(0, 120) ?? null },
+        update: {
+          quantity: qty,
+          minStock,
+          unitCost,
+          location: location?.slice(0, 120) ?? null,
+          binId,
+        },
         create: {
           warehouseId,
           itemId,
+          binId,
           quantity: qty,
           minStock,
           unitCost,
@@ -1909,13 +2242,21 @@ export async function importConsolidadoFromExcel(
   console.log('\n📊  Resumen importación Consolidado');
   console.log(`  • Artículos nuevos creados : ${created}`);
   console.log(`  • Filas sin nombre (omitidas): ${skipped}`);
-  if (assignedToFallback > 0) {
-    console.log(`  • Sin bodega → asignados a PEND-01: ${assignedToFallback} (reasignar en sistema)`);
+  if (assignedToDefaultWarehouse > 0) {
+    console.log(
+      `  • Sin bodega → asignados a ${CONSOLIDADO_DEFAULT_WAREHOUSE_CODE}: ${assignedToDefaultWarehouse}`,
+    );
+  }
+  if (generatedInventoryCodes > 0) {
+    console.log(
+      `  • Códigos de inventario generados: ${generatedInventoryCodes}`,
+    );
   }
   if (zeroCost.length > 0) {
     console.log(`  • Costo $0 (revisar): ${zeroCost.length}`);
     zeroCost.slice(0, 10).forEach((s) => console.log(`    - ${s}`));
-    if (zeroCost.length > 10) console.log(`    … y ${zeroCost.length - 10} más`);
+    if (zeroCost.length > 10)
+      console.log(`    … y ${zeroCost.length - 10} más`);
   }
 }
 
@@ -1928,6 +2269,7 @@ async function main() {
       ? normalizeText(args[presetIdx + 1] || '').toLowerCase()
       : '';
   const shouldReset = args.includes('--reset');
+  const shouldDryRun = args.includes('--dry-run');
   const tenantId = await resolveTenantId();
 
   if (shouldReset) {
@@ -1940,6 +2282,11 @@ async function main() {
     if (!filePath) throw new Error('Debe indicar --file <ruta-excel>.');
 
     if (preset === 'consolidado') {
+      if (shouldDryRun) {
+        await analyzeConsolidadoFromExcel(filePath);
+        console.log('✅ Preflight Consolidado completado sin modificar la BD.');
+        return;
+      }
       await importConsolidadoFromExcel(filePath, tenantId);
       console.log('✅ Importación Consolidado completada.');
       return;
@@ -1965,10 +2312,13 @@ async function main() {
   }
   if (!shouldReset) {
     console.log(
-      'Uso: ts-node prisma/import-inventory-from-excel.ts --file "<ruta>" [--reset] [--preset consolidado|insumos|inicial]',
+      'Uso: ts-node prisma/import-inventory-from-excel.ts --file "<ruta>" [--reset] [--dry-run] [--preset consolidado|insumos|inicial]',
     );
     console.log(
-      '  --preset consolidado → "Consolidado de Inventario BaseLogic" (hoja única, encabezados fila 6).',
+      '  --preset consolidado → "Consolidado de Inventario BaseLogic" (hoja única; detecta fila de encabezados).',
+    );
+    console.log(
+      '  --dry-run           → para preset consolidado, valida columnas/notas/resumen sin modificar la BD.',
     );
     console.log(
       '  --preset insumos     → INVENTARIO INSUMOS MANTENCION.xlsx (3 hojas).',

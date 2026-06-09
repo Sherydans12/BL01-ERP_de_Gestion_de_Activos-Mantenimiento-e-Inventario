@@ -4,6 +4,8 @@ import {
   Get,
   Post,
   Body,
+  HttpCode,
+  HttpStatus,
   Put,
   Param,
   Delete,
@@ -13,8 +15,10 @@ import {
   UploadedFile,
   UseInterceptors,
   StreamableFile,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { InventoryItemsService } from './inventory-items.service';
 import type { QuickCreateItemDto } from './dto/quick-create-item.dto';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
@@ -26,6 +30,18 @@ import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
 
 const attachmentFileLimits = { limits: { fileSize: MAX_UPLOAD_FILE_BYTES } };
+const masterImportLimits = { limits: { fileSize: 20 * 1024 * 1024 } };
+
+function parseImportOptions(body: any): Record<string, unknown> {
+  const raw = body?.options;
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  try {
+    return JSON.parse(String(raw)) as Record<string, unknown>;
+  } catch {
+    throw new BadRequestException('options debe ser JSON valido.');
+  }
+}
 
 @Controller('inventory-items')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -115,6 +131,57 @@ export class InventoryItemsController {
       search,
       categoryId,
     });
+  }
+
+  @Get('export/master')
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_READ)
+  async exportMasterExcel(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const buffer =
+      await this.inventoryItemsService.getInventoryMasterExcelBuffer(req.user);
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.set(
+      'Content-Disposition',
+      `attachment; filename="BaseLogic_Maestro_Inventario_${stamp}.xlsx"`,
+    );
+    return new StreamableFile(buffer, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+
+  @Post('import/validate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_UPDATE)
+  @UseInterceptors(FileInterceptor('file', masterImportLimits))
+  validateMasterImport(@UploadedFile() file: any, @Req() req: any) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debe adjuntar un archivo Excel .xlsx.');
+    }
+    return this.inventoryItemsService.validateInventoryMasterImport(
+      file.buffer,
+      req.user,
+    );
+  }
+
+  @Post('import/commit')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.INVENTORY_STOCK_ADJUST)
+  @UseInterceptors(FileInterceptor('file', masterImportLimits))
+  commitMasterImport(
+    @UploadedFile() file: any,
+    @Body() body: any,
+    @Req() req: any,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debe adjuntar un archivo Excel .xlsx.');
+    }
+    return this.inventoryItemsService.commitInventoryMasterImport(
+      file.buffer,
+      req.user,
+      parseImportOptions(body),
+    );
   }
 
   /** Debe declararse antes de `:id` para no capturarse como UUID. */

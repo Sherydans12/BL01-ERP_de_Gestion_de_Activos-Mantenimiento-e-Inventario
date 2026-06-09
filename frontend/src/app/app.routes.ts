@@ -104,6 +104,18 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'flota/importar',
+        canActivate: [permissionGuard],
+        data: {
+          permissions: O.EQUIPMENT_UPDATE,
+          pageTitle: 'Importar maestro de flota',
+        },
+        loadComponent: () =>
+          import('./features/fleet/fleet-master-import/fleet-master-import.component').then(
+            (m) => m.FleetMasterImportComponent,
+          ),
+      },
+      {
         path: 'flota/registro-horas',
         canActivate: [permissionGuard],
         canDeactivate: [registroHorasCanDeactivate],
@@ -377,6 +389,18 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/inventory-stock/stock-dashboard/stock-dashboard.component').then(
             (m) => m.StockDashboardComponent,
+          ),
+      },
+      {
+        path: 'inventario/importar',
+        canActivate: [permissionGuard],
+        data: {
+          permissionsAny: [I.ITEM_UPDATE, I.STOCK_ADJUST],
+          pageTitle: 'Importar maestro de inventario',
+        },
+        loadComponent: () =>
+          import('./features/inventory-items/inventory-master-import/inventory-master-import.component').then(
+            (m) => m.InventoryMasterImportComponent,
           ),
       },
       {

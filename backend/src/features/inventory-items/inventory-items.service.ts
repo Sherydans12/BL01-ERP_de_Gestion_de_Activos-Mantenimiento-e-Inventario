@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
-import { NotificationChannel, Prisma } from '@prisma/client';
+import { NotificationChannel, Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
@@ -18,12 +18,73 @@ import {
   type InventoryLabelQrMode,
   type InventoryLabelSize,
 } from './inventory-item-label-pdf.generator';
+import { generateInventoryMasterExcelBuffer } from './inventory-master-excel.generator';
+import {
+  getImportNullableString,
+  getImportString,
+  normalizeImportKey,
+  parseBaseLogicMasterImportWorkbook,
+  parseImportBoolean,
+  parseImportNumber,
+} from '../../common/excel/baselogic-master-import.util';
 import { listItemIdsWithFieldDispatchOutstanding } from '../../common/inventory/field-dispatch-outstanding';
 import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
 import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-events';
 import { buildMailInventoryItemCreated } from '../../common/email/transactional-mail.builder';
 import { AuditService } from '../../common/audit/audit.service';
 import { userCanViewInventoryCost } from '../auth/permissions.util';
+
+type InventoryImportRequirement = {
+  kind: 'CATEGORY' | 'UNIT' | 'WAREHOUSE' | 'BIN' | 'SUPPLIER';
+  code: string;
+  parentCode?: string | null;
+  rows: number[];
+  severity: 'blocking' | 'warning';
+  message: string;
+};
+
+type InventoryImportAction = 'CREATE' | 'UPDATE' | 'NO_CHANGE' | 'ERROR';
+
+type InventoryImportPreviewRow = {
+  rowNumber: number;
+  action: InventoryImportAction;
+  itemId: string | null;
+  inventoryCode: string | null;
+  partNumber: string | null;
+  warehouseCode: string | null;
+  label: string;
+  errors: string[];
+  warnings: string[];
+  changes: Array<{ field: string; before: unknown; after: unknown }>;
+};
+
+type InventoryImportImpact = {
+  stocks: number;
+  transactions: number;
+  reservations: number;
+  workOrderParts: number;
+  lubeReportLines: number;
+  transferLines: number;
+  requisitionItems: number;
+  purchaseOrderItems: number;
+  attachments: number;
+};
+
+type InventoryDeleteCandidate = {
+  itemId: string;
+  inventoryCode: string | null;
+  partNumber: string | null;
+  name: string;
+  impact: InventoryImportImpact;
+  warnings: string[];
+};
+
+type InventoryImportOptions = {
+  allowCreates?: boolean;
+  allowUpdates?: boolean;
+  allowStockAdjustments?: boolean;
+  allowItemDeletes?: boolean;
+};
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
 /** Prefijo código de inventario autogenerado: `IN` + 4 dígitos (p. ej. IN0042). */
@@ -402,6 +463,803 @@ export class InventoryItemsService {
     ]);
 
     return { data, total, page, pageSize };
+  }
+
+  async getInventoryMasterExcelBuffer(user: any): Promise<Buffer> {
+    const tenantId = user.tenantId as string;
+    const canViewCost = userCanViewInventoryCost(user);
+
+    const [tenant, items, categories, units, warehouses, suppliers] =
+      await this.prisma.$transaction([
+        this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true },
+        }),
+        this.prisma.inventoryItem.findMany({
+          where: { tenantId },
+          orderBy: ITEM_CATALOG_ORDER_BY,
+          include: {
+            itemCategory: {
+              select: {
+                name: true,
+                parentCategory: { select: { name: true } },
+              },
+            },
+            unitOfMeasure: {
+              select: {
+                name: true,
+                abbreviation: true,
+                allowsDecimals: true,
+              },
+            },
+            inventorySupplier: { select: { name: true } },
+            policyTargetWarehouse: { select: { code: true, name: true } },
+            stocks: {
+              orderBy: { warehouse: { code: 'asc' } },
+              select: {
+                quantity: true,
+                unitCost: true,
+                minStock: true,
+                maxStock: true,
+                location: true,
+                bin: { select: { code: true, label: true } },
+                warehouse: {
+                  select: {
+                    code: true,
+                    name: true,
+                    location: true,
+                    contract: { select: { code: true, name: true } },
+                    subcontract: { select: { code: true, name: true } },
+                  },
+                },
+              },
+            },
+          },
+        }),
+        this.prisma.itemCategory.findMany({
+          where: { tenantId },
+          orderBy: [{ parentCategory: { name: 'asc' } }, { name: 'asc' }],
+          select: {
+            name: true,
+            parentCategory: { select: { name: true } },
+          },
+        }),
+        this.prisma.unitOfMeasure.findMany({
+          where: { tenantId },
+          orderBy: { abbreviation: 'asc' },
+          select: { name: true, abbreviation: true, allowsDecimals: true },
+        }),
+        this.prisma.warehouse.findMany({
+          where: { tenantId },
+          orderBy: { code: 'asc' },
+          select: {
+            code: true,
+            name: true,
+            location: true,
+            contract: { select: { code: true, name: true } },
+            subcontract: { select: { code: true, name: true } },
+          },
+        }),
+        this.prisma.inventorySupplier.findMany({
+          where: { tenantId },
+          orderBy: { name: 'asc' },
+          select: { name: true },
+        }),
+      ]);
+
+    return generateInventoryMasterExcelBuffer({
+      tenantName: tenant?.name ?? 'BaseLogic TPM',
+      generatedAt: new Date(),
+      canViewCost,
+      items,
+      categories: categories.map((category) => ({
+        family: category.parentCategory?.name ?? category.name,
+        subcategory: category.parentCategory ? category.name : null,
+      })),
+      units,
+      warehouses: warehouses.map((warehouse) => ({
+        code: warehouse.code,
+        name: warehouse.name,
+        location: warehouse.location,
+        contractCode: warehouse.contract.code,
+        subcontractCode: warehouse.subcontract?.code ?? null,
+      })),
+      suppliers,
+    });
+  }
+
+  private registerInventoryRequirement(
+    map: Map<string, InventoryImportRequirement>,
+    requirement: InventoryImportRequirement,
+  ): void {
+    const key = `${requirement.kind}:${requirement.parentCode ?? ''}:${requirement.code}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.rows = [...new Set([...existing.rows, ...requirement.rows])].sort(
+        (a, b) => a - b,
+      );
+      if (requirement.severity === 'blocking') existing.severity = 'blocking';
+      return;
+    }
+    map.set(key, requirement);
+  }
+
+  private async buildInventoryDeleteImpact(
+    tenantId: string,
+    itemIds: string[],
+  ): Promise<Map<string, InventoryImportImpact>> {
+    const empty = (): InventoryImportImpact => ({
+      stocks: 0,
+      transactions: 0,
+      reservations: 0,
+      workOrderParts: 0,
+      lubeReportLines: 0,
+      transferLines: 0,
+      requisitionItems: 0,
+      purchaseOrderItems: 0,
+      attachments: 0,
+    });
+    const map = new Map(itemIds.map((id) => [id, empty()]));
+    if (itemIds.length === 0) return map;
+
+    const attach = <K extends keyof InventoryImportImpact>(key: K, rows: any[]) => {
+      for (const row of rows) {
+        if (!row.itemId) continue;
+        const entry = map.get(row.itemId);
+        if (entry) entry[key] = row._count?._all ?? 0;
+      }
+    };
+
+    const [
+      stocks,
+      transactions,
+      reservations,
+      workOrderParts,
+      lubeReportLines,
+      transferLines,
+      requisitionItems,
+      purchaseOrderItems,
+      attachments,
+    ] = await Promise.all([
+      this.prisma.itemStock.groupBy({
+        by: ['itemId'],
+        where: { itemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.inventoryTransaction.groupBy({
+        by: ['itemId'],
+        where: { itemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.stockReservation.groupBy({
+        by: ['itemId'],
+        where: { itemId: { in: itemIds }, warehouse: { tenantId } },
+        _count: { _all: true },
+      }),
+      this.prisma.workOrderPart.groupBy({
+        by: ['inventoryItemId'],
+        where: { inventoryItemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.lubeReportLine.groupBy({
+        by: ['itemId'],
+        where: { itemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.inventoryTransferLine.groupBy({
+        by: ['itemId'],
+        where: { itemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.requisitionItem.groupBy({
+        by: ['inventoryItemId'],
+        where: { inventoryItemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.purchaseOrderItem.groupBy({
+        by: ['inventoryItemId'],
+        where: { inventoryItemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.inventoryItemAttachment.groupBy({
+        by: ['itemId'],
+        where: { tenantId, itemId: { in: itemIds } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    attach('stocks', stocks);
+    attach('transactions', transactions);
+    attach('reservations', reservations);
+    for (const row of workOrderParts) {
+      if (!row.inventoryItemId) continue;
+      const entry = map.get(row.inventoryItemId);
+      if (entry) entry.workOrderParts = row._count?._all ?? 0;
+    }
+    attach('lubeReportLines', lubeReportLines);
+    attach('transferLines', transferLines);
+    for (const row of requisitionItems) {
+      if (!row.inventoryItemId) continue;
+      const entry = map.get(row.inventoryItemId);
+      if (entry) entry.requisitionItems = row._count._all;
+    }
+    for (const row of purchaseOrderItems) {
+      if (!row.inventoryItemId) continue;
+      const entry = map.get(row.inventoryItemId);
+      if (entry) entry.purchaseOrderItems = row._count._all;
+    }
+    attach('attachments', attachments);
+    return map;
+  }
+
+  private hasInventoryDeleteImpact(impact: InventoryImportImpact): boolean {
+    return Object.values(impact).some((count) => count > 0);
+  }
+
+  async validateInventoryMasterImport(buffer: Buffer, user: any) {
+    const tenantId = user.tenantId as string;
+    const workbook = await parseBaseLogicMasterImportWorkbook(buffer, 'inventory');
+
+    const [items, categories, units, warehouses, suppliers] =
+      await this.prisma.$transaction([
+        this.prisma.inventoryItem.findMany({
+          where: { tenantId },
+          include: {
+            itemCategory: { select: { name: true, parentCategory: { select: { name: true } } } },
+            unitOfMeasure: { select: { abbreviation: true, name: true, allowsDecimals: true } },
+            inventorySupplier: { select: { name: true } },
+            stocks: {
+              select: {
+                warehouseId: true,
+                quantity: true,
+                unitCost: true,
+                minStock: true,
+                maxStock: true,
+                location: true,
+                warehouse: { select: { code: true } },
+                bin: { select: { code: true } },
+              },
+            },
+          },
+        }),
+        this.prisma.itemCategory.findMany({
+          where: { tenantId },
+          select: { id: true, name: true, parentCategoryId: true, parentCategory: { select: { name: true } } },
+        }),
+        this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
+        this.prisma.warehouse.findMany({ where: { tenantId }, include: { bins: true } }),
+        this.prisma.inventorySupplier.findMany({ where: { tenantId } }),
+      ]);
+
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    const itemByInventoryCode = new Map(
+      items
+        .filter((item) => item.inventoryCode)
+        .map((item) => [normalizeImportKey(item.inventoryCode), item]),
+    );
+    const itemByPartNumber = new Map(
+      items
+        .filter((item) => item.partNumber)
+        .map((item) => [normalizeImportKey(item.partNumber), item]),
+    );
+    const categoryByFamilySub = new Map<string, (typeof categories)[number]>();
+    for (const category of categories) {
+      if (!category.parentCategory) continue;
+      categoryByFamilySub.set(
+        `${normalizeImportKey(category.parentCategory.name)}:${normalizeImportKey(category.name)}`,
+        category,
+      );
+    }
+    const unitByAbbreviation = new Map(
+      units.map((unit) => [normalizeImportKey(unit.abbreviation), unit]),
+    );
+    const warehouseByCode = new Map(
+      warehouses.map((warehouse) => [normalizeImportKey(warehouse.code), warehouse]),
+    );
+    const supplierByName = new Map(
+      suppliers.map((supplier) => [normalizeImportKey(supplier.name), supplier]),
+    );
+
+    const requirements = new Map<string, InventoryImportRequirement>();
+    const previewRows: InventoryImportPreviewRow[] = [];
+    const includedItemIds = new Set<string>();
+    const includedItemKeys = new Set<string>();
+    const itemWarehouseKeys = new Map<string, number[]>();
+
+    for (const row of workbook.rows) {
+      const v = row.values;
+      const id = getImportNullableString(v, 'ID articulo');
+      const inventoryCode = getImportNullableString(v, 'Codigo inventario');
+      const partNumber = getImportNullableString(v, 'Numero parte');
+      const name = getImportString(v, 'Nombre');
+      const family = getImportString(v, 'Familia');
+      const subcategory = getImportString(v, 'Subcategoria');
+      const unitCode = getImportString(v, 'Unidad');
+      const warehouseCode = getImportNullableString(v, 'Bodega codigo');
+      const binCode = getImportNullableString(v, 'Bin codigo');
+      const supplierName = getImportNullableString(v, 'Proveedor habitual');
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      if (!name) errors.push('Nombre requerido.');
+      if (!family || !subcategory) errors.push('Familia y subcategoria requeridas.');
+      if (!unitCode) errors.push('Unidad requerida.');
+
+      const category = family && subcategory
+        ? categoryByFamilySub.get(`${normalizeImportKey(family)}:${normalizeImportKey(subcategory)}`)
+        : null;
+      if (!category && family && subcategory) {
+        this.registerInventoryRequirement(requirements, {
+          kind: 'CATEGORY',
+          code: subcategory,
+          parentCode: family,
+          rows: [row.rowNumber],
+          severity: 'blocking',
+          message: 'Debe existir la subcategoria bajo la familia indicada.',
+        });
+        errors.push(`Subcategoria no existe: ${family} / ${subcategory}.`);
+      }
+
+      const unit = unitCode ? unitByAbbreviation.get(normalizeImportKey(unitCode)) : null;
+      if (!unit && unitCode) {
+        this.registerInventoryRequirement(requirements, {
+          kind: 'UNIT',
+          code: unitCode,
+          rows: [row.rowNumber],
+          severity: 'blocking',
+          message: 'Debe existir la unidad de medida antes de importar.',
+        });
+        errors.push(`Unidad no existe: ${unitCode}.`);
+      }
+
+      const warehouse = warehouseCode
+        ? warehouseByCode.get(normalizeImportKey(warehouseCode))
+        : null;
+      if (warehouseCode && !warehouse) {
+        this.registerInventoryRequirement(requirements, {
+          kind: 'WAREHOUSE',
+          code: warehouseCode,
+          rows: [row.rowNumber],
+          severity: 'blocking',
+          message: 'Debe existir la bodega antes de importar stock.',
+        });
+        errors.push(`Bodega no existe: ${warehouseCode}.`);
+      }
+      if (binCode && warehouse) {
+        const bin = warehouse.bins.find(
+          (candidate) => normalizeImportKey(candidate.code) === normalizeImportKey(binCode),
+        );
+        if (!bin) {
+          this.registerInventoryRequirement(requirements, {
+            kind: 'BIN',
+            code: binCode,
+            parentCode: warehouse.code,
+            rows: [row.rowNumber],
+            severity: 'blocking',
+            message: 'Debe existir la ubicacion/bin bajo la bodega indicada.',
+          });
+          errors.push(`Bin no existe en bodega ${warehouse.code}: ${binCode}.`);
+        }
+      }
+
+      if (supplierName && !supplierByName.get(normalizeImportKey(supplierName))) {
+        this.registerInventoryRequirement(requirements, {
+          kind: 'SUPPLIER',
+          code: supplierName,
+          rows: [row.rowNumber],
+          severity: 'blocking',
+          message: 'Debe existir el proveedor habitual o limpiarse el campo.',
+        });
+        errors.push(`Proveedor habitual no existe: ${supplierName}.`);
+      }
+
+      const existing =
+        (id ? itemById.get(id) : null) ??
+        (inventoryCode ? itemByInventoryCode.get(normalizeImportKey(inventoryCode)) : null) ??
+        (partNumber ? itemByPartNumber.get(normalizeImportKey(partNumber)) : null) ??
+        null;
+      if (existing) includedItemIds.add(existing.id);
+      if (id) includedItemKeys.add(id);
+      if (inventoryCode) includedItemKeys.add(normalizeImportKey(inventoryCode));
+
+      const duplicateKey = `${id || inventoryCode || partNumber || name}:${warehouseCode || 'NO_WAREHOUSE'}`;
+      itemWarehouseKeys.set(duplicateKey, [
+        ...(itemWarehouseKeys.get(duplicateKey) ?? []),
+        row.rowNumber,
+      ]);
+
+      const existingStock = existing?.stocks.find(
+        (stock) =>
+          warehouseCode &&
+          normalizeImportKey(stock.warehouse.code) === normalizeImportKey(warehouseCode),
+      );
+      const changes: InventoryImportPreviewRow['changes'] = [];
+      const compare = (field: string, before: unknown, after: unknown) => {
+        const left = before ?? null;
+        const right = after ?? null;
+        if (JSON.stringify(left) !== JSON.stringify(right)) {
+          changes.push({ field, before: left, after: right });
+        }
+      };
+
+      if (existing) {
+        compare('name', existing.name, name);
+        compare('partNumber', existing.partNumber, partNumber);
+        compare('category', existing.itemCategory.name, subcategory);
+        compare('unit', existing.unitOfMeasure.abbreviation, unitCode);
+        compare('brand', existing.brand, getImportNullableString(v, 'Marca'));
+        if (existingStock) {
+          compare('stock.quantity', existingStock.quantity, parseImportNumber(v['Stock']) ?? 0);
+          compare('stock.minStock', existingStock.minStock, parseImportNumber(v['Stock minimo']));
+          compare('stock.maxStock', existingStock.maxStock, parseImportNumber(v['Stock maximo']));
+          compare('stock.location', existingStock.location, getImportNullableString(v, 'Ubicacion stock'));
+        } else if (warehouseCode) {
+          changes.push({ field: 'stock', before: null, after: warehouseCode });
+        }
+      }
+
+      previewRows.push({
+        rowNumber: row.rowNumber,
+        action: errors.length
+          ? 'ERROR'
+          : existing
+            ? changes.length
+              ? 'UPDATE'
+              : 'NO_CHANGE'
+            : 'CREATE',
+        itemId: existing?.id ?? null,
+        inventoryCode,
+        partNumber,
+        warehouseCode,
+        label: [inventoryCode, partNumber, name].filter(Boolean).join(' · '),
+        errors,
+        warnings,
+        changes,
+      });
+    }
+
+    for (const rows of itemWarehouseKeys.values()) {
+      if (rows.length <= 1) continue;
+      for (const preview of previewRows.filter((row) => rows.includes(row.rowNumber))) {
+        preview.errors.push(`Fila duplicada para el mismo articulo/bodega: ${rows.join(', ')}.`);
+        preview.action = 'ERROR';
+      }
+    }
+
+    const deleteSource = items.filter((item) => !includedItemIds.has(item.id));
+    const impactById = await this.buildInventoryDeleteImpact(
+      tenantId,
+      deleteSource.map((item) => item.id),
+    );
+    const deleteCandidates: InventoryDeleteCandidate[] = deleteSource.map((item) => {
+      const impact = impactById.get(item.id) ?? {
+        stocks: 0,
+        transactions: 0,
+        reservations: 0,
+        workOrderParts: 0,
+        lubeReportLines: 0,
+        transferLines: 0,
+        requisitionItems: 0,
+        purchaseOrderItems: 0,
+        attachments: 0,
+      };
+      return {
+        itemId: item.id,
+        inventoryCode: item.inventoryCode,
+        partNumber: item.partNumber,
+        name: item.name,
+        impact,
+        warnings: this.hasInventoryDeleteImpact(impact)
+          ? [
+              'Tiene historial o asociaciones. La eliminacion fisica no debe usarse salvo migracion destructiva aprobada.',
+            ]
+          : [],
+      };
+    });
+
+    return {
+      domain: 'inventory' as const,
+      version: workbook.version,
+      summary: {
+        rows: previewRows.length,
+        creates: previewRows.filter((row) => row.action === 'CREATE').length,
+        updates: previewRows.filter((row) => row.action === 'UPDATE').length,
+        unchanged: previewRows.filter((row) => row.action === 'NO_CHANGE').length,
+        errors: previewRows.reduce((count, row) => count + row.errors.length, 0),
+        deleteCandidates: deleteCandidates.length,
+      },
+      requirements: [...requirements.values()],
+      previewRows,
+      deleteCandidates,
+      configuration: {
+        requiredBeforeCommit: [
+          'Familias y subcategorias existentes',
+          'Unidades de medida existentes',
+          'Bodegas existentes',
+          'Bins existentes si se informan en el Excel',
+          'Proveedores habituales existentes si se informan en el Excel',
+        ],
+        options: {
+          allowCreates: true,
+          allowUpdates: true,
+          allowStockAdjustments: true,
+          allowItemDeletes: false,
+        },
+      },
+    };
+  }
+
+  async commitInventoryMasterImport(
+    buffer: Buffer,
+    user: any,
+    options: InventoryImportOptions = {},
+  ) {
+    const tenantId = user.tenantId as string;
+    const userId = user.id || user.sub;
+    if (!userId) {
+      throw new BadRequestException('Usuario no identificado para auditoria de stock.');
+    }
+
+    const validation = await this.validateInventoryMasterImport(buffer, user);
+    const blockingRows = validation.previewRows.filter((row) => row.errors.length > 0);
+    const blockingRequirements = validation.requirements.filter(
+      (req) => req.severity === 'blocking',
+    );
+    if (blockingRows.length || blockingRequirements.length) {
+      throw new BadRequestException({
+        message: 'La importacion tiene errores bloqueantes. Valide requisitos antes de confirmar.',
+        blockingRows: blockingRows.length,
+        blockingRequirements,
+      });
+    }
+
+    const allowCreates = options.allowCreates !== false;
+    const allowUpdates = options.allowUpdates !== false;
+    const allowStockAdjustments = options.allowStockAdjustments !== false;
+    const allowItemDeletes = options.allowItemDeletes === true;
+
+    if (!allowCreates && validation.previewRows.some((row) => row.action === 'CREATE')) {
+      throw new BadRequestException('La importacion contiene altas, pero allowCreates=false.');
+    }
+    if (!allowUpdates && validation.previewRows.some((row) => row.action === 'UPDATE')) {
+      throw new BadRequestException('La importacion contiene actualizaciones, pero allowUpdates=false.');
+    }
+    if (allowItemDeletes) {
+      const blockedDeletes = validation.deleteCandidates.filter((candidate) =>
+        this.hasInventoryDeleteImpact(candidate.impact),
+      );
+      if (blockedDeletes.length > 0) {
+        throw new BadRequestException({
+          message:
+            'Hay articulos ausentes con historial/asociaciones. Inventario no permite eliminacion fisica destructiva desde importacion.',
+          deleteCandidates: blockedDeletes,
+        });
+      }
+    }
+
+    const workbook = await parseBaseLogicMasterImportWorkbook(buffer, 'inventory');
+    const [categories, units, warehouses, suppliers, existingItems] =
+      await this.prisma.$transaction([
+        this.prisma.itemCategory.findMany({
+          where: { tenantId },
+          select: { id: true, name: true, parentCategory: { select: { name: true } } },
+        }),
+        this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
+        this.prisma.warehouse.findMany({ where: { tenantId }, include: { bins: true } }),
+        this.prisma.inventorySupplier.findMany({ where: { tenantId } }),
+        this.prisma.inventoryItem.findMany({ where: { tenantId } }),
+      ]);
+
+    const categoryByFamilySub = new Map<string, (typeof categories)[number]>();
+    for (const category of categories) {
+      if (!category.parentCategory) continue;
+      categoryByFamilySub.set(
+        `${normalizeImportKey(category.parentCategory.name)}:${normalizeImportKey(category.name)}`,
+        category,
+      );
+    }
+    const unitByAbbreviation = new Map(
+      units.map((unit) => [normalizeImportKey(unit.abbreviation), unit]),
+    );
+    const warehouseByCode = new Map(
+      warehouses.map((warehouse) => [normalizeImportKey(warehouse.code), warehouse]),
+    );
+    const supplierByName = new Map(
+      suppliers.map((supplier) => [normalizeImportKey(supplier.name), supplier]),
+    );
+    const itemById = new Map(existingItems.map((item) => [item.id, item]));
+    const itemByInventoryCode = new Map(
+      existingItems
+        .filter((item) => item.inventoryCode)
+        .map((item) => [normalizeImportKey(item.inventoryCode), item]),
+    );
+    const itemByPartNumber = new Map(
+      existingItems
+        .filter((item) => item.partNumber)
+        .map((item) => [normalizeImportKey(item.partNumber), item]),
+    );
+    const previewByRowNumber = new Map(
+      validation.previewRows.map((preview) => [preview.rowNumber, preview]),
+    );
+
+    let created = 0;
+    let updated = 0;
+    let unchanged = 0;
+    let stockAdjusted = 0;
+    let deleted = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of workbook.rows) {
+        const preview = previewByRowNumber.get(row.rowNumber);
+        if (!preview || preview.action === 'ERROR') continue;
+        if (preview.action === 'NO_CHANGE') {
+          unchanged++;
+          continue;
+        }
+
+        const v = row.values;
+        const id = getImportNullableString(v, 'ID articulo');
+        const inventoryCode = getImportNullableString(v, 'Codigo inventario');
+        const partNumber = getImportNullableString(v, 'Numero parte');
+        const family = getImportString(v, 'Familia');
+        const subcategory = getImportString(v, 'Subcategoria');
+        const unitCode = getImportString(v, 'Unidad');
+        const warehouseCode = getImportNullableString(v, 'Bodega codigo');
+        const supplierName = getImportNullableString(v, 'Proveedor habitual');
+
+        const category = categoryByFamilySub.get(
+          `${normalizeImportKey(family)}:${normalizeImportKey(subcategory)}`,
+        );
+        const unit = unitByAbbreviation.get(normalizeImportKey(unitCode));
+        const warehouse = warehouseCode
+          ? warehouseByCode.get(normalizeImportKey(warehouseCode))
+          : null;
+        const supplier = supplierName
+          ? supplierByName.get(normalizeImportKey(supplierName))
+          : null;
+        const existing =
+          (id ? itemById.get(id) : null) ??
+          (inventoryCode ? itemByInventoryCode.get(normalizeImportKey(inventoryCode)) : null) ??
+          (partNumber ? itemByPartNumber.get(normalizeImportKey(partNumber)) : null) ??
+          null;
+
+        if (!category || !unit) continue;
+
+        const itemId = existing?.id ?? id ?? randomUUID();
+        const itemData = {
+          tenantId,
+          inventoryCode,
+          qrCode: getImportNullableString(v, 'QR payload') || `INV:${itemId}`,
+          partNumber,
+          name: getImportString(v, 'Nombre'),
+          description: getImportNullableString(v, 'Descripcion'),
+          categoryId: category.id,
+          unitOfMeasureId: unit.id,
+          brand: getImportNullableString(v, 'Marca'),
+          compatibilityInfo: getImportNullableString(v, 'Compatibilidad'),
+          supplierId: supplier?.id ?? null,
+          isInventory: parseImportBoolean(v['Inventariable']) ?? true,
+          isConsumable: parseImportBoolean(v['Consumible']) ?? true,
+          isAsset: parseImportBoolean(v['Activo']) ?? false,
+          isSerialized: parseImportBoolean(v['Serializado']) ?? false,
+          policyMinStock: parseImportNumber(v['Politica minimo']),
+          policyMaxStock: parseImportNumber(v['Politica maximo']),
+        };
+
+        if (!existing) {
+          if (preview.action !== 'CREATE') continue;
+          if (!allowCreates) continue;
+          await tx.inventoryItem.create({
+            data: {
+              id: itemId,
+              ...itemData,
+            },
+          });
+          created++;
+        } else if (preview.action === 'UPDATE' && allowUpdates) {
+          await tx.inventoryItem.update({
+            where: { id: existing.id },
+            data: itemData,
+          });
+          updated++;
+        } else {
+          unchanged++;
+          continue;
+        }
+
+        if (!warehouse || !allowStockAdjustments) continue;
+
+        const binCode = getImportNullableString(v, 'Bin codigo');
+        const bin = binCode
+          ? warehouse.bins.find(
+              (candidate) =>
+                normalizeImportKey(candidate.code) === normalizeImportKey(binCode),
+            )
+          : null;
+        const quantity = parseImportNumber(v['Stock']) ?? 0;
+        const minStock = parseImportNumber(v['Stock minimo']) ?? 0;
+        const maxStock = parseImportNumber(v['Stock maximo']) ?? 0;
+        const unitCost = parseImportNumber(v['CPP']);
+        const currentStock = await tx.itemStock.findUnique({
+          where: {
+            warehouseId_itemId: {
+              warehouseId: warehouse.id,
+              itemId,
+            },
+          },
+        });
+        const previousStock = currentStock?.quantity ?? 0;
+        const nextStock = quantity;
+        const nextUnitCost =
+          unitCost != null ? new Prisma.Decimal(unitCost) : currentStock?.unitCost ?? null;
+
+        await tx.itemStock.upsert({
+          where: {
+            warehouseId_itemId: {
+              warehouseId: warehouse.id,
+              itemId,
+            },
+          },
+          update: {
+            quantity: nextStock,
+            unitCost: nextUnitCost,
+            minStock,
+            maxStock,
+            location: getImportNullableString(v, 'Ubicacion stock'),
+            binId: bin?.id ?? null,
+          },
+          create: {
+            warehouseId: warehouse.id,
+            itemId,
+            quantity: nextStock,
+            unitCost: nextUnitCost,
+            minStock,
+            maxStock,
+            location: getImportNullableString(v, 'Ubicacion stock'),
+            binId: bin?.id ?? null,
+          },
+        });
+
+        if (Math.abs(previousStock - nextStock) > 1e-9) {
+          await tx.inventoryTransaction.create({
+            data: {
+              warehouseId: warehouse.id,
+              itemId,
+              userId,
+              type: TransactionType.ADJUST,
+              quantity: nextStock - previousStock,
+              previousStock,
+              newStock: nextStock,
+              notes: 'Ajuste desde importacion maestro BaseLogic.',
+            },
+          });
+          stockAdjusted++;
+        }
+      }
+
+      if (allowItemDeletes) {
+        for (const candidate of validation.deleteCandidates) {
+          if (this.hasInventoryDeleteImpact(candidate.impact)) continue;
+          await tx.inventoryItem.delete({ where: { id: candidate.itemId } });
+          deleted++;
+        }
+      }
+    });
+
+    return {
+      created,
+      updated,
+      unchanged,
+      stockAdjusted,
+      deleted,
+      skippedDeleteCandidates: allowItemDeletes ? 0 : validation.deleteCandidates.length,
+      warnings:
+        validation.deleteCandidates.length > 0 && !allowItemDeletes
+          ? [
+              'Se detectaron articulos ausentes en el Excel. No fueron eliminados porque allowItemDeletes=false.',
+            ]
+          : [],
+    };
   }
 
   /** Solo subcategorías (hoja); no familias sueltas. Valida familia misma tenant. */

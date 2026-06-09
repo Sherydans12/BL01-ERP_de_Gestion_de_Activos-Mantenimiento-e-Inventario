@@ -27,6 +27,7 @@ import {
   Subscription,
   debounceTime,
   distinctUntilChanged,
+  finalize,
 } from 'rxjs';
 
 @Component({
@@ -57,6 +58,7 @@ export class InventoryItemListComponent implements OnInit, OnDestroy {
 
   isLoading = signal(true);
   isLoadingMore = signal(false);
+  isExportingExcel = signal(false);
 
   searchQuery = signal('');
   private search$ = new Subject<string>();
@@ -211,6 +213,40 @@ export class InventoryItemListComponent implements OnInit, OnDestroy {
     }
     this.page.update((p) => p + 1);
     this.loadPage(true);
+  }
+
+  exportMasterExcel() {
+    if (this.isExportingExcel()) return;
+
+    this.isExportingExcel.set(true);
+    this.inventoryItemsService
+      .downloadInventoryMasterExcel()
+      .pipe(finalize(() => this.isExportingExcel.set(false)))
+      .subscribe({
+        next: (blob) => {
+          if (!blob?.size) {
+            this.notificationService.error('El Excel generado está vacío.');
+            return;
+          }
+          this.downloadBlob(
+            blob,
+            `BaseLogic_Maestro_Inventario_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          );
+          this.notificationService.success('Excel maestro de inventario generado.');
+        },
+        error: () => {
+          this.notificationService.error('No se pudo generar el Excel de inventario.');
+        },
+      });
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   onFamilySelect(familyId: string) {

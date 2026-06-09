@@ -12,6 +12,7 @@ Esta carpeta es el **repositorio de contexto** que Cursor y los agentes deben us
 
 **Compras PBAC — pruebas API/E2E:** [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md) (seed 13 personas, `simulate:compras-pbac`, Playwright `e2e/`).  
 **Inventario PBAC — pruebas API/E2E:** [inventario-pbac-pruebas-api-e2e.md](inventario-pbac-pruebas-api-e2e.md) (seed 8 personas, `simulate:inventario-pbac`, Playwright `e2e/tests/inventario/`).  
+**Maestros Excel BaseLogic — export/import:** [importacion-exportacion-maestros-excel.md](importacion-exportacion-maestros-excel.md) — flota e inventario, contrato oculto, validacion previa, requisitos bloqueantes y politica de bajas con historial.
 **Operaciones × Inventario — E2E cobertura y pendientes:** [operaciones-e2e-cobertura-y-pendientes.md](operaciones-e2e-cobertura-y-pendientes.md) (ciclo M1/W2W/OT, caos/resiliencia, puntos ciegos y specs P0–P3).
 
 **Mapa de repos externos** (claude-mem, ui-ux, n8n-mcp, LightRAG, everything-claude-code): [repos-externos.md](repos-externos.md).
@@ -99,6 +100,7 @@ Evitá copiar todo el monorepo al proyecto: ruido y conflictos de convenciones.
 | [prisma-client-y-migraciones.md](prisma-client-y-migraciones.md) | **Prisma:** `postinstall` / `prebuild` → `generate`; cuándo correr `migrate deploy`; Docker y dev local |
 | [inventario-stock-transferencias-kardex.md](inventario-stock-transferencias-kardex.md) | **Inventario:** maestro de artículos, `ItemStock`, kardex (`InventoryTransaction`), ajustes, transferencias W2W, picker y rutas de código |
 | [inventario-alta-articulos-y-selector-global.md](inventario-alta-articulos-y-selector-global.md) | **Inventario:** política de umbrales sin `item_stocks` hasta primer movimiento; alta `/articulos/nuevo`; selector global unificado (`GLOBAL_ITEM_PICKER_CATALOG`) |
+| [importacion-exportacion-maestros-excel.md](importacion-exportacion-maestros-excel.md) | **Maestros Excel:** flota e inventario; export profesional, validacion previa, requisitos, commit configurado y bajas con impacto |
 | [ui-quickadd-global-picker-dialogos-nativos.md](ui-quickadd-global-picker-dialogos-nativos.md) | **UI:** `QuickAddItemModal` + `GlobalItemPicker` + `<dialog>` nativos (control de stock / no usar `overlayInsideDialog=true` en el picker) |
 | [ui-notificaciones-toasts-top-layer.md](ui-notificaciones-toasts-top-layer.md) | **UI:** toasts sobre `<dialog>` (top layer del navegador); `popover="manual"` en `app-toast` |
 | [ui-modales-tema-claro.md](ui-modales-tema-claro.md) | **UI:** modales en `data-theme='light'` — tokens (`text-main`, `bg-surface`), evitar `text-white` sobre `bg-dark`; `app-confirm-modal` + overrides en `styles.scss` |

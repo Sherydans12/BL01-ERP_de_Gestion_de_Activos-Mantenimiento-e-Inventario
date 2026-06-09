@@ -19,6 +19,60 @@ export interface PaginatedEquipments {
   limit: number;
 }
 
+export interface MasterImportRequirement {
+  kind: string;
+  code: string;
+  name?: string | null;
+  parentCode?: string | null;
+  rows: number[];
+  severity: 'blocking' | 'warning';
+  message: string;
+}
+
+export interface FleetImportValidationResult {
+  domain: 'fleet';
+  version: string;
+  summary: {
+    rows: number;
+    creates: number;
+    updates: number;
+    unchanged: number;
+    errors: number;
+    deleteCandidates: number;
+  };
+  requirements: MasterImportRequirement[];
+  previewRows: Array<{
+    rowNumber: number;
+    action: string;
+    equipmentId: string | null;
+    internalId: string;
+    label: string;
+    errors: string[];
+    warnings: string[];
+    changes: Array<{ field: string; before: unknown; after: unknown }>;
+  }>;
+  deleteCandidates: Array<{
+    equipmentId: string;
+    internalId: string;
+    label: string;
+    impact: Record<string, number>;
+    warnings: string[];
+  }>;
+  configuration: {
+    requiredBeforeCommit: string[];
+    options: Record<string, boolean>;
+  };
+}
+
+export interface MasterImportCommitResult {
+  created: number;
+  updated: number;
+  unchanged?: number;
+  deleted: number;
+  skippedDeleteCandidates: number;
+  warnings: string[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -143,6 +197,49 @@ export class FleetService {
     return this.http.get(`${this.apiUrl}/${id}/resume-pdf`, {
       responseType: 'blob',
     });
+  }
+
+  downloadFleetMasterExcel(options?: { contractId?: string | null }): Observable<Blob> {
+    let headers = new HttpHeaders();
+    if (options?.contractId) {
+      headers = headers.set('x-contract-id', options.contractId);
+    }
+    return this.http.get(`${this.apiUrl}/export/master`, {
+      headers,
+      responseType: 'blob',
+    });
+  }
+
+  validateFleetMasterImport(
+    file: File,
+    options?: { contractId?: string | null },
+  ): Observable<FleetImportValidationResult> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    let headers = new HttpHeaders();
+    if (options?.contractId) headers = headers.set('x-contract-id', options.contractId);
+    return this.http.post<FleetImportValidationResult>(
+      `${this.apiUrl}/import/validate`,
+      form,
+      { headers },
+    );
+  }
+
+  commitFleetMasterImport(
+    file: File,
+    importOptions: Record<string, boolean>,
+    options?: { contractId?: string | null },
+  ): Observable<MasterImportCommitResult> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('options', JSON.stringify(importOptions));
+    let headers = new HttpHeaders();
+    if (options?.contractId) headers = headers.set('x-contract-id', options.contractId);
+    return this.http.post<MasterImportCommitResult>(
+      `${this.apiUrl}/import/commit`,
+      form,
+      { headers },
+    );
   }
 
   getEquipmentAnalytics(id: string): Observable<EquipmentAnalytics> {

@@ -52,8 +52,28 @@
           </p>
         </div>
       </div>
-      @if (selectedWarehouseId()) {
-        <div class="flex flex-wrap gap-2 shrink-0 justify-end">
+      <div class="flex flex-wrap gap-2 shrink-0 justify-end">
+        <button
+          type="button"
+          (click)="exportMasterExcel()"
+          [disabled]="isExportingMasterExcel()"
+          class="inline-flex items-center justify-center border border-border bg-surface hover:bg-dark/80 text-muted font-mono text-sm py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
+          title="Exporta artículos y stock por bodega en formato maestro editable"
+        >
+          @if (isExportingMasterExcel()) {
+            <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2" aria-hidden="true"></span>
+          }
+          Maestro Excel
+        </button>
+        <a
+          *appHasPermission="i.STOCK_ADJUST"
+          routerLink="/app/inventario/importar"
+          class="inline-flex items-center justify-center border border-border bg-surface hover:bg-dark/80 text-muted font-mono text-sm py-2.5 px-4 rounded-lg transition-colors"
+          title="Valida e importa artículos, bodegas y saldos desde Excel"
+        >
+          Importar maestro
+        </a>
+        @if (selectedWarehouseId()) {
           <button
             type="button"
             (click)="downloadPhysicalCountSheetPdf()"
@@ -73,8 +93,8 @@
           >
             Nuevo movimiento
           </button>
-        </div>
-      }
+        }
+      </div>
     </div>
 
     <div

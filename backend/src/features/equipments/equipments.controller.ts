@@ -5,20 +5,41 @@ import {
   Put,
   Delete,
   Body,
+  BadRequestException,
+  HttpCode,
+  HttpStatus,
   Param,
   Query,
   UseGuards,
   Req,
   Headers,
   Header,
+  Res,
   StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { EquipmentsService } from './equipments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { BulkSyncMeterReadingsDto } from './dto/bulk-sync-meter-readings.dto';
+
+const MASTER_IMPORT_LIMITS = { limits: { fileSize: 20 * 1024 * 1024 } };
+
+function parseImportOptions(body: any): Record<string, unknown> {
+  const raw = body?.options;
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  try {
+    return JSON.parse(String(raw)) as Record<string, unknown>;
+  } catch {
+    throw new BadRequestException('options debe ser JSON valido.');
+  }
+}
 
 @Controller('equipments')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -83,6 +104,75 @@ export class EquipmentsController {
         search,
         limit: limit ? Number(limit) : undefined,
       },
+    );
+  }
+
+  @Get('export/master')
+  @RequirePermissions(SystemPermissions.OPERATIONS_EQUIPMENT_READ)
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  async exportMasterExcel(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ): Promise<StreamableFile> {
+    const activeContract = contractId || siteId;
+    const buffer = await this.equipmentsService.getFleetMasterExcelBuffer(
+      req.user,
+      activeContract,
+    );
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.set(
+      'Content-Disposition',
+      `attachment; filename="BaseLogic_Maestro_Flota_${stamp}.xlsx"`,
+    );
+    return new StreamableFile(buffer, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+
+  @Post('import/validate')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.OPERATIONS_EQUIPMENT_UPDATE)
+  @UseInterceptors(FileInterceptor('file', MASTER_IMPORT_LIMITS))
+  validateMasterImport(
+    @UploadedFile() file: any,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debe adjuntar un archivo Excel .xlsx.');
+    }
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.validateFleetMasterImport(
+      file.buffer,
+      req.user,
+      activeContract,
+    );
+  }
+
+  @Post('import/commit')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(SystemPermissions.OPERATIONS_EQUIPMENT_UPDATE)
+  @UseInterceptors(FileInterceptor('file', MASTER_IMPORT_LIMITS))
+  commitMasterImport(
+    @UploadedFile() file: any,
+    @Body() body: any,
+    @Req() req: any,
+    @Headers('x-site-id') siteId?: string,
+    @Headers('x-contract-id') contractId?: string,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('Debe adjuntar un archivo Excel .xlsx.');
+    }
+    const activeContract = contractId || siteId;
+    return this.equipmentsService.commitFleetMasterImport(
+      file.buffer,
+      req.user,
+      parseImportOptions(body),
+      activeContract,
     );
   }
 

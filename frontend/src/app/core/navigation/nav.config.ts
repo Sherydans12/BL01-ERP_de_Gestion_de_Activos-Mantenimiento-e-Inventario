@@ -145,6 +145,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: O.EQUIPMENT_READ,
       },
       {
+        label: 'Importar Flota Excel',
+        route: '/app/flota/importar',
+        icon: ICONS.documentText,
+        permissions: O.EQUIPMENT_UPDATE,
+      },
+      {
         label: 'Registro de horómetros',
         route: '/app/flota/registro-horas',
         icon: ICONS.clock,
@@ -249,6 +255,12 @@ export const NAV_SECTIONS: NavSection[] = [
         route: '/app/inventario/stock',
         icon: ICONS.chartBar,
         permissions: I.STOCK_READ,
+      },
+      {
+        label: 'Importar Inventario Excel',
+        route: '/app/inventario/importar',
+        icon: ICONS.documentText,
+        permissionsAny: [I.ITEM_UPDATE, I.STOCK_ADJUST],
       },
       {
         label: 'Abastecimiento',

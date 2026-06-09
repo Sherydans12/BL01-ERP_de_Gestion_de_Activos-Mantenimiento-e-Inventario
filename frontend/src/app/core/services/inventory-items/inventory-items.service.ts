@@ -123,6 +123,61 @@ export interface InventoryCatalogPage {
   pageSize: number;
 }
 
+export interface InventoryImportValidationResult {
+  domain: 'inventory';
+  version: string;
+  summary: {
+    rows: number;
+    creates: number;
+    updates: number;
+    unchanged: number;
+    errors: number;
+    deleteCandidates: number;
+  };
+  requirements: Array<{
+    kind: string;
+    code: string;
+    parentCode?: string | null;
+    rows: number[];
+    severity: 'blocking' | 'warning';
+    message: string;
+  }>;
+  previewRows: Array<{
+    rowNumber: number;
+    action: string;
+    itemId: string | null;
+    inventoryCode: string | null;
+    partNumber: string | null;
+    warehouseCode: string | null;
+    label: string;
+    errors: string[];
+    warnings: string[];
+    changes: Array<{ field: string; before: unknown; after: unknown }>;
+  }>;
+  deleteCandidates: Array<{
+    itemId: string;
+    inventoryCode: string | null;
+    partNumber: string | null;
+    name: string;
+    impact: Record<string, number>;
+    warnings: string[];
+  }>;
+  configuration: {
+    requiredBeforeCommit: string[];
+    options: Record<string, boolean>;
+  };
+}
+
+export interface InventoryImportCommitResult {
+  created: number;
+  updated: number;
+  unchanged?: number;
+  stockAdjusted: number;
+  deleted: number;
+  skippedDeleteCandidates: number;
+  warnings: string[];
+}
+
 export interface ItemLedgerReference {
   /** Incluye `ADJUST_SALDO_PENDIENTE` (ajuste desde stock vinculado a recepción/OC). */
   kind: string;
@@ -248,6 +303,34 @@ export class InventoryItemsService {
 
   getItem(id: string): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
+  }
+
+  downloadInventoryMasterExcel(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/export/master`, {
+      responseType: 'blob',
+    });
+  }
+
+  validateInventoryMasterImport(file: File): Observable<InventoryImportValidationResult> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<InventoryImportValidationResult>(
+      `${this.apiUrl}/import/validate`,
+      form,
+    );
+  }
+
+  commitInventoryMasterImport(
+    file: File,
+    options: Record<string, boolean>,
+  ): Observable<InventoryImportCommitResult> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('options', JSON.stringify(options));
+    return this.http.post<InventoryImportCommitResult>(
+      `${this.apiUrl}/import/commit`,
+      form,
+    );
   }
 
   /** PDF de etiqueta térmica (GET /inventory-items/:id/label). */
