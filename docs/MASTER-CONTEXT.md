@@ -77,7 +77,7 @@ API de contratos: [`SitesController`](../backend/src/features/sites/sites.contro
 | `Equipment` | `equipments` | N→1 `Tenant`; N→0..1 `Contract`; N→0..1 `Subcontract` |
 | `MeterAdjustment` | `meter_adjustments` | N→1 `Equipment`, `User` |
 | `EquipmentMeterLog` | `equipment_meter_logs` | N→1 `Tenant`, `Equipment`, `User` (fuente: `OT`, `MANUAL`, `TELEMETRY`) |
-| `EquipmentAvailability` / `AvailabilityEvent` | `equipment_availabilities` / `availability_events` | Snapshot único por turno + ledger 1→N de eventos M2 (`MANUAL`, `OT`, `FAULT_REPORT`, `LEGACY_SNAPSHOT`) |
+| `EquipmentAvailability` / `AvailabilityEvent` | `equipment_availabilities` / `availability_events` | Snapshot único por turno (M2) + ledger cronológico de eventos operacionales M2/M3 (`MANUAL`, `OT`, `FAULT_REPORT`, `LEGACY_SNAPSHOT`) |
 | `AssetCostRecord` | `asset_cost_records` | N→1 `Equipment`; opcional `PurchaseOrder`, `WorkOrder`, `WarehouseReceipt` |
 
 **Reglas de datos:** `@@unique([tenantId, internalId])`, placas y VIN únicos por tenant. `isOperational` y `cumulativeDowntimeHours` reflejan indisponibilidad por OT y por **fallas ALTAS** (M3). `currentMeter` es alimentado por OT, M1 (lubricantes), M2 (disponibilidad) y M3 (fallas) vía `applyCurrentMeterChange` — ver §2.4 «Ecosistema de Operaciones y Flota».
@@ -378,7 +378,7 @@ Los flujos coordinados por el orquestador son:
 
 **Relación M3 ↔ M2:** M3 sigue siendo el flujo rico de diagnóstico/OT por criticidad. M2 puede declarar indisponibilidad operacional de turno y crear un RF stub LOW para no perder trazabilidad; el supervisor o mantenedor completa el detalle en M3. `GET /unreported` sigue filtrando `isOperational: true` para no exigir parte a equipos detenidos, salvo que vuelvan a quedar operativos por M2 `OPERATIONAL` u OT cerrada.
 
-**Modelo híbrido M2 (2026-06-08):** `EquipmentAvailability` permanece como snapshot por `(tenantId, equipmentId, reportDate, shift)` y mantiene el cálculo actual de PA% del dashboard. Cada alta/edición de M2 inserta además un `AvailabilityEvent` en la misma transacción, con `previousStatus`, `eventAt`, `source` y `elapsedMinutes` para habilitar futuras métricas PA% basadas en duración real. La migración `20260608_add_availability_events` backfillea snapshots previos como `LEGACY_SNAPSHOT` de forma idempotente.
+**Modelo híbrido M2/M3 (2026-06-09):** `EquipmentAvailability` permanece como snapshot declarativo de M2 por turno y mantiene el cálculo actual de PA%. El ledger `AvailabilityEvent` se ha desacoplado de M2 (su FK es opcional) para permitir que flujos ajenos a los turnos (ej. Fallas M3 vía `faultReportId`) inserten eventos cronológicos de forma directa. La migración `20260608_add_availability_events` inicializó el ledger y la `20260609...` lo desacopló de los snapshots.
 
 ```mermaid
 flowchart TD

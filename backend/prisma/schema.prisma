@@ -1945,7 +1945,8 @@ enum AvailabilityEventSource {
 model AvailabilityEvent {
   id             String                  @id @default(uuid()) @db.Uuid
   tenantId       String                  @map("tenant_id") @db.Uuid
-  availabilityId String                  @map("availability_id") @db.Uuid
+  availabilityId String?                 @map("availability_id") @db.Uuid
+  faultReportId  String?                 @unique @map("fault_report_id") @db.Uuid
   equipmentId    String                  @map("equipment_id") @db.Uuid
   reportedById   String?                 @map("reported_by_id") @db.Uuid
   status         OperationalStatus
@@ -1957,10 +1958,11 @@ model AvailabilityEvent {
   elapsedMinutes Int?                    @map("elapsed_minutes")
   createdAt      DateTime                @default(now()) @map("created_at")
 
-  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  availability EquipmentAvailability @relation(fields: [availabilityId], references: [id], onDelete: Cascade)
-  equipment    Equipment             @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
-  reportedBy   User?                 @relation("AvailabilityEventReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  availability EquipmentAvailability? @relation(fields: [availabilityId], references: [id], onDelete: SetNull)
+  equipment    Equipment              @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy   User?                  @relation("AvailabilityEventReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  faultReport  FaultReport?           @relation("AvailabilityEventFaultReport", fields: [faultReportId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, equipmentId, eventAt])
   @@index([tenantId, availabilityId, eventAt])
@@ -2021,12 +2023,13 @@ model FaultReport {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contract    Contract                @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  equipment   Equipment               @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
-  reportedBy  User                    @relation("FaultReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
-  workOrder   WorkOrder?              @relation("FaultReportWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
-  attachments FaultReportAttachment[]
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract          Contract                @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  equipment         Equipment               @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy        User                    @relation("FaultReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  workOrder         WorkOrder?              @relation("FaultReportWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
+  attachments       FaultReportAttachment[]
+  availabilityEvent AvailabilityEvent?      @relation("AvailabilityEventFaultReport")
 
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])

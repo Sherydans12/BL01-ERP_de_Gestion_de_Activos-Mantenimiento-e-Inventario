@@ -9,6 +9,18 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-09 — P1A: Desacoplamiento de AvailabilityEvent para integración de fallas
+
+- **Contexto:** En la Fase P1 del flujo M2·M3·OT, las detenciones reportadas desde M3 (Fallas) fallaban al insertarse en el Ledger de disponibilidad porque `AvailabilityEvent` exigía una relación obligatoria (`availabilityId`) hacia un snapshot M2 (`EquipmentAvailability`), acoplando dos dominios.
+- **Decisión:**
+  - Se hizo `availabilityId` opcional en `AvailabilityEvent`.
+  - Se agregó `faultReportId` opcional (`@unique`) en `AvailabilityEvent`, apuntando a `FaultReport` con constraint `SetNull`.
+  - El servicio `AvailabilityEventService` ahora valida explícitamente según el origen. Si `source === FAULT_REPORT`, se requiere `faultReportId` y se rechaza `availabilityId`. Si el origen es `MANUAL` o `LEGACY_SNAPSHOT`, requiere `availabilityId` y rechaza `faultReportId`. El origen `OT` no está implementado y se rechaza.
+  - La transición P1B está pendiente para conectar M3.
+- **Consecuencias:**
+  - Generación de migración no destructiva (`20260609040000_decouple_availability_events_from_shift_snapshots`).
+  - Permite a M3 y a otros flujos registrar eventos operacionales en el Ledger híbrido sin falsificar o contaminar los reportes declarativos por turno de M2.
+
 ## 2026-06-08 — P0: Proteger transición de equipo hacia operativo (bloqueadores operacionales)
 
 - **Contexto:** Auditoría del flujo M2·M3·OT confirmó que `Equipment.isOperational` podía ser forzado a `true` por dos rutas independientes sin verificar causas activas de detención: (1) el Orquestador M2 reactivaba al recibir `OPERATIONAL` tras `DOWN_*` sin consultar FaultReports ni WorkOrders; (2) el cierre de OT escribía `isOperational = closureEquipmentOperational` directamente desde el flag del usuario, ignorando otros bloqueadores del mismo equipo.

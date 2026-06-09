@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import {
   AvailabilityEventSource,
   OperationalStatus,
@@ -8,7 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 export interface RegisterAvailabilityEventInput {
   tenantId: string;
-  availabilityId: string;
+  availabilityId?: string | null;
+  faultReportId?: string | null;
   equipmentId: string;
   reportedById?: string | null;
   status: OperationalStatus;
@@ -27,6 +28,42 @@ export class AvailabilityEventService {
     tx: Prisma.TransactionClient,
     input: RegisterAvailabilityEventInput,
   ) {
+    const source = input.source ?? AvailabilityEventSource.MANUAL;
+
+    switch (source) {
+      case AvailabilityEventSource.FAULT_REPORT:
+        if (!input.faultReportId) {
+          throw new BadRequestException('faultReportId es requerido para eventos de falla.');
+        }
+        if (input.availabilityId) {
+          throw new BadRequestException('availabilityId no debe informarse para eventos de falla.');
+        }
+        const report = await tx.faultReport.findFirst({
+          where: { id: input.faultReportId },
+          select: { tenantId: true, equipmentId: true },
+        });
+        if (!report || report.tenantId !== input.tenantId || report.equipmentId !== input.equipmentId) {
+          throw new BadRequestException('El FaultReport no existe o no corresponde al mismo tenant/equipo.');
+        }
+        break;
+
+      case AvailabilityEventSource.MANUAL:
+      case AvailabilityEventSource.LEGACY_SNAPSHOT:
+        if (!input.availabilityId) {
+          throw new BadRequestException(`availabilityId es requerido para el origen ${source}.`);
+        }
+        if (input.faultReportId) {
+          throw new BadRequestException(`faultReportId no debe informarse para el origen ${source}.`);
+        }
+        break;
+
+      case AvailabilityEventSource.OT:
+        throw new BadRequestException('El origen OT aún no está soportado (requiere workOrderId).');
+        
+      default:
+        throw new BadRequestException(`Origen ${source} no reconocido.`);
+    }
+
     const previousEvent = await tx.availabilityEvent.findFirst({
       where: {
         tenantId: input.tenantId,
@@ -51,7 +88,8 @@ export class AvailabilityEventService {
     return tx.availabilityEvent.create({
       data: {
         tenantId: input.tenantId,
-        availabilityId: input.availabilityId,
+        availabilityId: input.availabilityId ?? null,
+        faultReportId: input.faultReportId ?? null,
         equipmentId: input.equipmentId,
         reportedById: input.reportedById ?? null,
         status: input.status,
@@ -59,7 +97,7 @@ export class AvailabilityEventService {
         meterReading: input.meterReading ?? null,
         comments: input.comments ?? null,
         eventAt: input.eventAt,
-        source: input.source ?? AvailabilityEventSource.MANUAL,
+        source,
         elapsedMinutes,
       },
     });

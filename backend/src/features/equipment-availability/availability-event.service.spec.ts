@@ -81,6 +81,129 @@ describe('AvailabilityEventService — register', () => {
     );
   });
 
+  describe('Validaciones por Source', () => {
+    it('debe rechazar eventos con source OT porque no están soportados', async () => {
+      await expect(
+        service.register(tx as any, {
+          tenantId: 't1',
+          equipmentId: 'e1',
+          status: OperationalStatus.DOWN_PLANNED,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.OT,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('debe rechazar evento FAULT_REPORT si omite faultReportId', async () => {
+      await expect(
+        service.register(tx as any, {
+          tenantId: 't1',
+          equipmentId: 'e1',
+          status: OperationalStatus.DOWN_FAILURE,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.FAULT_REPORT,
+        }),
+      ).rejects.toMatchObject({ message: 'faultReportId es requerido para eventos de falla.' });
+    });
+
+    it('debe rechazar evento FAULT_REPORT si incluye availabilityId', async () => {
+      await expect(
+        service.register(tx as any, {
+          tenantId: 't1',
+          equipmentId: 'e1',
+          status: OperationalStatus.DOWN_FAILURE,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.FAULT_REPORT,
+          faultReportId: 'f1',
+          availabilityId: 'a1',
+        }),
+      ).rejects.toMatchObject({ message: 'availabilityId no debe informarse para eventos de falla.' });
+    });
+
+    it('debe rechazar evento FAULT_REPORT si el FaultReport no pertenece al tenant/equipo', async () => {
+      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId: 't2', equipmentId: 'e1' } as any);
+      await expect(
+        service.register(tx as any, {
+          tenantId: 't1',
+          equipmentId: 'e1',
+          status: OperationalStatus.DOWN_FAILURE,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.FAULT_REPORT,
+          faultReportId: 'f1',
+        }),
+      ).rejects.toMatchObject({ message: 'El FaultReport no existe o no corresponde al mismo tenant/equipo.' });
+    });
+
+    it('debe rechazar evento MANUAL si omite availabilityId', async () => {
+      await expect(
+        service.register(tx as any, {
+          tenantId: 't1',
+          equipmentId: 'e1',
+          status: OperationalStatus.DOWN_FAILURE,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.MANUAL,
+        }),
+      ).rejects.toMatchObject({ message: 'availabilityId es requerido para el origen MANUAL.' });
+    });
+
+    it('debe rechazar evento MANUAL si incluye faultReportId', async () => {
+      await expect(
+        service.register(tx as any, {
+          tenantId: 't1',
+          equipmentId: 'e1',
+          status: OperationalStatus.DOWN_FAILURE,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.MANUAL,
+          availabilityId: 'a1',
+          faultReportId: 'f1',
+        }),
+      ).rejects.toMatchObject({ message: 'faultReportId no debe informarse para el origen MANUAL.' });
+    });
+
+    it('debe registrar exitosamente un evento de falla con su faultReportId y sin availabilityId', async () => {
+      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId, equipmentId } as any);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce(null);
+      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'event-1' } as never);
+
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        status: OperationalStatus.DOWN_PLANNED,
+        eventAt: new Date(),
+        source: AvailabilityEventSource.FAULT_REPORT,
+        faultReportId: 'f1',
+      });
+
+      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            faultReportId: 'f1',
+            availabilityId: null,
+          }),
+        }),
+      );
+    });
+
+    it('debe delegar a Prisma la restricción única (P2002) si se intenta reusar un faultReportId', async () => {
+      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId, equipmentId } as any);
+      tx.availabilityEvent.create = jest.fn().mockRejectedValue({
+        code: 'P2002',
+        clientVersion: '7.5.0',
+      });
+
+      await expect(
+        service.register(tx as any, {
+          tenantId,
+          equipmentId,
+          status: OperationalStatus.DOWN_PLANNED,
+          eventAt: new Date(),
+          source: AvailabilityEventSource.FAULT_REPORT,
+          faultReportId: 'f1', // Reuso intencionado
+        }),
+      ).rejects.toMatchObject({ code: 'P2002' });
+    });
+  });
+
   it('recupera el historial de eventos en orden cronológico ASC', async () => {
     const events = [
       { id: 'event-1', eventAt: new Date('2026-06-08T08:00:00.000Z') },
