@@ -64,28 +64,7 @@ export class AvailabilityEventService {
         throw new BadRequestException(`Origen ${source} no reconocido.`);
     }
 
-    const previousEvent = await tx.availabilityEvent.findFirst({
-      where: {
-        tenantId: input.tenantId,
-        equipmentId: input.equipmentId,
-        eventAt: { lt: input.eventAt },
-      },
-      select: { eventAt: true, status: true },
-      orderBy: { eventAt: 'desc' },
-    });
-
-    const previousStatus = input.previousStatus ?? previousEvent?.status ?? null;
-    const elapsedMinutes = previousEvent
-      ? Math.max(
-          0,
-          Math.floor(
-            (input.eventAt.getTime() - previousEvent.eventAt.getTime()) /
-              60_000,
-          ),
-        )
-      : null;
-
-    return tx.availabilityEvent.create({
+    const initialEvent = await tx.availabilityEvent.create({
       data: {
         tenantId: input.tenantId,
         availabilityId: input.availabilityId ?? null,
@@ -93,14 +72,98 @@ export class AvailabilityEventService {
         equipmentId: input.equipmentId,
         reportedById: input.reportedById ?? null,
         status: input.status,
-        previousStatus,
+        previousStatus: null,
         meterReading: input.meterReading ?? null,
         comments: input.comments ?? null,
         eventAt: input.eventAt,
         source,
+        elapsedMinutes: null,
+      },
+    });
+
+    const predecessor = await tx.availabilityEvent.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        equipmentId: input.equipmentId,
+        OR: [
+          { eventAt: { lt: initialEvent.eventAt } },
+          {
+            eventAt: initialEvent.eventAt,
+            createdAt: { lt: initialEvent.createdAt },
+          },
+          {
+            eventAt: initialEvent.eventAt,
+            createdAt: initialEvent.createdAt,
+            id: { lt: initialEvent.id },
+          },
+        ],
+      },
+      orderBy: [
+        { eventAt: 'desc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
+    });
+
+    const successor = await tx.availabilityEvent.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        equipmentId: input.equipmentId,
+        OR: [
+          { eventAt: { gt: initialEvent.eventAt } },
+          {
+            eventAt: initialEvent.eventAt,
+            createdAt: { gt: initialEvent.createdAt },
+          },
+          {
+            eventAt: initialEvent.eventAt,
+            createdAt: initialEvent.createdAt,
+            id: { gt: initialEvent.id },
+          },
+        ],
+      },
+      orderBy: [
+        { eventAt: 'asc' },
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+
+    const previousStatus = input.previousStatus ?? predecessor?.status ?? null;
+    const elapsedMinutes = predecessor
+      ? Math.max(
+          0,
+          Math.floor(
+            (initialEvent.eventAt.getTime() - predecessor.eventAt.getTime()) / 60_000,
+          ),
+        )
+      : null;
+
+    const updatedEvent = await tx.availabilityEvent.update({
+      where: { id: initialEvent.id },
+      data: {
+        previousStatus,
         elapsedMinutes,
       },
     });
+
+    if (successor) {
+      const sElapsedMinutes = Math.max(
+        0,
+        Math.floor(
+          (successor.eventAt.getTime() - initialEvent.eventAt.getTime()) / 60_000,
+        ),
+      );
+      await tx.availabilityEvent.update({
+        where: { id: successor.id },
+        data: {
+          previousStatus: initialEvent.status,
+          elapsedMinutes: sElapsedMinutes,
+        },
+      });
+    }
+
+    return updatedEvent;
   }
 
   async findTimeline(
@@ -121,7 +184,11 @@ export class AvailabilityEventService {
             }
           : {}),
       },
-      orderBy: { eventAt: 'asc' },
+      orderBy: [
+        { eventAt: 'asc' },
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
     });
   }
 }

@@ -9,6 +9,18 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-09 — P1B1: Hardening cronológico del Ledger AvailabilityEvent
+
+- **Contexto:** Al habilitar la integración del Ledger con orígenes asíncronos (como el registro diferido de fallas desde M3), se podían generar registros desordenados, resultando en cálculos incorrectos de `elapsedMinutes` y `previousStatus` para los eventos afectados.
+- **Decisión:** 
+  - Se estableció como **Invariante A**: `N.previousStatus = P.status` y `N.elapsedMinutes = minutos(N.eventAt - P.eventAt)`. El evento actual registra la duración del estado anterior.
+  - Al insertar `N` entre `P` y `S`, el sistema solo repara `N` y `S`. El predecesor `P` no se altera.
+  - Se definió un orden técnico estricto: `(eventAt ASC, createdAt ASC, id ASC)`. Para empates de `eventAt`, la precedencia queda determinada determinísticamente por la creación o el ID. Los eventos empatados generan duraciones consecutivas de 0.
+  - Se usa el patrón *Create-first*: el servicio inserta `N` inicialmente, luego consulta sus verdaderos vecinos en la base de datos usando la tupla persistida y ejecuta un UPDATE sobre `N` y `S`. Se prescindió de UUID unique o reintentos (P2034) en la inserción porque la tupla técnica siempre evita colisiones y mantiene la línea temporal coherente.
+- **Consecuencias:** 
+  - Los eventos ya no asumen precedencia únicamente basada en el reloj; el Ledger soporta backfill seguro. 
+  - Queda pendiente **P1B2** (remover `isOperational` harcodeado en M3 y orquestarlo dentro del mismo entorno atómico de registro del evento).
+
 ## 2026-06-09 — P1A: Desacoplamiento de AvailabilityEvent para integración de fallas
 
 - **Contexto:** En la Fase P1 del flujo M2·M3·OT, las detenciones reportadas desde M3 (Fallas) fallaban al insertarse en el Ledger de disponibilidad porque `AvailabilityEvent` exigía una relación obligatoria (`availabilityId`) hacia un snapshot M2 (`EquipmentAvailability`), acoplando dos dominios.
@@ -454,3 +466,5 @@ ole = ADMIN activos + usuarios con UserContract al contrato del equipo (misma lo
   - Sin cambios de schema. No requiere nueva migracion.
   - Los modulos existentes (M1, M2, OT) solo actualizan isOperational=true cuando corresponde; la notificacion EQUIPMENT_DOWN es exclusiva de M3 falla ALTA.
   - Sprint 4.2 (PM proxima) pendiente de confirmacion de diseno (requiere campo anti-spam en schema).
+ 
+ 

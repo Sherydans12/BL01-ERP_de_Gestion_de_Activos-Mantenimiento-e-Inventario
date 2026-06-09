@@ -114,6 +114,15 @@ describe('EquipmentAvailabilityService — create', () => {
     sequenceServiceStub.getNextCorrelative.mockClear();
     sequenceServiceStub.getNextCorrelative.mockResolvedValue('RF-00001');
 
+    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
+      id: `evt-mock`,
+      eventAt: args.data.eventAt || new Date(),
+      createdAt: new Date(),
+      status: args.data.status,
+    } as never));
+    tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
+    tx.availabilityEvent.update.mockResolvedValue({} as never);
+
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
@@ -683,6 +692,15 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
     mockResolveReturnToService.mockClear();
     mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
 
+    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
+      id: `evt-mock`,
+      eventAt: args.data.eventAt || new Date(),
+      createdAt: new Date(),
+      status: args.data.status,
+    } as never));
+    tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
+    tx.availabilityEvent.update.mockResolvedValue({} as never);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: availabilityTestProviders(prisma, sequenceServiceStub),
     }).compile();
@@ -827,6 +845,15 @@ describe('EquipmentAvailabilityService — commitImport', () => {
     // P0: mocks por defecto para resolveReturnToService (sin bloqueadores)
     tx.faultReport.findMany.mockResolvedValue([] as never);
     tx.workOrder.findMany.mockResolvedValue([] as never);
+
+    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
+      id: `evt-mock`,
+      eventAt: args.data.eventAt || new Date(),
+      createdAt: new Date(),
+      status: args.data.status,
+    } as never));
+    tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
+    tx.availabilityEvent.update.mockResolvedValue({} as never);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: availabilityTestProviders(prisma, sequenceServiceStub),
@@ -1085,6 +1112,15 @@ describe('EquipmentAvailabilityService — hasNightShift guard (create / findUnr
     prisma.$transaction.mockImplementation(async (fn) =>
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
+
+    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
+      id: `evt-mock`,
+      eventAt: args.data.eventAt || new Date(),
+      createdAt: new Date(),
+      status: args.data.status,
+    } as never));
+    tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
+    tx.availabilityEvent.update.mockResolvedValue({} as never);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: availabilityTestProviders(prisma, sequenceServiceStub),

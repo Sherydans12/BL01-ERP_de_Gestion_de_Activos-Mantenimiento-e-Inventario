@@ -378,7 +378,7 @@ Los flujos coordinados por el orquestador son:
 
 **Relación M3 ↔ M2:** M3 sigue siendo el flujo rico de diagnóstico/OT por criticidad. M2 puede declarar indisponibilidad operacional de turno y crear un RF stub LOW para no perder trazabilidad; el supervisor o mantenedor completa el detalle en M3. `GET /unreported` sigue filtrando `isOperational: true` para no exigir parte a equipos detenidos, salvo que vuelvan a quedar operativos por M2 `OPERATIONAL` u OT cerrada.
 
-**Modelo híbrido M2/M3 (2026-06-09):** `EquipmentAvailability` permanece como snapshot declarativo de M2 por turno y mantiene el cálculo actual de PA%. El ledger `AvailabilityEvent` se ha desacoplado de M2 (su FK es opcional) para permitir que flujos ajenos a los turnos (ej. Fallas M3 vía `faultReportId`) inserten eventos cronológicos de forma directa. La migración `20260608_add_availability_events` inicializó el ledger y la `20260609...` lo desacopló de los snapshots.
+**Modelo híbrido M2/M3 (2026-06-09):** `EquipmentAvailability` permanece como snapshot declarativo de M2 por turno y mantiene el cálculo actual de PA%. El ledger `AvailabilityEvent` se ha desacoplado de M2 (su FK es opcional) para permitir que flujos ajenos a los turnos (ej. Fallas M3 vía `faultReportId`) inserten eventos cronológicos de forma directa. Además, el Ledger implementa un algoritmo de **inserción cronológica estricta (P1B1)** que repara dinámicamente los vecinos (`previousStatus` y `elapsedMinutes`) frente a eventos asíncronos o backfill, usando una tupla técnica de precedencia (`eventAt`, `createdAt`, `id`). La migración `20260608_add_availability_events` inicializó el ledger y la `20260609...` lo desacopló de los snapshots.
 
 ```mermaid
 flowchart TD
