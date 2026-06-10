@@ -38,8 +38,18 @@ const FLEET_COLUMNS: MasterExportColumn[] = [
     width: 14,
     note: 'Identificador interno operacional del equipo. Debe ser unico por empresa.',
   },
-  { header: 'Familia', key: 'family', width: 10, note: 'Codigo/familia del tipo de equipo.' },
-  { header: 'Patente', key: 'plate', width: 12, note: 'Patente unica. Dejar vacia si no aplica.' },
+  {
+    header: 'Familia',
+    key: 'family',
+    width: 10,
+    note: 'Codigo/familia del tipo de equipo.',
+  },
+  {
+    header: 'Patente',
+    key: 'plate',
+    width: 12,
+    note: 'Patente unica. Dejar vacia si no aplica.',
+  },
   { header: 'NIC mina', key: 'mineInternalId', width: 16 },
   { header: 'N serie', key: 'serialNumber', width: 18 },
   { header: 'Marca', key: 'brand', width: 18 },
@@ -51,8 +61,18 @@ const FLEET_COLUMNS: MasterExportColumn[] = [
   { header: 'Nombre contrato', key: 'contractName', width: 24 },
   { header: 'Subcontrato', key: 'subcontractCode', width: 14 },
   { header: 'Nombre subcontrato', key: 'subcontractName', width: 24 },
-  { header: 'Operativo', key: 'isOperational', width: 12, note: 'SI = equipo operativo; NO = fuera de servicio.' },
-  { header: 'Tipo medidor', key: 'meterType', width: 14, note: 'HOURS o KILOMETERS.' },
+  {
+    header: 'Operativo',
+    key: 'isOperational',
+    width: 12,
+    note: 'SI = equipo operativo; NO = fuera de servicio.',
+  },
+  {
+    header: 'Tipo medidor',
+    key: 'meterType',
+    width: 14,
+    note: 'HOURS o KILOMETERS.',
+  },
   { header: 'Medidor inicial', key: 'initialMeter', width: 14 },
   { header: 'Medidor actual', key: 'currentMeter', width: 14 },
   { header: 'Propiedad', key: 'ownership', width: 16 },
@@ -60,14 +80,44 @@ const FLEET_COLUMNS: MasterExportColumn[] = [
   { header: 'Empresa subarriendo', key: 'subleaseCompanyName', width: 26 },
   { header: 'Frecuencia mantencion', key: 'maintenanceFrequency', width: 18 },
   { header: 'Intervalo PM', key: 'pmIntervalOverride', width: 14 },
-  { header: 'Ultima PM fecha', key: 'lastMaintenanceDate', width: 16, numFmt: 'yyyy-mm-dd' },
+  {
+    header: 'Ultima PM fecha',
+    key: 'lastMaintenanceDate',
+    width: 16,
+    numFmt: 'yyyy-mm-dd',
+  },
   { header: 'Ultima PM medidor', key: 'lastMaintenanceMeter', width: 18 },
   { header: 'Tipo ultima PM', key: 'lastMaintenanceType', width: 18 },
-  { header: 'Revision tecnica vence', key: 'techReviewExp', width: 18, numFmt: 'yyyy-mm-dd' },
-  { header: 'Permiso circulacion vence', key: 'circPermitExp', width: 22, numFmt: 'yyyy-mm-dd' },
-  { header: 'SOAP/seguro vence', key: 'soapExp', width: 18, numFmt: 'yyyy-mm-dd' },
-  { header: 'Certificado mecanico vence', key: 'mechanicalCertExp', width: 24, numFmt: 'yyyy-mm-dd' },
-  { header: 'Poliza RC vence', key: 'liabilityPolicyExp', width: 18, numFmt: 'yyyy-mm-dd' },
+  {
+    header: 'Revision tecnica vence',
+    key: 'techReviewExp',
+    width: 18,
+    numFmt: 'yyyy-mm-dd',
+  },
+  {
+    header: 'Permiso circulacion vence',
+    key: 'circPermitExp',
+    width: 22,
+    numFmt: 'yyyy-mm-dd',
+  },
+  {
+    header: 'SOAP/seguro vence',
+    key: 'soapExp',
+    width: 18,
+    numFmt: 'yyyy-mm-dd',
+  },
+  {
+    header: 'Certificado mecanico vence',
+    key: 'mechanicalCertExp',
+    width: 24,
+    numFmt: 'yyyy-mm-dd',
+  },
+  {
+    header: 'Poliza RC vence',
+    key: 'liabilityPolicyExp',
+    width: 18,
+    numFmt: 'yyyy-mm-dd',
+  },
   { header: 'VIN', key: 'vin', width: 22 },
   { header: 'N motor', key: 'engineNumber', width: 18 },
 ];
@@ -78,7 +128,9 @@ function boolLabel(value: boolean): string {
 
 function dateOnly(value: Date | null): Date | null {
   if (!value) return null;
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
 }
 
 function familyFromCatalogCode(code: string | null): string | null {
@@ -157,20 +209,33 @@ export async function generateFleetMasterExcelBuffer(
           name: row.name,
           parentCode: row.parentCode,
         })),
-        { catalog: 'Tipo medidor', code: 'HOURS', name: 'Horas', parentCode: null },
-        { catalog: 'Tipo medidor', code: 'KILOMETERS', name: 'Kilometros', parentCode: null },
+        {
+          catalog: 'Tipo medidor',
+          code: 'HOURS',
+          name: 'Horas',
+          parentCode: null,
+        },
+        {
+          catalog: 'Tipo medidor',
+          code: 'KILOMETERS',
+          name: 'Kilometros',
+          parentCode: null,
+        },
         { catalog: 'Booleano', code: 'SI', name: 'Si', parentCode: null },
         { catalog: 'Booleano', code: 'NO', name: 'No', parentCode: null },
       ],
     },
   ];
 
-  const operationalCount = data.equipments.filter((e) => e.isOperational).length;
+  const operationalCount = data.equipments.filter(
+    (e) => e.isOperational,
+  ).length;
   const subleasedCount = data.equipments.filter((e) => e.isSubleased).length;
 
   return buildBaseLogicMasterWorkbook({
     title: 'Maestro de Flota',
-    subtitle: 'Extraccion profesional de equipos para auditoria, traspaso e importacion controlada.',
+    subtitle:
+      'Extraccion profesional de equipos para auditoria, traspaso e importacion controlada.',
     domain: 'fleet',
     tenantName: data.tenantName,
     generatedAt: data.generatedAt,

@@ -9,9 +9,7 @@ import {
 import { resolveReturnToService } from './operational-blockers';
 
 const tenantId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-const otherTenantId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const equipmentId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-const otherEquipmentId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
 describe('resolveReturnToService', () => {
   let tx: DeepMockProxy<Prisma.TransactionClient>;

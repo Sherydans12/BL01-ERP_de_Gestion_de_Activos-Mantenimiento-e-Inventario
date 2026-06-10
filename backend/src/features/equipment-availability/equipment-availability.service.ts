@@ -935,8 +935,7 @@ export class EquipmentAvailabilityService {
         const isBlockerException =
           e.status === 409 &&
           typeof e.getResponse === 'function' &&
-          (e.getResponse() as any)?.code ===
-            'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED';
+          e.getResponse()?.code === 'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED';
 
         const reason =
           e instanceof Error
@@ -944,7 +943,7 @@ export class EquipmentAvailabilityService {
             : 'Error desconocido al guardar el registro.';
 
         if (isBlockerException) {
-          const response = e.getResponse() as any;
+          const response = e.getResponse();
           errors.push({
             equipmentId: row.equipmentId,
             reason: response.message || reason,
@@ -1814,8 +1813,7 @@ export class EquipmentAvailabilityService {
         const isBlockerException =
           e.status === 409 &&
           typeof e.getResponse === 'function' &&
-          (e.getResponse() as any)?.code ===
-            'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED';
+          e.getResponse()?.code === 'EQUIPMENT_RETURN_TO_SERVICE_BLOCKED';
 
         const reason =
           e instanceof Error
@@ -1823,7 +1821,7 @@ export class EquipmentAvailabilityService {
             : 'Error desconocido al guardar el registro.';
 
         if (isBlockerException) {
-          const response = e.getResponse() as any;
+          const response = e.getResponse();
           errors.push({
             equipmentId: row.equipmentId,
             reason: response.message || reason,

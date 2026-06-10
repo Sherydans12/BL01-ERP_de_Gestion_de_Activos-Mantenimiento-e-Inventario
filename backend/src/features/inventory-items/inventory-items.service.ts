@@ -575,9 +575,9 @@ export class InventoryItemsService {
     const key = `${requirement.kind}:${requirement.parentCode ?? ''}:${requirement.code}`;
     const existing = map.get(key);
     if (existing) {
-      existing.rows = [...new Set([...existing.rows, ...requirement.rows])].sort(
-        (a, b) => a - b,
-      );
+      existing.rows = [
+        ...new Set([...existing.rows, ...requirement.rows]),
+      ].sort((a, b) => a - b);
       if (requirement.severity === 'blocking') existing.severity = 'blocking';
       return;
     }
@@ -602,7 +602,10 @@ export class InventoryItemsService {
     const map = new Map(itemIds.map((id) => [id, empty()]));
     if (itemIds.length === 0) return map;
 
-    const attach = <K extends keyof InventoryImportImpact>(key: K, rows: any[]) => {
+    const attach = <K extends keyof InventoryImportImpact>(
+      key: K,
+      rows: any[],
+    ) => {
       for (const row of rows) {
         if (!row.itemId) continue;
         const entry = map.get(row.itemId);
@@ -698,15 +701,25 @@ export class InventoryItemsService {
 
   async validateInventoryMasterImport(buffer: Buffer, user: any) {
     const tenantId = user.tenantId as string;
-    const workbook = await parseBaseLogicMasterImportWorkbook(buffer, 'inventory');
+    const workbook = await parseBaseLogicMasterImportWorkbook(
+      buffer,
+      'inventory',
+    );
 
     const [items, categories, units, warehouses, suppliers] =
       await this.prisma.$transaction([
         this.prisma.inventoryItem.findMany({
           where: { tenantId },
           include: {
-            itemCategory: { select: { name: true, parentCategory: { select: { name: true } } } },
-            unitOfMeasure: { select: { abbreviation: true, name: true, allowsDecimals: true } },
+            itemCategory: {
+              select: {
+                name: true,
+                parentCategory: { select: { name: true } },
+              },
+            },
+            unitOfMeasure: {
+              select: { abbreviation: true, name: true, allowsDecimals: true },
+            },
             inventorySupplier: { select: { name: true } },
             stocks: {
               select: {
@@ -724,10 +737,18 @@ export class InventoryItemsService {
         }),
         this.prisma.itemCategory.findMany({
           where: { tenantId },
-          select: { id: true, name: true, parentCategoryId: true, parentCategory: { select: { name: true } } },
+          select: {
+            id: true,
+            name: true,
+            parentCategoryId: true,
+            parentCategory: { select: { name: true } },
+          },
         }),
         this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
-        this.prisma.warehouse.findMany({ where: { tenantId }, include: { bins: true } }),
+        this.prisma.warehouse.findMany({
+          where: { tenantId },
+          include: { bins: true },
+        }),
         this.prisma.inventorySupplier.findMany({ where: { tenantId } }),
       ]);
 
@@ -754,10 +775,16 @@ export class InventoryItemsService {
       units.map((unit) => [normalizeImportKey(unit.abbreviation), unit]),
     );
     const warehouseByCode = new Map(
-      warehouses.map((warehouse) => [normalizeImportKey(warehouse.code), warehouse]),
+      warehouses.map((warehouse) => [
+        normalizeImportKey(warehouse.code),
+        warehouse,
+      ]),
     );
     const supplierByName = new Map(
-      suppliers.map((supplier) => [normalizeImportKey(supplier.name), supplier]),
+      suppliers.map((supplier) => [
+        normalizeImportKey(supplier.name),
+        supplier,
+      ]),
     );
 
     const requirements = new Map<string, InventoryImportRequirement>();
@@ -782,12 +809,16 @@ export class InventoryItemsService {
       const warnings: string[] = [];
 
       if (!name) errors.push('Nombre requerido.');
-      if (!family || !subcategory) errors.push('Familia y subcategoria requeridas.');
+      if (!family || !subcategory)
+        errors.push('Familia y subcategoria requeridas.');
       if (!unitCode) errors.push('Unidad requerida.');
 
-      const category = family && subcategory
-        ? categoryByFamilySub.get(`${normalizeImportKey(family)}:${normalizeImportKey(subcategory)}`)
-        : null;
+      const category =
+        family && subcategory
+          ? categoryByFamilySub.get(
+              `${normalizeImportKey(family)}:${normalizeImportKey(subcategory)}`,
+            )
+          : null;
       if (!category && family && subcategory) {
         this.registerInventoryRequirement(requirements, {
           kind: 'CATEGORY',
@@ -800,7 +831,9 @@ export class InventoryItemsService {
         errors.push(`Subcategoria no existe: ${family} / ${subcategory}.`);
       }
 
-      const unit = unitCode ? unitByAbbreviation.get(normalizeImportKey(unitCode)) : null;
+      const unit = unitCode
+        ? unitByAbbreviation.get(normalizeImportKey(unitCode))
+        : null;
       if (!unit && unitCode) {
         this.registerInventoryRequirement(requirements, {
           kind: 'UNIT',
@@ -827,7 +860,8 @@ export class InventoryItemsService {
       }
       if (binCode && warehouse) {
         const bin = warehouse.bins.find(
-          (candidate) => normalizeImportKey(candidate.code) === normalizeImportKey(binCode),
+          (candidate) =>
+            normalizeImportKey(candidate.code) === normalizeImportKey(binCode),
         );
         if (!bin) {
           this.registerInventoryRequirement(requirements, {
@@ -842,7 +876,10 @@ export class InventoryItemsService {
         }
       }
 
-      if (supplierName && !supplierByName.get(normalizeImportKey(supplierName))) {
+      if (
+        supplierName &&
+        !supplierByName.get(normalizeImportKey(supplierName))
+      ) {
         this.registerInventoryRequirement(requirements, {
           kind: 'SUPPLIER',
           code: supplierName,
@@ -855,12 +892,17 @@ export class InventoryItemsService {
 
       const existing =
         (id ? itemById.get(id) : null) ??
-        (inventoryCode ? itemByInventoryCode.get(normalizeImportKey(inventoryCode)) : null) ??
-        (partNumber ? itemByPartNumber.get(normalizeImportKey(partNumber)) : null) ??
+        (inventoryCode
+          ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
+          : null) ??
+        (partNumber
+          ? itemByPartNumber.get(normalizeImportKey(partNumber))
+          : null) ??
         null;
       if (existing) includedItemIds.add(existing.id);
       if (id) includedItemKeys.add(id);
-      if (inventoryCode) includedItemKeys.add(normalizeImportKey(inventoryCode));
+      if (inventoryCode)
+        includedItemKeys.add(normalizeImportKey(inventoryCode));
 
       const duplicateKey = `${id || inventoryCode || partNumber || name}:${warehouseCode || 'NO_WAREHOUSE'}`;
       itemWarehouseKeys.set(duplicateKey, [
@@ -871,7 +913,8 @@ export class InventoryItemsService {
       const existingStock = existing?.stocks.find(
         (stock) =>
           warehouseCode &&
-          normalizeImportKey(stock.warehouse.code) === normalizeImportKey(warehouseCode),
+          normalizeImportKey(stock.warehouse.code) ===
+            normalizeImportKey(warehouseCode),
       );
       const changes: InventoryImportPreviewRow['changes'] = [];
       const compare = (field: string, before: unknown, after: unknown) => {
@@ -889,10 +932,26 @@ export class InventoryItemsService {
         compare('unit', existing.unitOfMeasure.abbreviation, unitCode);
         compare('brand', existing.brand, getImportNullableString(v, 'Marca'));
         if (existingStock) {
-          compare('stock.quantity', existingStock.quantity, parseImportNumber(v['Stock']) ?? 0);
-          compare('stock.minStock', existingStock.minStock, parseImportNumber(v['Stock minimo']));
-          compare('stock.maxStock', existingStock.maxStock, parseImportNumber(v['Stock maximo']));
-          compare('stock.location', existingStock.location, getImportNullableString(v, 'Ubicacion stock'));
+          compare(
+            'stock.quantity',
+            existingStock.quantity,
+            parseImportNumber(v['Stock']) ?? 0,
+          );
+          compare(
+            'stock.minStock',
+            existingStock.minStock,
+            parseImportNumber(v['Stock minimo']),
+          );
+          compare(
+            'stock.maxStock',
+            existingStock.maxStock,
+            parseImportNumber(v['Stock maximo']),
+          );
+          compare(
+            'stock.location',
+            existingStock.location,
+            getImportNullableString(v, 'Ubicacion stock'),
+          );
         } else if (warehouseCode) {
           changes.push({ field: 'stock', before: null, after: warehouseCode });
         }
@@ -920,8 +979,12 @@ export class InventoryItemsService {
 
     for (const rows of itemWarehouseKeys.values()) {
       if (rows.length <= 1) continue;
-      for (const preview of previewRows.filter((row) => rows.includes(row.rowNumber))) {
-        preview.errors.push(`Fila duplicada para el mismo articulo/bodega: ${rows.join(', ')}.`);
+      for (const preview of previewRows.filter((row) =>
+        rows.includes(row.rowNumber),
+      )) {
+        preview.errors.push(
+          `Fila duplicada para el mismo articulo/bodega: ${rows.join(', ')}.`,
+        );
         preview.action = 'ERROR';
       }
     }
@@ -931,31 +994,33 @@ export class InventoryItemsService {
       tenantId,
       deleteSource.map((item) => item.id),
     );
-    const deleteCandidates: InventoryDeleteCandidate[] = deleteSource.map((item) => {
-      const impact = impactById.get(item.id) ?? {
-        stocks: 0,
-        transactions: 0,
-        reservations: 0,
-        workOrderParts: 0,
-        lubeReportLines: 0,
-        transferLines: 0,
-        requisitionItems: 0,
-        purchaseOrderItems: 0,
-        attachments: 0,
-      };
-      return {
-        itemId: item.id,
-        inventoryCode: item.inventoryCode,
-        partNumber: item.partNumber,
-        name: item.name,
-        impact,
-        warnings: this.hasInventoryDeleteImpact(impact)
-          ? [
-              'Tiene historial o asociaciones. La eliminacion fisica no debe usarse salvo migracion destructiva aprobada.',
-            ]
-          : [],
-      };
-    });
+    const deleteCandidates: InventoryDeleteCandidate[] = deleteSource.map(
+      (item) => {
+        const impact = impactById.get(item.id) ?? {
+          stocks: 0,
+          transactions: 0,
+          reservations: 0,
+          workOrderParts: 0,
+          lubeReportLines: 0,
+          transferLines: 0,
+          requisitionItems: 0,
+          purchaseOrderItems: 0,
+          attachments: 0,
+        };
+        return {
+          itemId: item.id,
+          inventoryCode: item.inventoryCode,
+          partNumber: item.partNumber,
+          name: item.name,
+          impact,
+          warnings: this.hasInventoryDeleteImpact(impact)
+            ? [
+                'Tiene historial o asociaciones. La eliminacion fisica no debe usarse salvo migracion destructiva aprobada.',
+              ]
+            : [],
+        };
+      },
+    );
 
     return {
       domain: 'inventory' as const,
@@ -964,8 +1029,12 @@ export class InventoryItemsService {
         rows: previewRows.length,
         creates: previewRows.filter((row) => row.action === 'CREATE').length,
         updates: previewRows.filter((row) => row.action === 'UPDATE').length,
-        unchanged: previewRows.filter((row) => row.action === 'NO_CHANGE').length,
-        errors: previewRows.reduce((count, row) => count + row.errors.length, 0),
+        unchanged: previewRows.filter((row) => row.action === 'NO_CHANGE')
+          .length,
+        errors: previewRows.reduce(
+          (count, row) => count + row.errors.length,
+          0,
+        ),
         deleteCandidates: deleteCandidates.length,
       },
       requirements: [...requirements.values()],
@@ -997,17 +1066,22 @@ export class InventoryItemsService {
     const tenantId = user.tenantId as string;
     const userId = user.id || user.sub;
     if (!userId) {
-      throw new BadRequestException('Usuario no identificado para auditoria de stock.');
+      throw new BadRequestException(
+        'Usuario no identificado para auditoria de stock.',
+      );
     }
 
     const validation = await this.validateInventoryMasterImport(buffer, user);
-    const blockingRows = validation.previewRows.filter((row) => row.errors.length > 0);
+    const blockingRows = validation.previewRows.filter(
+      (row) => row.errors.length > 0,
+    );
     const blockingRequirements = validation.requirements.filter(
       (req) => req.severity === 'blocking',
     );
     if (blockingRows.length || blockingRequirements.length) {
       throw new BadRequestException({
-        message: 'La importacion tiene errores bloqueantes. Valide requisitos antes de confirmar.',
+        message:
+          'La importacion tiene errores bloqueantes. Valide requisitos antes de confirmar.',
         blockingRows: blockingRows.length,
         blockingRequirements,
       });
@@ -1018,11 +1092,21 @@ export class InventoryItemsService {
     const allowStockAdjustments = options.allowStockAdjustments !== false;
     const allowItemDeletes = options.allowItemDeletes === true;
 
-    if (!allowCreates && validation.previewRows.some((row) => row.action === 'CREATE')) {
-      throw new BadRequestException('La importacion contiene altas, pero allowCreates=false.');
+    if (
+      !allowCreates &&
+      validation.previewRows.some((row) => row.action === 'CREATE')
+    ) {
+      throw new BadRequestException(
+        'La importacion contiene altas, pero allowCreates=false.',
+      );
     }
-    if (!allowUpdates && validation.previewRows.some((row) => row.action === 'UPDATE')) {
-      throw new BadRequestException('La importacion contiene actualizaciones, pero allowUpdates=false.');
+    if (
+      !allowUpdates &&
+      validation.previewRows.some((row) => row.action === 'UPDATE')
+    ) {
+      throw new BadRequestException(
+        'La importacion contiene actualizaciones, pero allowUpdates=false.',
+      );
     }
     if (allowItemDeletes) {
       const blockedDeletes = validation.deleteCandidates.filter((candidate) =>
@@ -1037,15 +1121,25 @@ export class InventoryItemsService {
       }
     }
 
-    const workbook = await parseBaseLogicMasterImportWorkbook(buffer, 'inventory');
+    const workbook = await parseBaseLogicMasterImportWorkbook(
+      buffer,
+      'inventory',
+    );
     const [categories, units, warehouses, suppliers, existingItems] =
       await this.prisma.$transaction([
         this.prisma.itemCategory.findMany({
           where: { tenantId },
-          select: { id: true, name: true, parentCategory: { select: { name: true } } },
+          select: {
+            id: true,
+            name: true,
+            parentCategory: { select: { name: true } },
+          },
         }),
         this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
-        this.prisma.warehouse.findMany({ where: { tenantId }, include: { bins: true } }),
+        this.prisma.warehouse.findMany({
+          where: { tenantId },
+          include: { bins: true },
+        }),
         this.prisma.inventorySupplier.findMany({ where: { tenantId } }),
         this.prisma.inventoryItem.findMany({ where: { tenantId } }),
       ]);
@@ -1062,10 +1156,16 @@ export class InventoryItemsService {
       units.map((unit) => [normalizeImportKey(unit.abbreviation), unit]),
     );
     const warehouseByCode = new Map(
-      warehouses.map((warehouse) => [normalizeImportKey(warehouse.code), warehouse]),
+      warehouses.map((warehouse) => [
+        normalizeImportKey(warehouse.code),
+        warehouse,
+      ]),
     );
     const supplierByName = new Map(
-      suppliers.map((supplier) => [normalizeImportKey(supplier.name), supplier]),
+      suppliers.map((supplier) => [
+        normalizeImportKey(supplier.name),
+        supplier,
+      ]),
     );
     const itemById = new Map(existingItems.map((item) => [item.id, item]));
     const itemByInventoryCode = new Map(
@@ -1119,8 +1219,12 @@ export class InventoryItemsService {
           : null;
         const existing =
           (id ? itemById.get(id) : null) ??
-          (inventoryCode ? itemByInventoryCode.get(normalizeImportKey(inventoryCode)) : null) ??
-          (partNumber ? itemByPartNumber.get(normalizeImportKey(partNumber)) : null) ??
+          (inventoryCode
+            ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
+            : null) ??
+          (partNumber
+            ? itemByPartNumber.get(normalizeImportKey(partNumber))
+            : null) ??
           null;
 
         if (!category || !unit) continue;
@@ -1173,7 +1277,8 @@ export class InventoryItemsService {
         const bin = binCode
           ? warehouse.bins.find(
               (candidate) =>
-                normalizeImportKey(candidate.code) === normalizeImportKey(binCode),
+                normalizeImportKey(candidate.code) ===
+                normalizeImportKey(binCode),
             )
           : null;
         const quantity = parseImportNumber(v['Stock']) ?? 0;
@@ -1191,7 +1296,9 @@ export class InventoryItemsService {
         const previousStock = currentStock?.quantity ?? 0;
         const nextStock = quantity;
         const nextUnitCost =
-          unitCost != null ? new Prisma.Decimal(unitCost) : currentStock?.unitCost ?? null;
+          unitCost != null
+            ? new Prisma.Decimal(unitCost)
+            : (currentStock?.unitCost ?? null);
 
         await tx.itemStock.upsert({
           where: {
@@ -1252,7 +1359,9 @@ export class InventoryItemsService {
       unchanged,
       stockAdjusted,
       deleted,
-      skippedDeleteCandidates: allowItemDeletes ? 0 : validation.deleteCandidates.length,
+      skippedDeleteCandidates: allowItemDeletes
+        ? 0
+        : validation.deleteCandidates.length,
       warnings:
         validation.deleteCandidates.length > 0 && !allowItemDeletes
           ? [

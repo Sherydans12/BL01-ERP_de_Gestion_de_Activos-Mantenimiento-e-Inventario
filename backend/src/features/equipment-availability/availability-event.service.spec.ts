@@ -106,7 +106,9 @@ describe('AvailabilityEventService — register', () => {
           eventAt: new Date(),
           source: AvailabilityEventSource.FAULT_REPORT,
         }),
-      ).rejects.toMatchObject({ message: 'faultReportId es requerido para eventos de falla.' });
+      ).rejects.toMatchObject({
+        message: 'faultReportId es requerido para eventos de falla.',
+      });
     });
 
     it('debe rechazar evento FAULT_REPORT si incluye availabilityId', async () => {
@@ -120,11 +122,16 @@ describe('AvailabilityEventService — register', () => {
           faultReportId: 'f1',
           availabilityId: 'a1',
         }),
-      ).rejects.toMatchObject({ message: 'availabilityId no debe informarse para eventos de falla.' });
+      ).rejects.toMatchObject({
+        message: 'availabilityId no debe informarse para eventos de falla.',
+      });
     });
 
     it('debe rechazar evento FAULT_REPORT si el FaultReport no pertenece al tenant/equipo', async () => {
-      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId: 't2', equipmentId: 'e1' } as any);
+      tx.faultReport.findFirst.mockResolvedValueOnce({
+        tenantId: 't2',
+        equipmentId: 'e1',
+      } as any);
       await expect(
         service.register(tx as any, {
           tenantId: 't1',
@@ -134,7 +141,10 @@ describe('AvailabilityEventService — register', () => {
           source: AvailabilityEventSource.FAULT_REPORT,
           faultReportId: 'f1',
         }),
-      ).rejects.toMatchObject({ message: 'El FaultReport no existe o no corresponde al mismo tenant/equipo.' });
+      ).rejects.toMatchObject({
+        message:
+          'El FaultReport no existe o no corresponde al mismo tenant/equipo.',
+      });
     });
 
     it('debe rechazar evento MANUAL si omite availabilityId', async () => {
@@ -146,7 +156,9 @@ describe('AvailabilityEventService — register', () => {
           eventAt: new Date(),
           source: AvailabilityEventSource.MANUAL,
         }),
-      ).rejects.toMatchObject({ message: 'availabilityId es requerido para el origen MANUAL.' });
+      ).rejects.toMatchObject({
+        message: 'availabilityId es requerido para el origen MANUAL.',
+      });
     });
 
     it('debe rechazar evento MANUAL si incluye faultReportId', async () => {
@@ -160,13 +172,20 @@ describe('AvailabilityEventService — register', () => {
           availabilityId: 'a1',
           faultReportId: 'f1',
         }),
-      ).rejects.toMatchObject({ message: 'faultReportId no debe informarse para el origen MANUAL.' });
+      ).rejects.toMatchObject({
+        message: 'faultReportId no debe informarse para el origen MANUAL.',
+      });
     });
 
     it('debe registrar exitosamente un evento de falla con su faultReportId y sin availabilityId', async () => {
-      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId, equipmentId } as any);
+      tx.faultReport.findFirst.mockResolvedValueOnce({
+        tenantId,
+        equipmentId,
+      } as any);
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null);
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'event-1' } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'event-1',
+      } as never);
 
       await service.register(tx as any, {
         tenantId,
@@ -188,7 +207,10 @@ describe('AvailabilityEventService — register', () => {
     });
 
     it('debe delegar a Prisma la restricción única (P2002) si se intenta reusar un faultReportId', async () => {
-      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId, equipmentId } as any);
+      tx.faultReport.findFirst.mockResolvedValueOnce({
+        tenantId,
+        equipmentId,
+      } as any);
       tx.availabilityEvent.create = jest.fn().mockRejectedValue({
         code: 'P2002',
         clientVersion: '7.5.0',
@@ -223,23 +245,29 @@ describe('AvailabilityEventService — register', () => {
     expect(prisma.availabilityEvent.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ tenantId, equipmentId }),
-        orderBy: [
-          { eventAt: 'asc' },
-          { createdAt: 'asc' },
-          { id: 'asc' },
-        ],
+        orderBy: [{ eventAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       }),
     );
   });
 
   describe('Chronological Hardening (P1B1)', () => {
     const defaultDate = new Date('2026-06-08T12:00:00.000Z');
-    
+
     it('Caso 1: Primer evento', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-1', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-1',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // P
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-1', previousStatus: null, elapsedMinutes: null, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-1',
+        previousStatus: null,
+        elapsedMinutes: null,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
 
       const result = await service.register(tx as any, {
         tenantId,
@@ -249,96 +277,288 @@ describe('AvailabilityEventService — register', () => {
         eventAt: defaultDate,
       });
 
-      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ previousStatus: null, elapsedMinutes: null })
-      }));
+      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            previousStatus: null,
+            elapsedMinutes: null,
+          }),
+        }),
+      );
       expect(tx.availabilityEvent.update).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject({ previousStatus: null, elapsedMinutes: null });
+      expect(result).toMatchObject({
+        previousStatus: null,
+        elapsedMinutes: null,
+      });
     });
 
     it('Caso 2: Append normal', async () => {
       const pDate = new Date('2026-06-08T10:00:00.000Z');
       const nDate = new Date('2026-06-08T12:00:00.000Z');
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: nDate, createdAt: nDate, status: OperationalStatus.DOWN_FAILURE } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-p', status: OperationalStatus.OPERATIONAL, eventAt: pDate } as never); // P
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: nDate,
+        createdAt: nDate,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-p',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: pDate,
+      } as never); // P
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-n', previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 } as never);
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-n',
+        previousStatus: OperationalStatus.OPERATIONAL,
+        elapsedMinutes: 120,
+      } as never);
 
       const result = await service.register(tx as any, {
-        tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: nDate,
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: nDate,
       });
 
       expect(tx.availabilityEvent.update).toHaveBeenCalledTimes(1);
-      expect(tx.availabilityEvent.update).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: 'evt-n' }, data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 }
-      }));
-      expect(result).toMatchObject({ previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 });
+      expect(tx.availabilityEvent.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'evt-n' },
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 120,
+          },
+        }),
+      );
+      expect(result).toMatchObject({
+        previousStatus: OperationalStatus.OPERATIONAL,
+        elapsedMinutes: 120,
+      });
     });
 
     it('Caso 3: Prepend histórico', async () => {
       const nDate = new Date('2026-06-08T10:00:00.000Z');
       const sDate = new Date('2026-06-08T12:00:00.000Z');
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: nDate, createdAt: nDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: nDate,
+        createdAt: nDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // P
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-s', status: OperationalStatus.DOWN_FAILURE, eventAt: sDate } as never); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-n', previousStatus: null, elapsedMinutes: null, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-s',
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: sDate,
+      } as never); // S
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-n',
+        previousStatus: null,
+        elapsedMinutes: null,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
 
       await service.register(tx as any, {
-        tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: nDate,
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: nDate,
       });
 
       expect(tx.availabilityEvent.update).toHaveBeenCalledTimes(2);
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: { id: 'evt-n' }, data: { previousStatus: null, elapsedMinutes: null } }));
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(2, expect.objectContaining({ where: { id: 'evt-s' }, data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 } }));
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: { id: 'evt-n' },
+          data: { previousStatus: null, elapsedMinutes: null },
+        }),
+      );
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: { id: 'evt-s' },
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 120,
+          },
+        }),
+      );
     });
 
     it('Caso 4: Inserción intermedia', async () => {
       const pDate = new Date('2026-06-08T10:00:00.000Z');
       const nDate = new Date('2026-06-08T12:00:00.000Z');
       const sDate = new Date('2026-06-08T15:00:00.000Z');
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: nDate, createdAt: nDate, status: OperationalStatus.DOWN_FAILURE } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-p', status: OperationalStatus.OPERATIONAL, eventAt: pDate } as never); // P
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-s', status: OperationalStatus.OPERATIONAL, eventAt: sDate } as never); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-n', status: OperationalStatus.DOWN_FAILURE, previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: nDate,
+        createdAt: nDate,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-p',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: pDate,
+      } as never); // P
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-s',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: sDate,
+      } as never); // S
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-n',
+        status: OperationalStatus.DOWN_FAILURE,
+        previousStatus: OperationalStatus.OPERATIONAL,
+        elapsedMinutes: 120,
+      } as never);
 
       await service.register(tx as any, {
-        tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: nDate,
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: nDate,
       });
 
       expect(tx.availabilityEvent.update).toHaveBeenCalledTimes(2);
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: { id: 'evt-n' }, data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 } }));
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(2, expect.objectContaining({ where: { id: 'evt-s' }, data: { previousStatus: OperationalStatus.DOWN_FAILURE, elapsedMinutes: 180 } }));
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: { id: 'evt-n' },
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 120,
+          },
+        }),
+      );
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: { id: 'evt-s' },
+          data: {
+            previousStatus: OperationalStatus.DOWN_FAILURE,
+            elapsedMinutes: 180,
+          },
+        }),
+      );
     });
 
     it('Caso 5: Tres estados distintos', async () => {
       // P: STANDBY, N: DOWN_FAILURE, S: DOWN_MAINTENANCE
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: new Date('2026-06-08T12:00:00.000Z'), createdAt: new Date(), status: OperationalStatus.DOWN_FAILURE } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-p', status: OperationalStatus.STANDBY, eventAt: new Date('2026-06-08T10:00:00.000Z') } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-s', status: OperationalStatus.DOWN_MAINTENANCE, eventAt: new Date('2026-06-08T15:00:00.000Z') } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: new Date('2026-06-08T12:00:00.000Z'),
+        createdAt: new Date(),
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-p',
+        status: OperationalStatus.STANDBY,
+        eventAt: new Date('2026-06-08T10:00:00.000Z'),
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-s',
+        status: OperationalStatus.DOWN_MAINTENANCE,
+        eventAt: new Date('2026-06-08T15:00:00.000Z'),
+      } as never);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: new Date('2026-06-08T12:00:00.000Z') });
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: { previousStatus: OperationalStatus.STANDBY, elapsedMinutes: 120 } }));
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { previousStatus: OperationalStatus.DOWN_FAILURE, elapsedMinutes: 180 } }));
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: new Date('2026-06-08T12:00:00.000Z'),
+      });
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: {
+            previousStatus: OperationalStatus.STANDBY,
+            elapsedMinutes: 120,
+          },
+        }),
+      );
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: {
+            previousStatus: OperationalStatus.DOWN_FAILURE,
+            elapsedMinutes: 180,
+          },
+        }),
+      );
     });
 
     it('Caso 6: Estados consecutivos iguales', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: new Date('2026-06-08T12:00:00.000Z'), createdAt: new Date(), status: OperationalStatus.OPERATIONAL } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-p', status: OperationalStatus.OPERATIONAL, eventAt: new Date('2026-06-08T10:00:00.000Z') } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-s', status: OperationalStatus.OPERATIONAL, eventAt: new Date('2026-06-08T15:00:00.000Z') } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: new Date('2026-06-08T12:00:00.000Z'),
+        createdAt: new Date(),
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-p',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: new Date('2026-06-08T10:00:00.000Z'),
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-s',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: new Date('2026-06-08T15:00:00.000Z'),
+      } as never);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: new Date('2026-06-08T12:00:00.000Z') });
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 120 } }));
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 180 } }));
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: new Date('2026-06-08T12:00:00.000Z'),
+      });
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 120,
+          },
+        }),
+      );
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 180,
+          },
+        }),
+      );
     });
 
     it('Caso 7: No modifica el predecesor', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: new Date(), createdAt: new Date(), status: OperationalStatus.OPERATIONAL } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-p', status: OperationalStatus.OPERATIONAL, eventAt: new Date() } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: new Date(),
+        createdAt: new Date(),
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-p',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: new Date(),
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: new Date() });
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: new Date(),
+      });
       const calls = tx.availabilityEvent.update.mock.calls;
-      expect(calls.some(c => c[0].where.id === 'evt-p')).toBeFalsy();
+      expect(calls.some((c) => c[0].where.id === 'evt-p')).toBeFalsy();
     });
 
     it('Caso 8: Solo actualiza el sucesor inmediato', async () => {
@@ -352,57 +572,169 @@ describe('AvailabilityEventService — register', () => {
     });
 
     it('Caso 10: Aislamiento por tenant', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValue(null);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId: 'tenant-x', equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate });
-      expect(tx.availabilityEvent.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ tenantId: 'tenant-x' }) }));
+      await service.register(tx as any, {
+        tenantId: 'tenant-x',
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: defaultDate,
+      });
+      expect(tx.availabilityEvent.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 'tenant-x' }),
+        }),
+      );
     });
 
     it('Caso 11: Aislamiento por equipo', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValue(null);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId, equipmentId: 'eq-x', availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate });
-      expect(tx.availabilityEvent.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ equipmentId: 'eq-x' }) }));
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId: 'eq-x',
+        availabilityId,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: defaultDate,
+      });
+      expect(tx.availabilityEvent.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ equipmentId: 'eq-x' }),
+        }),
+      );
     });
 
     it('Caso 12: FAULT_REPORT sin availabilityId', async () => {
-      tx.faultReport.findFirst.mockResolvedValueOnce({ tenantId, equipmentId } as any);
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.DOWN_FAILURE } as never);
+      tx.faultReport.findFirst.mockResolvedValueOnce({
+        tenantId,
+        equipmentId,
+      } as any);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValue(null);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId, equipmentId, source: AvailabilityEventSource.FAULT_REPORT, faultReportId: 'f1', status: OperationalStatus.DOWN_FAILURE, eventAt: defaultDate });
-      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ faultReportId: 'f1', availabilityId: null }) }));
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        source: AvailabilityEventSource.FAULT_REPORT,
+        faultReportId: 'f1',
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: defaultDate,
+      });
+      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            faultReportId: 'f1',
+            availabilityId: null,
+          }),
+        }),
+      );
     });
 
     it('Caso 13: Evento M2 con availabilityId', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValue(null);
       tx.availabilityEvent.update.mockResolvedValueOnce({} as never);
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId: 'a1', source: AvailabilityEventSource.MANUAL, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate });
-      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ availabilityId: 'a1' }) }));
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId: 'a1',
+        source: AvailabilityEventSource.MANUAL,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: defaultDate,
+      });
+      expect(tx.availabilityEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ availabilityId: 'a1' }),
+        }),
+      );
     });
 
     it('Caso 14: Error al crear N', async () => {
       tx.availabilityEvent.create.mockRejectedValue(new Error('P2002'));
-      await expect(service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate })).rejects.toThrow('P2002');
+      await expect(
+        service.register(tx as any, {
+          tenantId,
+          equipmentId,
+          availabilityId,
+          status: OperationalStatus.OPERATIONAL,
+          eventAt: defaultDate,
+        }),
+      ).rejects.toThrow('P2002');
     });
 
     it('Caso 15: Error al actualizar N', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValue(null);
-      tx.availabilityEvent.update.mockRejectedValueOnce(new Error('Update failed'));
-      await expect(service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate })).rejects.toThrow('Update failed');
+      tx.availabilityEvent.update.mockRejectedValueOnce(
+        new Error('Update failed'),
+      );
+      await expect(
+        service.register(tx as any, {
+          tenantId,
+          equipmentId,
+          availabilityId,
+          status: OperationalStatus.OPERATIONAL,
+          eventAt: defaultDate,
+        }),
+      ).rejects.toThrow('Update failed');
     });
 
     it('Caso 16: Error al actualizar S', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // P
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-s', status: OperationalStatus.OPERATIONAL, eventAt: new Date('2026-06-08T15:00:00.000Z') } as never); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-n' } as never); // N update ok
-      tx.availabilityEvent.update.mockRejectedValueOnce(new Error('Update S failed'));
-      await expect(service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate })).rejects.toThrow('Update S failed');
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-s',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: new Date('2026-06-08T15:00:00.000Z'),
+      } as never); // S
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-n',
+      } as never); // N update ok
+      tx.availabilityEvent.update.mockRejectedValueOnce(
+        new Error('Update S failed'),
+      );
+      await expect(
+        service.register(tx as any, {
+          tenantId,
+          equipmentId,
+          availabilityId,
+          status: OperationalStatus.OPERATIONAL,
+          eventAt: defaultDate,
+        }),
+      ).rejects.toThrow('Update S failed');
     });
 
     it('Caso 17: No crea EquipmentAvailability', async () => {
@@ -419,16 +751,42 @@ describe('AvailabilityEventService — register', () => {
       const eDate = new Date('2026-06-08T10:00:00.000Z');
       const pCreatedAt = new Date('2026-06-08T09:59:00.000Z');
       const nCreatedAt = new Date('2026-06-08T10:00:00.000Z');
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: eDate, createdAt: nCreatedAt, status: OperationalStatus.DOWN_FAILURE } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: 'evt-p', status: OperationalStatus.OPERATIONAL, eventAt: eDate, createdAt: pCreatedAt } as never); // P
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: eDate,
+        createdAt: nCreatedAt,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: 'evt-p',
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: eDate,
+        createdAt: pCreatedAt,
+      } as never); // P
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-n', previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 0 } as never);
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-n',
+        previousStatus: OperationalStatus.OPERATIONAL,
+        elapsedMinutes: 0,
+      } as never);
 
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: eDate });
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: eDate,
+      });
 
-      expect(tx.availabilityEvent.update).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: 'evt-n' }, data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 0 }
-      }));
+      expect(tx.availabilityEvent.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'evt-n' },
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 0,
+          },
+        }),
+      );
     });
 
     it('Caso 20: Empate de eventAt y createdAt, desempate por id (A -> N -> B)', async () => {
@@ -438,19 +796,58 @@ describe('AvailabilityEventService — register', () => {
       const idN = '50000000-0000-0000-0000-000000000000';
       const idB = '90000000-0000-0000-0000-000000000000';
 
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: idN, eventAt: eDate, createdAt: eCreatedAt, status: OperationalStatus.DOWN_FAILURE } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: idA, status: OperationalStatus.OPERATIONAL, eventAt: eDate, createdAt: eCreatedAt } as never); // P
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: idB, status: OperationalStatus.STANDBY, eventAt: eDate, createdAt: eCreatedAt } as never); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: idN, previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 0 } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: idN,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: idA,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+      } as never); // P
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: idB,
+        status: OperationalStatus.STANDBY,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+      } as never); // S
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: idN,
+        previousStatus: OperationalStatus.OPERATIONAL,
+        elapsedMinutes: 0,
+      } as never);
 
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: eDate });
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: eDate,
+      });
 
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({
-        where: { id: idN }, data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 0 }
-      }));
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(2, expect.objectContaining({
-        where: { id: idB }, data: { previousStatus: OperationalStatus.DOWN_FAILURE, elapsedMinutes: 0 }
-      }));
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: { id: idN },
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 0,
+          },
+        }),
+      );
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: { id: idB },
+          data: {
+            previousStatus: OperationalStatus.DOWN_FAILURE,
+            elapsedMinutes: 0,
+          },
+        }),
+      );
     });
 
     it('Caso 21: El nuevo evento ordena antes de un evento existente empatado (N -> A)', async () => {
@@ -459,19 +856,50 @@ describe('AvailabilityEventService — register', () => {
       const idA = '90000000-0000-0000-0000-000000000000';
       const idN = '10000000-0000-0000-0000-000000000000';
 
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: idN, eventAt: eDate, createdAt: eCreatedAt, status: OperationalStatus.DOWN_FAILURE } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: idN,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // P (no hay predecesor)
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: idA, status: OperationalStatus.OPERATIONAL, eventAt: eDate, createdAt: eCreatedAt } as never); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: idN, previousStatus: null, elapsedMinutes: null } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: idA,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+      } as never); // S
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: idN,
+        previousStatus: null,
+        elapsedMinutes: null,
+      } as never);
 
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: eDate });
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: eDate,
+      });
 
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({
-        where: { id: idN }, data: { previousStatus: null, elapsedMinutes: null }
-      }));
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(2, expect.objectContaining({
-        where: { id: idA }, data: { previousStatus: OperationalStatus.DOWN_FAILURE, elapsedMinutes: 0 }
-      }));
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: { id: idN },
+          data: { previousStatus: null, elapsedMinutes: null },
+        }),
+      );
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: { id: idA },
+          data: {
+            previousStatus: OperationalStatus.DOWN_FAILURE,
+            elapsedMinutes: 0,
+          },
+        }),
+      );
     });
 
     it('Caso 22: El nuevo evento ordena después de un evento existente empatado', async () => {
@@ -480,16 +908,43 @@ describe('AvailabilityEventService — register', () => {
       const idA = '10000000-0000-0000-0000-000000000000';
       const idN = '90000000-0000-0000-0000-000000000000';
 
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: idN, eventAt: eDate, createdAt: eCreatedAt, status: OperationalStatus.DOWN_FAILURE } as never);
-      tx.availabilityEvent.findFirst.mockResolvedValueOnce({ id: idA, status: OperationalStatus.OPERATIONAL, eventAt: eDate, createdAt: eCreatedAt } as never); // P
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: idN,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+        status: OperationalStatus.DOWN_FAILURE,
+      } as never);
+      tx.availabilityEvent.findFirst.mockResolvedValueOnce({
+        id: idA,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: eDate,
+        createdAt: eCreatedAt,
+      } as never); // P
       tx.availabilityEvent.findFirst.mockResolvedValueOnce(null); // S
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: idN, previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 0 } as never);
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: idN,
+        previousStatus: OperationalStatus.OPERATIONAL,
+        elapsedMinutes: 0,
+      } as never);
 
-      await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.DOWN_FAILURE, eventAt: eDate });
+      await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.DOWN_FAILURE,
+        eventAt: eDate,
+      });
 
-      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(1, expect.objectContaining({
-        where: { id: idN }, data: { previousStatus: OperationalStatus.OPERATIONAL, elapsedMinutes: 0 }
-      }));
+      expect(tx.availabilityEvent.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: { id: idN },
+          data: {
+            previousStatus: OperationalStatus.OPERATIONAL,
+            elapsedMinutes: 0,
+          },
+        }),
+      );
     });
 
     it('Caso 23: elapsedMinutes = 0 para eventos con mismo eventAt', async () => {
@@ -498,12 +953,30 @@ describe('AvailabilityEventService — register', () => {
     });
 
     it('Caso 24: El retorno contiene los valores finales reparados', async () => {
-      tx.availabilityEvent.create.mockResolvedValueOnce({ id: 'evt-n', eventAt: defaultDate, createdAt: defaultDate, status: OperationalStatus.OPERATIONAL } as never);
+      tx.availabilityEvent.create.mockResolvedValueOnce({
+        id: 'evt-n',
+        eventAt: defaultDate,
+        createdAt: defaultDate,
+        status: OperationalStatus.OPERATIONAL,
+      } as never);
       tx.availabilityEvent.findFirst.mockResolvedValue(null);
-      tx.availabilityEvent.update.mockResolvedValueOnce({ id: 'evt-n', previousStatus: OperationalStatus.DOWN_FAILURE, elapsedMinutes: 120 } as never);
-      
-      const result = await service.register(tx as any, { tenantId, equipmentId, availabilityId, status: OperationalStatus.OPERATIONAL, eventAt: defaultDate });
-      expect(result).toMatchObject({ previousStatus: OperationalStatus.DOWN_FAILURE, elapsedMinutes: 120 });
+      tx.availabilityEvent.update.mockResolvedValueOnce({
+        id: 'evt-n',
+        previousStatus: OperationalStatus.DOWN_FAILURE,
+        elapsedMinutes: 120,
+      } as never);
+
+      const result = await service.register(tx as any, {
+        tenantId,
+        equipmentId,
+        availabilityId,
+        status: OperationalStatus.OPERATIONAL,
+        eventAt: defaultDate,
+      });
+      expect(result).toMatchObject({
+        previousStatus: OperationalStatus.DOWN_FAILURE,
+        elapsedMinutes: 120,
+      });
     });
   });
 });

@@ -38,7 +38,12 @@ import {
   userCanAccessContractId,
 } from '../../common/contract-scope.util';
 
-type FleetImportAction = 'CREATE' | 'UPDATE' | 'NO_CHANGE' | 'DELETE_CANDIDATE' | 'ERROR';
+type FleetImportAction =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'NO_CHANGE'
+  | 'DELETE_CANDIDATE'
+  | 'ERROR';
 
 type FleetImportRequirement = {
   kind: 'CONTRACT' | 'SUBCONTRACT' | 'EQUIPMENT_TYPE';
@@ -404,7 +409,8 @@ export class EquipmentsService {
       return {
         ...eq,
         actionRequiredFault:
-          Boolean(activeFault) && latestM2 !== OperationalStatus.DOWN_MAINTENANCE,
+          Boolean(activeFault) &&
+          latestM2 !== OperationalStatus.DOWN_MAINTENANCE,
         activeFaultReportStatus: activeFault?.status ?? null,
         activeFaultReportCorrelative: activeFault?.correlative ?? null,
       };
@@ -679,9 +685,9 @@ export class EquipmentsService {
     const key = `${requirement.kind}:${requirement.code}`;
     const existing = map.get(key);
     if (existing) {
-      existing.rows = [...new Set([...existing.rows, ...requirement.rows])].sort(
-        (a, b) => a - b,
-      );
+      existing.rows = [
+        ...new Set([...existing.rows, ...requirement.rows]),
+      ].sort((a, b) => a - b);
       if (requirement.severity === 'blocking') existing.severity = 'blocking';
       return;
     }
@@ -826,9 +832,14 @@ export class EquipmentsService {
         }),
       ]);
 
-    const equipmentById = new Map(equipments.map((equipment) => [equipment.id, equipment]));
+    const equipmentById = new Map(
+      equipments.map((equipment) => [equipment.id, equipment]),
+    );
     const equipmentByInternal = new Map(
-      equipments.map((equipment) => [normalizeImportKey(equipment.internalId), equipment]),
+      equipments.map((equipment) => [
+        normalizeImportKey(equipment.internalId),
+        equipment,
+      ]),
     );
     const typeByCode = new Map(
       equipmentTypes.map((type) => [normalizeImportKey(type.code), type]),
@@ -837,9 +848,15 @@ export class EquipmentsService {
       equipmentTypes.map((type) => [normalizeImportKey(type.name), type]),
     );
     const contractByCode = new Map(
-      contracts.map((contract) => [normalizeImportKey(contract.code), contract]),
+      contracts.map((contract) => [
+        normalizeImportKey(contract.code),
+        contract,
+      ]),
     );
-    const subcontractsByContractAndCode = new Map<string, (typeof contracts)[number]['subcontracts'][number]>();
+    const subcontractsByContractAndCode = new Map<
+      string,
+      (typeof contracts)[number]['subcontracts'][number]
+    >();
     for (const contract of contracts) {
       for (const subcontract of contract.subcontracts) {
         subcontractsByContractAndCode.set(
@@ -857,7 +874,11 @@ export class EquipmentsService {
     const includedEquipmentIds = new Set<string>();
     const includedInternalKeys = new Set<string>();
 
-    const addSeen = (map: Map<string, number[]>, key: string, rowNumber: number) => {
+    const addSeen = (
+      map: Map<string, number[]>,
+      key: string,
+      rowNumber: number,
+    ) => {
       map.set(key, [...(map.get(key) ?? []), rowNumber]);
     };
 
@@ -865,7 +886,8 @@ export class EquipmentsService {
       const v = row.values;
       const id = getImportNullableString(v, 'ID sistema');
       const internalId = getImportString(v, 'N interno').toUpperCase();
-      const plate = getImportNullableString(v, 'Patente')?.toUpperCase() ?? null;
+      const plate =
+        getImportNullableString(v, 'Patente')?.toUpperCase() ?? null;
       const typeCode = getImportNullableString(v, 'Codigo tipo catalogo');
       const typeName = getImportString(v, 'Tipo equipo');
       const contractCode = getImportString(v, 'Contrato');
@@ -874,10 +896,12 @@ export class EquipmentsService {
       const warnings: string[] = [];
 
       if (!internalId) errors.push('N interno requerido.');
-      if (!typeName && !typeCode) errors.push('Tipo equipo o codigo tipo catalogo requerido.');
+      if (!typeName && !typeCode)
+        errors.push('Tipo equipo o codigo tipo catalogo requerido.');
       if (!contractCode) errors.push('Contrato requerido.');
       if (id) {
-        if (seenIds.has(id)) errors.push(`ID sistema duplicado en el archivo: ${id}.`);
+        if (seenIds.has(id))
+          errors.push(`ID sistema duplicado en el archivo: ${id}.`);
         seenIds.add(id);
       }
       if (internalId) {
@@ -917,11 +941,14 @@ export class EquipmentsService {
         errors.push(`Contrato no existe: ${contractCode}.`);
       }
 
-      let subcontract: (typeof contracts)[number]['subcontracts'][number] | null = null;
+      let subcontract:
+        | (typeof contracts)[number]['subcontracts'][number]
+        | null = null;
       if (subcontractCode && contractCode) {
-        subcontract = subcontractsByContractAndCode.get(
-          `${normalizeImportKey(contractCode)}:${normalizeImportKey(subcontractCode)}`,
-        ) ?? null;
+        subcontract =
+          subcontractsByContractAndCode.get(
+            `${normalizeImportKey(contractCode)}:${normalizeImportKey(subcontractCode)}`,
+          ) ?? null;
         if (!subcontract) {
           this.registerFleetRequirement(requirements, {
             kind: 'SUBCONTRACT',
@@ -930,7 +957,9 @@ export class EquipmentsService {
             severity: 'blocking',
             message: `Debe existir bajo el contrato ${contractCode}.`,
           });
-          errors.push(`Subcontrato no existe o no pertenece al contrato: ${subcontractCode}.`);
+          errors.push(
+            `Subcontrato no existe o no pertenece al contrato: ${subcontractCode}.`,
+          );
         }
       } else if (contract && contract.subcontracts.length > 0) {
         warnings.push(
@@ -940,7 +969,9 @@ export class EquipmentsService {
 
       const existing =
         (id ? equipmentById.get(id) : null) ??
-        (internalId ? equipmentByInternal.get(normalizeImportKey(internalId)) : null) ??
+        (internalId
+          ? equipmentByInternal.get(normalizeImportKey(internalId))
+          : null) ??
         null;
       if (existing) {
         includedEquipmentIds.add(existing.id);
@@ -950,9 +981,17 @@ export class EquipmentsService {
       const changes: FleetImportPreviewRow['changes'] = [];
       const compare = (field: string, before: unknown, after: unknown) => {
         const normalize = (value: unknown) =>
-          value instanceof Date ? value.toISOString().slice(0, 10) : (value ?? null);
-        if (JSON.stringify(normalize(before)) !== JSON.stringify(normalize(after))) {
-          changes.push({ field, before: normalize(before), after: normalize(after) });
+          value instanceof Date
+            ? value.toISOString().slice(0, 10)
+            : (value ?? null);
+        if (
+          JSON.stringify(normalize(before)) !== JSON.stringify(normalize(after))
+        ) {
+          changes.push({
+            field,
+            before: normalize(before),
+            after: normalize(after),
+          });
         }
       };
 
@@ -1008,23 +1047,29 @@ export class EquipmentsService {
             : 'CREATE',
         equipmentId: existing?.id ?? null,
         internalId,
-        label: [internalId, plate, imported.brand, imported.model].filter(Boolean).join(' · '),
+        label: [internalId, plate, imported.brand, imported.model]
+          .filter(Boolean)
+          .join(' · '),
         errors,
         warnings,
         changes,
       });
     }
 
-    for (const [key, rows] of seenInternalIds) {
+    for (const rows of seenInternalIds.values()) {
       if (rows.length <= 1) continue;
-      for (const preview of previewRows.filter((row) => rows.includes(row.rowNumber))) {
+      for (const preview of previewRows.filter((row) =>
+        rows.includes(row.rowNumber),
+      )) {
         preview.errors.push(`N interno duplicado en filas ${rows.join(', ')}.`);
         preview.action = 'ERROR';
       }
     }
     for (const [key, rows] of seenPlates) {
       if (!key || rows.length <= 1) continue;
-      for (const preview of previewRows.filter((row) => rows.includes(row.rowNumber))) {
+      for (const preview of previewRows.filter((row) =>
+        rows.includes(row.rowNumber),
+      )) {
         preview.errors.push(`Patente duplicada en filas ${rows.join(', ')}.`);
         preview.action = 'ERROR';
       }
@@ -1040,31 +1085,40 @@ export class EquipmentsService {
       tenantId,
       deleteSource.map((equipment) => equipment.id),
     );
-    const deleteCandidates: FleetDeleteCandidate[] = deleteSource.map((equipment) => {
-      const impact = impactById.get(equipment.id) ?? {
-        workOrders: 0,
-        availabilityRecords: 0,
-        availabilityEvents: 0,
-        faultReports: 0,
-        lubeReports: 0,
-        meterAdjustments: 0,
-        meterLogs: 0,
-        assetCosts: 0,
-        purchaseRequisitions: 0,
-        purchaseOrders: 0,
-      };
-      return {
-        equipmentId: equipment.id,
-        internalId: equipment.internalId,
-        label: [equipment.internalId, equipment.plate, equipment.brand, equipment.model]
-          .filter(Boolean)
-          .join(' · '),
-        impact,
-        warnings: this.hasFleetDeleteImpact(impact)
-          ? ['Tiene registros asociados. Solo se eliminara con confirmacion destructiva explicita.']
-          : [],
-      };
-    });
+    const deleteCandidates: FleetDeleteCandidate[] = deleteSource.map(
+      (equipment) => {
+        const impact = impactById.get(equipment.id) ?? {
+          workOrders: 0,
+          availabilityRecords: 0,
+          availabilityEvents: 0,
+          faultReports: 0,
+          lubeReports: 0,
+          meterAdjustments: 0,
+          meterLogs: 0,
+          assetCosts: 0,
+          purchaseRequisitions: 0,
+          purchaseOrders: 0,
+        };
+        return {
+          equipmentId: equipment.id,
+          internalId: equipment.internalId,
+          label: [
+            equipment.internalId,
+            equipment.plate,
+            equipment.brand,
+            equipment.model,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          impact,
+          warnings: this.hasFleetDeleteImpact(impact)
+            ? [
+                'Tiene registros asociados. Solo se eliminara con confirmacion destructiva explicita.',
+              ]
+            : [],
+        };
+      },
+    );
 
     const blockingErrors = previewRows.reduce(
       (count, row) => count + row.errors.length,
@@ -1078,7 +1132,8 @@ export class EquipmentsService {
         rows: previewRows.length,
         creates: previewRows.filter((row) => row.action === 'CREATE').length,
         updates: previewRows.filter((row) => row.action === 'UPDATE').length,
-        unchanged: previewRows.filter((row) => row.action === 'NO_CHANGE').length,
+        unchanged: previewRows.filter((row) => row.action === 'NO_CHANGE')
+          .length,
         errors: blockingErrors,
         deleteCandidates: deleteCandidates.length,
       },
@@ -1115,7 +1170,9 @@ export class EquipmentsService {
       data: { equipmentId: null },
     });
     await tx.availabilityEvent.deleteMany({ where: { tenantId, equipmentId } });
-    await tx.equipmentAvailability.deleteMany({ where: { tenantId, equipmentId } });
+    await tx.equipmentAvailability.deleteMany({
+      where: { tenantId, equipmentId },
+    });
     await tx.faultReport.deleteMany({ where: { tenantId, equipmentId } });
     await tx.lubeReport.deleteMany({ where: { tenantId, equipmentId } });
     await tx.workOrder.deleteMany({ where: { tenantId, equipmentId } });
@@ -1134,17 +1191,26 @@ export class EquipmentsService {
     const tenantId = user.tenantId as string;
     const userId = user.id || user.sub;
     if (!userId) {
-      throw new BadRequestException('Usuario no valido para auditoria de medidor.');
+      throw new BadRequestException(
+        'Usuario no valido para auditoria de medidor.',
+      );
     }
 
-    const validation = await this.validateFleetMasterImport(buffer, user, siteHeader);
-    const blockingRows = validation.previewRows.filter((row) => row.errors.length > 0);
+    const validation = await this.validateFleetMasterImport(
+      buffer,
+      user,
+      siteHeader,
+    );
+    const blockingRows = validation.previewRows.filter(
+      (row) => row.errors.length > 0,
+    );
     const blockingRequirements = validation.requirements.filter(
       (req) => req.severity === 'blocking',
     );
     if (blockingRows.length || blockingRequirements.length) {
       throw new BadRequestException({
-        message: 'La importacion tiene errores bloqueantes. Valide y configure antes de confirmar.',
+        message:
+          'La importacion tiene errores bloqueantes. Valide y configure antes de confirmar.',
         blockingRows: blockingRows.length,
         blockingRequirements,
       });
@@ -1153,13 +1219,24 @@ export class EquipmentsService {
     const allowCreates = options.allowCreates !== false;
     const allowUpdates = options.allowUpdates !== false;
     const allowDeletes = options.allowDeletes === true;
-    const forceDeleteWithAssociations = options.forceDeleteWithAssociations === true;
+    const forceDeleteWithAssociations =
+      options.forceDeleteWithAssociations === true;
 
-    if (!allowCreates && validation.previewRows.some((row) => row.action === 'CREATE')) {
-      throw new BadRequestException('La importacion contiene altas, pero allowCreates=false.');
+    if (
+      !allowCreates &&
+      validation.previewRows.some((row) => row.action === 'CREATE')
+    ) {
+      throw new BadRequestException(
+        'La importacion contiene altas, pero allowCreates=false.',
+      );
     }
-    if (!allowUpdates && validation.previewRows.some((row) => row.action === 'UPDATE')) {
-      throw new BadRequestException('La importacion contiene actualizaciones, pero allowUpdates=false.');
+    if (
+      !allowUpdates &&
+      validation.previewRows.some((row) => row.action === 'UPDATE')
+    ) {
+      throw new BadRequestException(
+        'La importacion contiene actualizaciones, pero allowUpdates=false.',
+      );
     }
     if (allowDeletes && !forceDeleteWithAssociations) {
       const blockedDeletes = validation.deleteCandidates.filter((candidate) =>
@@ -1175,23 +1252,36 @@ export class EquipmentsService {
     }
 
     const workbook = await parseBaseLogicMasterImportWorkbook(buffer, 'fleet');
-    const [equipmentTypes, contracts, existing] = await this.prisma.$transaction([
-      this.prisma.catalogItem.findMany({
-        where: { tenantId, category: 'EQUIPMENT_TYPE', isActive: true },
-      }),
-      this.prisma.contract.findMany({
-        where: { tenantId },
-        include: { subcontracts: true },
-      }),
-      this.prisma.equipment.findMany({
-        where: this.buildFleetImportScopeWhere(user, siteHeader),
-      }),
-    ]);
+    const [equipmentTypes, contracts, existing] =
+      await this.prisma.$transaction([
+        this.prisma.catalogItem.findMany({
+          where: { tenantId, category: 'EQUIPMENT_TYPE', isActive: true },
+        }),
+        this.prisma.contract.findMany({
+          where: { tenantId },
+          include: { subcontracts: true },
+        }),
+        this.prisma.equipment.findMany({
+          where: this.buildFleetImportScopeWhere(user, siteHeader),
+        }),
+      ]);
 
-    const typeByCode = new Map(equipmentTypes.map((type) => [normalizeImportKey(type.code), type]));
-    const typeByName = new Map(equipmentTypes.map((type) => [normalizeImportKey(type.name), type]));
-    const contractByCode = new Map(contracts.map((contract) => [normalizeImportKey(contract.code), contract]));
-    const subcontractByContractAndCode = new Map<string, (typeof contracts)[number]['subcontracts'][number]>();
+    const typeByCode = new Map(
+      equipmentTypes.map((type) => [normalizeImportKey(type.code), type]),
+    );
+    const typeByName = new Map(
+      equipmentTypes.map((type) => [normalizeImportKey(type.name), type]),
+    );
+    const contractByCode = new Map(
+      contracts.map((contract) => [
+        normalizeImportKey(contract.code),
+        contract,
+      ]),
+    );
+    const subcontractByContractAndCode = new Map<
+      string,
+      (typeof contracts)[number]['subcontracts'][number]
+    >();
     for (const contract of contracts) {
       for (const subcontract of contract.subcontracts) {
         subcontractByContractAndCode.set(
@@ -1200,9 +1290,14 @@ export class EquipmentsService {
         );
       }
     }
-    const existingById = new Map(existing.map((equipment) => [equipment.id, equipment]));
+    const existingById = new Map(
+      existing.map((equipment) => [equipment.id, equipment]),
+    );
     const existingByInternal = new Map(
-      existing.map((equipment) => [normalizeImportKey(equipment.internalId), equipment]),
+      existing.map((equipment) => [
+        normalizeImportKey(equipment.internalId),
+        equipment,
+      ]),
     );
     const previewByRowNumber = new Map(
       validation.previewRows.map((preview) => [preview.rowNumber, preview]),
@@ -1268,7 +1363,10 @@ export class EquipmentsService {
           year: parseImportInt(v['Ano']),
           ownership: getImportNullableString(v, 'Propiedad'),
           isSubleased: parseImportBoolean(v['Subarriendo']) ?? false,
-          subleaseCompanyName: getImportNullableString(v, 'Empresa subarriendo'),
+          subleaseCompanyName: getImportNullableString(
+            v,
+            'Empresa subarriendo',
+          ),
           maintenanceFrequency: parseImportInt(v['Frecuencia mantencion']),
           pmIntervalOverride: parseImportInt(v['Intervalo PM']),
           lastMaintenanceDate: parseImportDate(v['Ultima PM fecha']),
@@ -1307,7 +1405,11 @@ export class EquipmentsService {
           continue;
         }
 
-        const { currentMeter: nextMeter, tenantId: _tenantId, ...updateData } = data;
+        const {
+          currentMeter: nextMeter,
+          tenantId: _tenantId,
+          ...updateData
+        } = data;
         await tx.equipment.update({
           where: { id: existingRow.id },
           data: updateData,
@@ -1326,7 +1428,11 @@ export class EquipmentsService {
 
       if (allowDeletes) {
         for (const candidate of validation.deleteCandidates) {
-          await this.deleteEquipmentWithAssociations(tx, tenantId, candidate.equipmentId);
+          await this.deleteEquipmentWithAssociations(
+            tx,
+            tenantId,
+            candidate.equipmentId,
+          );
           deleted++;
         }
       }
@@ -1337,7 +1443,9 @@ export class EquipmentsService {
       updated,
       unchanged,
       deleted,
-      skippedDeleteCandidates: allowDeletes ? 0 : validation.deleteCandidates.length,
+      skippedDeleteCandidates: allowDeletes
+        ? 0
+        : validation.deleteCandidates.length,
       warnings:
         validation.deleteCandidates.length > 0 && !allowDeletes
           ? [

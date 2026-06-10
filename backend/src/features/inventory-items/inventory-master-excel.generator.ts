@@ -102,8 +102,18 @@ const BASE_COLUMNS: MasterExportColumn[] = [
   { header: 'Stock minimo', key: 'minStock', width: 14, numFmt: '#,##0.00' },
   { header: 'Stock maximo', key: 'maxStock', width: 14, numFmt: '#,##0.00' },
   { header: 'Bodega politica', key: 'policyWarehouse', width: 20 },
-  { header: 'Politica minimo', key: 'policyMinStock', width: 14, numFmt: '#,##0.00' },
-  { header: 'Politica maximo', key: 'policyMaxStock', width: 14, numFmt: '#,##0.00' },
+  {
+    header: 'Politica minimo',
+    key: 'policyMinStock',
+    width: 14,
+    numFmt: '#,##0.00',
+  },
+  {
+    header: 'Politica maximo',
+    key: 'policyMaxStock',
+    width: 14,
+    numFmt: '#,##0.00',
+  },
   { header: 'QR payload', key: 'qrCode', width: 24 },
 ];
 
@@ -119,7 +129,11 @@ function boolLabel(value: boolean): string {
 function numberFromDecimal(value: unknown): number {
   if (value == null) return 0;
   if (typeof value === 'number') return value;
-  if (typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+  if (
+    typeof value === 'object' &&
+    'toNumber' in value &&
+    typeof value.toNumber === 'function'
+  ) {
     return (value as { toNumber: () => number }).toNumber();
   }
   const parsed = Number(value);
@@ -133,74 +147,79 @@ export async function generateInventoryMasterExcelBuffer(
     ? [...BASE_COLUMNS.slice(0, 27), ...COST_COLUMNS, ...BASE_COLUMNS.slice(27)]
     : BASE_COLUMNS;
 
-  const rows: InventoryMasterRow[] = data.items.flatMap((item): InventoryMasterRow[] => {
-    const family = item.itemCategory.parentCategory?.name ?? item.itemCategory.name;
-    const subcategory = item.itemCategory.parentCategory ? item.itemCategory.name : null;
-    const common = {
-      id: item.id,
-      inventoryCode: item.inventoryCode,
-      partNumber: item.partNumber,
-      name: item.name,
-      description: item.description,
-      family,
-      subcategory,
-      unit: item.unitOfMeasure.abbreviation,
-      unitName: item.unitOfMeasure.name,
-      allowsDecimals: boolLabel(item.unitOfMeasure.allowsDecimals),
-      brand: item.brand,
-      compatibilityInfo: item.compatibilityInfo,
-      supplier: item.inventorySupplier?.name ?? null,
-      isInventory: boolLabel(item.isInventory),
-      isConsumable: boolLabel(item.isConsumable),
-      isAsset: boolLabel(item.isAsset),
-      isSerialized: boolLabel(item.isSerialized),
-      policyWarehouse: item.policyTargetWarehouse
-        ? `${item.policyTargetWarehouse.code} - ${item.policyTargetWarehouse.name}`
-        : null,
-      policyMinStock: item.policyMinStock,
-      policyMaxStock: item.policyMaxStock,
-      qrCode: item.qrCode,
-    };
+  const rows: InventoryMasterRow[] = data.items.flatMap(
+    (item): InventoryMasterRow[] => {
+      const family =
+        item.itemCategory.parentCategory?.name ?? item.itemCategory.name;
+      const subcategory = item.itemCategory.parentCategory
+        ? item.itemCategory.name
+        : null;
+      const common = {
+        id: item.id,
+        inventoryCode: item.inventoryCode,
+        partNumber: item.partNumber,
+        name: item.name,
+        description: item.description,
+        family,
+        subcategory,
+        unit: item.unitOfMeasure.abbreviation,
+        unitName: item.unitOfMeasure.name,
+        allowsDecimals: boolLabel(item.unitOfMeasure.allowsDecimals),
+        brand: item.brand,
+        compatibilityInfo: item.compatibilityInfo,
+        supplier: item.inventorySupplier?.name ?? null,
+        isInventory: boolLabel(item.isInventory),
+        isConsumable: boolLabel(item.isConsumable),
+        isAsset: boolLabel(item.isAsset),
+        isSerialized: boolLabel(item.isSerialized),
+        policyWarehouse: item.policyTargetWarehouse
+          ? `${item.policyTargetWarehouse.code} - ${item.policyTargetWarehouse.name}`
+          : null,
+        policyMinStock: item.policyMinStock,
+        policyMaxStock: item.policyMaxStock,
+        qrCode: item.qrCode,
+      };
 
-    if (item.stocks.length === 0) {
-      return [
-        {
+      if (item.stocks.length === 0) {
+        return [
+          {
+            ...common,
+            warehouseCode: null,
+            warehouseName: null,
+            contractCode: null,
+            subcontractCode: null,
+            stockLocation: null,
+            binCode: null,
+            binLabel: null,
+            quantity: 0,
+            minStock: null,
+            maxStock: null,
+            unitCost: data.canViewCost ? 0 : undefined,
+            lineValue: data.canViewCost ? 0 : undefined,
+          } satisfies InventoryMasterRow,
+        ];
+      }
+
+      return item.stocks.map((stock) => {
+        const unitCost = numberFromDecimal(stock.unitCost);
+        return {
           ...common,
-          warehouseCode: null,
-          warehouseName: null,
-          contractCode: null,
-          subcontractCode: null,
-          stockLocation: null,
-          binCode: null,
-          binLabel: null,
-          quantity: 0,
-          minStock: null,
-          maxStock: null,
-          unitCost: data.canViewCost ? 0 : undefined,
-          lineValue: data.canViewCost ? 0 : undefined,
-        } satisfies InventoryMasterRow,
-      ];
-    }
-
-    return item.stocks.map((stock) => {
-      const unitCost = numberFromDecimal(stock.unitCost);
-      return {
-        ...common,
-        warehouseCode: stock.warehouse.code,
-        warehouseName: stock.warehouse.name,
-        contractCode: stock.warehouse.contract.code,
-        subcontractCode: stock.warehouse.subcontract?.code ?? null,
-        stockLocation: stock.location,
-        binCode: stock.bin?.code ?? null,
-        binLabel: stock.bin?.label ?? null,
-        quantity: stock.quantity,
-        minStock: stock.minStock,
-        maxStock: stock.maxStock,
-        unitCost: data.canViewCost ? unitCost : undefined,
-        lineValue: data.canViewCost ? stock.quantity * unitCost : undefined,
-      } satisfies InventoryMasterRow;
-    });
-  });
+          warehouseCode: stock.warehouse.code,
+          warehouseName: stock.warehouse.name,
+          contractCode: stock.warehouse.contract.code,
+          subcontractCode: stock.warehouse.subcontract?.code ?? null,
+          stockLocation: stock.location,
+          binCode: stock.bin?.code ?? null,
+          binLabel: stock.bin?.label ?? null,
+          quantity: stock.quantity,
+          minStock: stock.minStock,
+          maxStock: stock.maxStock,
+          unitCost: data.canViewCost ? unitCost : undefined,
+          lineValue: data.canViewCost ? stock.quantity * unitCost : undefined,
+        } satisfies InventoryMasterRow;
+      });
+    },
+  );
 
   const catalogs: MasterExportCatalogSheet[] = [
     {
@@ -234,7 +253,9 @@ export async function generateInventoryMasterExcelBuffer(
           parent: warehouse.contractCode,
           notes: [
             warehouse.location,
-            warehouse.subcontractCode ? `Subcontrato ${warehouse.subcontractCode}` : null,
+            warehouse.subcontractCode
+              ? `Subcontrato ${warehouse.subcontractCode}`
+              : null,
           ]
             .filter(Boolean)
             .join(' | '),
@@ -250,15 +271,21 @@ export async function generateInventoryMasterExcelBuffer(
     },
   ];
 
-  const stockedRows = rows.filter((row) => Number(row.quantity ?? 0) > 0).length;
-  const totalQty = rows.reduce((acc, row) => acc + Number(row.quantity ?? 0), 0);
+  const stockedRows = rows.filter(
+    (row) => Number(row.quantity ?? 0) > 0,
+  ).length;
+  const totalQty = rows.reduce(
+    (acc, row) => acc + Number(row.quantity ?? 0),
+    0,
+  );
   const totalValue = data.canViewCost
     ? rows.reduce((acc, row) => acc + Number(row.lineValue ?? 0), 0)
     : 0;
 
   return buildBaseLogicMasterWorkbook({
     title: 'Maestro de Inventario',
-    subtitle: 'Extraccion profesional de articulos, bodegas, ubicaciones, stock y politicas.',
+    subtitle:
+      'Extraccion profesional de articulos, bodegas, ubicaciones, stock y politicas.',
     domain: 'inventory',
     tenantName: data.tenantName,
     generatedAt: data.generatedAt,
@@ -269,7 +296,9 @@ export async function generateInventoryMasterExcelBuffer(
       ['Filas articulo/bodega', rows.length],
       ['Filas con stock positivo', stockedRows],
       ['Cantidad total', Number(totalQty.toFixed(2))],
-      ...(data.canViewCost ? [['Valor total', Number(totalValue.toFixed(2))] as [string, number]] : []),
+      ...(data.canViewCost
+        ? [['Valor total', Number(totalValue.toFixed(2))] as [string, number]]
+        : []),
     ],
     notes: [
       'Una fila representa un articulo en una bodega. Un articulo puede aparecer mas de una vez si tiene stock en varias bodegas.',

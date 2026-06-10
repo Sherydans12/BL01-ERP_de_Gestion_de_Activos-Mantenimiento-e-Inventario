@@ -16,7 +16,12 @@ jest.mock('../equipments/equipment-meter-sync', () => ({
   applyCurrentMeterChange: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../equipments/operational-blockers', () => ({
-  resolveReturnToService: jest.fn().mockResolvedValue({ tenantId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', equipmentId: 'cccccccc-cccc-cccc-cccc-cccccccccccc', allowed: true, blockers: [] }),
+  resolveReturnToService: jest.fn().mockResolvedValue({
+    tenantId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    equipmentId: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    allowed: true,
+    blockers: [],
+  }),
 }));
 
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
@@ -110,16 +115,24 @@ describe('EquipmentAvailabilityService — create', () => {
     tx = mockDeep<Prisma.TransactionClient>();
     mockApplyCurrentMeterChange.mockClear();
     mockResolveReturnToService.mockClear();
-    mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
+    mockResolveReturnToService.mockResolvedValue({
+      tenantId,
+      equipmentId,
+      allowed: true,
+      blockers: [],
+    });
     sequenceServiceStub.getNextCorrelative.mockClear();
     sequenceServiceStub.getNextCorrelative.mockResolvedValue('RF-00001');
 
-    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
-      id: `evt-mock`,
-      eventAt: args.data.eventAt || new Date(),
-      createdAt: new Date(),
-      status: args.data.status,
-    } as never));
+    tx.availabilityEvent.create.mockImplementation(
+      async (args: any) =>
+        ({
+          id: `evt-mock`,
+          eventAt: args.data.eventAt || new Date(),
+          createdAt: new Date(),
+          status: args.data.status,
+        }) as never,
+    );
     tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
     tx.availabilityEvent.update.mockResolvedValue({} as never);
 
@@ -309,7 +322,9 @@ describe('EquipmentAvailabilityService — create', () => {
       meterReading: 1100,
     };
 
-    await expect(service.create(dto, adminUser)).rejects.toThrow(ConflictException);
+    await expect(service.create(dto, adminUser)).rejects.toThrow(
+      ConflictException,
+    );
 
     expect(mockResolveReturnToService).toHaveBeenCalledWith(
       tx,
@@ -690,14 +705,22 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
     mockResolveReturnToService.mockClear();
-    mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
+    mockResolveReturnToService.mockResolvedValue({
+      tenantId,
+      equipmentId,
+      allowed: true,
+      blockers: [],
+    });
 
-    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
-      id: `evt-mock`,
-      eventAt: args.data.eventAt || new Date(),
-      createdAt: new Date(),
-      status: args.data.status,
-    } as never));
+    tx.availabilityEvent.create.mockImplementation(
+      async (args: any) =>
+        ({
+          id: `evt-mock`,
+          eventAt: args.data.eventAt || new Date(),
+          createdAt: new Date(),
+          status: args.data.status,
+        }) as never,
+    );
     tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
     tx.availabilityEvent.update.mockResolvedValue({} as never);
 
@@ -755,7 +778,14 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
           tenantId: tId,
           equipmentId: eqId,
           allowed: false,
-          blockers: [{ type: 'HIGH_FAULT', sourceId: '1', correlative: 'RF-1', status: 'OPEN' }],
+          blockers: [
+            {
+              type: 'HIGH_FAULT',
+              sourceId: '1',
+              correlative: 'RF-1',
+              status: 'OPEN',
+            },
+          ],
         };
       }
       return { tenantId: tId, equipmentId: eqId, allowed: true, blockers: [] };
@@ -768,8 +798,16 @@ describe('EquipmentAvailabilityService — batchCreate', () => {
         shift: ShiftType.DAY,
         reportDate: '2026-06-03',
         rows: [
-          { equipmentId, status: OperationalStatus.OPERATIONAL, meterReading: 1500 }, // Fila A
-          { equipmentId: eq2Id, status: OperationalStatus.OPERATIONAL, meterReading: 600 }, // Fila B
+          {
+            equipmentId,
+            status: OperationalStatus.OPERATIONAL,
+            meterReading: 1500,
+          }, // Fila A
+          {
+            equipmentId: eq2Id,
+            status: OperationalStatus.OPERATIONAL,
+            meterReading: 600,
+          }, // Fila B
         ],
       },
       adminUser,
@@ -840,18 +878,26 @@ describe('EquipmentAvailabilityService — commitImport', () => {
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
     mockResolveReturnToService.mockClear();
-    mockResolveReturnToService.mockResolvedValue({ tenantId, equipmentId, allowed: true, blockers: [] });
+    mockResolveReturnToService.mockResolvedValue({
+      tenantId,
+      equipmentId,
+      allowed: true,
+      blockers: [],
+    });
 
     // P0: mocks por defecto para resolveReturnToService (sin bloqueadores)
     tx.faultReport.findMany.mockResolvedValue([] as never);
     tx.workOrder.findMany.mockResolvedValue([] as never);
 
-    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
-      id: `evt-mock`,
-      eventAt: args.data.eventAt || new Date(),
-      createdAt: new Date(),
-      status: args.data.status,
-    } as never));
+    tx.availabilityEvent.create.mockImplementation(
+      async (args: any) =>
+        ({
+          id: `evt-mock`,
+          eventAt: args.data.eventAt || new Date(),
+          createdAt: new Date(),
+          status: args.data.status,
+        }) as never,
+    );
     tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
     tx.availabilityEvent.update.mockResolvedValue({} as never);
 
@@ -1046,7 +1092,14 @@ describe('EquipmentAvailabilityService — commitImport', () => {
           tenantId: tId,
           equipmentId: eqId,
           allowed: false,
-          blockers: [{ type: 'HIGH_FAULT', sourceId: '1', correlative: 'RF-1', status: 'OPEN' }],
+          blockers: [
+            {
+              type: 'HIGH_FAULT',
+              sourceId: '1',
+              correlative: 'RF-1',
+              status: 'OPEN',
+            },
+          ],
         };
       }
       return { tenantId: tId, equipmentId: eqId, allowed: true, blockers: [] };
@@ -1059,8 +1112,16 @@ describe('EquipmentAvailabilityService — commitImport', () => {
         shift: ShiftType.DAY,
         reportDate: '2026-06-03',
         rows: [
-          { equipmentId, status: OperationalStatus.OPERATIONAL, meterReading: 1500 }, // Fila A
-          { equipmentId: eq2Id, status: OperationalStatus.OPERATIONAL, meterReading: 600 }, // Fila B
+          {
+            equipmentId,
+            status: OperationalStatus.OPERATIONAL,
+            meterReading: 1500,
+          }, // Fila A
+          {
+            equipmentId: eq2Id,
+            status: OperationalStatus.OPERATIONAL,
+            meterReading: 600,
+          }, // Fila B
         ],
       },
       adminUser,
@@ -1113,12 +1174,15 @@ describe('EquipmentAvailabilityService — hasNightShift guard (create / findUnr
       (fn as (client: typeof tx) => Promise<unknown>)(tx),
     );
 
-    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
-      id: `evt-mock`,
-      eventAt: args.data.eventAt || new Date(),
-      createdAt: new Date(),
-      status: args.data.status,
-    } as never));
+    tx.availabilityEvent.create.mockImplementation(
+      async (args: any) =>
+        ({
+          id: `evt-mock`,
+          eventAt: args.data.eventAt || new Date(),
+          createdAt: new Date(),
+          status: args.data.status,
+        }) as never,
+    );
     tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
     tx.availabilityEvent.update.mockResolvedValue({} as never);
 

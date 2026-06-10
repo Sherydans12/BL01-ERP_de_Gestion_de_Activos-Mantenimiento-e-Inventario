@@ -31,37 +31,54 @@ export class AvailabilityEventService {
     const source = input.source ?? AvailabilityEventSource.MANUAL;
 
     switch (source) {
-      case AvailabilityEventSource.FAULT_REPORT:
+      case AvailabilityEventSource.FAULT_REPORT: {
         if (!input.faultReportId) {
-          throw new BadRequestException('faultReportId es requerido para eventos de falla.');
+          throw new BadRequestException(
+            'faultReportId es requerido para eventos de falla.',
+          );
         }
         if (input.availabilityId) {
-          throw new BadRequestException('availabilityId no debe informarse para eventos de falla.');
+          throw new BadRequestException(
+            'availabilityId no debe informarse para eventos de falla.',
+          );
         }
         const report = await tx.faultReport.findFirst({
           where: { id: input.faultReportId },
           select: { tenantId: true, equipmentId: true },
         });
-        if (!report || report.tenantId !== input.tenantId || report.equipmentId !== input.equipmentId) {
-          throw new BadRequestException('El FaultReport no existe o no corresponde al mismo tenant/equipo.');
+        if (
+          !report ||
+          report.tenantId !== input.tenantId ||
+          report.equipmentId !== input.equipmentId
+        ) {
+          throw new BadRequestException(
+            'El FaultReport no existe o no corresponde al mismo tenant/equipo.',
+          );
         }
         break;
+      }
 
       case AvailabilityEventSource.MANUAL:
       case AvailabilityEventSource.LEGACY_SNAPSHOT:
         if (!input.availabilityId) {
-          throw new BadRequestException(`availabilityId es requerido para el origen ${source}.`);
+          throw new BadRequestException(
+            `availabilityId es requerido para el origen ${source}.`,
+          );
         }
         if (input.faultReportId) {
-          throw new BadRequestException(`faultReportId no debe informarse para el origen ${source}.`);
+          throw new BadRequestException(
+            `faultReportId no debe informarse para el origen ${source}.`,
+          );
         }
         break;
 
       case AvailabilityEventSource.OT:
-        throw new BadRequestException('El origen OT aún no está soportado (requiere workOrderId).');
-        
+        throw new BadRequestException(
+          'El origen OT aún no está soportado (requiere workOrderId).',
+        );
+
       default:
-        throw new BadRequestException(`Origen ${source} no reconocido.`);
+        throw new BadRequestException('Origen no reconocido.');
     }
 
     const initialEvent = await tx.availabilityEvent.create({
@@ -98,11 +115,7 @@ export class AvailabilityEventService {
           },
         ],
       },
-      orderBy: [
-        { eventAt: 'desc' },
-        { createdAt: 'desc' },
-        { id: 'desc' },
-      ],
+      orderBy: [{ eventAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
     });
 
     const successor = await tx.availabilityEvent.findFirst({
@@ -122,11 +135,7 @@ export class AvailabilityEventService {
           },
         ],
       },
-      orderBy: [
-        { eventAt: 'asc' },
-        { createdAt: 'asc' },
-        { id: 'asc' },
-      ],
+      orderBy: [{ eventAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
 
     const previousStatus = input.previousStatus ?? predecessor?.status ?? null;
@@ -134,7 +143,8 @@ export class AvailabilityEventService {
       ? Math.max(
           0,
           Math.floor(
-            (initialEvent.eventAt.getTime() - predecessor.eventAt.getTime()) / 60_000,
+            (initialEvent.eventAt.getTime() - predecessor.eventAt.getTime()) /
+              60_000,
           ),
         )
       : null;
@@ -151,7 +161,8 @@ export class AvailabilityEventService {
       const sElapsedMinutes = Math.max(
         0,
         Math.floor(
-          (successor.eventAt.getTime() - initialEvent.eventAt.getTime()) / 60_000,
+          (successor.eventAt.getTime() - initialEvent.eventAt.getTime()) /
+            60_000,
         ),
       );
       await tx.availabilityEvent.update({
@@ -184,11 +195,7 @@ export class AvailabilityEventService {
             }
           : {}),
       },
-      orderBy: [
-        { eventAt: 'asc' },
-        { createdAt: 'asc' },
-        { id: 'asc' },
-      ],
+      orderBy: [{ eventAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
   }
 }

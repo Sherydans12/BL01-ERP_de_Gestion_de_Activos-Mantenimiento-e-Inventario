@@ -165,12 +165,15 @@ describe('Cross-Module — El Caos en Terreno: integridad del horómetro bajo re
       updatedAt: new Date(),
     } as never);
 
-    tx.availabilityEvent.create.mockImplementation(async (args: any) => ({
-      id: `evt-mock`,
-      eventAt: args.data.eventAt || new Date(),
-      createdAt: new Date(),
-      status: args.data.status,
-    } as never));
+    tx.availabilityEvent.create.mockImplementation(
+      async (args: any) =>
+        ({
+          id: `evt-mock`,
+          eventAt: args.data.eventAt || new Date(),
+          createdAt: new Date(),
+          status: args.data.status,
+        }) as never,
+    );
     tx.availabilityEvent.findFirst.mockResolvedValue(null as never);
     tx.availabilityEvent.update.mockResolvedValue({} as never);
 

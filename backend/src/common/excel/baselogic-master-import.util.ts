@@ -20,15 +20,16 @@ export type ParsedMasterImportWorkbook = {
 function cellText(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string') return value.trim();
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value).trim();
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === 'object' && 'text' in value) {
-    return String((value as { text?: unknown }).text ?? '').trim();
+    return cellText((value as { text?: unknown }).text);
   }
   if (typeof value === 'object' && 'result' in value) {
     return cellText((value as { result?: unknown }).result);
   }
-  return String(value).trim();
+  return JSON.stringify(value).trim();
 }
 
 export function normalizeImportText(value: unknown): string {
@@ -69,20 +70,28 @@ export function parseImportInt(value: unknown): number | null {
 export function parseImportDate(value: unknown): Date | null {
   if (value == null || value === '') return null;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
+    return new Date(
+      Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()),
+    );
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
     const millis = Math.round((value - 25569) * 86400 * 1000);
     const parsed = new Date(millis);
     return new Date(
-      Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()),
+      Date.UTC(
+        parsed.getUTCFullYear(),
+        parsed.getUTCMonth(),
+        parsed.getUTCDate(),
+      ),
     );
   }
   const text = normalizeImportText(value);
   if (!text) return null;
   const date = new Date(text);
   if (Number.isNaN(date.getTime())) return null;
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }
 
 export function getImportString(
@@ -156,11 +165,17 @@ export async function parseBaseLogicMasterImportWorkbook(
   });
 
   if (!headers.length) {
-    throw new BadRequestException('No se encontraron encabezados validos en el Excel.');
+    throw new BadRequestException(
+      'No se encontraron encabezados validos en el Excel.',
+    );
   }
 
   const rows: ParsedMasterImportRow[] = [];
-  for (let rowNumber = firstDataRow; rowNumber <= dataSheet.rowCount; rowNumber += 1) {
+  for (
+    let rowNumber = firstDataRow;
+    rowNumber <= dataSheet.rowCount;
+    rowNumber += 1
+  ) {
     const row = dataSheet.getRow(rowNumber);
     const values: Record<string, unknown> = {};
     let hasValue = false;

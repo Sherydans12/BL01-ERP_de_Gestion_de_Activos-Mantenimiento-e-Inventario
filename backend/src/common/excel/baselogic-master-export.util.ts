@@ -43,10 +43,14 @@ const COLORS = {
 function asExcelValue(value: unknown): ExcelJS.CellValue {
   if (value == null) return null;
   if (value instanceof Date) return value;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
     return value;
   }
-  return String(value);
+  return JSON.stringify(value);
 }
 
 function styleHeaderRow(row: ExcelJS.Row): void {
@@ -57,8 +61,17 @@ function styleHeaderRow(row: ExcelJS.Row): void {
       pattern: 'solid',
       fgColor: { argb: COLORS.header },
     };
-    cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: COLORS.headerText } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.font = {
+      name: 'Calibri',
+      size: 10,
+      bold: true,
+      color: { argb: COLORS.headerText },
+    };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
     cell.border = {
       top: { style: 'thin', color: { argb: COLORS.border } },
       left: { style: 'thin', color: { argb: COLORS.border } },
@@ -75,15 +88,6 @@ function styleDataSheet(
 ): void {
   ws.views = [{ state: 'frozen', ySplit: 5 }];
   ws.properties.defaultRowHeight = 18;
-  ws.getCell('A1').value = 'BaseLogic';
-  ws.getCell('A1').font = {
-    name: 'Consolas',
-    size: 11,
-    bold: true,
-    color: { argb: COLORS.cyan },
-  };
-  ws.getCell('A2').font = { name: 'Calibri', size: 16, bold: true, color: { argb: COLORS.text } };
-  ws.getCell('A3').font = { name: 'Calibri', size: 10, color: { argb: COLORS.muted } };
 
   ws.columns = columns.map((col) => ({
     header: col.header,
@@ -93,8 +97,26 @@ function styleDataSheet(
 
   ws.spliceRows(1, 0, [], [], [], []);
   ws.getCell('A1').value = 'BaseLogic';
+  ws.getCell('A1').font = {
+    name: 'Consolas',
+    size: 11,
+    bold: true,
+    color: { argb: COLORS.cyan },
+  };
   ws.getCell('A2').value = ws.name;
-  ws.getCell('A3').value = 'Hoja profesional editable para extraccion/importacion controlada.';
+  ws.getCell('A2').font = {
+    name: 'Calibri',
+    size: 16,
+    bold: true,
+    color: { argb: COLORS.text },
+  };
+  ws.getCell('A3').value =
+    'Hoja profesional editable para extraccion/importacion controlada.';
+  ws.getCell('A3').font = {
+    name: 'Calibri',
+    size: 10,
+    color: { argb: COLORS.muted },
+  };
   ws.mergeCells(1, 1, 1, Math.max(1, columns.length));
   ws.mergeCells(2, 1, 2, Math.max(1, columns.length));
   ws.mergeCells(3, 1, 3, Math.max(1, columns.length));
@@ -113,9 +135,7 @@ function styleDataSheet(
   styleHeaderRow(headerRow);
 
   for (const row of rows) {
-    const added = ws.addRow(
-      columns.map((col) => asExcelValue(row[col.key])),
-    );
+    const added = ws.addRow(columns.map((col) => asExcelValue(row[col.key])));
     added.eachCell((cell, colNumber) => {
       const col = columns[colNumber - 1];
       cell.font = { name: 'Calibri', size: 10, color: { argb: COLORS.text } };
@@ -133,16 +153,14 @@ function styleDataSheet(
   };
 }
 
-function addSummarySheet(wb: ExcelJS.Workbook, options: MasterExportOptions): void {
+function addSummarySheet(
+  wb: ExcelJS.Workbook,
+  options: MasterExportOptions,
+): void {
   const ws = wb.addWorksheet('Resumen', {
     views: [{ state: 'frozen', ySplit: 6 }],
   });
-  ws.columns = [
-    { width: 28 },
-    { width: 36 },
-    { width: 18 },
-    { width: 18 },
-  ];
+  ws.columns = [{ width: 28 }, { width: 36 }, { width: 18 }, { width: 18 }];
 
   ws.mergeCells('A1:D1');
   ws.getCell('A1').value = 'BaseLogic';
@@ -162,12 +180,21 @@ function addSummarySheet(wb: ExcelJS.Workbook, options: MasterExportOptions): vo
 
   ws.mergeCells('A2:D2');
   ws.getCell('A2').value = options.title;
-  ws.getCell('A2').font = { name: 'Calibri', size: 18, bold: true, color: { argb: COLORS.text } };
+  ws.getCell('A2').font = {
+    name: 'Calibri',
+    size: 18,
+    bold: true,
+    color: { argb: COLORS.text },
+  };
   ws.getRow(2).height = 26;
 
   ws.mergeCells('A3:D3');
   ws.getCell('A3').value = options.subtitle;
-  ws.getCell('A3').font = { name: 'Calibri', size: 10, color: { argb: COLORS.muted } };
+  ws.getCell('A3').font = {
+    name: 'Calibri',
+    size: 10,
+    color: { argb: COLORS.muted },
+  };
 
   ws.addRow([]);
   ws.addRow(['Empresa', options.tenantName]);
@@ -194,7 +221,10 @@ function addSummarySheet(wb: ExcelJS.Workbook, options: MasterExportOptions): vo
   }
 }
 
-function addCatalogSheet(wb: ExcelJS.Workbook, catalog: MasterExportCatalogSheet): void {
+function addCatalogSheet(
+  wb: ExcelJS.Workbook,
+  catalog: MasterExportCatalogSheet,
+): void {
   const ws = wb.addWorksheet(catalog.name, {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
@@ -209,11 +239,17 @@ function addCatalogSheet(wb: ExcelJS.Workbook, catalog: MasterExportCatalogSheet
   }
   ws.autoFilter = {
     from: { row: 1, column: 1 },
-    to: { row: Math.max(1, catalog.rows.length + 1), column: catalog.columns.length },
+    to: {
+      row: Math.max(1, catalog.rows.length + 1),
+      column: catalog.columns.length,
+    },
   };
 }
 
-function addHiddenContractSheet(wb: ExcelJS.Workbook, options: MasterExportOptions): void {
+function addHiddenContractSheet(
+  wb: ExcelJS.Workbook,
+  options: MasterExportOptions,
+): void {
   const ws = wb.addWorksheet('_bl_import_contract');
   ws.state = 'veryHidden';
   ws.addRows([
@@ -239,7 +275,9 @@ export async function buildBaseLogicMasterWorkbook(
 
   addSummarySheet(wb, options);
 
-  const dataSheet = wb.addWorksheet(options.domain === 'fleet' ? 'Flota' : 'Inventario');
+  const dataSheet = wb.addWorksheet(
+    options.domain === 'fleet' ? 'Flota' : 'Inventario',
+  );
   styleDataSheet(dataSheet, options.columns, options.rows);
 
   for (const catalog of options.catalogs ?? []) {
