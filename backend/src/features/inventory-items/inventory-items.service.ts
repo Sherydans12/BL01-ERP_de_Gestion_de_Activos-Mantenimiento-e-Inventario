@@ -84,6 +84,8 @@ type InventoryImportOptions = {
   allowUpdates?: boolean;
   allowStockAdjustments?: boolean;
   allowItemDeletes?: boolean;
+  autoCreateBins?: boolean;
+  autoCreateSuppliers?: boolean;
 };
 
 const INV_SKU_DOC_TYPE = 'INV_SKU';
@@ -699,6 +701,13 @@ export class InventoryItemsService {
     return Object.values(impact).some((count) => count > 0);
   }
 
+  private normalizeWarehouseBinCode(code: string): string {
+    return normalizeImportKey(code)
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50);
+  }
+
   async validateInventoryMasterImport(buffer: Buffer, user: any) {
     const tenantId = user.tenantId as string;
     const workbook = await parseBaseLogicMasterImportWorkbook(
@@ -869,10 +878,13 @@ export class InventoryItemsService {
             code: binCode,
             parentCode: warehouse.code,
             rows: [row.rowNumber],
-            severity: 'blocking',
-            message: 'Debe existir la ubicacion/bin bajo la bodega indicada.',
+            severity: 'warning',
+            message:
+              'La ubicacion/bin no existe; se creara automaticamente al confirmar la importacion.',
           });
-          errors.push(`Bin no existe en bodega ${warehouse.code}: ${binCode}.`);
+          warnings.push(
+            `Bin no existe en bodega ${warehouse.code}: ${binCode}. Se creara automaticamente.`,
+          );
         }
       }
 
@@ -884,10 +896,13 @@ export class InventoryItemsService {
           kind: 'SUPPLIER',
           code: supplierName,
           rows: [row.rowNumber],
-          severity: 'blocking',
-          message: 'Debe existir el proveedor habitual o limpiarse el campo.',
+          severity: 'warning',
+          message:
+            'El proveedor habitual no existe; se creara automaticamente al confirmar la importacion.',
         });
-        errors.push(`Proveedor habitual no existe: ${supplierName}.`);
+        warnings.push(
+          `Proveedor habitual no existe: ${supplierName}. Se creara automaticamente.`,
+        );
       }
 
       const existing =
@@ -931,6 +946,11 @@ export class InventoryItemsService {
         compare('category', existing.itemCategory.name, subcategory);
         compare('unit', existing.unitOfMeasure.abbreviation, unitCode);
         compare('brand', existing.brand, getImportNullableString(v, 'Marca'));
+        compare(
+          'supplier',
+          existing.inventorySupplier?.name ?? null,
+          supplierName,
+        );
         if (existingStock) {
           compare(
             'stock.quantity',
@@ -952,6 +972,7 @@ export class InventoryItemsService {
             existingStock.location,
             getImportNullableString(v, 'Ubicacion stock'),
           );
+          compare('stock.bin', existingStock.bin?.code ?? null, binCode);
         } else if (warehouseCode) {
           changes.push({ field: 'stock', before: null, after: warehouseCode });
         }
@@ -1053,6 +1074,8 @@ export class InventoryItemsService {
           allowUpdates: true,
           allowStockAdjustments: true,
           allowItemDeletes: false,
+          autoCreateBins: true,
+          autoCreateSuppliers: true,
         },
       },
     };
@@ -1091,6 +1114,20 @@ export class InventoryItemsService {
     const allowUpdates = options.allowUpdates !== false;
     const allowStockAdjustments = options.allowStockAdjustments !== false;
     const allowItemDeletes = options.allowItemDeletes === true;
+    const autoCreateBins = options.autoCreateBins !== false;
+    const autoCreateSuppliers = options.autoCreateSuppliers !== false;
+    const disabledAutoCreateRequirements = validation.requirements.filter(
+      (req) =>
+        (req.kind === 'BIN' && !autoCreateBins) ||
+        (req.kind === 'SUPPLIER' && !autoCreateSuppliers),
+    );
+    if (disabledAutoCreateRequirements.length > 0) {
+      throw new BadRequestException({
+        message:
+          'La importacion requiere crear bins o proveedores faltantes. Active la autocreacion o cree los maestros antes de confirmar.',
+        requirements: disabledAutoCreateRequirements,
+      });
+    }
 
     if (
       !allowCreates &&
@@ -1214,9 +1251,18 @@ export class InventoryItemsService {
         const warehouse = warehouseCode
           ? warehouseByCode.get(normalizeImportKey(warehouseCode))
           : null;
-        const supplier = supplierName
+        let supplier = supplierName
           ? supplierByName.get(normalizeImportKey(supplierName))
           : null;
+        if (supplierName && !supplier && autoCreateSuppliers) {
+          supplier = await tx.inventorySupplier.create({
+            data: {
+              tenantId,
+              name: supplierName.slice(0, 150),
+            },
+          });
+          supplierByName.set(normalizeImportKey(supplier.name), supplier);
+        }
         const existing =
           (id ? itemById.get(id) : null) ??
           (inventoryCode
@@ -1274,13 +1320,35 @@ export class InventoryItemsService {
         if (!warehouse || !allowStockAdjustments) continue;
 
         const binCode = getImportNullableString(v, 'Bin codigo');
-        const bin = binCode
+        let bin = binCode
           ? warehouse.bins.find(
               (candidate) =>
                 normalizeImportKey(candidate.code) ===
                 normalizeImportKey(binCode),
             )
           : null;
+        if (binCode && !bin && autoCreateBins) {
+          const normalizedBinCode = this.normalizeWarehouseBinCode(binCode);
+          if (normalizedBinCode) {
+            bin = await tx.warehouseBin.upsert({
+              where: {
+                warehouseId_code: {
+                  warehouseId: warehouse.id,
+                  code: normalizedBinCode,
+                },
+              },
+              update: {
+                label: binCode.slice(0, 100),
+              },
+              create: {
+                warehouseId: warehouse.id,
+                code: normalizedBinCode,
+                label: binCode.slice(0, 100),
+              },
+            });
+            warehouse.bins.push(bin);
+          }
+        }
         const quantity = parseImportNumber(v['Stock']) ?? 0;
         const minStock = parseImportNumber(v['Stock minimo']) ?? 0;
         const maxStock = parseImportNumber(v['Stock maximo']) ?? 0;

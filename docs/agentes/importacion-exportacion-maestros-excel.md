@@ -72,9 +72,13 @@ Requisitos bloqueantes:
 - Familia y subcategoria deben existir.
 - Unidad de medida debe existir.
 - Bodega debe existir si se informa stock.
-- Bin/ubicacion debe existir bajo la bodega si se informa.
-- Proveedor habitual debe existir si se informa.
 - No debe haber filas duplicadas para el mismo articulo/bodega.
+
+Autocreacion controlada:
+
+- Bin/ubicacion faltante bajo una bodega existente se informa como advertencia y se crea automaticamente al confirmar si `autoCreateBins=true`.
+- Proveedor habitual faltante se informa como advertencia y se crea automaticamente al confirmar si `autoCreateSuppliers=true`.
+- Si esas opciones se desactivan y el Excel requiere crear bins/proveedores, el commit se bloquea.
 
 Bajas:
 

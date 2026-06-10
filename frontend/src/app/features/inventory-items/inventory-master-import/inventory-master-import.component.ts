@@ -67,14 +67,16 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
 
         <section class="rounded-xl border border-border bg-surface p-4">
           <h2 class="text-sm font-bold text-main mb-3">Configuración de importación</h2>
-          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.allowCreates" /> Permitir altas</label>
             <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.allowUpdates" /> Permitir actualizaciones</label>
             <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.allowStockAdjustments" /> Ajustar stock con kardex</label>
+            <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.autoCreateBins" /> Crear bins faltantes</label>
+            <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.autoCreateSuppliers" /> Crear proveedores faltantes</label>
             <label class="flex items-center gap-2 text-sm text-amber-200"><input type="checkbox" [(ngModel)]="options.allowItemDeletes" /> Eliminar artículos sin historial</label>
           </div>
           <p class="mt-3 text-xs text-muted">
-            Los artículos con kardex, reservas, OT, compras o adjuntos no se eliminan físicamente desde importación.
+            Los bins y proveedores faltantes se crean automáticamente si las opciones están activas. Los artículos con kardex, reservas, OT, compras o adjuntos no se eliminan físicamente desde importación.
           </p>
         </section>
 
@@ -160,6 +162,8 @@ export class InventoryMasterImportComponent {
     allowUpdates: true,
     allowStockAdjustments: true,
     allowItemDeletes: false,
+    autoCreateBins: true,
+    autoCreateSuppliers: true,
   };
 
   canCommit = computed(() => {
