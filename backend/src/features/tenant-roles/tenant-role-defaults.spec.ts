@@ -48,12 +48,8 @@ describe('resolveApprovalPolicyForUser', () => {
   });
 
   it('no hace match si allowedUsers está vacío', () => {
-    const empty: TestPolicy[] = [
-      { level: 1, id: 'empty', allowedUsers: [] },
-    ];
-    expect(
-      resolveApprovalPolicyForUser(empty, { id: userA }),
-    ).toBeUndefined();
+    const empty: TestPolicy[] = [{ level: 1, id: 'empty', allowedUsers: [] }];
+    expect(resolveApprovalPolicyForUser(empty, { id: userA })).toBeUndefined();
   });
 
   it('respeta el orden del arreglo (debe venir ordenado por level asc desde el caller)', () => {

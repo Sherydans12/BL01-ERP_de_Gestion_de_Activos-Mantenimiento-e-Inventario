@@ -272,10 +272,10 @@ import { A } from '../../../core/constants/admin-permissions';
                       [ngClass]="{
                         'bg-primary/10 text-primary border-primary/20':
                           user.role === 'ADMIN',
-                        'bg-blue-900/20 text-blue-400 border-blue-500/20':
-                          user.role === 'SUPERVISOR',
+                        'bg-purple-500/10 text-purple-300 border-purple-500/20':
+                          user.role === 'SUPER_ADMIN',
                         'bg-dark text-muted border-border':
-                          user.role === 'MECHANIC',
+                          user.role === 'USER',
                       }"
                     >
                       {{ user.customRole?.name || user.role }}
@@ -1198,7 +1198,7 @@ export class UserManagementComponent implements OnInit {
   /** Contratos en UserContract (cualquier rol no ADMIN en el tenant). */
   needsContractAssignment = computed(() => {
     const br = this.selectedRoleBaseRole();
-    return br === 'SUPERVISOR' || br === 'MECHANIC' || br === 'USER';
+    return br !== 'ADMIN' && br !== 'SUPER_ADMIN';
   });
 
   // Paginación

@@ -405,6 +405,6 @@ export class GlobalItemPickerComponent
   }
 
   canSeeUnitCosts(): boolean {
-    return this.authService.hasRole(['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN']);
+    return this.authService.canViewInventoryCost();
   }
 }

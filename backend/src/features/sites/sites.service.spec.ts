@@ -11,10 +11,7 @@ describe('SitesService', () => {
     prisma = mockDeep<PrismaService>();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SitesService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [SitesService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get(SitesService);

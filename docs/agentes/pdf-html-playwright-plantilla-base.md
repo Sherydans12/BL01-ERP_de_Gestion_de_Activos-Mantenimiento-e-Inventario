@@ -8,11 +8,15 @@ Este documento fija el **patrón oficial** para PDFs generados en el backend: **
 |-------|-----------|
 | Plantilla OC + helpers | `backend/src/features/purchases/purchase-order-pdf.generator.ts` |
 | Plantilla SRC (resumen) | `backend/src/features/purchases/purchase-requisition-pdf.generator.ts` |
+| Plantilla OT (orden de trabajo) | `backend/src/features/work-orders/work-order-pdf.generator.ts` |
+| Utilidades CSS/HTML compartidas | `backend/src/common/pdf/pdf-html-shared.ts` |
 | Plantilla reporte ejecutivo compras | `backend/src/features/purchases/purchases-analytics-report-pdf.generator.ts` |
 | Stream PDF OC (include Prisma + `pdfLogoUrl`; merge aviso/razón social desde `tenants`) | `backend/src/features/purchases/purchase-orders.service.ts` → `getPurchaseOrderPdfStream` |
 | Stream PDF SRC | `backend/src/features/purchases/purchase-requisitions.service.ts` → `getRequisitionPdfStream` |
 | PDF OC HTTP (`Cache-Control: no-store`) | `backend/src/features/purchases/purchase-orders.controller.ts` → `GET :id/pdf` |
 | PDF SRC HTTP | `backend/src/features/purchases/purchase-requisitions.controller.ts` → `GET :id/pdf` |
+| Stream PDF OT | `backend/src/features/work-orders/work-orders.service.ts` → `getWorkOrderPdfStream` |
+| PDF OT HTTP | `backend/src/features/work-orders/work-orders.controller.ts` → `GET :id/pdf` |
 | Chromium en imagen Docker | `backend/Dockerfile` (deps sistema + `playwright install chromium` en runner) |
 | Variable ejecutable opcional | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` |
 
@@ -94,4 +98,17 @@ Al añadir un PDF nuevo que siga este patrón, enlazalo desde aquí (tabla “Im
 |-----------|-----------|
 | Orden de compra (OC) | `purchase-order-pdf.generator.ts` |
 | Requerimiento de compra (SRC) — resumen | `purchase-requisition-pdf.generator.ts` |
+| Orden de trabajo (OT) | `work-order-pdf.generator.ts` |
 | Reporte ejecutivo de compras (analytics) | `purchases-analytics-report-pdf.generator.ts` |
+| Hoja de conteo físico (bodega) | `physical-count-sheet-pdf.generator.ts` |
+| Resumen gestión mensual mantenimiento | `work-order-management-monthly-pdf.generator.ts` |
+| Valorización maestra inventario | `inventory-valuation-full-report.generator.ts` (PDF; XLSX ExcelJS) — `GET /inventory-analytics/full-report` |
+| Valorización resumen por familia | `inventory-valuation-summary-report.generator.ts` — `GET /inventory-analytics/valuation-report` |
+| Hoja de vida del activo (equipo) | `equipment-resume-pdf.generator.ts` |
+| Stream PDF hoja de vida | `equipments.service.ts` → `getEquipmentResumePdfStream` |
+| PDF hoja de vida HTTP | `equipments.controller.ts` → `GET :id/resume-pdf` |
+| Utilidades compartidas / logo | `backend/src/common/pdf/pdf-html-shared.ts`, `fetch-tenant-pdf-logo.ts` |
+
+**Excepción (no migrar a HTML):** etiquetas térmicas de artículo (`inventory-item-label-pdf.generator.ts`, PDFKit + QR, tamaño 50×25 / 100×50 mm).
+
+**Dashboard stock (`/app/inventario/stock`):** «Exportar PDF/Excel» → `valuation-report`; «Reporte maestro» → `full-report` (permiso `inventory:analytics:report`).

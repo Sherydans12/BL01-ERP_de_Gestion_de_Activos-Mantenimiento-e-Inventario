@@ -145,60 +145,6 @@
         }
       </section>
 
-      @if (selectedEquipment()) {
-        <section
-          class="bg-surface border border-border rounded-xl p-6 shadow-lg border-primary/20"
-          aria-label="Última medición del equipo"
-        >
-          <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2 mb-4">
-            Última medición
-          </h3>
-          @if (meterSnapshotLoading()) {
-            <div class="flex items-center gap-3 text-sm text-muted">
-              <div
-                class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"
-              ></div>
-              Sincronizando medidor…
-            </div>
-          } @else {
-            @if (meterSnapshot(); as snap) {
-              <div class="flex flex-wrap items-end gap-4 justify-between">
-                <div>
-                  <p class="text-[10px] uppercase text-muted tracking-wider mb-1">
-                    Medidor actual ({{ snap.meterType === "KILOMETERS" ? "km" : "hrs" }})
-                  </p>
-                  <p class="text-3xl font-mono font-bold text-primary tabular-nums">
-                    {{ snap.currentMeter | number }}
-                  </p>
-                </div>
-                <div class="flex flex-col items-start gap-2 min-w-0">
-                  @if (snap.lastLog) {
-                    <span class="text-xs text-muted font-mono">
-                      Último registro:
-                      {{ snap.lastLog.date | date: "yyyy-MM-dd HH:mm" }}
-                    </span>
-                    @if (snap.lastLog.userName) {
-                      <span class="text-[11px] text-muted"
-                        >Usuario: {{ snap.lastLog.userName }}</span
-                      >
-                    }
-                  } @else {
-                    <span class="text-xs text-muted">Sin entradas en bitácora aún.</span>
-                  }
-                  <span
-                    class="inline-flex items-center rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-mono font-semibold text-primary"
-                  >
-                    {{ meterSourceBadge() }}
-                  </span>
-                </div>
-              </div>
-            } @else {
-              <p class="text-sm text-muted">No se pudo cargar el snapshot del medidor.</p>
-            }
-          }
-        </section>
-      }
-
       <!-- Panel PM opcional -->
       @if (selectedEquipment(); as eq) {
         <div class="rounded-xl border border-border bg-dark/40 overflow-hidden">
@@ -261,12 +207,70 @@
         </div>
       }
 
+      <!-- Aviso: fallas de terreno (M3) sin OT vinculada del equipo seleccionado -->
+      @if (openFaults().length > 0) {
+        <div class="rounded-xl border border-warning/40 bg-warning/10 p-4 space-y-3">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+            </svg>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-main">
+                Este equipo tiene {{ openFaults().length }}
+                {{ openFaults().length === 1 ? "falla reportada" : "fallas reportadas" }} sin vincular a OT
+              </p>
+              <p class="text-xs text-muted mt-0.5">
+                Reportes de terreno (M3) abiertos. Considera resolverlos al planificar esta orden.
+              </p>
+            </div>
+            <a
+              [routerLink]="['/app/operaciones/fallas']"
+              class="shrink-0 text-xs font-mono text-primary hover:underline"
+            >
+              Ver fallas →
+            </a>
+          </div>
+          <ul class="space-y-1.5">
+            @for (f of openFaults(); track f.id) {
+              <li class="flex items-center gap-2 text-xs">
+                <span class="font-mono font-semibold text-main">{{ f.correlative }}</span>
+                <span
+                  class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  [class]="criticalityMeta[f.criticality].badgeClass"
+                >
+                  {{ criticalityMeta[f.criticality].label }}
+                </span>
+                <span class="text-muted">{{ systemLabels[f.affectedSystem] }}</span>
+                <span class="text-muted/70 font-mono">· {{ f.eventDate | date: "dd/MM/yyyy" }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
       <!-- Tiempos -->
       <section class="bg-surface border border-border rounded-xl p-6 shadow-lg space-y-4">
         <h3 class="text-xs font-mono text-primary uppercase tracking-wider border-b border-border pb-2">
           Tiempos y detención del equipo
         </h3>
         <p class="text-[11px] text-muted font-mono">Detención real</p>
+
+        @if (selectedEquipment()) {
+          @if (meterSnapshotLoading()) {
+            <div class="flex items-center gap-3 text-sm text-muted mb-3" role="status">
+              <div
+                class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"
+              ></div>
+              Cargando referencia de lectura…
+            </div>
+          } @else {
+            <app-meter-reference-banner
+              class="block mb-4"
+              [snapshot]="meterSnapshot()"
+            />
+          }
+        }
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs text-muted mb-1">Inicio (fecha y hora)</label>
@@ -278,11 +282,36 @@
           </div>
           <div>
             <label class="block text-xs text-muted mb-1">{{ meterLabel() }} inicial <span class="text-red-400">*</span></label>
-            <input type="number" formControlName="detentionInitialMeter" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+            <input
+              type="number"
+              formControlName="detentionInitialMeter"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
+            />
+            @if (initialMeterContextHint(); as hint) {
+              <p class="mt-1 text-xs text-muted">{{ hint }}</p>
+            }
           </div>
           <div>
             <label class="block text-xs text-muted mb-1">{{ meterLabel() }} final <span class="text-muted text-[10px] font-normal">(opcional)</span></label>
-            <input type="number" formControlName="detentionFinalMeter" class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary" />
+            <input
+              type="number"
+              formControlName="detentionFinalMeter"
+              class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-primary"
+              [ngClass]="detentionMeterInputNgClass('detentionFinalMeter')"
+            />
+            @if (detentionFinalMeterInvalid()) {
+              <p class="mt-1 text-xs text-error" role="alert">
+                No puede ser menor al medidor inicial de la OT ni al medidor actual del equipo
+                @if (effectiveEquipmentCurrentMeter() !== null) {
+                  ({{ effectiveEquipmentCurrentMeter() | number }}
+                  {{ meterLabel() === 'Kilometraje' ? 'km' : 'hrs' }}).
+                }
+              </p>
+            } @else if (detentionFinalNeedsJumpConfirm()) {
+              <p class="mt-1 text-xs text-amber-400 font-medium" role="alert">
+                Salto alto respecto al medidor actual; se pedirá confirmación al cerrar.
+              </p>
+            }
           </div>
         </div>
 
@@ -622,16 +651,23 @@
                       </button>
                     }
                   </div>
-                  <div class="sm:col-span-2">
-                    <label class="text-[9px] text-muted uppercase tracking-wide">Litros</label>
-                    <input
-                      formControlName="liters"
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0"
-                      class="mt-0.5 w-full bg-dark border border-border rounded-lg px-2 py-2 text-sm font-mono text-main outline-none focus:border-primary"
-                    />
+                  <div class="sm:col-span-5">
+                    @if (row.get('inventoryItemId')?.value) {
+                      <app-fluid-quantity-row
+                        [itemId]="row.get('inventoryItemId')!.value"
+                        [unitAbbr]="row.get('unitAbbr')?.value || 'LT'"
+                        [allowsDecimals]="row.get('allowsDecimals')?.value ?? true"
+                        [availableStock]="row.get('stockAvailable')?.value ?? null"
+                        [blockNegativeStock]="blockNegativeStock()"
+                        [quantityControl]="fluidLitersControl(row)"
+                        [confirmedLargeDispatch]="row.get('confirmedLargeDispatch')?.value ?? false"
+                        (confirmedLargeDispatchChange)="onFluidLargeConfirm(i, $event)"
+                        (validationChange)="onFluidLineValidation(i, $event)" />
+                    } @else {
+                      <p class="text-[11px] text-muted mt-4">
+                        Elija un ítem del catálogo para ingresar cantidad.
+                      </p>
+                    }
                   </div>
                   <div class="sm:col-span-3">
                     <label class="text-[9px] text-muted uppercase tracking-wide">Acción</label>
@@ -647,6 +683,10 @@
                 <input type="hidden" formControlName="fluidType" />
                 <input type="hidden" formControlName="inventoryItemId" />
                 <input type="hidden" formControlName="linkedFluidItemName" />
+                <input type="hidden" formControlName="unitAbbr" />
+                <input type="hidden" formControlName="allowsDecimals" />
+                <input type="hidden" formControlName="stockAvailable" />
+                <input type="hidden" formControlName="confirmedLargeDispatch" />
               </div>
             }
           </div>
@@ -666,12 +706,19 @@
           <button type="submit" [disabled]="otForm.invalid" class="ot-btn-primary">
             {{ mode === "CREATING" ? "Registrar OT" : "Guardar cambios" }}
           </button>
-          @if (canCloseOt() && otId) {
+          @if (showCloseOtButton()) {
             <button
               type="button"
               (click)="openCloseOperationalDialog()"
               class="ot-btn-outline"
-              [attr.title]="!closeAllowed() ? 'Registre el inicio de detención antes de cerrar' : null"
+              [disabled]="!canCloseOt()"
+              [attr.title]="
+                detentionFinalMeterInvalid()
+                  ? 'Corrija el medidor final antes de cerrar'
+                  : !closeAllowed()
+                    ? 'Registre el inicio de detención antes de cerrar'
+                    : null
+              "
             >
               Firmar y cerrar OT
             </button>
@@ -784,6 +831,21 @@
 
       <div class="rounded-lg border border-border bg-dark/20 px-3 py-3 space-y-3">
         <span class="text-[10px] font-mono uppercase text-muted tracking-wide">Kits y líneas de repuesto</span>
+
+        <!-- Aviso de stock insuficiente en la bodega de consumo (Sprint 2.3) -->
+        @if (anyPartStockShortage()) {
+          <div class="rounded-lg border border-error/40 bg-error/10 px-3 py-2 flex items-start gap-2">
+            <svg class="w-4 h-4 text-error shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+            </svg>
+            <p class="text-xs text-error">
+              Una o más líneas piden más cantidad que el stock disponible en
+              <span class="font-semibold">{{ consumptionWarehouseLabel() }}</span>.
+              Podrás guardar la OT, pero el descuento al cerrar puede quedar pendiente de regularización.
+            </p>
+          </div>
+        }
+
         <div class="flex flex-wrap gap-2 items-center">
           <select
             (change)="applyKit($event)"
@@ -824,6 +886,26 @@
                         {{ ctrl.get("linkedItemName")?.value }}
                       </p>
                     </div>
+                    <!-- Stock disponible en la bodega de consumo (Sprint 2.3) -->
+                    @if (ctrl.get("inventoryItemId")?.value && pickerWarehouseId()) {
+                      @if (stockForItem(ctrl.get("inventoryItemId")?.value); as available) {
+                        <p
+                          class="text-[10px] font-mono flex items-center gap-1"
+                          [ngClass]="partRowHasShortage(ctrl) ? 'text-error' : 'text-success'"
+                        >
+                          <span class="w-1.5 h-1.5 rounded-full" [ngClass]="partRowHasShortage(ctrl) ? 'bg-error' : 'bg-success'"></span>
+                          Stock disponible: {{ available }}
+                          @if (partRowHasShortage(ctrl)) {
+                            · pedido supera stock
+                          }
+                        </p>
+                      } @else {
+                        <p class="text-[10px] font-mono text-error flex items-center gap-1">
+                          <span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                          Sin stock en {{ consumptionWarehouseLabel() }}
+                        </p>
+                      }
+                    }
                   } @else {
                     <div class="rounded-lg border border-dashed border-border bg-dark/40 px-3 py-2 text-[11px] text-muted">
                       Sin vínculo — use «Buscar catálogo».
@@ -937,6 +1019,17 @@
       </div>
     </div>
   </dialog>
+
+<app-confirm-modal
+  [isOpen]="showLargeJumpCloseModal()"
+  title="Confirmar salto de medidor al cerrar"
+  [message]="largeJumpCloseModalMessage()"
+  confirmText="Confirmar y continuar"
+  cancelText="Revisar medidor"
+  riskLevel="warning"
+  (confirm)="onLargeJumpCloseConfirmed()"
+  (cancel)="onLargeJumpCloseCancelled()"
+></app-confirm-modal>
 
   <dialog
     #closeOtDialog

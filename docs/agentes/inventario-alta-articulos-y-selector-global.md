@@ -31,7 +31,7 @@ Resumen de mejoras **2026-05** alineadas con multi-bodega (`item_stocks`) y UX d
 |----------|-------------------|-----------|
 | Requerimiento de compra (líneas) | `requisition-form` | Sí (`GLOBAL_ITEM_PICKER_CATALOG`) |
 | Detalle OC (vincular línea) | `purchase-order-detail` | Sí (misma constante) |
-| Orden de trabajo (repuestos / fluidos) | `work-order-form` | Sí (no se enlaza el input; queda el default `true` del picker) |
+| Orden de trabajo (repuestos / fluidos) | `work-order-form` | Sí (fluidos usan `app-fluid-quantity-row` con `stockAvailableQuantity` del picker) |
 | Control de stock — **Entrada por compra** o **Transferencia entre bodegas** (diálogo de movimiento) | `stock-dashboard` | Sí (`PURCHASE_IN`, `TRANSFER`) |
 | Control de stock — Salida a terreno / Reingreso desde terreno / Devolución desde OT | `stock-dashboard` | **No** (`transactionItemPickerAllowQuickAdd()` en `false`) |
 | Transferencia W2W (pantalla dedicada) | `inventory-transfer` | **No** (`[allowQuickAdd]="false"`; catálogo solo con stock en bodega **origen**) |
@@ -45,6 +45,7 @@ La pantalla **Transferencia W2W** (`inventory-transfer`) **no** es el mismo fluj
   (`strictFamilyFirst`, `allowQuickAdd`, `onlyWithStockInWarehouse`, `titleMaster`).
 - **Control de stock** enlaza `allowQuickAdd` según tipo de movimiento (ver §3); **requerimiento** y **detalle OC** usan `GLOBAL_ITEM_PICKER_CATALOG`. La pantalla **W2W dedicada** (`inventory-transfer`) monta el mismo picker pero con **`allowQuickAdd` en false**.
 - **`warehouseId`** sigue siendo responsabilidad de cada pantalla (stock pasa la bodega seleccionada; SRC no tiene bodega fija en el picker).
+- **`stockAvailableQuantity`** (2026-06-04): el backend expone en filas del picker el disponible neto (físico − reservas) para M1 y fluidos OT; lo consume `app-fluid-quantity-row` sin peticiones extra.
 - **Quick-add desde el picker:** usar **`overlayInsideDialog=false`** en `GlobalItemPicker` (overlay `fixed`). Con `true` se rompe el flujo **Nuevo movimiento** + catálogo (dos `<dialog>` nativos). Ver [ui-quickadd-global-picker-dialogos-nativos.md](ui-quickadd-global-picker-dialogos-nativos.md).
 - **Toasts sobre `<dialog>` nativo:** `NotificationService` + `app-toast` deben verse también con el picker abierto; ver [ui-notificaciones-toasts-top-layer.md](ui-notificaciones-toasts-top-layer.md) (Popover API / top layer).
 
@@ -57,6 +58,7 @@ La pantalla **Transferencia W2W** (`inventory-transfer`) **no** es el mismo fluj
 | SRC | `frontend/.../requisition-form/` |
 | OC vincular línea | `frontend/.../purchase-order-detail/` |
 | OT (picker de artículos) | `frontend/.../work-order-form/` |
+| M1 lubricantes (picker + cantidad) | `frontend/.../lube-report-form/` + `shared/.../fluid-quantity-row/` |
 | Transferencias W2W (picker; sin quick-add) | `frontend/.../inventory-transfer/` |
 | Política + Prisma | `backend/prisma/schema.prisma` (`InventoryItem`), migración citada |
 | Crear / quick-create | `backend/.../inventory-items.service.ts` |

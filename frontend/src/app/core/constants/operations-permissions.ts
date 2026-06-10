@@ -22,6 +22,17 @@ export const O = {
 
   BACKLOG_READ: 'operations:backlog:read',
   BACKLOG_MANAGE: 'operations:backlog:manage',
+
+  LUBE_REPORT_READ: 'operations:lube-report:read',
+  LUBE_REPORT_CREATE: 'operations:lube-report:create',
+
+  AVAILABILITY_READ: 'operations:availability:read',
+  AVAILABILITY_CREATE: 'operations:availability:create',
+  AVAILABILITY_MONITOR: 'operations:availability:monitor',
+
+  FAULT_REPORT_READ: 'operations:fault-report:read',
+  FAULT_REPORT_CREATE: 'operations:fault-report:create',
+  FAULT_REPORT_MANAGE: 'operations:fault-report:manage',
 } as const;
 
 /** Mutación de OT en formulario (planificación, asignación o ejecución). */

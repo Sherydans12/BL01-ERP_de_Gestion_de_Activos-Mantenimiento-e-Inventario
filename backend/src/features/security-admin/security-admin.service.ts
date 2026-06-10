@@ -222,8 +222,7 @@ export class SecurityAdminService {
       this.prisma.user.count({ where: { role: 'SUPER_ADMIN' } }),
     ]);
     return {
-      superAdminStepUpEmailEnabled:
-        row?.superAdminStepUpEmailEnabled ?? false,
+      superAdminStepUpEmailEnabled: row?.superAdminStepUpEmailEnabled ?? false,
       authStepUpLocalBypass:
         this.config.get<string>('AUTH_STEP_UP_BYPASS', '') === 'true',
       superAdminTotpEnabledCount,

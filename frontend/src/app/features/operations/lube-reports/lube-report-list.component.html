@@ -1,0 +1,351 @@
+<div class="min-h-screen bg-dark px-4 py-8 sm:px-6 lg:px-10">
+
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
+        <svg class="h-6 w-6 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15a2.25 2.25 0 01.457 1.338 48.254 48.254 0 01-11.604 0 2.25 2.25 0 01.457-1.338M19.8 15l-1.8-1.2M5 14.5l1.8-1.2M12 21v-6.75"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="text-xl font-semibold text-main">Historial de Despachos</h1>
+        <p class="text-sm text-muted">
+          @if (loading()) { Cargando… }
+          @else { {{ total() | number }} {{ total() === 1 ? 'registro' : 'registros' }} }
+        </p>
+      </div>
+    </div>
+
+    <a
+      *appHasPermission="O.LUBE_REPORT_CREATE"
+      routerLink="/app/operaciones/lubricantes/nuevo"
+      class="inline-flex min-h-[48px] items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+      </svg>
+      Nuevo despacho
+    </a>
+  </header>
+
+  <!-- Búsqueda -->
+  <section class="mb-4 rounded-2xl bg-surface border border-border p-4 shadow-sm">
+    <label class="block text-[10px] font-mono text-muted uppercase tracking-widest mb-1.5">
+      Buscar despachos
+    </label>
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div class="tpm-search-combobox relative flex flex-1 min-w-0 items-center rounded-lg border border-border bg-dark focus-within:border-primary">
+        <span class="pointer-events-none flex shrink-0 items-center self-stretch pl-3 pr-1 text-muted" aria-hidden="true">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </span>
+        <input
+          type="text"
+          inputmode="search"
+          spellcheck="false"
+          autocomplete="off"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="onSearchChange($event)"
+          (keydown.enter)="onSearchEnter($event)"
+          placeholder="Correlativo RCL, equipo, bodega, operador, observaciones…"
+          class="tpm-input-leading-icon min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0 pr-9 text-sm text-main shadow-none ring-0 outline-none focus:ring-0 rounded-none placeholder:text-muted"
+        />
+        @if (hasActiveSearch()) {
+          <button
+            type="button"
+            (click)="clearSearch()"
+            class="absolute inset-y-0 right-0 flex items-center pr-2 text-muted hover:text-main"
+            aria-label="Limpiar búsqueda">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        }
+      </div>
+      @if (!loading() && hasActiveSearch()) {
+        <span class="text-xs text-muted whitespace-nowrap shrink-0">{{ total() }} coincidencia(s)</span>
+      }
+    </div>
+    <p class="text-xs text-muted mt-2">Búsqueda en servidor (insensible a mayúsculas). Incluye UUID del documento.</p>
+  </section>
+
+  <!-- Filtros + ordenamiento -->
+  <section class="mb-6 rounded-2xl bg-surface border border-border p-4 shadow-sm space-y-4">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Bodega / Camión</label>
+        <select
+          [ngModel]="filterWarehouseId()"
+          (ngModelChange)="filterWarehouseId.set($event)"
+          class="min-h-[44px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todas las bodegas</option>
+          @for (wh of warehouses(); track wh.id) {
+            <option [value]="wh.id">{{ wh.code }} — {{ wh.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Equipo</label>
+        <select
+          [ngModel]="filterEquipmentId()"
+          (ngModelChange)="filterEquipmentId.set($event)"
+          class="min-h-[44px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todos los equipos</option>
+          @for (eq of equipments(); track eq.id) {
+            <option [value]="eq.id">{{ eq.internalId }} — {{ eq.brand }} {{ eq.model }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Desde</label>
+        <input
+          type="date"
+          [ngModel]="filterDateFrom()"
+          (ngModelChange)="filterDateFrom.set($event)"
+          class="min-h-[44px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Hasta</label>
+        <input
+          type="date"
+          [ngModel]="filterDateTo()"
+          (ngModelChange)="filterDateTo.set($event)"
+          class="min-h-[44px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+      </div>
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="flex flex-col gap-1">
+        <label class="text-[10px] font-mono text-muted uppercase tracking-widest">Ordenar por</label>
+        <select
+          [ngModel]="sortField()"
+          (ngModelChange)="onSortFieldChange($event)"
+          class="min-h-[44px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none">
+          <option value="dispatchDate">Fecha despacho</option>
+          <option value="correlative">Correlativo</option>
+          <option value="createdAt">Fecha registro</option>
+          <option value="meterReading">Horómetro</option>
+          <option value="warehouseName">Bodega</option>
+          <option value="equipmentInternalId">Equipo (N° interno)</option>
+          <option value="userName">Operador</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-[10px] font-mono text-muted uppercase tracking-widest">Dirección</label>
+        <select
+          [ngModel]="sortDir()"
+          (ngModelChange)="onSortDirChange($event)"
+          class="min-h-[44px] w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none">
+          <option value="asc">Ascendente</option>
+          <option value="desc">Descendente</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-end gap-2">
+      @if (hasActiveFilters()) {
+        <button
+          type="button"
+          (click)="clearFilters()"
+          class="min-h-[44px] rounded-lg border border-border px-4 py-1.5 text-sm text-muted transition hover:border-primary/50 hover:text-main">
+          Limpiar filtros
+        </button>
+      }
+      <button
+        type="button"
+        (click)="applyFilters()"
+        class="min-h-[44px] rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white transition hover:opacity-90">
+        Aplicar filtros
+      </button>
+    </div>
+  </section>
+
+  <div class="rounded-2xl bg-surface border border-border shadow-sm overflow-hidden">
+
+    @if (loading()) {
+      <div class="divide-y divide-border">
+        @for (_ of [1,2,3,4,5,6]; track $index) {
+          <div class="flex items-center gap-4 px-5 py-4">
+            <div class="h-4 w-24 animate-pulse rounded bg-border"></div>
+            <div class="h-4 w-20 animate-pulse rounded bg-border"></div>
+            <div class="h-4 flex-1 animate-pulse rounded bg-border"></div>
+            <div class="h-4 w-36 animate-pulse rounded bg-border"></div>
+          </div>
+        }
+      </div>
+    } @else if (rows().length === 0) {
+      <div class="flex flex-col items-center justify-center gap-3 py-16 text-center px-4">
+        <svg class="h-12 w-12 text-border" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15a2.25 2.25 0 01.457 1.338 48.254 48.254 0 01-11.604 0 2.25 2.25 0 01.457-1.338M19.8 15l-1.8-1.2M5 14.5l1.8-1.2M12 21v-6.75"/>
+        </svg>
+        @if (hasActiveSearch() || hasActiveFilters()) {
+          <p class="text-muted">No hay despachos con los criterios actuales.</p>
+          <button
+            type="button"
+            (click)="clearSearch(); clearFilters()"
+            class="text-sm text-primary hover:underline">
+            Limpiar búsqueda y filtros
+          </button>
+        } @else {
+          <p class="text-muted">No se encontraron despachos registrados.</p>
+        }
+      </div>
+    } @else {
+
+      @if (deviceService.isMobile()) {
+        <div class="divide-y divide-border">
+          @for (row of rows(); track row.id) {
+            <div class="px-4 py-4">
+              <div class="mb-2 flex items-start justify-between gap-2">
+                <div class="flex flex-col gap-1">
+                  <span class="font-mono text-base font-semibold text-main">
+                    {{ row.dispatchDate | date:'dd/MM/yyyy' }}
+                  </span>
+                  <span class="inline-flex w-fit items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                    {{ row.correlative }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  (click)="openDetail(row.id)"
+                  title="Ver detalle"
+                  class="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl text-muted hover:bg-primary/15 hover:text-primary">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              </div>
+              <p class="text-base font-bold text-main leading-tight">{{ row.equipment.internalId }}</p>
+              <p class="mb-2 text-sm text-muted">
+                {{ row.equipment.brand }} {{ row.equipment.model }}
+                @if (row.equipment.plate) { · {{ row.equipment.plate }} }
+              </p>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2 text-xs text-muted">
+                <span>{{ row.warehouse.code }} — {{ row.warehouse.name }}</span>
+                @if (row.meterReading !== null) {
+                  <span class="font-mono font-medium text-main">{{ row.meterReading | number }} h</span>
+                }
+                <span>{{ row.lineCount }} ítem{{ row.lineCount === 1 ? '' : 's' }}</span>
+                <span class="truncate max-w-[12rem]">{{ row.user.name }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[48rem] text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
+                <th class="px-5 py-3.5">Fecha</th>
+                <th class="px-5 py-3.5">Correlativo</th>
+                <th class="px-5 py-3.5">Origen</th>
+                <th class="px-5 py-3.5">Equipo</th>
+                <th class="px-5 py-3.5 text-right">Horómetro</th>
+                <th class="px-5 py-3.5 text-right">Ítems</th>
+                <th class="px-5 py-3.5 text-right">Operador</th>
+                <th class="px-5 py-3.5 w-12"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              @for (row of rows(); track row.id) {
+                <tr class="group transition-colors hover:bg-primary/5">
+                  <td class="whitespace-nowrap px-5 py-3.5 font-mono text-sm text-main">
+                    {{ row.dispatchDate | date:'dd/MM/yyyy' }}
+                  </td>
+                  <td class="whitespace-nowrap px-5 py-3.5">
+                    <span class="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                      {{ row.correlative }}
+                    </span>
+                  </td>
+                  <td class="px-5 py-3.5">
+                    <p class="font-medium text-main leading-tight">{{ row.warehouse.code }}</p>
+                    <p class="text-xs text-muted truncate max-w-[12rem]">{{ row.warehouse.name }}</p>
+                  </td>
+                  <td class="px-5 py-3.5">
+                    <p class="font-medium text-main leading-tight">{{ row.equipment.internalId }}</p>
+                    <p class="text-xs text-muted truncate max-w-[14rem]">
+                      {{ row.equipment.brand }} {{ row.equipment.model }}
+                      @if (row.equipment.plate) { · {{ row.equipment.plate }} }
+                    </p>
+                  </td>
+                  <td class="whitespace-nowrap px-5 py-3.5 text-right font-mono text-sm">
+                    @if (row.meterReading !== null) {
+                      <span class="text-main">{{ row.meterReading | number }} h</span>
+                    } @else {
+                      <span class="text-muted">—</span>
+                    }
+                  </td>
+                  <td class="whitespace-nowrap px-5 py-3.5 text-right text-muted">{{ row.lineCount }}</td>
+                  <td class="px-5 py-3.5 text-right">
+                    <span class="text-xs text-muted truncate max-w-[10rem] block">{{ row.user.name }}</span>
+                  </td>
+                  <td class="px-5 py-3.5 text-right">
+                    <button
+                      type="button"
+                      (click)="openDetail(row.id)"
+                      title="Ver detalle"
+                      class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted opacity-70 transition group-hover:opacity-100 hover:bg-primary/15 hover:text-primary">
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-border bg-dark/30">
+        <p class="text-sm text-muted">
+          @if (total() === 0) {
+            Sin registros
+          } @else {
+            Mostrando <span class="text-main font-medium">{{ rangeFrom() }}</span>–<span class="text-main font-medium">{{ rangeTo() }}</span>
+            de <span class="text-main font-medium">{{ total() }}</span>
+          }
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            (click)="prevPage()"
+            [disabled]="page() <= 1"
+            class="px-3 py-1.5 rounded-lg text-sm border border-border text-main hover:bg-dark disabled:opacity-40 disabled:pointer-events-none min-h-[44px] sm:min-h-0">
+            Anterior
+          </button>
+          <span class="text-sm text-main font-mono px-1">Pág. {{ page() }} / {{ totalPages() }}</span>
+          <button
+            type="button"
+            (click)="nextPage()"
+            [disabled]="page() >= totalPages()"
+            class="px-3 py-1.5 rounded-lg text-sm border border-border text-main hover:bg-dark disabled:opacity-40 disabled:pointer-events-none min-h-[44px] sm:min-h-0">
+            Siguiente
+          </button>
+          <select
+            [ngModel]="pageSize()"
+            (ngModelChange)="onPageSizeChange($event)"
+            class="px-3 py-1.5 rounded-lg text-sm bg-dark border border-border text-main focus:border-primary focus:outline-none min-h-[44px] sm:min-h-0">
+            @for (n of pageSizeOptions; track n) {
+              <option [ngValue]="n">{{ n }} / página</option>
+            }
+          </select>
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+<app-lube-report-detail-modal
+  [open]="detailOpen()"
+  [loading]="detailLoading()"
+  [report]="detailReport()"
+  [errorMessage]="detailError()"
+  (closed)="closeDetail()"
+/>

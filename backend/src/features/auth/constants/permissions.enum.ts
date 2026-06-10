@@ -81,6 +81,15 @@ export enum SystemPermissions {
   // —— Inventario: stock y ajustes ——
   INVENTORY_STOCK_READ = 'inventory:stock:read',
   INVENTORY_STOCK_ADJUST = 'inventory:stock:adjust',
+  INVENTORY_STOCK_VIEW_COST = 'inventory:stock:view_cost',
+
+  // —— Inventario: proveedores (maestro ligero) ——
+  INVENTORY_SUPPLIER_READ = 'inventory:supplier:read',
+  INVENTORY_SUPPLIER_MANAGE = 'inventory:supplier:manage',
+
+  // —— Inventario: analítica ——
+  INVENTORY_ANALYTICS_READ = 'inventory:analytics:read',
+  INVENTORY_ANALYTICS_REPORT = 'inventory:analytics:report',
 
   // —— Operaciones: flota / equipos ——
   OPERATIONS_EQUIPMENT_READ = 'operations:equipment:read',
@@ -107,6 +116,20 @@ export enum SystemPermissions {
   // —— Operaciones: backlog de OT ——
   OPERATIONS_BACKLOG_READ = 'operations:backlog:read',
   OPERATIONS_BACKLOG_MANAGE = 'operations:backlog:manage',
+
+  // —— Operaciones: reporte de consumo de lubricantes ——
+  OPERATIONS_LUBE_REPORT_READ = 'operations:lube-report:read',
+  OPERATIONS_LUBE_REPORT_CREATE = 'operations:lube-report:create',
+
+  // —— Operaciones: disponibilidad operativa diaria ——
+  OPERATIONS_AVAILABILITY_READ = 'operations:availability:read',
+  OPERATIONS_AVAILABILITY_CREATE = 'operations:availability:create',
+  OPERATIONS_AVAILABILITY_MONITOR = 'operations:availability:monitor',
+
+  // —— Operaciones: registro de fallas (correctivo imprevisto) ——
+  OPERATIONS_FAULT_REPORT_READ = 'operations:fault-report:read',
+  OPERATIONS_FAULT_REPORT_CREATE = 'operations:fault-report:create',
+  OPERATIONS_FAULT_REPORT_MANAGE = 'operations:fault-report:manage',
 
   // —— Administración: usuarios ——
   ADMIN_USER_READ = 'admin:user:read',

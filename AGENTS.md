@@ -15,6 +15,13 @@ Fase actual descrita en el README raíz: **D — Hardening y lógica EAM**.
 - **Stub legacy:** `.agents/rules/tpm-arquitectura.md` solo apunta al `.mdc`; editar siempre el `.mdc`.
 - **Skills ECC:** `ecc-nestjs-patterns`, `ecc-postgres-patterns`, `ecc-adr`, `ecc-codebase-onboarding`, **`ecc-api-design`**, **`ecc-security-review`** (ver `docs/agentes/README.md` y [repos-externos.md](docs/agentes/repos-externos.md)).
 
+## Compatibilidad Codex
+
+- Codex lee este `AGENTS.md` como guía principal del repo. No reemplaza `.cursor/`; las reglas Cursor siguen siendo fuente canónica para Cursor.
+- Configuración repo-local de Codex: `.codex/config.toml` (solo ajustes de Codex, sin tocar Cursor).
+- Skills repo-locales de Codex: `.agents/skills/`. Son **wrappers** livianos que delegan a `.cursor/skills/*/SKILL.md`; mantener una sola fuente de verdad en `.cursor/skills/`.
+- Guía de compatibilidad y mantenimiento: [`docs/agentes/codex-compatibilidad.md`](docs/agentes/codex-compatibilidad.md).
+
 ## Stack
 
 | Área | Tecnología |

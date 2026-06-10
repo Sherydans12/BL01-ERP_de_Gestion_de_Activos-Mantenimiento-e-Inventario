@@ -27,7 +27,7 @@ export class SubcontractsController {
   @RequirePermissions(SystemPermissions.ADMIN_CONTRACT_MANAGE)
   async create(
     @Body() body: { name: string; code: string; contractId: string },
-    @Req() req: any,
+    @Req() _req: any,
   ) {
     return this.prisma.subcontract.create({ data: body });
   }
@@ -38,7 +38,7 @@ export class SubcontractsController {
   async update(
     @Param('id') id: string,
     @Body() body: { name: string; code: string },
-    @Req() req: any,
+    @Req() _req: any,
   ) {
     return this.prisma.subcontract.update({ where: { id }, data: body });
   }
@@ -46,7 +46,7 @@ export class SubcontractsController {
   @Delete(':id')
   @UseGuards(PermissionsGuard)
   @RequirePermissions(SystemPermissions.ADMIN_CONTRACT_MANAGE)
-  async remove(@Param('id') id: string, @Req() req: any) {
+  async remove(@Param('id') id: string, @Req() _req: any) {
     try {
       return await this.prisma.subcontract.delete({ where: { id } });
     } catch (error) {

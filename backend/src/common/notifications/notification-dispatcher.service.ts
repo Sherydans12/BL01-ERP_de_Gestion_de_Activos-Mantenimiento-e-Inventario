@@ -211,11 +211,7 @@ export class NotificationDispatcherService {
       }
     }
 
-    if (
-      tasks.length === 0 &&
-      hasCc &&
-      tenantSetting?.enabled
-    ) {
+    if (tasks.length === 0 && hasCc && tenantSetting?.enabled) {
       tasks.push(
         this.emailService
           .sendMail({

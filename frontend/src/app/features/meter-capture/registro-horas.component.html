@@ -14,8 +14,10 @@
       @if (pendingSyncCount() > 0) {
         <span
           class="meter-cap-pill"
-          [class.meter-cap-pill--online-pending]="isOnline()"
-          [class.meter-cap-pill--pending-offline]="!isOnline()"
+          [ngClass]="{
+            'meter-cap-pill--online-pending': isOnline(),
+            'meter-cap-pill--pending-offline': !isOnline()
+          }"
         >
           @if (isOnline()) {
             Listo para subir: {{ pendingSyncCount() }}
@@ -44,7 +46,7 @@
         <label class="meter-cap-label text-muted">
           Contrato
           <select
-            class="meter-cap-select"
+            class="meter-cap-select min-h-[48px] text-base"
             [disabled]="conflictOnlyMode()"
             [ngModel]="contractScopeId() ?? ''"
             (ngModelChange)="onContractScopeChange($event)"
@@ -59,7 +61,7 @@
       <label class="meter-cap-label text-muted">
         Categoría (tipo)
         <select
-          class="meter-cap-select"
+          class="meter-cap-select min-h-[48px] text-base"
           [disabled]="conflictOnlyMode()"
           [ngModel]="categoryType()"
           (ngModelChange)="onCategoryChange($event)"
@@ -76,7 +78,7 @@
         Buscar equipo
         <input
           type="search"
-          class="meter-cap-input"
+          class="meter-cap-input min-h-[48px] text-base"
           placeholder="Código, patente, marca…"
           [disabled]="conflictOnlyMode()"
           [value]="searchText()"
@@ -85,7 +87,7 @@
       </label>
       <button
         type="button"
-        class="meter-cap-btn meter-cap-btn--ghost"
+        class="meter-cap-btn meter-cap-btn--ghost min-h-[48px] text-base"
         [disabled]="conflictOnlyMode()"
         title="Roadmap: escanear QR y enfocar la lectura de la fila"
         (click)="scanQrPlaceholder()"
@@ -98,7 +100,7 @@
   <div class="meter-cap-actions">
     <button
       type="button"
-      class="meter-cap-btn meter-cap-btn--secondary"
+      class="meter-cap-btn meter-cap-btn--secondary min-h-[48px] text-base"
       [disabled]="loading()"
       (click)="reloadFullList()"
     >
@@ -107,14 +109,12 @@
     <button
       *appHasPermission="o.METER_READING_CREATE"
       type="button"
-      class="meter-cap-btn"
-      [class.meter-cap-btn--save-local]="!isOnline() && !syncing()"
-      [class.meter-cap-btn--online-pending]="
-        isOnline() && pendingSyncCount() > 0 && !syncing()
-      "
-      [class.meter-cap-btn--primary]="
-        isOnline() && pendingSyncCount() === 0 && !syncing()
-      "
+      class="meter-cap-btn min-h-[48px] text-base"
+      [ngClass]="{
+        'meter-cap-btn--save-local': !isOnline() && !syncing(),
+        'meter-cap-btn--online-pending': isOnline() && pendingSyncCount() > 0 && !syncing(),
+        'meter-cap-btn--primary': isOnline() && pendingSyncCount() === 0 && !syncing()
+      }"
       [disabled]="syncing() || loading() || pendingSyncCount() === 0"
       (click)="syncReadings()"
     >
@@ -122,7 +122,9 @@
     </button>
   </div>
 
-  <div class="meter-cap-table-wrap bg-surface border border-border rounded-xl overflow-hidden">
+  <div
+    class="meter-cap-table-wrap bg-surface border border-border rounded-xl overflow-hidden"
+  >
     @if (loading()) {
       <div class="meter-cap-loading text-muted">Cargando equipos…</div>
     } @else if (boardRows().length === 0) {
@@ -133,6 +135,82 @@
           No hay equipos con los filtros actuales.
         }
       </div>
+    } @else if (deviceService.isMobile()) {
+      <div class="meter-cap-cards p-3 flex flex-col gap-3">
+        @for (row of boardRows(); track row.id) {
+          @let delta = rowDelta(row);
+          <article
+            class="meter-cap-card bg-dark border border-border rounded-xl p-4"
+            [ngClass]="cardNgClass(row)"
+          >
+            <div class="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <p class="font-mono text-sm text-primary font-semibold">
+                  {{ row.internalId }}
+                </p>
+                <p class="text-sm text-main font-medium">
+                  {{ row.displayName || '—' }}
+                </p>
+                <p class="text-xs text-muted mt-0.5">
+                  {{ meterTypeLabel(row.meterType) }} ·
+                  {{ meterUnitShort(row.meterType) }}
+                </p>
+              </div>
+              <span
+                class="text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded-md border border-border text-muted shrink-0"
+              >
+                {{ row.contractCode ?? '—' }}
+              </span>
+            </div>
+
+            <app-meter-reference-banner
+              class="block mb-3"
+              [boardRow]="row"
+            />
+
+            <label class="block text-xs text-muted uppercase tracking-wide mb-1">
+              Nueva lectura ({{ meterUnitShort(row.meterType) }})
+            </label>
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                [id]="'meter-reading-' + row.id"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric"
+                class="meter-cap-num min-h-[48px] text-lg flex-1 min-w-[8rem]"
+                [ngModel]="readingFor(row.id)"
+                (ngModelChange)="updateReading(row.id, $event)"
+                [ngClass]="readingInputNgClass(row)"
+              />
+              @if (delta !== null && delta > 0 && !rowHasInvalidReading(row)) {
+                <span
+                  class="meter-cap-delta-badge text-success font-semibold text-base tabular-nums"
+                >
+                  +{{ delta }} {{ meterUnitShort(row.meterType) }}
+                </span>
+              }
+            </div>
+
+            @if (rowNeedsJumpConfirm(row)) {
+              <p
+                class="meter-cap-jump-warn mt-2 text-sm font-medium text-amber-400"
+                role="alert"
+              >
+                Salto alto detectado
+              </p>
+            }
+
+            @if (conflictOnlyMode()) {
+              <p class="mt-2 text-xs text-muted">
+                En servidor:
+                <strong class="text-main">{{ row.currentMeter }}</strong>
+                {{ meterUnitShort(row.meterType) }}
+              </p>
+            }
+          </article>
+        }
+      </div>
     } @else {
       <div class="meter-cap-scroll">
         <table class="meter-cap-table">
@@ -140,46 +218,71 @@
             <tr>
               <th>Código</th>
               <th>Nombre</th>
+              <th>Medidor</th>
               <th>Contrato</th>
-              <th>Última lectura</th>
-              <th>Medidor actual (BD)</th>
-              <th>Lectura actual</th>
+              <th>Nueva lectura</th>
             </tr>
           </thead>
           <tbody>
             @for (row of boardRows(); track row.id) {
-              <tr [class.meter-cap-row--invalid]="rowHasInvalidReading(row)">
+              @let delta = rowDelta(row);
+              <tr [ngClass]="rowNgClass(row)">
                 <td class="font-mono text-muted">{{ row.internalId }}</td>
                 <td>{{ row.displayName || '—' }}</td>
+                <td class="text-xs text-muted whitespace-nowrap">
+                  {{ meterTypeLabel(row.meterType) }}
+                  <span class="text-main font-medium">({{
+                    meterUnitShort(row.meterType)
+                  }})</span>
+                </td>
                 <td class="text-muted text-xs">
                   {{ row.contractCode ?? '—' }}
                   @if (row.subcontractCode) {
                     <span> / {{ row.subcontractCode }}</span>
                   }
                 </td>
-                <td class="text-muted whitespace-nowrap">
-                  @if (row.lastReadingAt) {
-                    {{ row.lastReadingAt | date: 'short' }}
-                  } @else {
-                    —
-                  }
-                </td>
-                <td class="tabular-nums text-muted">{{ row.currentMeter }}</td>
                 <td>
                   <div class="meter-cap-reading-cell">
-                    <input
-                      [id]="'meter-reading-' + row.id"
-                      type="number"
-                      min="0"
-                      step="1"
-                      class="meter-cap-num"
-                      [ngModel]="readingFor(row.id)"
-                      (ngModelChange)="updateReading(row.id, $event)"
-                      [class.meter-cap-num--invalid]="rowHasInvalidReading(row)"
+                    <app-meter-reference-banner
+                      class="block mb-2 max-w-md"
+                      [boardRow]="row"
+                      [compact]="true"
                     />
+                    <div class="flex flex-wrap items-center gap-2">
+                      <input
+                        [id]="'meter-reading-' + row.id"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                        class="meter-cap-num min-h-[48px] text-lg"
+                        [ngModel]="readingFor(row.id)"
+                        (ngModelChange)="updateReading(row.id, $event)"
+                        [ngClass]="readingInputNgClass(row)"
+                      />
+                      @if (
+                        delta !== null && delta > 0 && !rowHasInvalidReading(row)
+                      ) {
+                        <span
+                          class="meter-cap-delta-badge text-success font-semibold text-sm tabular-nums whitespace-nowrap"
+                        >
+                          +{{ delta }} {{ meterUnitShort(row.meterType) }}
+                        </span>
+                      }
+                    </div>
+                    @if (rowNeedsJumpConfirm(row)) {
+                      <p
+                        class="meter-cap-jump-warn text-xs font-medium text-amber-400 mt-1"
+                        role="alert"
+                      >
+                        Salto alto detectado
+                      </p>
+                    }
                     @if (conflictOnlyMode()) {
                       <span class="meter-cap-server-hint">
-                        En servidor: <strong>{{ row.currentMeter }}</strong>
+                        En servidor:
+                        <strong>{{ row.currentMeter }}</strong>
+                        {{ meterUnitShort(row.meterType) }}
                       </span>
                     }
                   </div>
@@ -192,3 +295,15 @@
     }
   </div>
 </div>
+
+<app-confirm-modal
+  [isOpen]="showLargeJumpConfirmModal()"
+  title="Confirmar saltos atípicos"
+  [message]="largeJumpModalMessage()"
+  [consequenceSummary]="largeJumpConsequenceSummary()"
+  confirmText="Confirmar y sincronizar"
+  cancelText="Revisar lecturas"
+  riskLevel="warning"
+  (confirm)="onLargeJumpConfirmed()"
+  (cancel)="onLargeJumpCancelled()"
+></app-confirm-modal>

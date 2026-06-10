@@ -1,0 +1,230 @@
+<div class="min-h-screen bg-dark p-4 lg:p-6 pb-32">
+
+  <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-main">Reporte de Disponibilidad</h1>
+      <p class="text-muted text-sm mt-1">Reporta el estado operativo de la flota para el turno seleccionado.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a routerLink="/app/operaciones/disponibilidad/monitor"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-border text-muted hover:text-main min-h-[40px]">
+        Monitor de Flota
+      </a>
+      <a routerLink="/app/operaciones/disponibilidad/importar"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-primary/40 text-primary hover:bg-primary/10 min-h-[40px]">
+        Importar Excel
+      </a>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-surface border border-border rounded-2xl p-5 mb-6 space-y-4">
+    <div class="grid grid-cols-1 gap-4" [class.sm:grid-cols-2]="shiftService.hasNightShift()" [class.lg:grid-cols-4]="contractOptions().length > 1">
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Fecha <span class="text-red-400">*</span></label>
+        <input type="date" [max]="maxDate" [ngModel]="reportDate()" (ngModelChange)="reportDate.set($event); onFilterChange()"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]" />
+      </div>
+      @if (shiftService.hasNightShift()) {
+        <div>
+          <label class="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Turno</label>
+          <div class="flex gap-2">
+            @for (s of SHIFTS; track s) {
+              <label class="flex items-center justify-center gap-2 cursor-pointer text-sm px-3 min-h-[44px] rounded-lg border transition-all flex-1"
+                [ngClass]="shift() === s ? {'border-primary': true, 'text-primary': true, 'bg-primary/10': true} : {'border-border': true, 'text-muted': true}">
+                <input type="radio" [value]="s" [checked]="shift() === s" (change)="shift.set(s); onFilterChange()" class="sr-only" />
+                {{ SHIFT_LABELS[s] }}
+              </label>
+            }
+          </div>
+        </div>
+      }
+      @if (contractOptions().length > 1) {
+        <div>
+          <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Contrato</label>
+          <select [ngModel]="filterContractId()" (ngModelChange)="filterContractId.set($event); onFilterChange()"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]">
+            <option value="">Todos</option>
+            @for (c of contractOptions(); track c.id) {
+              <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+      <div>
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Buscar equipo</label>
+        <input type="search" placeholder="Código, patente…" [ngModel]="searchDraft()" (ngModelChange)="onSearchDraftChange($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]" />
+      </div>
+    </div>
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-xs text-muted">
+        @if (!isLoadingEquipments()) {
+          {{ pendingTotal() }} pendiente{{ pendingTotal() !== 1 ? 's' : '' }} en el turno
+          @if (readyCount() > 0) { · <span class="text-main font-semibold">{{ readyCount() }}</span> listos para enviar }
+        }
+      </p>
+      <label class="inline-flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+        <input type="checkbox" [ngModel]="compactView()" (ngModelChange)="compactView.set($event)" class="rounded border-border" />
+        Vista compacta (tabla)
+      </label>
+    </div>
+  </div>
+
+  @if (isLoadingEquipments()) {
+    <div class="space-y-3 animate-pulse">
+      @for (i of [1, 2, 3]; track i) {
+        <div class="bg-surface border border-border rounded-xl p-5 h-32 bg-border/30"></div>
+      }
+    </div>
+  } @else if (pendingTotal() === 0) {
+    <div class="bg-surface border border-green-500/30 rounded-2xl p-10 text-center">
+      <h2 class="text-xl font-bold text-green-400 mb-1">¡Flota al 100%!</h2>
+      <p class="text-muted text-sm">Todos los equipos del turno han sido reportados.</p>
+      <a routerLink="/app/operaciones/disponibilidad/monitor" class="inline-block mt-4 text-sm text-primary hover:underline">Ver monitor del turno</a>
+    </div>
+  } @else if (compactView()) {
+    <div class="bg-surface border border-border rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border bg-dark/40">
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Equipo</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Estado</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Horómetro</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Comentarios</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            @for (eq of pendingEquipments(); track eq.id) {
+              <tr [id]="'avail-eq-' + eq.id" class="hover:bg-dark/30"
+                [class.ring-2]="highlightEquipmentId() === eq.id"
+                [class.ring-primary]="highlightEquipmentId() === eq.id">
+                <td class="px-4 py-3">
+                  <span class="font-mono text-xs text-muted block">{{ eq.internalId }}</span>
+                  <span class="text-main">{{ eq.brand }} {{ eq.model }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <select [ngModel]="drafts()[eq.id]?.status" (ngModelChange)="updateDraft(eq.id, { status: $event })"
+                    class="w-full min-w-[140px] px-2 py-1.5 bg-dark border border-border rounded-lg text-xs text-main">
+                    <option [ngValue]="null">— Seleccionar —</option>
+                    @for (s of OPERATIONAL_STATUSES; track s) {
+                      <option [ngValue]="s">{{ STATUS_LABELS[s] }}</option>
+                    }
+                  </select>
+                </td>
+                <td class="px-4 py-3">
+                  <input type="number" min="1" step="1" placeholder="Hrs"
+                    [ngModel]="drafts()[eq.id]?.meterReading"
+                    (ngModelChange)="updateDraft(eq.id, { meterReading: $event ? +$event : null })"
+                    (focus)="openMeterPanel(eq.id)"
+                    class="w-24 px-2 py-1.5 bg-dark border border-border rounded-lg text-xs text-main" />
+                </td>
+                <td class="px-4 py-3">
+                  <input type="text" maxlength="200" placeholder="Observaciones…"
+                    [ngModel]="drafts()[eq.id]?.comments" (ngModelChange)="updateDraft(eq.id, { comments: $event })"
+                    class="w-full min-w-[120px] px-2 py-1.5 bg-dark border border-border rounded-lg text-xs text-main" />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  } @else {
+    <div class="space-y-4">
+      @for (eq of pendingEquipments(); track eq.id) {
+        <div [id]="'avail-eq-' + eq.id"
+          class="bg-surface rounded-xl p-4 lg:p-5 space-y-4 border transition-colors"
+          [ngClass]="drafts()[eq.id]?.status !== null ? {'border-primary/40': true} : {'border-border': true}"
+          [class.ring-2]="highlightEquipmentId() === eq.id"
+          [class.ring-primary]="highlightEquipmentId() === eq.id">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <span class="font-mono text-xs text-muted block">{{ eq.internalId }}</span>
+              <h3 class="text-sm font-semibold text-main">{{ eq.brand }} {{ eq.model }}</h3>
+            </div>
+            @if (eq.plate) {
+              <span class="px-2 py-0.5 rounded text-xs bg-dark text-muted border border-border font-mono">{{ eq.plate }}</span>
+            }
+          </div>
+
+          @if (isMeterExpanded(eq.id)) {
+            <app-meter-reference-banner [snapshot]="meterSnapshots()[eq.id] ?? null" />
+          }
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            @for (s of OPERATIONAL_STATUSES; track s) {
+              <label class="flex items-center gap-2 px-3 min-h-[44px] rounded-lg border cursor-pointer transition-all select-none text-xs"
+                [ngClass]="drafts()[eq.id]?.status === s ? {'border-primary': true, 'bg-primary/10': true, 'text-primary': true} : {'border-border': true, 'text-muted': true}">
+                <input type="radio" [name]="'status-' + eq.id" [value]="s" [checked]="drafts()[eq.id]?.status === s"
+                  (change)="updateDraft(eq.id, { status: s })" class="sr-only" />
+                <span class="w-2 h-2 rounded-full" [ngClass]="STATUS_DOT[s]"></span>
+                {{ STATUS_LABELS[s] }}
+              </label>
+            }
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Horómetro (opcional)</label>
+              <input type="number" min="1" step="1" placeholder="Ej: 12450"
+                [ngModel]="drafts()[eq.id]?.meterReading"
+                (ngModelChange)="updateDraft(eq.id, { meterReading: $event ? +$event : null })"
+                (focus)="openMeterPanel(eq.id)"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Comentarios (opcional)</label>
+              <input type="text" maxlength="200" placeholder="Observaciones del turno…"
+                [ngModel]="drafts()[eq.id]?.comments" (ngModelChange)="updateDraft(eq.id, { comments: $event })"
+                class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm min-h-[44px]" />
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  @if (totalPages() > 1 && !isLoadingEquipments()) {
+    <div class="flex items-center justify-center gap-3 mt-6">
+      <button type="button" (click)="goToPage(page() - 1)" [disabled]="page() <= 1"
+        class="px-4 py-2 rounded-lg text-sm border border-border text-muted disabled:opacity-40">Anterior</button>
+      <span class="text-sm text-muted">Página {{ page() }} de {{ totalPages() }}</span>
+      <button type="button" (click)="goToPage(page() + 1)" [disabled]="page() >= totalPages()"
+        class="px-4 py-2 rounded-lg text-sm border border-border text-muted disabled:opacity-40">Siguiente</button>
+    </div>
+  }
+</div>
+
+@if (!isLoadingEquipments() && pendingTotal() > 0) {
+  <div class="fixed bottom-0 left-0 right-0 z-30 bg-dark border-t border-border px-4 py-3 lg:px-8">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <p class="text-sm text-muted hidden sm:block">
+        @if (readyCount() > 0) {
+          <span class="text-main font-semibold">{{ readyCount() }}</span> listos · {{ pendingTotal() }} pendientes total
+        } @else {
+          Selecciona el estado de al menos un equipo
+        }
+      </p>
+      <div class="flex items-center gap-3 ml-auto">
+        <a routerLink="/app/operaciones/disponibilidad/monitor" class="text-sm text-muted hover:text-main px-3 py-2 min-h-[48px] flex items-center">Cancelar</a>
+        <button type="button" (click)="submitAll()" [disabled]="readyCount() === 0 || isSubmitting()"
+          class="inline-flex items-center gap-2 px-6 min-h-[48px] rounded-xl text-sm font-bold bg-primary text-white hover:opacity-90 disabled:opacity-40">
+          @if (isSubmitting()) { Enviando… } @else { Enviar {{ readyCount() > 0 ? readyCount() : '' }} Reporte{{ readyCount() > 1 ? 's' : '' }} }
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<app-confirm-modal [isOpen]="leaveConfirmOpen()" title="¿Salir sin guardar?"
+  message="Tienes datos ingresados que se perderán si sales ahora."
+  confirmText="Salir de todas formas" cancelText="Quedarme aquí"
+  (confirm)="onLeaveConfirmed()" (cancel)="onLeaveCancelled()" />
+
+<app-confirm-modal [isOpen]="faultCompletionConfirmOpen()"
+  title="Completar registro de falla"
+  message="Se ha registrado la detención del equipo. ¿Desea continuar al registro de falla para completar el diagnóstico?"
+  confirmText="Sí, registrar falla" cancelText="Ahora no"
+  (confirm)="onFaultCompletionConfirmed()" (cancel)="onFaultCompletionDeclined()" />

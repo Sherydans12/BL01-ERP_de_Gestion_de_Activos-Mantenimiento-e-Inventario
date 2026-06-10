@@ -7,8 +7,13 @@ import { EMPTY, from, Observable } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
 
-const APPROVER_ROLES = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'] as const;
+const APPROVER_ROLES = ['ADMIN', 'SUPER_ADMIN'] as const;
 const SESSION_ATTEMPT_KEY = 'bl_push_subscribe_attempted';
+
+interface PushNavAction {
+  route: string[] | null;
+  queryParams?: Record<string, string>;
+}
 
 /**
  * Web Push: suscripción con SwPush y registro en el backend.
@@ -28,17 +33,10 @@ export class PushNotificationsService {
   ) {
     if (isPlatformBrowser(this.platformId) && this.swPush.isEnabled) {
       this.swPush.notificationClicks.subscribe((event) => {
-        const { orderId, queryParams } = this.parsePushNotificationData(
-          event.notification.data,
+        const parsed = this.parsePushNotificationData(event.notification.data);
+        void this.navigateFromPush(parsed).then(() =>
+          this.dismissBrowserNotifications(),
         );
-        if (orderId) {
-          const extras = queryParams ? { queryParams } : {};
-          void this.router
-            .navigate(['/app/compras/ordenes', orderId], extras)
-            .then(() => this.dismissBrowserNotifications());
-        } else {
-          void this.dismissBrowserNotifications();
-        }
       });
     }
   }
@@ -70,34 +68,46 @@ export class PushNotificationsService {
   }
 
   /**
-   * Lee `orderId` y `type` del payload push (objeto o JSON en string).
-   * `INVOICE_DISCREPANCY` abre la OC en la pestaña Facturación.
+   * Parseado del payload push → estructura de navegación por tipo de evento.
+   * Tipos soportados:
+   *   - `PURCHASE_ORDER_PENDING_SIGNATURE`, `PURCHASE_ORDER_BATCH_PENDING_SIGNATURE`: → /compras/ordenes/:orderId
+   *   - `INVOICE_DISCREPANCY`: → /compras/ordenes/:orderId?tab=billing
+   *   - `EQUIPMENT_DOWN`: → /operaciones/fallas
    */
-  private parsePushNotificationData(data: unknown): {
-    orderId: string | null;
-    queryParams?: Record<string, string>;
-  } {
+  parsePushNotificationData(data: unknown): PushNavAction {
     let raw: Record<string, unknown> | null = null;
-    if (data == null) {
-      return { orderId: null };
-    }
+    if (data == null) return { route: null };
     if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
       raw = data as Record<string, unknown>;
     } else if (typeof data === 'string') {
       try {
         raw = JSON.parse(data) as Record<string, unknown>;
       } catch {
-        return { orderId: null };
+        return { route: null };
       }
     } else {
-      return { orderId: null };
+      return { route: null };
     }
-    const orderId =
-      typeof raw['orderId'] === 'string' ? raw['orderId'] : null;
+
     const type = typeof raw['type'] === 'string' ? raw['type'] : null;
-    const queryParams =
-      type === 'INVOICE_DISCREPANCY' ? { tab: 'billing' } : undefined;
-    return { orderId, queryParams };
+    const orderId = typeof raw['orderId'] === 'string' ? raw['orderId'] : null;
+
+    if (type === 'EQUIPMENT_DOWN') {
+      return { route: ['/app/operaciones/fallas'] };
+    }
+    if (type === 'INVOICE_DISCREPANCY' && orderId) {
+      return { route: ['/app/compras/ordenes', orderId], queryParams: { tab: 'billing' } };
+    }
+    if (orderId) {
+      return { route: ['/app/compras/ordenes', orderId] };
+    }
+    return { route: null };
+  }
+
+  private async navigateFromPush(action: PushNavAction): Promise<void> {
+    if (!action.route) return;
+    const extras = action.queryParams ? { queryParams: action.queryParams } : {};
+    await this.router.navigate(action.route, extras);
   }
 
   static isApproverRole(role: string | undefined): boolean {

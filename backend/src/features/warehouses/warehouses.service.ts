@@ -2,8 +2,10 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { userCanAccessContractId } from '../../common/contract-scope.util';
 
 export interface CreateWarehouseDto {
   code: string;
@@ -21,14 +23,31 @@ export class WarehousesService {
   async findAll(user: any, activeContract?: string) {
     const tenantId = user.tenantId;
     const where: any = { tenantId };
+    const contractFilter =
+      activeContract && activeContract !== 'ALL' ? activeContract : undefined;
+    const allowed: string[] = Array.isArray(user.allowedContracts)
+      ? user.allowedContracts
+      : [];
+    const tenantWide = allowed.includes('ALL');
+    const emptySentinel = '00000000-0000-0000-0000-000000000000';
 
     // Lógica de seguridad por Contrato
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (activeContract && activeContract !== 'ALL') {
-        where.contractId = activeContract;
+      if (contractFilter) {
+        where.contractId = contractFilter;
       }
+    } else if (contractFilter) {
+      const canAccess =
+        tenantWide || allowed.length === 0 || allowed.includes(contractFilter);
+      where.contractId = canAccess ? contractFilter : emptySentinel;
     } else {
-      where.contractId = { in: user.allowedContracts || [] };
+      where.contractId = tenantWide
+        ? undefined
+        : { in: allowed.length ? allowed : [emptySentinel] };
+    }
+
+    if (where.contractId === undefined) {
+      delete where.contractId;
     }
 
     return this.prisma.warehouse.findMany({
@@ -50,6 +69,11 @@ export class WarehousesService {
       },
     });
     if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    if (!userCanAccessContractId(user, warehouse.contractId)) {
+      throw new ForbiddenException(
+        'No tiene acceso al contrato de esta bodega.',
+      );
+    }
     return warehouse;
   }
 
@@ -119,7 +143,7 @@ export class WarehousesService {
       return await this.prisma.warehouse.delete({
         where: { id },
       });
-    } catch (error) {
+    } catch (_error) {
       throw new BadRequestException(
         'No se puede eliminar la bodega porque ya contiene stock o transacciones registradas.',
       );

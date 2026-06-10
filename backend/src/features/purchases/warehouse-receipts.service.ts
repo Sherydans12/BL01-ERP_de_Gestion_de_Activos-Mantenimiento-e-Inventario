@@ -50,8 +50,7 @@ const WR_LIST_SORT_FIELDS = [
   'receivedByName',
 ] as const;
 
-type WarehouseReceiptListSortField =
-  (typeof WR_LIST_SORT_FIELDS)[number];
+type WarehouseReceiptListSortField = (typeof WR_LIST_SORT_FIELDS)[number];
 
 function isWarehouseReceiptListSortField(
   v: string,
@@ -247,7 +246,7 @@ export class WarehouseReceiptsService {
       and.push({ OR: searchOr });
     }
     if (and.length === 1) {
-      return and[0] as Prisma.WarehouseReceiptWhereInput;
+      return and[0];
     }
     return { AND: and };
   }
@@ -271,11 +270,7 @@ export class WarehouseReceiptsService {
     const { field: sortField, order: sortOrder } =
       parseWarehouseReceiptListSort(opts?.sort, opts?.dir);
 
-    const where = this.buildReceiptListWhere(
-      tenantId,
-      user,
-      opts?.search,
-    );
+    const where = this.buildReceiptListWhere(tenantId, user, opts?.search);
 
     const total = await this.prisma.warehouseReceipt.count({ where });
     const maxPage = Math.max(1, Math.ceil(total / pageSize));
@@ -331,11 +326,12 @@ export class WarehouseReceiptsService {
         [key: string]: unknown;
       }>;
     },
-  >(receipt: T, tenantId: string): Promise<
+  >(
+    receipt: T,
+    tenantId: string,
+  ): Promise<
     T & {
-      items: Array<
-        T['items'][number] & { quantityPendingOnPurchase: number }
-      >;
+      items: Array<T['items'][number] & { quantityPendingOnPurchase: number }>;
     }
   > {
     const orderItemIds = receipt.items.map((i) => i.orderItemId);
@@ -367,7 +363,10 @@ export class WarehouseReceiptsService {
     const items = receipt.items.map((item) => {
       const orderQty = Number(item.orderItem.quantity);
       const receivedElsewhere = mapOther.get(item.orderItemId) ?? 0;
-      const quantityPendingOnPurchase = Math.max(0, orderQty - receivedElsewhere);
+      const quantityPendingOnPurchase = Math.max(
+        0,
+        orderQty - receivedElsewhere,
+      );
       return { ...item, quantityPendingOnPurchase };
     });
     return { ...receipt, items };
@@ -538,7 +537,9 @@ export class WarehouseReceiptsService {
     const receipt = await this.findById(receiptId, user.tenantId);
 
     if (receipt.status === 'COMPLETED') {
-      throw new BadRequestException('Esta recepción ya fue completamente confirmada y no puede modificarse.');
+      throw new BadRequestException(
+        'Esta recepción ya fue completamente confirmada y no puede modificarse.',
+      );
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -654,7 +655,9 @@ export class WarehouseReceiptsService {
     );
 
     if (receipt.status === 'COMPLETED') {
-      throw new BadRequestException('Esta recepción ya fue completamente confirmada.');
+      throw new BadRequestException(
+        'Esta recepción ya fue completamente confirmada.',
+      );
     }
 
     /**
@@ -665,7 +668,11 @@ export class WarehouseReceiptsService {
     const totalDelta = receipt.items.reduce(
       (sum, i) =>
         sum +
-        Math.max(0, Number(i.quantityReceived) - Number((i as any).quantityConfirmed ?? 0)),
+        Math.max(
+          0,
+          Number(i.quantityReceived) -
+            Number((i as any).quantityConfirmed ?? 0),
+        ),
       0,
     );
     if (totalDelta <= 0) {
@@ -846,8 +853,7 @@ export class WarehouseReceiptsService {
          * concurrentes confirmadas entre la creación y la confirmación de esta guía.
          */
         const allComplete = receipt.items.every((item) => {
-          const alreadyInOther =
-            receivedByOrderItem.get(item.orderItemId) ?? 0;
+          const alreadyInOther = receivedByOrderItem.get(item.orderItemId) ?? 0;
           return (
             alreadyInOther + Number(item.quantityReceived) >=
             Number(item.orderItem.quantity) - 1e-9

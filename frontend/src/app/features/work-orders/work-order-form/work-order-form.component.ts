@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   inject,
   signal,
   OnInit,
@@ -8,8 +9,11 @@ import {
   ElementRef,
   effect,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { switchMap } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import {
+  AbstractControl,
   FormBuilder,
   FormGroup,
   FormArray,
@@ -29,6 +33,12 @@ import {
   OtClassificationTag,
 } from '../../../core/services/work-orders/work-orders.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
+import {
+  FaultReportsService,
+  FaultReportRow,
+  CRITICALITY_META,
+  SYSTEM_LABELS,
+} from '../../../core/services/fault-reports/fault-reports.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { WarehousesService } from '../../../core/services/warehouses/warehouses.service';
 import {
@@ -36,6 +46,12 @@ import {
   ItemPickerRow,
 } from '../../../core/services/inventory-items/inventory-items.service';
 import { InventoryStockService } from '../../../core/services/inventory-stock/inventory-stock.service';
+import { TenantService } from '../../../core/services/tenant/tenant.service';
+import {
+  FluidQuantityRowComponent,
+  FluidQuantityValidation,
+} from '../../../shared/components/fluid-quantity-row/fluid-quantity-row.component';
+import { parseFluidQuantity, requiresLargeDispatchConfirmation } from '../../../shared/utils/fluid-dispatch-limits.util';
 import { MaintenanceKitsService } from '../../../core/services/maintenance-kits/maintenance-kits.service';
 import { EquipmentMeterSnapshotService } from '../../../core/services/equipment-meter/equipment-meter-snapshot.service';
 import {
@@ -43,6 +59,10 @@ import {
   EquipmentMeterSnapshot,
   MeterType,
 } from '../../../core/models/types';
+import { getMeterSourceLabel } from '../../../shared/utils/meter-source-label.util';
+import { meterUnitLabel } from '../../../shared/utils/meter-reference-view.util';
+import { MeterReferenceBannerComponent } from '../../../shared/components/meter-reference-banner/meter-reference-banner.component';
+import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import {
   computePmProjection,
   pmIntervalSourceLabel,
@@ -73,6 +93,10 @@ import {
   WORK_ORDER_FORM_EDIT_ANY,
 } from '../../../core/constants/operations-permissions';
 
+/** Umbrales alineados con `getMeterJumpLimit` en backend. */
+const METER_JUMP_LIMIT_HOURS = 24;
+const METER_JUMP_LIMIT_KM = 500;
+
 function isoToDatetimeLocalValue(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -91,6 +115,9 @@ function isoToDatetimeLocalValue(iso: string): string {
     GlobalItemPickerComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective,
+    MeterReferenceBannerComponent,
+    ConfirmModalComponent,
+    FluidQuantityRowComponent,
   ],
   templateUrl: './work-order-form.component.html',
   styleUrl: './work-order-form.component.scss',
@@ -104,15 +131,18 @@ export class WorkOrderFormComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private workOrdersService = inject(WorkOrdersService);
   private fleetService = inject(FleetService);
+  private faultService = inject(FaultReportsService);
   private notificationService = inject(NotificationService);
   private warehousesService = inject(WarehousesService);
   private inventoryItemsService = inject(InventoryItemsService);
   private inventoryStockService = inject(InventoryStockService);
+  private tenantService = inject(TenantService);
   private maintenanceKitsService = inject(MaintenanceKitsService);
   private equipmentMeterSnapshotService = inject(EquipmentMeterSnapshotService);
   readonly catalogService = inject(CatalogService);
   private authService = inject(AuthService);
   private usersService = inject(UsersService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Diálogo nativo: `CatalogItem` categoría SYSTEM (catálogo global del tenant). */
   catalogSystemsDialog =
@@ -150,6 +180,13 @@ export class WorkOrderFormComponent implements OnInit {
   partPickerIndex = signal(-1);
   showFluidPicker = signal(false);
   fluidPickerRowIndex = signal(-1);
+  fluidLineValidations = signal<Record<number, FluidQuantityValidation>>({});
+
+  blockNegativeStock = computed(
+    () =>
+      this.tenantService.currentTenant()?.operationalConfig
+        ?.blockNegativeStock ?? false,
+  );
 
   otKindOptions = OT_KIND_OPTIONS;
   noPlanSubtypeOptions = NO_PLAN_SUBTYPE_OPTIONS;
@@ -174,9 +211,80 @@ export class WorkOrderFormComponent implements OnInit {
     return this.catalogService.systems().filter((sys) => !picked.has(sys.id));
   });
 
+  /** Fuerza recomputación de validaciones de medidor al editar controles. */
+  private meterFormTick = signal(0);
+
+  showLargeJumpCloseModal = signal(false);
+
+  protected readonly getMeterSourceLabel = getMeterSourceLabel;
+
+  effectiveEquipmentCurrentMeter = computed(() => {
+    const snap = this.meterSnapshot();
+    if (snap) return snap.currentMeter;
+    return this.selectedEquipment()?.currentMeter ?? null;
+  });
+
+  initialMeterContextHint = computed(() => {
+    const lo = this.lastClosedOt();
+    if (lo) {
+      return `Referencia de cierre: OT ${lo.correlative}`;
+    }
+    const last = this.meterSnapshot()?.lastLog;
+    if (last) {
+      return `Vía: ${getMeterSourceLabel(last.source, {
+        otCorrelative: last.otCorrelative,
+      })}`;
+    }
+    return null;
+  });
+
+  detentionFinalMeterInvalid = computed(() => {
+    this.meterFormTick();
+    const fin = this.parseMeterFormValue('detentionFinalMeter');
+    if (fin === null) return false;
+    const ini = this.parseMeterFormValue('detentionInitialMeter');
+    const cur = this.effectiveEquipmentCurrentMeter();
+    if (ini !== null && fin < ini) return true;
+    if (cur !== null && fin < cur) return true;
+    return false;
+  });
+
+  detentionFinalNeedsJumpConfirm = computed(() => {
+    this.meterFormTick();
+    const fin = this.parseMeterFormValue('detentionFinalMeter');
+    const cur = this.effectiveEquipmentCurrentMeter();
+    if (fin === null || cur === null || fin <= cur) return false;
+    const mt =
+      this.meterSnapshot()?.meterType ??
+      this.selectedEquipment()?.meterType ??
+      MeterType.HOURS;
+    const limit =
+      mt === MeterType.KILOMETERS ? METER_JUMP_LIMIT_KM : METER_JUMP_LIMIT_HOURS;
+    return fin - cur > limit;
+  });
+
+  largeJumpCloseModalMessage = computed(() => {
+    const fin = this.parseMeterFormValue('detentionFinalMeter');
+    const cur = this.effectiveEquipmentCurrentMeter();
+    const mt =
+      this.meterSnapshot()?.meterType ??
+      this.selectedEquipment()?.meterType ??
+      MeterType.HOURS;
+    if (fin === null || cur === null) {
+      return '¿Confirmas el medidor final antes de cerrar la OT?';
+    }
+    const delta = fin - cur;
+    return (
+      `El medidor final (${fin} ${meterUnitLabel(mt)}) supera en +${delta} ${meterUnitLabel(mt)} ` +
+      `al medidor actual del equipo (${cur}). ¿Confirmas que es correcto antes de cerrar?`
+    );
+  });
+
   closeAllowed = computed(() => {
     const raw = this.otForm.get('detentionStartedAt')?.value;
-    return typeof raw === 'string' && raw.trim().length > 0;
+    const hasDetentionStart =
+      typeof raw === 'string' && raw.trim().length > 0;
+    return hasDetentionStart && !this.detentionFinalMeterInvalid();
   });
 
   readonly isFormReadOnly = computed(() => {
@@ -193,11 +301,18 @@ export class WorkOrderFormComponent implements OnInit {
     () => this.mode !== 'READONLY' && !this.isFormReadOnly(),
   );
 
-  readonly canCloseOt = computed(
+  readonly showCloseOtButton = computed(
     () =>
       this.mode === 'EDITING' &&
-      this.authService.hasPermission(O.WORK_ORDER_CLOSE) &&
-      this.closeAllowed(),
+      !!this.otId &&
+      this.authService.hasPermission(O.WORK_ORDER_CLOSE),
+  );
+
+  readonly canCloseOt = computed(
+    () =>
+      this.showCloseOtButton() &&
+      this.closeAllowed() &&
+      this.allActiveFluidRowsValid(),
   );
 
   readonly canManageBacklog = computed(() =>
@@ -208,28 +323,32 @@ export class WorkOrderFormComponent implements OnInit {
     this.authService.hasPermission(O.WORK_ORDER_ASSIGN),
   );
 
-  /** Mecánico no puede editar OT en curso o en pausa (solo supervisor/admin). */
-  formLockedForMechanic = computed(
-    () =>
-      this.authService.currentUser()?.role === 'MECHANIC' &&
-      (this.currentStatus === 'IN_PROGRESS' ||
-        this.currentStatus === 'ON_HOLD'),
-  );
+  /** Sin permiso de planificación/asignación: no editar OT en curso o en pausa. */
+  formLockedForMechanic = computed(() => {
+    if (
+      this.currentStatus !== 'IN_PROGRESS' &&
+      this.currentStatus !== 'ON_HOLD'
+    ) {
+      return false;
+    }
+    const auth = this.authService;
+    if (
+      auth.hasPermission(O.WORK_ORDER_UPDATE) ||
+      auth.hasPermission(O.WORK_ORDER_ASSIGN)
+    ) {
+      return false;
+    }
+    const ot = this.otForm.getRawValue();
+    const supervisorId = ot.shiftSupervisorUserId as string | null;
+    return supervisorId !== auth.currentUser()?.id;
+  });
 
   mechanicsForPick = computed(() =>
-    this.assignableUsers().filter(
-      (u) =>
-        u.role === 'MECHANIC' ||
-        u.customRole?.baseRole === 'MECHANIC',
-    ),
+    this.assignableUsers().filter((u) => u.canExecuteOt !== false),
   );
 
   supervisorsForPick = computed(() =>
-    this.assignableUsers().filter(
-      (u) =>
-        u.role === 'SUPERVISOR' ||
-        u.customRole?.baseRole === 'SUPERVISOR',
-    ),
+    this.assignableUsers().filter((u) => u.canSuperviseOt === true),
   );
 
   fluidCompartmentOrder = FLUID_COMPARTMENTS_ORDER;
@@ -248,21 +367,13 @@ export class WorkOrderFormComponent implements OnInit {
 
   lastClosedOt = signal<{ id: string; correlative: string } | null>(null);
 
+  // Fallas de terreno (M3) en estado OPEN del equipo seleccionado, para avisar al planificador.
+  openFaults = signal<FaultReportRow[]>([]);
+  protected readonly criticalityMeta = CRITICALITY_META;
+  protected readonly systemLabels = SYSTEM_LABELS;
+
   meterSnapshot = signal<EquipmentMeterSnapshot | null>(null);
   meterSnapshotLoading = signal(false);
-
-  meterSourceBadge = computed(() => {
-    const snap = this.meterSnapshot();
-    const last = snap?.lastLog;
-    if (!last) return 'Sin registro en bitácora';
-    if (last.source === 'OT') {
-      return last.otCorrelative
-        ? `Desde OT-${last.otCorrelative}`
-        : 'Desde OT';
-    }
-    if (last.source === 'TELEMETRY') return 'Telemetría';
-    return 'Manual / maestro';
-  });
 
   otForm: FormGroup;
 
@@ -341,6 +452,10 @@ export class WorkOrderFormComponent implements OnInit {
       action: ['RELLENO' as const],
       inventoryItemId: [''],
       linkedFluidItemName: [''],
+      unitAbbr: ['LT'],
+      allowsDecimals: [true],
+      stockAvailable: [null as number | null],
+      confirmedLargeDispatch: [false],
     });
   }
 
@@ -413,10 +528,12 @@ export class WorkOrderFormComponent implements OnInit {
         this.filterKits(eq);
         this.loadLastClosedOt(eq.id);
         this.loadMeterSnapshot(eq.id);
+        this.loadOpenFaults(eq.id);
       } else {
         this.warehouses.set([]);
         this.lastClosedOt.set(null);
         this.meterSnapshot.set(null);
+        this.openFaults.set([]);
       }
     });
 
@@ -430,6 +547,35 @@ export class WorkOrderFormComponent implements OnInit {
         this.warehouseStocks.set([]);
       }
     });
+
+    this.otForm
+      .get('detentionInitialMeter')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.meterFormTick.update((n) => n + 1));
+    this.otForm
+      .get('detentionFinalMeter')
+      ?.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.meterFormTick.update((n) => n + 1));
+  }
+
+  private parseMeterFormValue(controlName: string): number | null {
+    const raw = this.otForm.get(controlName)?.value;
+    if (raw === '' || raw === null || raw === undefined) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return n;
+  }
+
+  detentionMeterInputNgClass(controlName: 'detentionInitialMeter' | 'detentionFinalMeter'): Record<string, boolean> {
+    if (controlName !== 'detentionFinalMeter') {
+      return {};
+    }
+    const invalid = this.detentionFinalMeterInvalid();
+    const jump = this.detentionFinalNeedsJumpConfirm();
+    return {
+      'border-error text-error': invalid,
+      'border-amber-500': jump && !invalid,
+    };
   }
 
   private selectedEquipmentMeterHook(eq: Equipment) {
@@ -481,6 +627,16 @@ export class WorkOrderFormComponent implements OnInit {
         this.meterSnapshotLoading.set(false);
       },
     });
+  }
+
+  /** Fallas de terreno (M3) en estado OPEN del equipo: avisa al planificador qué reportes esperan OT. */
+  private loadOpenFaults(equipmentId: string) {
+    this.faultService
+      .getReports({ equipmentId, status: 'OPEN', pageSize: 5 })
+      .subscribe({
+        next: (res) => this.openFaults.set(res.data ?? []),
+        error: () => this.openFaults.set([]),
+      });
   }
 
   private loadLastClosedOt(equipmentId: string) {
@@ -633,12 +789,9 @@ export class WorkOrderFormComponent implements OnInit {
           })),
         );
 
-        if (
-          this.authService.currentUser()?.role === 'MECHANIC' &&
-          (ot.status === 'IN_PROGRESS' || ot.status === 'ON_HOLD')
-        ) {
+        if (this.formLockedForMechanic()) {
           this.notificationService.warning(
-            'OT en curso o en pausa: solo un supervisor puede modificar el formulario.',
+            'OT en curso o en pausa: solo quien supervise la OT o tenga permiso de planificación puede modificar el formulario.',
           );
         }
       },
@@ -664,6 +817,9 @@ export class WorkOrderFormComponent implements OnInit {
         linkedFluidItemName: hit.inventoryItem
           ? `${hit.inventoryItem.partNumber} — ${hit.inventoryItem.name}`
           : '',
+        unitAbbr: hit.inventoryItem?.unitOfMeasure?.abbreviation ?? 'LT',
+        allowsDecimals:
+          hit.inventoryItem?.unitOfMeasure?.allowsDecimals ?? true,
       });
       this.compartmentRowsArray.push(g);
     }
@@ -718,10 +874,94 @@ export class WorkOrderFormComponent implements OnInit {
         return `Fluidos por compartimiento (fila ${i + 1}): elija un ítem del catálogo de inventario.`;
       }
       if (!hasLiters) {
-        return `Fluidos por compartimiento (fila ${i + 1}): indique litros consumidos (> 0).`;
+        return `Fluidos por compartimiento (fila ${i + 1}): indique cantidad consumida (> 0) en la unidad del artículo.`;
       }
     }
     return null;
+  }
+
+  allActiveFluidRowsValid(): boolean {
+    const vals = this.fluidLineValidations();
+    for (let i = 0; i < this.compartmentRowsArray.length; i++) {
+      const raw = this.compartmentRowsArray.at(i).getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+        allowsDecimals?: boolean;
+      };
+      const id = raw.inventoryItemId?.trim() ?? '';
+      const allowsDecimals = raw.allowsDecimals ?? true;
+      const liters = parseFluidQuantity(raw.liters, allowsDecimals);
+      if (!id && liters <= 0) continue;
+      if (id && liters > 0 && vals[i]?.valid !== true) return false;
+    }
+    return true;
+  }
+
+  fluidsNeedLargeConfirmAtClose(): boolean {
+    for (const row of this.compartmentRowsArray.controls) {
+      const raw = row.getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+        unitAbbr?: string;
+        allowsDecimals?: boolean;
+      };
+      if (!raw.inventoryItemId?.trim()) continue;
+      const qty = parseFluidQuantity(
+        raw.liters,
+        raw.allowsDecimals ?? true,
+      );
+      if (
+        requiresLargeDispatchConfirmation(
+          qty,
+          raw.unitAbbr ?? 'LT',
+          raw.allowsDecimals ?? true,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  fluidsLargeConfirmOkAtClose(): boolean {
+    for (let i = 0; i < this.compartmentRowsArray.length; i++) {
+      const raw = this.compartmentRowsArray.at(i).getRawValue() as {
+        inventoryItemId?: string;
+        liters?: string;
+        unitAbbr?: string;
+        allowsDecimals?: boolean;
+        confirmedLargeDispatch?: boolean;
+      };
+      if (!raw.inventoryItemId?.trim()) continue;
+      const qty = parseFluidQuantity(
+        raw.liters,
+        raw.allowsDecimals ?? true,
+      );
+      if (
+        requiresLargeDispatchConfirmation(
+          qty,
+          raw.unitAbbr ?? 'LT',
+          raw.allowsDecimals ?? true,
+        ) &&
+        !raw.confirmedLargeDispatch
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  onFluidLineValidation(index: number, validation: FluidQuantityValidation): void {
+    this.fluidLineValidations.update((prev) => ({ ...prev, [index]: validation }));
+  }
+
+  onFluidLargeConfirm(index: number, confirmed: boolean): void {
+    const g = this.compartmentRowsArray.at(index) as FormGroup;
+    g.patchValue({ confirmedLargeDispatch: confirmed });
+  }
+
+  fluidLitersControl(row: AbstractControl): FormControl<string | number | null> {
+    return row.get('liters') as FormControl<string | number | null>;
   }
 
   buildCreatePayload(): CreateWorkOrderExcelPayload {
@@ -844,6 +1084,12 @@ export class WorkOrderFormComponent implements OnInit {
       this.notificationService.error(fluidErr);
       return;
     }
+    if (!this.allActiveFluidRowsValid()) {
+      this.notificationService.error(
+        'Revise las cantidades de fluidos (stock, formato o confirmación de consumo inusual).',
+      );
+      return;
+    }
     if (this.otForm.invalid || this.isFormReadOnly()) {
       this.otForm.markAllAsTouched();
       return;
@@ -927,14 +1173,33 @@ export class WorkOrderFormComponent implements OnInit {
   }
 
   openCloseOperationalDialog() {
-    if (!this.closeAllowed()) {
+    if (!this.otForm.get('detentionStartedAt')?.value?.toString().trim()) {
       this.notificationService.error(
         'Registre el inicio de detención (inicio del trabajo) antes de cerrar la OT.',
       );
       return;
     }
+    if (this.detentionFinalMeterInvalid()) {
+      this.notificationService.error(
+        'El medidor final no puede ser menor al inicial de la OT ni al medidor actual del equipo.',
+      );
+      return;
+    }
     if (!this.otId || this.isFormReadOnly()) return;
+    if (this.detentionFinalNeedsJumpConfirm()) {
+      this.showLargeJumpCloseModal.set(true);
+      return;
+    }
     this.closeOtDialog()?.nativeElement.showModal();
+  }
+
+  onLargeJumpCloseConfirmed() {
+    this.showLargeJumpCloseModal.set(false);
+    this.closeOtDialog()?.nativeElement.showModal();
+  }
+
+  onLargeJumpCloseCancelled() {
+    this.showLargeJumpCloseModal.set(false);
   }
 
   closeCloseOperationalDialog() {
@@ -953,10 +1218,52 @@ export class WorkOrderFormComponent implements OnInit {
       return;
     }
     if (!this.otId) return;
+    if (this.detentionFinalMeterInvalid()) {
+      this.notificationService.error(
+        'Corrija el medidor final antes de cerrar la OT.',
+      );
+      return;
+    }
+    if (!this.allActiveFluidRowsValid()) {
+      this.notificationService.error(
+        'Revise las cantidades de fluidos antes de cerrar la OT.',
+      );
+      return;
+    }
+    if (
+      this.fluidsNeedLargeConfirmAtClose() &&
+      !this.fluidsLargeConfirmOkAtClose()
+    ) {
+      this.notificationService.error(
+        'Confirme las cantidades inusuales de fluidos antes de cerrar la OT.',
+      );
+      return;
+    }
+    const confirmedLargeJump = this.detentionFinalNeedsJumpConfirm();
+    const confirmedLargeFluidDispatch = this.fluidsNeedLargeConfirmAtClose();
+    const payload = this.buildCreatePayload();
     this.workOrdersService
-      .updateStatus(this.otId, 'CLOSED', wh || undefined, equipmentOperational)
+      .patchWorkOrder(this.otId, payload)
+      .pipe(
+        switchMap(() =>
+          this.workOrdersService.updateStatus(
+            this.otId!,
+            'CLOSED',
+            wh || undefined,
+            equipmentOperational,
+            confirmedLargeJump,
+            confirmedLargeFluidDispatch === true,
+          ),
+        ),
+      )
       .subscribe({
         next: () => {
+          const equipmentId = String(
+            this.otForm.get('equipmentId')?.value ?? '',
+          ).trim();
+          if (equipmentId) {
+            this.fleetService.notifyEquipmentChanged(equipmentId);
+          }
           this.notificationService.success('OT cerrada.');
           this.router.navigate(['/app/ots']);
         },
@@ -1197,6 +1504,11 @@ export class WorkOrderFormComponent implements OnInit {
         fluidType: label,
         inventoryItemId: row.id,
         linkedFluidItemName: pnOrSku ? `${pnOrSku} — ${row.name}` : row.name,
+        unitAbbr: row.unitOfMeasure?.abbreviation ?? 'LT',
+        allowsDecimals: row.unitOfMeasure?.allowsDecimals ?? true,
+        stockAvailable:
+          row.stockAvailableQuantity ?? row.stockQuantity ?? null,
+        confirmedLargeDispatch: false,
       });
     }
     this.onFluidPickerClosed();
@@ -1247,6 +1559,40 @@ export class WorkOrderFormComponent implements OnInit {
     const wh = this.warehouses().find((w: { id: string }) => w.id === id);
     if (wh) return `${wh.code} — ${wh.name}`;
     return id;
+  }
+
+  /**
+   * Stock disponible (físico − reservado) del ítem en la bodega de consumo (Sprint 2.3).
+   * `null` si no hay bodega seleccionada o el ítem no figura en el stock de esa bodega.
+   */
+  stockForItem(itemId: string | null | undefined): number | null {
+    if (!itemId || !this.pickerWarehouseId()) return null;
+    const row = this.warehouseStocks().find(
+      (s: { itemId?: string }) => s.itemId === itemId,
+    );
+    if (!row) return null;
+    const avail = (row as { availableQuantity?: number; quantity?: number })
+      .availableQuantity;
+    const qty =
+      avail != null
+        ? avail
+        : ((row as { quantity?: number }).quantity ?? 0);
+    return Number(qty) || 0;
+  }
+
+  /** True si la línea tiene ítem vinculado y la cantidad pedida supera el stock disponible. */
+  partRowHasShortage(ctrl: AbstractControl): boolean {
+    const itemId = ctrl.get('inventoryItemId')?.value as string | null;
+    if (!itemId) return false;
+    const available = this.stockForItem(itemId);
+    if (available == null) return false;
+    const requested = Number(ctrl.get('quantity')?.value) || 0;
+    return requested > available;
+  }
+
+  /** True si alguna línea de repuesto vinculada no tiene stock suficiente en la bodega. */
+  anyPartStockShortage(): boolean {
+    return this.partsArray.controls.some((c) => this.partRowHasShortage(c));
   }
 
   applyKit(event: Event) {

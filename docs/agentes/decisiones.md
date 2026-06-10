@@ -9,6 +9,266 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-09 — P1B1: Hardening cronológico del Ledger AvailabilityEvent
+
+- **Contexto:** Al habilitar la integración del Ledger con orígenes asíncronos (como el registro diferido de fallas desde M3), se podían generar registros desordenados, resultando en cálculos incorrectos de `elapsedMinutes` y `previousStatus` para los eventos afectados.
+- **Decisión:** 
+  - Se estableció como **Invariante A**: `N.previousStatus = P.status` y `N.elapsedMinutes = minutos(N.eventAt - P.eventAt)`. El evento actual registra la duración del estado anterior.
+  - Al insertar `N` entre `P` y `S`, el sistema solo repara `N` y `S`. El predecesor `P` no se altera.
+  - Se definió un orden técnico estricto: `(eventAt ASC, createdAt ASC, id ASC)`. Para empates de `eventAt`, la precedencia queda determinada determinísticamente por la creación o el ID. Los eventos empatados generan duraciones consecutivas de 0.
+  - Se usa el patrón *Create-first*: el servicio inserta `N` inicialmente, luego consulta sus verdaderos vecinos en la base de datos usando la tupla persistida y ejecuta un UPDATE sobre `N` y `S`. Se prescindió de UUID unique o reintentos (P2034) en la inserción porque la tupla técnica siempre evita colisiones y mantiene la línea temporal coherente.
+- **Consecuencias:** 
+  - Los eventos ya no asumen precedencia únicamente basada en el reloj; el Ledger soporta backfill seguro. 
+  - Queda pendiente **P1B2** (remover `isOperational` harcodeado en M3 y orquestarlo dentro del mismo entorno atómico de registro del evento).
+
+## 2026-06-09 — P1A: Desacoplamiento de AvailabilityEvent para integración de fallas
+
+- **Contexto:** En la Fase P1 del flujo M2·M3·OT, las detenciones reportadas desde M3 (Fallas) fallaban al insertarse en el Ledger de disponibilidad porque `AvailabilityEvent` exigía una relación obligatoria (`availabilityId`) hacia un snapshot M2 (`EquipmentAvailability`), acoplando dos dominios.
+- **Decisión:**
+  - Se hizo `availabilityId` opcional en `AvailabilityEvent`.
+  - Se agregó `faultReportId` opcional (`@unique`) en `AvailabilityEvent`, apuntando a `FaultReport` con constraint `SetNull`.
+  - El servicio `AvailabilityEventService` ahora valida explícitamente según el origen. Si `source === FAULT_REPORT`, se requiere `faultReportId` y se rechaza `availabilityId`. Si el origen es `MANUAL` o `LEGACY_SNAPSHOT`, requiere `availabilityId` y rechaza `faultReportId`. El origen `OT` no está implementado y se rechaza.
+  - La transición P1B está pendiente para conectar M3.
+- **Consecuencias:**
+  - Generación de migración no destructiva (`20260609040000_decouple_availability_events_from_shift_snapshots`).
+  - Permite a M3 y a otros flujos registrar eventos operacionales en el Ledger híbrido sin falsificar o contaminar los reportes declarativos por turno de M2.
+
+## 2026-06-08 — P0: Proteger transición de equipo hacia operativo (bloqueadores operacionales)
+
+- **Contexto:** Auditoría del flujo M2·M3·OT confirmó que `Equipment.isOperational` podía ser forzado a `true` por dos rutas independientes sin verificar causas activas de detención: (1) el Orquestador M2 reactivaba al recibir `OPERATIONAL` tras `DOWN_*` sin consultar FaultReports ni WorkOrders; (2) el cierre de OT escribía `isOperational = closureEquipmentOperational` directamente desde el flag del usuario, ignorando otros bloqueadores del mismo equipo.
+- **Decisión:**
+  - **Función pura `resolveReturnToService`** en `equipments/operational-blockers.ts`: consulta transaccional de FaultReports HIGH activas (OPEN o LINKED con OT no cerrada) y WorkOrders con `affectsAvailability=SI` no cerradas. Recibe `tx: Prisma.TransactionClient` para ejecutarse dentro de la transacción Serializable del llamador.
+  - **Orquestador M2** (`onOperationalStatusChange`): antes de escribir `isOperational: true`, evalúa `resolveReturnToService`. Si hay bloqueadores, retorna `{ isOperational: false, skippedReason: 'BLOCKED_BY_ACTIVE_CAUSES', blockers }` sin mutar el equipo. El snapshot M2 y el AvailabilityEvent ya están persistidos (Alternativa 2 — registrar intención del supervisor, mantener maestro detenido).
+  - **Cierre de OT** (`WorkOrdersService.updateStatus`): si `closureEquipmentOperational=true`, evalúa `resolveReturnToService` con `excludeWorkOrderId` para no bloquearse a sí misma. Si existen otros bloqueadores, escribe `isOperational: false` aunque el usuario haya indicado operativo.
+  - **Opción C (función pura) vs A/B**: se eligió función pura exportada para evitar acoplamiento de módulos Nest — `WorkOrdersModule` no importa `EquipmentsModule` y sigue sin necesitarlo; ambos consumidores importan la función directamente.
+  - **Sin migración**: los índices `@@index([tenantId, equipmentId])` y `@@index([tenantId, criticality, status])` de FaultReport cubren las consultas; el volumen de fallas/OTs activas por equipo es < 5.
+- **Consecuencias:**
+  - Suite dominio: 421 tests (25 suites), 0 fallos. Tests P0 nuevos: 16 en `operational-blockers.spec.ts`, 5 en orchestrator, 4 en work-orders.
+  - El equipo ya no puede ser reactivado mientras existan fallas HIGH abiertas u OTs con impacto de disponibilidad activas.
+  - El snapshot M2 OPERATIONAL con bloqueadores se registra pero no reactiva al equipo — el `sideEffects[]` existente informa al frontend.
+  - Pendiente: cierre de OT no actualiza `FaultReportStatus → CLOSED` (sincronización FaultReport ← WorkOrder, fuera del alcance P0).
+
+## 2026-06-08 — Sanity Check: Persistencia M2↔M3 y Modelo Híbrido (Snapshot + Ledger)
+
+- **Contexto:** Al navegar de M2 (Disponibilidad) a M3 (Registro de Fallas) mediante el redireccionamiento asistido (cuando un equipo se reporta como detenido/falla), el refresco de página (F5) no debe causar pérdida de los datos pre-rellenados. Asimismo, se requería consolidar la documentación sobre el modelo híbrido de disponibilidad (Snapshot diario para performance de reportes + Ledger de `AvailabilityEvent` para auditoría temporal) y la centralización de mutación de estados operacionales.
+- **Decisión:**
+  - **Persistencia de Formulario (M3):** Se implementó una directiva reactiva (utilizando Angular Signals `effect`) en `FaultReportFormComponent` que respalda el borrador del formulario en `localStorage` (`tpm_fault_report_draft`). Al cargar el componente (`ngOnInit`), se intenta recuperar de `localStorage` antes de recurrir a los parámetros de URL (`queryParams`), asegurando persistencia absoluta en refrescos accidentales (F5). El borrador se purga automáticamente al enviar con éxito o limpiar el formulario.
+  - **UX Feedback:** Al confirmar el redireccionamiento M2 ➔ M3, se agregó un toast informativo a través de `NotificationService` indicando al usuario la necesidad de registrar la falla para completar la detención del equipo.
+  - **Centralización (Orquestador):** Se formalizó en `MASTER-CONTEXT.md` que `EquipmentOperationalOrchestratorService` actúa como la única entidad autorizada para mutar el estado `isOperational` y emitir `AvailabilityEvent` en el Ledger híbrido, erradicando modificaciones directas dispersas en otros servicios.
+  - **Modelo Híbrido:** Se documentó el acoplamiento Snapshot (`EquipmentAvailability` por turno) + Ledger (`AvailabilityEvent` mutable cronológicamente) para paridad de datos históricos.
+- **Consecuencias:** Mayor resiliencia en terreno frente a caídas de red o refrescos de pantalla. La trazabilidad y las métricas operativas de la flota cuentan ahora con una arquitectura centralizada y documentada, evitando drifts de estado.
+
+## 2026-06-07 — P4 refresh Flota: M1/M2/M3 actualizan Maestro y modal
+
+- **Contexto:** Al reportar disponibilidad y luego revisar Maestro de Flota o el modal de equipo, algunos estados quedaban obsoletos. El backend ya tenía orquestación M2 `DOWN_*`, pero `OPERATIONAL` solo restauraba si el parte previo era de la misma fecha/turno; además M1 y M3 LOW no notificaban cambios a Flota.
+- **Decisión:**
+  - **Backend M2:** `EquipmentAvailabilityService` resuelve `previousStatus` con prioridad: registro editado de la misma celda; DAY del mismo día cuando se graba NIGHT; último parte previo del equipo. Así `OPERATIONAL` tras último M2 `DOWN_FAILURE` / `DOWN_MAINTENANCE` restaura `Equipment.isOperational=true` en `create`, `batchCreate` y `commitImport`.
+  - **Frontend:** `lube-report-form` llama `FleetService.notifyEquipmentChanged(equipmentId)` tras despacho exitoso. `fault-report-form` notifica en todas las criticidades, incluyendo LOW, porque la ficha de salud/historial del modal cambió aunque `isOperational` no lo haga.
+  - **Contrato UI:** M2 sigue propagando `sideEffects[]` y `AvailabilityForm/Import` notifican por equipo; `FleetMasterComponent` escucha `listVersion` y `EquipmentDetailModalComponent` escucha `equipmentRevision`.
+  - **Modal de Flota:** el badge de estado operativo prioriza el último parte M2 visible (`STANDBY`, `RESERVE_NO_OPERATOR`, `DOWN_*`) cuando `Equipment.isOperational` no está en falso; si está falso, mantiene `FUERA DE SERVICIO` como estado imperativo.
+  - **Último M2:** `findAll` ordena por `reportDate desc`, `shift desc`, `createdAt desc`; así el turno Noche queda después de Día para la misma fecha al pedir `pageSize=1`.
+  - **Fechas M2 en modal:** `reportDate` se muestra como fecha lógica de negocio (`dd/MM/yyyy`) sin pipe `date` local, para evitar que `2026-06-07T00:00:00Z` se renderice como `06/06/2026` en Chile/UTC-4.
+  - **Horómetro transversal:** Registro de Horas (`bulkSyncMeterReadings`), cierre de OT (`finalMeter`) y edición directa de equipo en Maestro notifican `FleetService.notifyEquipmentChanged(equipmentId)` cuando pueden cambiar `currentMeter`. M1/M2/M3 ya usaban el mismo contrato.
+- **Consecuencias:** Maestro de Flota y modal vuelven a consultar datos actuales tras M1, M2, M3, captura de horómetro, cierre de OT y edición manual de equipo. Specs focalizados agregan regresión para M2 `OPERATIONAL` posterior a `DOWN_*`, notificaciones M1/M3 y refresh de horómetro.
+
+## 2026-06-06 — Turnos M2: JWT operationalConfig + coerción NIGHT→DAY + E2E P1b
+
+- **Contexto:** Con `hasNightShift=false`, de noche el frontend infería `NIGHT` antes de cargar config y el backend respondía 400. Tras el fix inicial (`e71f1e1`), quedaban gaps de hidratación y regresión E2E.
+- **Decisión:**
+  - **Backend:** `resolveShift()` normaliza `NIGHT` → `DAY` si el tenant no opera turno noche (sin 400). Import Excel: plantillas con `NIGHT` en `_info` se tratan como `DAY`.
+  - **Frontend:** `ShiftService.coerceShift()`, coerción central en `EquipmentAvailabilityService`, alineación post-config en monitor/reporte (`4172ffc`).
+  - **JWT (`a69c2f5`):** Login y activación incluyen `operationalConfig` en payload JWT y `user.tenant`; `AuthService` fusiona al restaurar sesión; `company-config` llama `patchSessionOperationalConfig` al guardar turnos.
+  - **E2E:** `e2e/tests/e2e-operations-shift-policy.spec.ts` (`npm run test:operations:shift`) — JWT alineado, API/UI con `hasNightShift` true/false.
+- **Consecuencias:** `GET /tenant-config` sigue siendo fuente completa de branding; JWT cubre turnos para arranque inmediato de M2. SUPER_ADMIN sin `tenantId` en JWT sigue dependiendo de `x-tenant-id` + tenant-config. Pendientes menores: frontera HH:mm, auto-filtro 20:00, CI E2E (plan T3–T7).
+
+## 2026-06-05 — P4 Sprint 1 backend: orquestador M2 detención → stub M3 + isOperational
+
+- **Contexto:** Backlog P4 §3 — unificar estado operativo al reportar `DOWN_FAILURE` / `DOWN_MAINTENANCE` en M2.
+- **Decisión:**
+  - Nuevo `EquipmentOperationalOrchestratorService` (`onOperationalStatusChange` dentro de la misma `$transaction` que el parte).
+  - `DOWN_FAILURE` / `DOWN_MAINTENANCE`: `isOperational=false`; si no hay RF activo (OPEN o LINKED con OT no cerrada), crea stub `FaultReport` OPEN/LOW (`FAULT_REP`); si hay RF activo, no duplica.
+  - `OPERATIONAL` tras parte previo `DOWN_*`: `isOperational=true` (ampliado el 2026-06-07 para resolver el último parte del equipo, no solo la misma fecha/turno).
+  - Hook en `EquipmentAvailabilityService` (`create`, `upsertRow` → `batchCreate` / `commitImport`); respuesta con `operationalTransition` (unitario) y `sideEffects[]` (lote).
+- **Consecuencias:** Suite dominio **403 tests** (+6 orchestrator). Frontend Sprint 2 pendiente hasta el refresh Flota del 2026-06-07. `MASTER-CONTEXT.md` §2.4 actualizado al cerrar P4 funcional.
+
+## 2026-06-05 — Auditoría M2 `DOWN_FAILURE` vs. entregas P0–P2 (no es lo mismo)
+
+- **Contexto:** Tras commits `6838b31` (P1 M2) y `489cba5` (P2 inventario×ops), se reportó que «Detenido por Falla» en Disponibilidad no actualiza Maestro de Flota ni crea RF en M3. Había que distinguir **regresión E2E** de **gap de integración producto**.
+- **Decisión:**
+  - **P0–P2 no resuelven ese gap.** P0 prueba M3 **directo** (API HIGH → `isOperational=false`). P1 prueba monitor/batch con status **`OPERATIONAL`**. P2 es inventario×M1. Ninguno asserta M2 `DOWN_FAILURE` → M3 → Flota.
+  - El comportamiento actual sigue siendo **coherente con arquitectura documentada** (`MASTER-CONTEXT.md` §2.4): M2 declarativo, `isOperational` imperativo (M3 ALTA + OT). La UX del dropdown «Detenido por Falla» **genera expectativa incorrecta** hasta implementar puente (backlog **P4** en `operaciones-e2e-cobertura-y-pendientes.md`).
+  - **Pendiente producto+código:** orquestador / redirect M2→M3, invalidación Flota desde M2, modal con refresh; E2E `test:operations:p4`.
+- **Consecuencias:** Doc §1.1 en cobertura E2E; fila M2 actualizada en `sistema-integrado-roadmap.md`. **P3** (dashboard KPIs) sigue siendo el siguiente paquete E2E acordado; **P4** es el track de integración M2↔M3.
+
+## 2026-06-05 — E2E P1 M2 disponibilidad + P2 inventario×operaciones
+
+- **Contexto:** Backlog P1–P2 en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md).
+- **Decisión:**
+  - **P1** (`6838b31`, `npm run test:operations:p1`, 4 tests): monitor Pendientes→Reportar (link fila, turno **DAY** fijo), batch API 2 equipos, `hasNightShift=false`, toggles ajustes empresa.
+  - **P2** (`489cba5`, `npm run test:operations:p2`, 2 tests): W2W parcial 30/100 + M1 «Disponible: 30»; PBAC lectura POST M1 → 403.
+- **Consecuencias:** Suite E2E documentada **69 tests**. Pendiente: P3 dashboard, P4 M2↔M3, P2.2 OT bodega otro contrato (UI).
+
+## 2026-06-05 — E2E P0 integridad transversal (blockNegativeStock, M3 ALTA, correlativos)
+
+- **Contexto:** Backlog P0 en [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) tras estabilización chaos/lifecycle.
+- **Decisión:**
+  - Nuevo spec `e2e/tests/e2e-operations-p0-integrity.spec.ts` (`npm run test:operations:p0`, 4 tests): `blockNegativeStock` M1 (API 400 + UI POST rechazado o botón deshabilitado), OT cierre fluidos 400 sin kardex, M3 HIGH → `isOperational=false` + `NO_PROGRAMADA_REACTIVA`, smoke `RCL-` / `RF-`.
+  - Helpers: `api-tenant-config.ts`, `api-fault-reports.ts`.
+  - Frontend: `lube-report-form` puede refrescar `GET /tenant-config` al abrir; desde 2026-06-06 el JWT incluye `operationalConfig` en login (ver entrada turnos M2).
+- **Consecuencias:** Suite E2E **63/63**. `test:domain` **397/397**. P1 (M2 tablero, ajustes empresa) sigue pendiente.
+
+## 2026-06-04 — E2E operaciones: estabilización caos/lifecycle + correlativos M1/M3
+
+- **Contexto:** Suite nueva (`e2e-chaos-resilience`, `e2e-operations-lifecycle`) fallaba por desalineación de contrato PBAC, Reactive Forms en Playwright, parseo es-CL en historial de medidor, kardex `WORK_ORDER_ISSUE` omitido en helpers, y tipos de documento &gt; 10 chars en `sequence_counters`.
+- **Decisión:**
+  - Backend: `FAULT_REP` en `fault-reports.service` (paridad con `LUBE_RCL` ya en M1).
+  - E2E: `resolveE2EPrimaryContractId()`, header `x-site-id` en OT, `setReactiveInput` / `parseUiNumber`, modal flota vía ficha (no HOJA DE VIDA PDF), retries red/auth.
+  - Doc: [`operaciones-e2e-cobertura-y-pendientes.md`](operaciones-e2e-cobertura-y-pendientes.md) — puntos ciegos y backlog P0–P3.
+- **Consecuencias:** Suite focalizada **11/11**; suite completa **59 tests** con retry en navegación. Pendiente E2E: `blockNegativeStock`, M2 tablero, M3 falla ALTA smoke.
+
+## 2026-06-04 — M2 Disponibilidad: tablero del turno + carga escalable
+
+- **Contexto:** Monitor solo listaba pendientes; formulario cargaba toda la flota sin paginar/filtrar; no había vista de reportados del turno ni historial consultable.
+- **Decisión:**
+  - Backend: `GET /shift-board` (KPIs + filas REPORTED/PENDING/EXCLUDED), `unreported` paginado, `POST /batch`, ABAC en `findAll`.
+  - Frontend: Monitor con tabs, tabla unificada, auto-refresh 5 min, export Excel, modal ficha; formulario paginado con búsqueda/contrato/vista compacta/batch/meter banner; nueva ruta `/disponibilidad/historial`.
+- **Consecuencias:** Plan en `docs/agentes/m2-disponibilidad-plan-implementacion.md`. Pendiente roadmap: push anti-spam pendientes (Sprint 4.2).
+
+## 2026-06-04 — Integridad de fluidos (M1 + OT): stock centralizado, decimales y consumo inusual
+
+- **Contexto:** Auditoría de M1 (Lubricantes) y fluidos en cierre de OT detectó stock negativo permitido por diseño (`isPendingRegularization`), inputs manuales sin visibilidad de disponible, label fijo «Litros» en OT y drift de punto flotante en restas de `ItemStock`.
+- **Decisión:**
+  - **Núcleo único:** `InventoryStockService.performTransactionCore` con `stock-quantity.util` (`Decimal.js`, epsilon `1e-9`). M1 (`LUBE_DISPATCH`) y OT (`WORK_ORDER_ISSUE`) delegan descuentos; W2W reutiliza el mismo mensaje de insuficiencia.
+  - **Flag tenant:** `TenantOperationalConfig.blockNegativeStock` (default `false`). Si `true` → `BadRequestException` en lugar de saldo negativo pendiente.
+  - **Frontend shared:** `app-fluid-quantity-row` — badge disponible, validación ámbar/rojo, `step` según `allowsDecimals`, checkbox consumo inusual. Integrado en `lube-report-form` y `work-order-form` (fluidos). Stock del picker vía `stockAvailableQuantity` (sin N+1).
+  - **Consumo atípico:** umbral por UoM (~100 LT); `confirmedLargeDispatch` en línea M1 y `confirmedLargeFluidDispatch` al cerrar OT.
+  - **Configuración UI:** toggle en **Ajustes → Empresa** (`PATCH /tenant-config/operational`).
+- **Consecuencias:** Migración `20260604120000_tenant_block_negative_stock`. Suite dominio **391 tests · 22 suites · 0 fallos**. Columna `ItemStock.quantity` sigue `Float` en DB; precisión en runtime hasta evaluar migración schema.
+
+## 2026-06-03 — Banner de referencia de lectura (Ojo de Seguridad) — Trinidad Operativa
+
+- **Contexto:** Errores de digitación de horómetro/odómetro en terreno alimentan `currentMeter` vía M1, M2, M3, OT y captura masiva. Se requería visibilidad de la última lectura y su fuente antes de cada ingreso.
+- **Decisión:**
+  - Componente shared `app-meter-reference-banner` (`border-l-4 border-primary bg-primary/10`) con utilidades `getMeterSourceLabel` y `resolveMeterReferenceView`; datos vía `GET /equipments/:id/meter-snapshot` (caché en `EquipmentMeterSnapshotService`) o fila enriquecida de `meter-capture-board` (sin N+1 en tablas masivas).
+  - **Puntos de entrada cubiertos:** Registro de Horas (`meter-capture-board` + validación de salto), formulario OT (detención + cierre con `confirmedLargeJump`), **M1 Lubricantes** (bloqueo guardar si lectura &lt; actual), **M3 Fallas** (alerta si lectura &lt; última registrada).
+  - Regla de oro sin bitácora: copy *«Sin registros previos — Lectura inicial»*.
+- **Consecuencias:** M2 disponibilidad (form + import Excel) y Maestro de Flota quedan como siguiente extensión opcional. Onboarding de datos masivos (Excel) puede reutilizar el mismo patrón de board enriquecido.
+
+## 2026-06-03 — Gestión Configurable de Turnos por Tenant (TenantOperationalConfig)
+
+- **Contexto:** El sistema EAM fue diseñado con `ShiftType` (`DAY` / `NIGHT`), pero el primer cliente solo opera en Turno Día. Se requería que la configuración de turnos fuera por Tenant para no forzar a todos a ver selectores que no usan.
+- **Decisión:**
+  - **Separación 1:1 (`TenantOperationalConfig`):** Se creó una tabla independiente vinculada a `Tenant` por FK única, con campos `hasNightShift: Boolean @default(true)`, `dayShiftStartTime`, `nightShiftStartTime` y, desde 2026-06-04, `blockNegativeStock: Boolean @default(false)` para controlar stock negativo en M1/OT/inventario.
+  - **Lazy-creation:** El registro solo se crea en base de datos al primer `PATCH /tenant-config/operational`; mientras no exista, el backend lee los defaults en memoria (`hasNightShift=true`, `08:00`, `20:00`). Esto evita backfill en tenants existentes.
+  - **Backend defensivo (`shift` opcional → default `DAY`):** Los DTOs declaran `shift?: ShiftType` con `@IsOptional()`. `resolveShift()` aplica `DAY` por defecto; si `hasNightShift=false` y llega `NIGHT`, **normaliza a `DAY`** (actualizado 2026-06-06 — ver entrada «JWT operationalConfig»).
+  - **Frontend reactivo via `ShiftService`:** `ShiftService` consume `operationalConfig` desde JWT (login) y `GET /tenant-config` (layout). Si `hasNightShift()===false`, `currentShift()` siempre `'DAY'`. Selectores de turno envueltos en `@if (shiftService.hasNightShift())`.
+- **Consecuencias:** Sin cambios de schema aditivos para tenants existentes. Config operativa: JWT (arranque) + `GET /tenant-config` (branding y refresh). Ver commits `e71f1e1`, `4172ffc`, `a69c2f5`.
+
+## 2026-06-03 — Sprint 3 Sistema Integrado: lifecycle cost en modal (2.2) + stock en form de OT (2.3)
+
+- **Contexto:** Prioridades 2.2 y 2.3 del roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md). El modal de equipo no mostraba el costo acumulado del activo (los `AssetCostRecord` existían pero solo aparecían mal etiquetados en el timeline), y el form de OT no daba visibilidad del stock disponible al agregar repuestos.
+- **Decisión:**
+  - **2.2 — Tab «Costos» (frontend, sin backend):** `AssetCostType` FE alineado al enum real (`PURCHASE | WORK_ORDER | LUBE_DISPATCH`); `AssetCostRecord` suma `workOrder?.correlative`. Nuevos `computed`: `costTotal`, `costByType` (subtotal + % por tipo, orden desc), `costRecordsSorted`; helper `assetCostTypeMeta` (label + color de barra/texto) y `formatMoney` reutilizado. El tab muestra KPI total + barras por tipo + tabla de imputaciones con origen (OT/OC/recepción). **Fix colateral:** el timeline del tab «Historial» etiquetaba *todos* los cost records como «Compra externa»; ahora distingue los tres tipos. +4 specs.
+  - **2.3 — Stock en repuestos del form de OT (frontend, sin backend):** `stockForItem(itemId)` lee `warehouseStocks` (ya cargado al elegir bodega de consumo) y devuelve `availableQuantity` (físico − reservado). Cada línea de repuesto vinculada muestra «Stock disponible: X» (verde) o «Sin stock» (rojo); `partRowHasShortage` marca en rojo si la cantidad supera el disponible y `anyPartStockShortage` dispara un aviso en la sección. No bloquea el guardado (consistente con la regla de regularización pendiente al cerrar OT). +5 specs.
+  - **Ampliación 2026-06-04:** repuestos mantienen aviso local; **fluidos M1 y OT** migraron a `app-fluid-quantity-row` con bloqueo opcional vía `blockNegativeStock` (ver decisión 2026-06-04).
+- **Consecuencias:**
+  - Suites: frontend **120** (+9: 4 costos + 5 stock OT); backend dominio **345** (sin cambios — Sprint 3 es 100% frontend); `ng build` y lint verdes.
+  - El modal de equipo queda como **centro de lifecycle cost** (consumo + costo por tipo) y el planificador ve el abastecimiento antes de comprometer repuestos. **Sprint 3 CERRADO** → quedan solo las extensiones push de Prioridad 3 (3.1 EQUIPMENT_DOWN, 3.2 PM próxima).
+
+## 2026-06-03 — Sprint 2 Sistema Integrado: Consumos unificados (lubricantes + repuestos) en modal de equipo
+
+- **Contexto:** Prioridad 2.1 del roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md). El tab «Consumos» del `equipment-detail-modal` solo mostraba lubricantes (M1); los repuestos despachados a OTs no eran visibles en la ficha del activo, rompiendo la vista de «consumo del activo». La relación `WorkOrderPart` (con `unitCost` CPP, `partNumber`, `quantity`, `inventoryItemId`) ya existía pero `getAnalytics` no la incluía.
+- **Decisión:**
+  - **Backend (`equipments.service.ts` `getAnalytics`):** se agregó `include: { parts: { select: ... } }` a la query de `workOrders` (últimas 50 OT CERRADAS). Cambio aditivo y mínimo — **sin endpoint nuevo** (regla del roadmap: el modal ya carga analytics al abrir). +1 spec en `equipments.service.spec.ts` (verifica el `include` y el passthrough de `parts`).
+  - **Frontend types (`types.ts`):** `WorkOrderPart` ahora expone `unitCost?: number | null` e `inventoryItemId?: string | null`.
+  - **Modal (`equipment-detail-modal`):** `computed partsConsumed` aplana `analytics.workOrders[].parts` en filas `{ otId, otCorrelative, date, partNumber, description, quantity, unitCost, lineCost }` (orden por fecha desc); `computed partsTotalCost` suma solo líneas con costo conocido; helper `formatMoney` (CLP). El tab «Consumos» se reestructuró en **dos secciones** (Lubricantes + Repuestos usados en OTs); cada repuesto linkea al `WorkOrderDetailModal` embebido reusando `openOtDetail` del Sprint 1. **Decisión de UX confirmada con el usuario:** dos secciones (no tabla cronológica unificada) y fuente analytics (no endpoint dedicado). +3 specs frontend.
+- **Consecuencias:**
+  - Suites: frontend **111** (+3), backend dominio **345** (+1); `ng build` y lint verdes.
+  - El activo pasa a tener trazabilidad de consumo real: lubricantes (M1) + repuestos/costo de OTs en un solo lugar, con navegación a la OT origen.
+  - Limitación conocida: los repuestos provienen de las **últimas 50 OT cerradas** (mismo alcance que el resto de analytics); si se requiere histórico completo o agrupación por período → endpoint dedicado (Sprint futuro).
+
+## 2026-06-03 — Sprint 1 Sistema Integrado: Dashboard KPIs + indicador de Turno + tab OTs
+
+- **Contexto:** Tras la integración transversal M1·M2·M3↔Flota, el roadmap [`sistema-integrado-roadmap.md`](sistema-integrado-roadmap.md) priorizó cerrar conexiones visibles de alto impacto (Prioridad 1.1 y 1.2). Faltaban dos métricas de salud de flota (equipos fuera de servicio reales y fallas de terreno sin OT) que no existían en `GET /work-orders/stats`, y el modal de equipo no permitía ver OTs activas (solo el timeline con cerradas).
+- **Decisión:**
+  - **Backend:** `getStats()` (`work-orders.service.ts`) sumó dos counts al `Promise.all`: `equiposDetenidos` (`Equipment.isOperational=false` con scope tenant/contrato) y `faultReportsOpen` (`FaultReport.status='OPEN'` por equipo accesible). +2 specs en `work-orders.service.spec.ts` (suite dominio 344).
+  - **Turno activo:** nuevo `ShiftService` (`core/services/shift/`) autodetecta DÍA (08:00–20:00) / NOCHE por hora local con tick de 1 min vía `toSignal(interval)`. `ShiftBadgeComponent` (`core/components/shift-badge/`) muestra turno + reloj en `.app-shell-header` (oculto en móvil, fondo opaco sin blur por regla §5.1). Si se requiere config manual de rangos → crear módulo dedicado; `ShiftService` es el único punto a tocar.
+  - **Dashboard:** 3 tiles nuevos clicables (Equipos detenidos→`/app/flota`, Fallas sin OT→`/app/operaciones/fallas`, Sin reporte de turno→`/app/operaciones/disponibilidad/monitor`); franja a `lg:grid-cols-4` (8 tiles en 2 filas). `loadUnreported()` hace una 2ª llamada no crítica a `/equipment-availability/unreported` con la fecha/turno de `ShiftService`. `DashboardUiModel` ahora exige `equiposDetenidos`, `faultReportsOpen`, `unreportedCount`.
+  - **Modal de equipo:** nueva pestaña «Órdenes de Trabajo» (`TabId += 'ots'`) con carga perezosa vía `getWorkOrdersFiltered({ equipmentId, limit:20 })` — tabla con TODOS los estados (no solo cerradas como el timeline). Click en correlativo abre `WorkOrderDetailModalComponent` **embebido** (`showOtDetail`/`selectedOtId`), preservando el contexto del equipo. +5 specs.
+  - **Banner de fallas OPEN en form de OT (Prioridad 1.3):** al seleccionar equipo en `work-order-form`, señal `openFaults` consulta `getReports({ equipmentId, status:'OPEN', pageSize:5 })`. Si hay fallas abiertas, banner ámbar (`warning`) con conteo + correlativos (badge criticidad vía `CRITICALITY_META`, sistema vía `SYSTEM_LABELS`, fecha) y link a `/app/operaciones/fallas`; se limpia al deseleccionar. Cierra el círculo M3 → planificación de OT. Spec nuevo `work-order-form.component.spec.ts` (4 tests; sin render de template por tamaño del componente, se invoca `ngOnInit()` y se prueba la lógica).
+- **Consecuencias:**
+  - Suites: frontend **108** (+9 en el sprint: +5 OTs tab, +4 banner OT), backend dominio **344** (+2); `ng build` y lint verdes.
+  - El dashboard pasa a cruzar M3/Flota (detenidos), M3 (fallas OPEN) y M2 (sin reporte de turno) en un golpe de vista.
+  - **Sprint 1 CERRADO**: Prioridad 1.1 (parcial — tiles base), 1.2 y 1.3 entregadas. Siguiente: Sprint 2 del roadmap.
+
+## 2026-06-03 — Integración Transversal de Operaciones (M1·M2·M3 ↔ Flota) — INTEGRACIÓN COMPLETA
+
+- **Contexto:** M1 (Lubricantes), M2 (Disponibilidad) y M3 (Fallas) quedaron al 100% en backend pero operaban como silos en la UI. Las acciones en terreno no se reflejaban en el Maestro de Flota ni en el modal de detalle de equipo, rompiendo la noción de fuente única de verdad (SSOT) sobre `Equipment`.
+
+- **Decisión (Fase 1 — Documentación):**
+  1. **SSOT formalizada** en `MASTER-CONTEXT.md` §2.4 «Ecosistema de Operaciones y Flota»: tablas de alimentación de `currentMeter` (4 fuentes × `MeterLogSource`) y control de `isOperational` (quién lo escribe vs. quién solo lo lee). Diagramas Mermaid. Actualizado §1.2 con referencia cruzada.
+  2. **Glosario ampliado** (`glosario.md`): 7 nuevos términos — `currentMeter`, `isOperational`, Disponibilidad (M2), `OperationalStatus`, Falla/M3, Falla Crítica/ALTA, M1/M2/M3.
+
+- **Decisión (Fase 2 — Refactor UI):**
+  3. **Maestro de Flota — alerta visual crítica:** Filas con `isOperational === false` reciben borde rojo grueso + fondo rojizo + badge `animate-pulse` «FUERA DE SERVICIO». El `currentMeter` ya se mostraba en la columna «Medidor».
+  4. **`FleetService` — mecanismo de frescura:** Signal `_listVersion` (readonly) + `invalidateCache()` + `refetch()`. `getEquipments` acepta `noCache:true` que agrega `_ts=Date.now()` como cache-bust HTTP.
+  5. **`FleetMasterComponent` — doble garantía anti-stale:** `ngOnInit` hace refetch con cache-bust (el componente se recrea en cada navegación de ruta); `effect()` reactivo escucha `listVersion()` para invalidaciones push desde otras rutas.
+  6. **`EquipmentDetailModalComponent` — Centro de Mando Operacional:** Dos nuevas pestañas con fetch perezoso (carga al abrir la pestaña, no repite si el equipo no cambia):
+     - **«Salud y Operación»**: `forkJoin(faultService.getReports({pageSize:1}), availabilityService.getAll({pageSize:1}))` con `catchError`. Badge gigante real de `isOperational` (antes estaba hardcodeado a «OPERATIVO»). Tarjeta Última Falla (M3) y Último Reporte de Turno (M2).
+     - **«Consumos»**: `lubeService.getReports({pageSize:5})`. Mini-tabla con folio, fecha, bodega, líneas y medidor.
+  7. **Fix tipo `MeterLogSource`** en `types.ts`: añadidos `'AVAILABILITY_REPORT' | 'FAULT_REPORT'` (faltaban y causaban error TS en compilación). Etiquetas legibles añadidas al historial de medidores.
+
+- **Decisión (Fase 3 — Invalidación push desde M3):**
+  8. **`FaultReportFormComponent.onSubmitSuccess`** llama `fleetService.notifyEquipmentChanged(equipmentId)`. Inicialmente se activó para `HIGH`/`MEDIUM` (`HIGH` muta `isOperational=false`; `MEDIUM` puede avanzar horómetro); desde 2026-06-07 también aplica a `LOW` porque cambia historial de salud del modal. La señal `listVersion` cambia y el `effect()` del Maestro de Flota dispara la recarga aunque el componente ya esté activo.
+
+- **Consecuencias:**
+  - Build Angular: `exit 0` — *Application bundle generation complete*. Sin cambios de schema, backend ni migraciones.
+  - `FleetMasterComponent` y `EquipmentDetailModalComponent` son el **Centro de Mando Operacional** del EAM: consumen M1, M2 y M3 reactivamente sin acoplamiento directo entre módulos de Operaciones.
+  - Doble garantía de frescura: refetch en entrada a ruta **+** invalidación push desde el formulario de fallas.
+  - El ecosistema M1·M2·M3 está **100% integrado en la UI**.
+
+## 2026-06-02 — Módulo 3: Registro de Fallas (FaultReport) — Persistencia y Seguridad
+
+- **Contexto**: Requerimiento de capturar eventos correctivos imprevistos en terreno, actualizando el estado del equipo y alimentando la cola de trabajo del planificador. El sistema debe discriminar por criticidad para decidir el impacto automático sobre disponibilidad y mantenimiento.
+- **Decisión**:
+  1. **Persistencia:** Nuevo modelo `FaultReport` con enums `AffectedSystem` (7 sistemas: MOTOR, HYDRAULIC, ELECTRICAL, POWER_TRAIN, STRUCTURE, GET_WEAR, TIRES_TRACKS), `FaultCriticality` (HIGH/MEDIUM/LOW) y `FaultReportStatus` (OPEN/LINKED/CLOSED). Correlativo `RF-XXXXX` vía `SequenceCounter` existente. FK `workOrderId @unique` para relación 1:1 con la OT generada. Nuevo valor `FAULT_REPORT` en enum `MeterLogSource`.
+  2. **Regla de integración con OT (forma nativa BaseLogic):** Se descartó crear tablas intermedias (`WorkRequest`, `MaintenanceBacklog`). La primitiva nativa del planificador es la `WorkOrder`. La lógica de despacho por criticidad es: **ALTA** → crea `WorkOrder(category=NO_PROGRAMADA_REACTIVA, affectsAvailability=SI, detentionStartedAt=eventDate)` + `Equipment.isOperational = false` en la misma `$transaction`; **MEDIA** → crea `WorkOrder(category=NO_PROGRAMADA_CORRECTIVA, affectsAvailability=NO)` sin impacto en disponibilidad; **BAJA** → solo registra el `FaultReport` (el planificador convierte manualmente vía `POST /fault-reports/:id/create-work-order`).
+  3. **Integración con Módulo 2 (Disponibilidad):** `Equipment.isOperational = false` es mutado directamente en la transacción de una falla ALTA. `EquipmentAvailability` (Módulo 2) es declarativo/supervisor; lee `isOperational` como señal pero no es sincronizado automáticamente. El supervisor confirma el estado en su reporte de turno. Las dos capas son ortogonales.
+  4. **Horómetro:** Si `meterAtFault > equipment.currentMeter`, se llama a `applyCurrentMeterChange(tx, { source: FAULT_REPORT })` dentro de la misma transacción atómica.
+  5. **PBAC:** 3 nuevos permisos: `operations:fault-report:read` (ver listados), `create` (operador en terreno, genera OT automática para ALTA/MEDIA), `manage` (planificador: cierra BAJA o convierte a OT manualmente).
+- **Consecuencias**: Schema: +3 enums, +1 valor en `MeterLogSource`, +1 tabla `fault_reports` con `@@unique([tenantId, correlative])` y `@unique work_order_id`. Relaciones inversas en `Equipment`, `WorkOrder`, `Tenant`, `Contract` y `User`. Migración `20260602020000_init_fault_reports_module` aplicada. Pendiente: Fase 2 (servicio, controller, DTOs) y Fase 3 (frontend Angular 18).
+
+## 2026-06-02 — Módulo de Disponibilidad Operativa Diaria: cierre frontend + smoke tests
+
+- **Contexto:** Cierre del módulo completo (backend + frontend) para merge a `develop`. El módulo permite a supervisores reportar el estado operativo de equipos por turno y a admins monitorear equipos sin reporte.
+- **Decisión:** UX optimizada para uso en terreno (lectura al sol): búsqueda de equipos en memoria con Signals (sin debounce ni HTTP extra), bloqueo de fechas futuras en `reportDate`, feedback de colores semánticos por `OperationalStatus` en el formulario. Separación de permisos `CREATE` (supervisor reporta) vs `MONITOR` (admin/jefe consulta omisiones). Smoke tests con Jasmine + Angular `TestBed`: 12 tests para `AvailabilityFormComponent` (estado inicial, `isFormValid`, `isDirty`, `confirmLeaveIfDirty`, `resetForm`) y 13 tests para `AvailabilityMonitorComponent` (empty state verde, alerta con equipos pendientes, `allReported`, `unreportedCount`, `onShiftChange`, `onDateChange`).
+- **Consecuencias:** Suite frontend: 25/25 specs en verde (sin romper ningún otro test). Suite backend: 342 tests · 19 suites · 0 fallos. Módulo listo para merge `develop → main` post-QA.
+
+## 2026-06-02 — Módulo de Disponibilidad Operativa Diaria: persistencia y lógica de omisiones
+
+- **Contexto**: Requerimiento de registrar el estado de cada equipo por turno (Día/Noche) y alertar al administrador qué equipos no han sido informados en el turno activo. El módulo debe cruzar el Maestro de Flota con los registros del turno sin introducir campos derivados en la base de datos.
+- **Decisión (1 — sin `isAvailable` persistido)**: Se descartó agregar un campo booleano `isAvailable` a `EquipmentAvailability` o a `Equipment`. Prisma no soporta columnas generadas (`GENERATED ALWAYS AS`) de forma nativa; mantener el booleano sincronizado en el código introduciría una superficie de bugs y acoplaría la lógica de negocio ("¿es STANDBY disponible?") al schema de base de datos, dificultando cambios futuros de la regla sin nueva migración. La derivación se hace en la capa de servicio con una función pura (`isAvailableStatus(s: OperationalStatus): boolean`) exportada desde `availability.helpers.ts`. Para KPIs de uptime a escala se usará `$queryRaw` con `COUNT(*) FILTER (WHERE status IN (...))` o una vista Postgres materializable, sin columnas extras en la tabla.
+- **Decisión (2 — cruce en memoria para equipos no informados)**: El endpoint `GET /api/equipment-availability/unreported` usa la estrategia `Promise.all` + `Set` (dos queries Prisma en paralelo, diff en Node.js) en lugar de un `$queryRaw` con `NOT IN`. Razón: para flotas de EAM industrial (< 300 equipos activos por contrato) el overhead de dos queries paralelas es subms y el código es idiomático, testeable y libre de SQL crudo. El filtro `isOperational: true` excluye equipos ya marcados fuera de servicio por OT activa, evitando falsos positivos de omisión. Si en el futuro la flota supera los 1000 equipos por contrato, se reemplaza la implementación por `$queryRaw` con `NOT IN` usando los índices `(tenant_id, report_date, shift)` y `(tenant_id, contract_id)` ya creados en la migración, sin cambiar la firma del endpoint.
+- **Consecuencias**: Schema con 2 nuevos enums (`ShiftType`, `OperationalStatus`), 1 valor nuevo en `MeterLogSource` (`AVAILABILITY_REPORT`), tabla `equipment_availabilities` con `@@unique([tenantId, equipmentId, reportDate, shift])`. 3 nuevos permisos PBAC: `operations:availability:read/create/monitor`. Horómetro actualizado vía `applyCurrentMeterChange` solo si `meterReading > equipment.currentMeter` (guard en el servicio, no en el helper). Fase 2 pendiente: servicio, controller, DTOs y frontend Angular 18.
+
+## 2026-06-02 — Módulo de Consumo de Lubricantes (Integración Flota/Kardex)
+
+- **Contexto**: Necesidad de trazar el despacho en terreno de aceites/grasas asociando el costo directo al equipo y controlando el Kardex de forma inmutable.
+- **Decisión**: Se implementó una arquitectura en 3 capas. 1) Bodegas Móviles (`Warehouse type=VIRTUAL`) como origen de suministro (camión lubricador). 2) Transacción atómica `Prisma.$transaction(Serializable)` que rebaja stock (`InventoryTransaction type=OUT, referenceType=LUBE_DISPATCH`) usando el CPP congelado al momento del despacho, actualiza el horómetro del equipo vía `applyCurrentMeterChange` e imputa el costo en `AssetCostRecord (LUBE_DISPATCH)`. 3) Frontend Angular 18 standalone usando Signals, servicio HTTP tipado y `GlobalItemPicker` filtrado por familia "Lubricantes" (`lockedFamilyId`). Correlativo `RCL-XXXXX` generado por `SequenceService`. Protección PBAC con `operations:lube-report:read/create`.
+- **Consecuencias**: El sistema cruza automáticamente Operaciones (Flota/Horómetros) con Inventario (stock W2W, Kardex inmutable) y Finanzas (imputación de costo directo al activo). Se añadieron los permisos `OPERATIONS_LUBE_REPORT_READ` y `OPERATIONS_LUBE_REPORT_CREATE` (backend `permissions.enum.ts` + frontend `operations-permissions.ts`). Nuevos modelos Prisma: `LubeReport`, `LubeReportLine`; nuevo valor enum `AssetCostType.LUBE_DISPATCH`. Suite de 8 tests unitarios en `lube-reports.service.spec.ts` sin DB real (`jest-mock-extended`).
+
+## 2026-05-24 — Compras PBAC: simulador API + E2E Playwright
+
+- **Contexto:** Tras Fase 3 PBAC faltaba verificación automatizada end-to-end del módulo P2P (43 permisos `purchases:*`, ACL firmas, menú UI).
+- **Decisión:** Seed `seed-compras-pbac-personas.ts` (13 personas); script `simulate-compras-pbac.mjs` con matriz 43 probes, flujos A–J y cobertura K–S; paquete `e2e/` con Playwright (5 smoke UI). Doc: [`compras-pbac-pruebas-api-e2e.md`](compras-pbac-pruebas-api-e2e.md).
+- **Consecuencias:** QA en `develop` puede correr `simulate:compras-pbac -- --all` y `e2e` tras seed. No incluir `.xlsx` de inventario en commits. Throttle login: `PBAC_LOGIN_DELAY_MS=3500` si 429.
+
+## 2026-05-24 — PBAC Fase 3: erradicación enum `MECHANIC` / `SUPERVISOR`
+
+- **Contexto:** Fase 2 migró lógica a permisos; el enum y la UI aún exponían roles legacy. Pre-producción sin deuda masiva de datos.
+- **Decisión:** `UserRole` = `SUPER_ADMIN` | `ADMIN` | `USER` únicamente. Migración `20260524120000_remove_legacy_roles` (UPDATE a `USER` antes de alterar enum). Espejos tenant por defecto: `Sistema · ADMIN` y `Sistema · USER`; `ensureSuperAdminMirrorRole` en seed. `findAssignableForOt` solo por permisos OT en JSON.
+- **Consecuencias:** Re-login tras deploy. Usuarios legacy quedan `USER` — reasignar `TenantRole` PBAC. Suite dominio **282 tests**. Ver [pbac-matriz-verificacion.md](pbac-matriz-verificacion.md).
+
 ## 2026-05-24 — Migración W2W: ALTER condicional (orden vs tablas futuras)
 
 - **Contexto:** `20260414170504` hacía `ALTER TABLE unit_of_measures` antes de que existiera la tabla (`20260417100000`); QA en bucle P3018.
@@ -188,3 +448,23 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - **Contexto:** Usuario quería feedback inmediato al ingresar cantidades y poder consultar el catálogo sin salir de la vista.
 - **Decisión:** Columna "Estado" con badge coloreado por fila (`sin ingresar`, `parcial: X de Y`, `✓ completo`). Click en nombre del artículo abre un modal con datos del catálogo y tabla de cantidades en contexto.
 - **Consecuencias:** Clases CSS con `/` (Tailwind) no se pueden usar en `[class.xxx]` de Angular; se definieron `.row-qty-complete` / `.row-qty-partial` en `styles.scss` y se usa `[ngClass]`.
+
+## 2026-06-03 - Sprint 4 Sistema Integrado: EQUIPMENT_DOWN push + correo (3.1)
+
+- **Contexto:** Sprint 4 del roadmap de integracion transversal. Los Sprints 1-3 implementaron UI cruzada; Sprint 4 cierra el ciclo con notificaciones salientes cuando un equipo queda fuera de servicio.
+- **Decision:**
+  - Nuevo evento NOTIFICATION_EVENTS.EQUIPMENT_DOWN en el catalogo.
+  - FaultReportsService.create dispara (fire-and-forget, fuera de la transaccion Serializable) 
+otifyEquipmentDown() cuando criticality === HIGH.
+  - Pool de destinatarios: 
+ole = ADMIN activos + usuarios con UserContract al contrato del equipo (misma logica de acceso que el modulo de compras).
+  - Motor omnicanal NotificationDispatcherService: EMAIL (opt-in) + WEB_PUSH (opt-in) + ccEmails del tenant.
+  - Plantilla uildMailEquipmentDown en 	ransactional-mail.builder.ts; preview en docs/email-previews/07-equipo-fuera-de-servicio.html.
+  - Frontend: parsePushNotificationData refactorizado a PushNavAction; clic en push de EQUIPMENT_DOWN navega a /app/operaciones/fallas.
+  - ault-reports.service.spec.ts sumado a 	est:domain (20 suites, 360 tests).
+- **Consecuencias:**
+  - Sin cambios de schema. No requiere nueva migracion.
+  - Los modulos existentes (M1, M2, OT) solo actualizan isOperational=true cuando corresponde; la notificacion EQUIPMENT_DOWN es exclusiva de M3 falla ALTA.
+  - Sprint 4.2 (PM proxima) pendiente de confirmacion de diseno (requiere campo anti-spam en schema).
+ 
+ 

@@ -10,16 +10,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 import {
   PurchaseCreditNotesService,
   CreateCreditNoteDto,
 } from './purchase-credit-notes.service';
 
 @Controller('purchase-credit-notes')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'SUPERVISOR', 'SUPER_ADMIN')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchaseCreditNotesController {
   constructor(private readonly service: PurchaseCreditNotesService) {}
 
@@ -28,6 +28,7 @@ export class PurchaseCreditNotesController {
    * GET /purchase-credit-notes?purchaseOrderId=<uuid>
    */
   @Get()
+  @RequirePermissions(SystemPermissions.PURCHASES_CREDIT_NOTE_MANAGE)
   findByOrder(
     @Query('purchaseOrderId') purchaseOrderId: string,
     @Req() req: any,
@@ -40,6 +41,7 @@ export class PurchaseCreditNotesController {
    * POST /purchase-credit-notes
    */
   @Post()
+  @RequirePermissions(SystemPermissions.PURCHASES_CREDIT_NOTE_MANAGE)
   create(@Body() body: CreateCreditNoteDto, @Req() req: any) {
     return this.service.create(body, req.user);
   }
@@ -49,6 +51,7 @@ export class PurchaseCreditNotesController {
    * DELETE /purchase-credit-notes/:id
    */
   @Delete(':id')
+  @RequirePermissions(SystemPermissions.PURCHASES_CREDIT_NOTE_MANAGE)
   remove(@Param('id') id: string, @Req() req: any) {
     return this.service.remove(id, req.user);
   }

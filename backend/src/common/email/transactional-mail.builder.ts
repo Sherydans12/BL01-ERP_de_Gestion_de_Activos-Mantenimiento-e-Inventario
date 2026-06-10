@@ -135,7 +135,10 @@ export function buildMailRequisitionDraftCreated(params: {
       </p>
       <p style="margin:0;">Este borrador aún no ha sido emitido formalmente. Puedes revisarlo y coordinar con el solicitante si es necesario.</p>
     `,
-    cta: { href: `${params.appUrl}/app/compras/requerimientos`, label: 'Ver Requerimientos' },
+    cta: {
+      href: `${params.appUrl}/app/compras/requerimientos`,
+      label: 'Ver Requerimientos',
+    },
   });
 }
 
@@ -176,7 +179,10 @@ export function buildMailRequisitionSubmitted(params: {
       </p>
       <p style="margin:0;">Revisa y procesa el requerimiento desde el módulo de Compras.</p>
     `,
-    cta: { href: `${params.appUrl}/app/compras/requerimientos`, label: 'Gestionar Requerimiento' },
+    cta: {
+      href: `${params.appUrl}/app/compras/requerimientos`,
+      label: 'Gestionar Requerimiento',
+    },
   });
 }
 
@@ -206,7 +212,9 @@ export function buildMailInventoryItemCreated(params: {
       <td style="padding:7px 0;color:#e4e4e7;font-size:12.5px;${mono ? 'font-family:ui-monospace,monospace;color:#00e5ff;font-weight:600;' : ''}">${escapeHtml(value)}</td>
     </tr>`;
 
-  const pnRow = params.partNumber ? metaRow('Part Number', params.partNumber, true) : '';
+  const pnRow = params.partNumber
+    ? metaRow('Part Number', params.partNumber, true)
+    : '';
 
   return buildTpmEmailHtml({
     headline: 'Nuevo artículo en catálogo',
@@ -229,6 +237,60 @@ export function buildMailInventoryItemCreated(params: {
     cta: {
       href: `${params.appUrl}/app/articulos/${params.itemId}`,
       label: 'Ver artículo',
+    },
+  });
+}
+
+/**
+ * Falla de criticidad ALTA que dejó un equipo fuera de servicio.
+ * Evento: `EQUIPMENT_DOWN` (disparado desde `FaultReportsService.create` con criticidad HIGH).
+ */
+export function buildMailEquipmentDown(params: {
+  faultCorrelative: string;
+  equipmentLabel: string;
+  affectedSystem: string;
+  symptom: string;
+  reportedBy: string;
+  eventDate: string;
+  workOrderCorrelative?: string | null;
+  contractName?: string | null;
+  appUrl: string;
+}): string {
+  const metaRow = (label: string, value: string, mono = false) =>
+    `<tr>
+      <td style="padding:7px 14px 7px 0;color:#94a3b8;font-size:12.5px;white-space:nowrap;vertical-align:top;">${label}</td>
+      <td style="padding:7px 0;color:#e4e4e7;font-size:12.5px;${mono ? 'font-family:ui-monospace,monospace;color:#00e5ff;font-weight:600;' : ''}">${escapeHtml(value)}</td>
+    </tr>`;
+
+  const otRow = params.workOrderCorrelative
+    ? metaRow('OT generada', params.workOrderCorrelative, true)
+    : '';
+  const contractRow = params.contractName
+    ? metaRow('Contrato', params.contractName)
+    : '';
+
+  return buildTpmEmailHtml({
+    headline: 'Equipo fuera de servicio',
+    subhead: `${escapeHtml(params.equipmentLabel)} — falla crítica ${escapeHtml(params.faultCorrelative)}`,
+    bodyHtml: `
+      <p style="margin:0 0 14px 0;">Se registró una falla de criticidad <strong style="color:#f87171;">ALTA</strong> que dejó el equipo <strong>fuera de servicio</strong>. Requiere atención inmediata de mantenimiento.</p>
+      <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;background-color:#0f1419;border:1px solid #2a3441;">
+        <tbody>
+          ${metaRow('Equipo', params.equipmentLabel)}
+          ${metaRow('Reporte', params.faultCorrelative, true)}
+          ${metaRow('Sistema afectado', params.affectedSystem)}
+          ${metaRow('Síntoma', params.symptom)}
+          ${metaRow('Reportado por', params.reportedBy)}
+          ${metaRow('Fecha del evento', params.eventDate)}
+          ${otRow}
+          ${contractRow}
+        </tbody>
+      </table>
+      <p style="margin:12px 0 0 0;font-size:12.5px;color:#94a3b8;">El equipo aparece marcado como «Fuera de servicio» en el Maestro de Flota hasta que se cierre la orden de trabajo asociada.</p>
+    `,
+    cta: {
+      href: `${params.appUrl}/app/operaciones/fallas`,
+      label: 'Ver reporte de falla',
     },
   });
 }

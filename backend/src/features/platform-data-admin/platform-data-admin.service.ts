@@ -116,7 +116,11 @@ export class PlatformDataAdminService {
     });
   }
 
-  async createTenant(dto: { code: string; name: string; primaryColor?: string }): Promise<PlatformTenantRow> {
+  async createTenant(dto: {
+    code: string;
+    name: string;
+    primaryColor?: string;
+  }): Promise<PlatformTenantRow> {
     const codeUpper = dto.code.trim().toUpperCase();
     const existing = await this.prisma.tenant.findUnique({
       where: { code: codeUpper },
@@ -124,7 +128,7 @@ export class PlatformDataAdminService {
     if (existing) {
       throw new BadRequestException('Ya existe una empresa con ese código.');
     }
-    
+
     return this.prisma.tenant.create({
       data: {
         code: codeUpper,
@@ -283,6 +287,9 @@ export class PlatformDataAdminService {
         const d: Record<string, number> = {};
         d.purchaseDocuments = (
           await tx.purchaseDocument.deleteMany({ where: { tenantId } })
+        ).count;
+        d.purchaseCreditNotes = (
+          await tx.purchaseCreditNote.deleteMany({ where: { tenantId } })
         ).count;
         d.purchaseInvoices = (
           await tx.purchaseInvoice.deleteMany({ where: { tenantId } })

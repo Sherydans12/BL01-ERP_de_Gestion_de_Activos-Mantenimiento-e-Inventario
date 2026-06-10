@@ -1,4 +1,6 @@
 import { chromium } from 'playwright';
+import { catalogItemLineLabel } from '../../common/pdf/item-catalog-display.util';
+import { pdfElectronicFootNoteHtml } from '../../common/pdf/pdf-html-shared';
 
 /**
  * PDF de resumen de requerimiento (SRC) — HTML + Chromium.
@@ -32,7 +34,11 @@ export type SrcPdfRequisition = {
     unitOfMeasure: string;
     partNumber?: string | null;
     itemNotes?: string | null;
-    inventoryItem?: { partNumber?: string | null; name?: string | null } | null;
+    inventoryItem?: {
+      partNumber?: string | null;
+      name?: string | null;
+      description?: string | null;
+    } | null;
     awardedQuotationItem?: {
       unitPrice: unknown;
       quotation?: {
@@ -129,16 +135,14 @@ function equipmentLine(
   return label ? `${eq.internalId} (${label})` : eq.internalId;
 }
 
-function buildItemRowDescription(
-  line: SrcPdfRequisition['items'][0],
-): string {
-  const part = line.inventoryItem?.partNumber?.trim() || line.partNumber?.trim();
-  const name = line.inventoryItem?.name?.trim();
-  const base = line.description?.trim() || '—';
-  if (part && name) return `COD (${part}) ${name} — ${base}`;
-  if (part) return `COD (${part}) ${base}`;
-  if (name) return `${name} — ${base}`;
-  return base;
+function buildItemRowDescription(line: SrcPdfRequisition['items'][0]): string {
+  return catalogItemLineLabel({
+    partNumber:
+      line.inventoryItem?.partNumber?.trim() || line.partNumber?.trim(),
+    name: line.inventoryItem?.name,
+    description: line.inventoryItem?.description,
+    lineDescription: line.description,
+  });
 }
 
 const PO_INACTIVE = new Set(['CANCELLED', 'REJECTED']);
@@ -175,7 +179,7 @@ function computeModalidadHtml(req: SrcPdfRequisition): string {
     return `<p><strong>Proveedor de referencia (cotización ganadora):</strong> ${escapeHtml(winnerVendor.trim())}</p>`;
   }
   if (vendorNamesFromAwards.size === 1) {
-    const v = [...vendorNamesFromAwards][0]!;
+    const v = [...vendorNamesFromAwards][0];
     return `<p><strong>Proveedor adjudicado (oferta por ítem):</strong> ${escapeHtml(v)}</p>`;
   }
   return `<p>${escapeHtml('Sin adjudicación definitiva al momento de la emisión (en proceso o pendiente de ofertas).')}</p>`;
@@ -200,7 +204,10 @@ function buildPurchaseRequisitionHtml(
     ? [req.contract.code, req.contract.name].filter(Boolean).join(' — ').trim()
     : '';
   const sLine = req.subcontract
-    ? [req.subcontract.code, req.subcontract.name].filter(Boolean).join(' — ').trim()
+    ? [req.subcontract.code, req.subcontract.name]
+        .filter(Boolean)
+        .join(' — ')
+        .trim()
     : '';
 
   const destImputacion = (() => {
@@ -225,7 +232,10 @@ function buildPurchaseRequisitionHtml(
     return parts.join('<br/>');
   })();
 
-  const requesterLine = [req.requestedBy?.name?.trim(), req.requestedBy?.email?.trim()]
+  const requesterLine = [
+    req.requestedBy?.name?.trim(),
+    req.requestedBy?.email?.trim(),
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -591,9 +601,10 @@ function buildPurchaseRequisitionHtml(
       <tbody>${itemRows}</tbody>
     </table>
 
-    <p class="foot-note">
-      Documento generado electrónicamente desde TPM · SRC ${escapeHtml(req.correlative)} · resumen para archivo y auditoría
-    </p>
+    ${pdfElectronicFootNoteHtml([
+      `SRC ${req.correlative}`,
+      'resumen para archivo y auditoría',
+    ])}
   </div>
 </body>
 </html>`;

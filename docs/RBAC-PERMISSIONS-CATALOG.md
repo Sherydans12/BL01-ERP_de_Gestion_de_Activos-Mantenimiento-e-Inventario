@@ -231,7 +231,7 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 | ✅ | `inventory:stock:read` | `GET /api/inventory-stock/supply-alerts`<br>`GET /api/inventory-stock/inventory-record-accuracy`<br>`GET /api/inventory-stock/pending`<br>`GET /api/inventory-stock/pending/count`<br>`GET /api/inventory-stock/warehouse/:warehouseId`<br>`GET /api/inventory-stock/warehouse/:warehouseId/transactions`<br>`GET /api/inventory-stock/warehouse/:warehouseId/item/:itemId/stock-position`<br>`GET /api/inventory-stock/warehouse/:warehouseId/item/:itemId/reservations`<br>`GET /api/inventory-stock/warehouse/:warehouseId/pending-regularization`<br>`GET /api/inventory-stock/warehouse/:warehouseId/physical-count-sheet/pdf` | Consultar saldos, kardex por bodega, alertas de abastecimiento, reservas OT y reportes operativos de stock. |
 | ✅ | `inventory:stock:adjust` | `POST /api/inventory-stock/transaction`<br>`POST /api/inventory-stock/return`<br>`PUT /api/inventory-stock/warehouse/:warehouseId/item/:itemId/levels`<br>`POST /api/inventory-adjustments` | Movimientos manuales de stock, devoluciones vinculadas a OT, políticas min/max por bodega y ajustes de inventario físico (kardex). |
 
-> **Pendiente PBAC (inventario):** `inventory-suppliers`, `inventory-analytics` siguen en `@Roles` legacy hasta un sprint de extensión.
+> **PBAC inventario (proveedores / analítica):** `inventory:supplier:read|manage`, `inventory:analytics:read|report` — migrados en sprint 2026-05-24 (Fase 1).
 
 ---
 
@@ -273,7 +273,7 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 
 | Estado | Llave del permiso | Acción en el API | Descripción de negocio |
 |:------:|-------------------|------------------|-------------------------|
-| ✅ | `operations:equipment:read` | `GET /api/equipments`<br>`GET /api/equipments/:id`<br>`GET /api/equipments/:id/analytics` | Listar flota, consultar ficha y analytics del activo. |
+| ✅ | `operations:equipment:read` | `GET /api/equipments`<br>`GET /api/equipments/:id`<br>`GET /api/equipments/:id/analytics`<br>`GET /api/equipments/:id/resume-pdf` | Listar flota, ficha, analytics y PDF hoja de vida del activo. |
 | ✅ | `operations:equipment:create` | `POST /api/equipments` | Alta de equipo en el maestro de flota. |
 | ✅ | `operations:equipment:update` | `PUT /api/equipments/:id` | Editar datos operativos, documentación y atributos del activo. |
 | ✅ | `operations:equipment:delete` | `DELETE /api/equipments/:id` | Desactivar o dar de baja un equipo (según reglas del servicio). |
@@ -284,7 +284,7 @@ Marca cada fila al migrar `permissions.enum.ts` + controlador.
 
 | Estado | Llave del permiso | Acción en el API | Descripción de negocio |
 |:------:|-------------------|------------------|-------------------------|
-| ✅ | `operations:work-order:read` | `GET /api/work-orders`<br>`GET /api/work-orders/stats`<br>`GET /api/work-orders/:id`<br>`GET /api/work-order-analytics/dashboard`<br>`GET /api/work-order-analytics/projected-services` | Ver listados, detalle, KPIs y analítica operativa de OTs. |
+| ✅ | `operations:work-order:read` | `GET /api/work-orders`<br>`GET /api/work-orders/stats`<br>`GET /api/work-orders/:id`<br>`GET /api/work-orders/:id/pdf`<br>`GET /api/work-order-analytics/dashboard`<br>`GET /api/work-order-analytics/projected-services` | Ver listados, detalle, PDF formal de OT, KPIs y analítica operativa. |
 | ✅ | `operations:work-order:create` | `POST /api/work-orders` | Crear una nueva orden de trabajo. |
 | ✅ | `operations:work-order:update` | `PATCH /api/work-orders/:id` (cabecera/planificación)<br>`GET /api/work-order-analytics/report/monthly/pdf` | Editar planificación, clasificación y reportes de gestión. |
 | ✅ | `operations:work-order:assign` | `PATCH /api/work-orders/:id` (`participantUserIds`, `shiftSupervisorUserId`, …) | Asignar personal y responsables en la OT (ABAC en servicio). |
@@ -379,6 +379,36 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 
 ---
 
+### Reporte de consumo de lubricantes (`lube-report`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:lube-report:read` | `GET /api/lube-reports`<br>`GET /api/lube-reports/:id` | Consultar historial de despachos de aceites/grasas (reservado para implementación futura). |
+| ✅ | `operations:lube-report:create` | `POST /api/lube-reports` | Registrar un despacho de lubricante: descuenta stock físico de la bodega origen (fija o virtual/camión), actualiza horómetro del equipo (opcional) e inyecta el movimiento `OUT / LUBE_DISPATCH` en el kardex inmutable. Genera `AssetCostRecord` tipo `LUBE_DISPATCH` para imputar el costo directo al activo. |
+
+> **Multi-tenant y ABAC en servicio:** el `tenantId` es extraído exclusivamente del JWT. El servicio valida que la bodega origen pertenece al tenant y al `contractId` del DTO — un usuario del tenant A no puede despachar desde bodega del tenant B aunque envíe su UUID en el payload.
+
+---
+
+### Disponibilidad operativa diaria (`availability`)
+
+> **Módulo:** `EquipmentAvailabilityModule` — Tabla `equipment_availabilities`. Permite registrar el estado de cada equipo por turno (Día/Noche) y detectar equipos sin reporte en el turno activo.
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| ✅ | `operations:availability:read` | `GET /api/equipment-availability`<br>`GET /api/equipment-availability/:id` | Consultar el historial de reportes de disponibilidad. Disponible para supervisores y administradores; el scope de datos se limita a los contratos del JWT. |
+| ✅ | `operations:availability:create` | `POST /api/equipment-availability` | Registrar el estado de un equipo para el turno actual (Operativo, Standby, Reserva sin operador, Detenido por Falla, Detenido por Mantención). Si `meterReading` supera el `currentMeter` del equipo, actualiza el horómetro con `source = AVAILABILITY_REPORT`. Restricción única `(tenantId, equipmentId, reportDate, shift)` — un equipo no puede tener dos reportes para el mismo turno. |
+| ✅ | `operations:availability:monitor` | `GET /api/equipment-availability/unreported`<br>`GET /api/equipment-availability/summary` | Acceder al panel de alerta de omisiones: lista los equipos activos del Maestro de Flota que **no tienen reporte** en el turno/fecha consultados. Solo roles gerenciales (Jefe de turno, Admin). |
+
+> **Roles por defecto sugeridos:**
+> - `MECHANIC` / Supervisor de turno: `read` + `create`
+> - `SUPERVISOR` / Jefe de turno: `read` + `create` + `monitor`
+> - `ADMIN`: todos los permisos del grupo
+>
+> **Regla anti-limbo:** el endpoint `unreported` cruza el Maestro de Flota (`equipments WHERE isOperational = true`) con los registros de `equipment_availabilities` para el turno solicitado. Equipos ya fuera de servicio por OT activa (`isOperational = false`) no generan alerta de omisión.
+
+---
+
 ## Módulo: Administración (`admin`)
 
 ### Usuarios (`user`)
@@ -421,6 +451,20 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 | ✅ | `admin:notification:manage-settings` | `PUT /api/notification-settings/tenant`<br>`PUT /api/notification-settings/user` (otros usuarios) | Configurar opt-in/CC global y preferencias delegadas. |
 
 > **Autogestión:** `PUT /api/notification-settings/user` sin `targetUserId` (propias preferencias) no exige `manage-settings`.
+
+---
+
+### Registro de fallas — correctivo imprevisto (`fault-report`)
+
+| Estado | Llave del permiso | Acción en el API | Descripción de negocio |
+|:------:|-------------------|------------------|-------------------------|
+| 🔲 | `operations:fault-report:read` | `GET /api/fault-reports`<br>`GET /api/fault-reports/:id` | Listar y consultar detalle de eventos de falla. Filtrables por criticidad, sistema afectado y estado. |
+| 🔲 | `operations:fault-report:create` | `POST /api/fault-reports` | Registrar una falla en terreno. Criticidad ALTA → crea OT `NO_PROGRAMADA_REACTIVA` + `isOperational = false`. Criticidad MEDIA → crea OT `NO_PROGRAMADA_CORRECTIVA`. Criticidad BAJA → solo registra el reporte. |
+| 🔲 | `operations:fault-report:manage` | `POST /api/fault-reports/:id/create-work-order`<br>`PATCH /api/fault-reports/:id/close` | Gestión por planificador: convertir falla BAJA en OT manualmente o cerrarla sin intervención. |
+
+> **Regla de negocio clave:** La OT generada automáticamente usa `initialRequestDescription` ← `symptomDescription` del reporte, `category = NO_PROGRAMADA_REACTIVA | NO_PROGRAMADA_CORRECTIVA`, `maintenanceType = CORRECTIVO`, `status = OPEN`. La trazabilidad es bidireccional: `FaultReport.workOrderId` y `WorkOrder.faultReport`.
+
+> **Horómetro:** Si `meterAtFault > equipment.currentMeter`, se llama a `applyCurrentMeterChange` con `source = FAULT_REPORT` dentro de la misma transacción.
 
 ---
 

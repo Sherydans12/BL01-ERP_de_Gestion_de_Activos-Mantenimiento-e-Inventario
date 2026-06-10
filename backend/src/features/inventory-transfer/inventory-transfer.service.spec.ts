@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -39,6 +35,7 @@ describe('InventoryTransferService', () => {
   const userId = '55555555-5555-5555-5555-555555555555';
   const transferId = '66666666-6666-6666-6666-666666666666';
   const destContractId = '77777777-7777-7777-7777-777777777777';
+  const foreignContractId = '88888888-8888-8888-8888-888888888888';
 
   const adminUser = {
     id: userId,
@@ -49,14 +46,33 @@ describe('InventoryTransferService', () => {
   const supervisorDestAccess = {
     id: userId,
     tenantId,
-    role: 'SUPERVISOR',
+    role: 'USER',
     allowedContracts: [destContractId],
   };
 
-  const mechanicUser = {
+  /** USER sin permiso de creación ni lectura de transferencias (PBAC). */
+  const userWithoutTransferRead = {
     id: userId,
     tenantId,
-    role: 'MECHANIC',
+    role: 'USER',
+    allowedContracts: [destContractId],
+    permissions: ['inventory:stock:read'],
+  };
+
+  /** USER con lectura pero sin contrato en alcance (ABAC por contrato). */
+  const userWithoutContractScope = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    allowedContracts: [foreignContractId],
+    permissions: ['inventory:transfer:read'],
+  };
+
+  const userWithoutTransferCreate = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    permissions: ['inventory:transfer:read'],
   };
 
   const baseDto: CreateInventoryTransferDto = {
@@ -89,9 +105,9 @@ describe('InventoryTransferService', () => {
   });
 
   describe('executeTransfer', () => {
-    it('rechaza rol sin privilegio (MECHANIC)', async () => {
+    it('rechaza usuario sin permiso inventory:transfer:create', async () => {
       await expect(
-        service.executeTransfer(baseDto, mechanicUser),
+        service.executeTransfer(baseDto, userWithoutTransferCreate),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -105,13 +121,17 @@ describe('InventoryTransferService', () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.warehouse.findFirst
           .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce({ id: destId, code: 'DST', tenantId } as never);
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'DST',
+            tenantId,
+          } as never);
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      await expect(
-        service.executeTransfer(baseDto, adminUser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.executeTransfer(baseDto, adminUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('rechaza origen y destino iguales', async () => {
@@ -141,8 +161,16 @@ describe('InventoryTransferService', () => {
     it('rechaza fracción cuando la UoM no admite decimales', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.warehouse.findFirst
-          .mockResolvedValueOnce({ id: originId, code: 'ORI', tenantId } as never)
-          .mockResolvedValueOnce({ id: destId, code: 'DST', tenantId } as never);
+          .mockResolvedValueOnce({
+            id: originId,
+            code: 'ORI',
+            tenantId,
+          } as never)
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'DST',
+            tenantId,
+          } as never);
         tx.inventoryTransfer.create.mockResolvedValue({
           id: transferId,
         } as never);
@@ -167,7 +195,9 @@ describe('InventoryTransferService', () => {
         tx.warehouse.findFirst
           .mockResolvedValueOnce({ id: originId, code: 'ORI' } as never)
           .mockResolvedValueOnce({ id: destId, code: 'DST' } as never);
-        tx.inventoryTransfer.create.mockResolvedValue({ id: transferId } as never);
+        tx.inventoryTransfer.create.mockResolvedValue({
+          id: transferId,
+        } as never);
         tx.inventoryItem.findFirst.mockResolvedValue({
           id: itemId,
           partNumber: 'PN-1',
@@ -180,9 +210,9 @@ describe('InventoryTransferService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      await expect(
-        service.executeTransfer(baseDto, adminUser),
-      ).rejects.toThrow(/Stock insuficiente en origen/);
+      await expect(service.executeTransfer(baseDto, adminUser)).rejects.toThrow(
+        /Stock insuficiente para PN-1/,
+      );
     });
 
     it('crea transferencia SHIPPED, descuenta origen y registra TRANSFER_OUT', async () => {
@@ -253,7 +283,12 @@ describe('InventoryTransferService', () => {
       id: transferId,
       tenantId,
       status: 'SHIPPED',
-      originWarehouse: { id: originId, code: 'B-ORI', name: 'Origen', contractId: 'c-ori' },
+      originWarehouse: {
+        id: originId,
+        code: 'B-ORI',
+        name: 'Origen',
+        contractId: 'c-ori',
+      },
       destinationWarehouse: {
         id: destId,
         code: 'B-DST',
@@ -375,7 +410,10 @@ describe('InventoryTransferService', () => {
           shippedTransfer as never,
         );
         tx.itemStock.findUnique.mockResolvedValue(null);
-        mockGetPolicyThresholds.mockResolvedValue({ minStock: 1, maxStock: 50 });
+        mockGetPolicyThresholds.mockResolvedValue({
+          minStock: 1,
+          maxStock: 50,
+        });
         tx.itemStock.upsert.mockResolvedValue({} as never);
         tx.inventoryTransaction.create.mockResolvedValue({} as never);
         tx.inventoryTransfer.update.mockResolvedValue({} as never);
@@ -480,7 +518,7 @@ describe('InventoryTransferService', () => {
       );
     });
 
-    it('filtra por contratos permitidos para SUPERVISOR', async () => {
+    it('filtra por contratos permitidos en listado (alcance contrato)', async () => {
       prisma.inventoryTransfer.findMany.mockResolvedValue([] as never);
       prisma.inventoryTransfer.count.mockResolvedValue(0);
 
@@ -492,7 +530,9 @@ describe('InventoryTransferService', () => {
             tenantId,
             OR: [
               { originWarehouse: { contractId: { in: [destContractId] } } },
-              { destinationWarehouse: { contractId: { in: [destContractId] } } },
+              {
+                destinationWarehouse: { contractId: { in: [destContractId] } },
+              },
             ],
           },
         }),
@@ -523,12 +563,37 @@ describe('InventoryTransferService', () => {
       createdBy: { id: userId, name: 'Admin', email: 'a@test.com' },
     };
 
-    it('lanza NotFoundException si no hay acceso o no existe', async () => {
+    it('lanza NotFoundException si la transferencia no existe', async () => {
       prisma.inventoryTransfer.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.getTransferById(transferId, mechanicUser),
+        service.getTransferById(transferId, userWithoutTransferRead),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('lanza NotFoundException si el usuario no tiene alcance de contrato', async () => {
+      prisma.inventoryTransfer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getTransferById(transferId, userWithoutContractScope),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.inventoryTransfer.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: transferId,
+            tenantId,
+            OR: [
+              { originWarehouse: { contractId: { in: [foreignContractId] } } },
+              {
+                destinationWarehouse: {
+                  contractId: { in: [foreignContractId] },
+                },
+              },
+            ],
+          }),
+        }),
+      );
     });
 
     it('adjunta reception cuando la transferencia está COMPLETED', async () => {

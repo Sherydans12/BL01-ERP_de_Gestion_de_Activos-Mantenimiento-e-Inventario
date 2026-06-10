@@ -48,7 +48,7 @@ const BOOTSTRAP_USERS: BootstrapUser[] = [
     tenantRoleName: 'Supervisor de mantención',
     tenantRoleDescription:
       'Supervisión de mantención; permisos base tipo supervisor.',
-    baseRole: UserRole.SUPERVISOR,
+    baseRole: UserRole.USER,
   },
   {
     email: 'hugo.godoy@tmp-chile.con',
@@ -163,6 +163,8 @@ async function main() {
     });
     await tx.warehouseReceipt.deleteMany({ where: { tenantId } });
 
+    await tx.purchaseDocument.deleteMany({ where: { tenantId } });
+    await tx.purchaseCreditNote.deleteMany({ where: { tenantId } });
     await tx.purchaseOrderApproval.deleteMany({
       where: { purchaseOrder: { tenantId } },
     });
@@ -181,12 +183,19 @@ async function main() {
 
     await tx.vendor.deleteMany({ where: { tenantId } });
 
+    await tx.faultReport.deleteMany({ where: { tenantId } });
+    await tx.lubeReport.deleteMany({ where: { tenantId } });
+    await tx.equipmentAvailability.deleteMany({ where: { tenantId } });
+
     await tx.stockReservation.deleteMany({
       where: { workOrder: { tenantId } },
     });
     await tx.workOrder.deleteMany({ where: { tenantId } });
 
     await tx.meterAdjustment.deleteMany({
+      where: { equipment: { tenantId } },
+    });
+    await tx.equipmentMeterLog.deleteMany({
       where: { equipment: { tenantId } },
     });
     await tx.equipment.deleteMany({ where: { tenantId } });

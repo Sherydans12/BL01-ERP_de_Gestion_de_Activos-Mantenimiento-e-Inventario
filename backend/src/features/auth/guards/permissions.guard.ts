@@ -44,7 +44,7 @@ export class PermissionsGuard implements CanActivate {
       : [];
 
     if (needsAll) {
-      const hasAll = requiredAll!.every((p) => granted.includes(p));
+      const hasAll = requiredAll.every((p) => granted.includes(p));
       if (!hasAll) {
         throw new ForbiddenException(
           'No tienes permisos suficientes para esta acción.',
@@ -53,7 +53,7 @@ export class PermissionsGuard implements CanActivate {
     }
 
     if (needsAny) {
-      const hasOne = requiredAny!.some((p) => granted.includes(p));
+      const hasOne = requiredAny.some((p) => granted.includes(p));
       if (!hasOne) {
         throw new ForbiddenException(
           'No tienes permisos suficientes para esta acción.',

@@ -1,0 +1,225 @@
+import type { Page } from '@playwright/test';
+
+import type { TenantOperationalSnapshot } from './api-tenant-config';
+
+export const API_BASE = (process.env.E2E_API_BASE || 'http://localhost:3000/api').replace(/\/$/, '');
+export const TENANT_CODE = (process.env.TENANT_CODE || 'TPM').trim().toUpperCase();
+export const PASSWORD = (process.env.PBAC_TEST_PASSWORD || 'Test1234!').trim();
+
+export const PBAC_USERS = {
+  vacio: 'pbac-compras-vacio@test.com',
+  solicitante: 'pbac-compras-solicitante@test.com',
+  comprador: 'pbac-compras-comprador@test.com',
+  aprobador1: 'pbac-compras-aprobador1@test.com',
+  aprobador2: 'pbac-compras-aprobador2@test.com',
+  bodega: 'pbac-compras-bodega@test.com',
+  tesoreria: 'pbac-compras-tesoreria@test.com',
+  config: 'pbac-compras-config@test.com',
+  lectura: 'pbac-compras-lectura@test.com',
+  enAclSinApprove: 'pbac-compras-en-acl-sin-approve@test.com',
+  approveFueraAcl: 'pbac-compras-approve-fuera-acl@test.com',
+  sinContrato: 'pbac-compras-sin-contrato@test.com',
+  adminCompras: 'pbac-compras-admin-compras@test.com',
+} as const;
+
+export const INVENTARIO_USERS = {
+  admin: 'pbac-inventario-admin@test.com',
+  bodega: 'pbac-inventario-bodega@test.com',
+  vacio: 'pbac-inventario-vacio@test.com',
+  sinContrato: 'pbac-inventario-sin-contrato@test.com',
+  lectura: 'pbac-inventario-lectura@test.com',
+  gestor: 'pbac-inventario-gestor@test.com',
+  w2wOrigen: 'pbac-inventario-w2w-origen@test.com',
+  w2wDestino: 'pbac-inventario-w2w-destino@test.com',
+} as const;
+
+export const OPERACIONES_USERS = {
+  planificador: 'pbac-operaciones-planificador@test.com',
+  mecanico: 'pbac-operaciones-mecanico@test.com',
+} as const;
+
+/** Sesión con contrato activo explícito (p. ej. operador destino W2W). */
+async function gotoAppShell(page: Page) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto('/app/dashboard', { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(/\/app\//, { timeout: 30_000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(800 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+export async function seedBrowserSessionWithContract(
+  page: Page,
+  email: string,
+  contractId: string,
+) {
+  const { token, user, permissions } = await apiLogin(email);
+  const userWithPermissions = { ...user, permissions };
+  await page.goto('/auth/login');
+  await page.evaluate(
+    ({ token: t, userJson, cid }) => {
+      localStorage.setItem('tpm_token', t);
+      localStorage.setItem('tpm_user', userJson);
+      localStorage.setItem('tpm_contract_id', cid);
+    },
+    { token, userJson: JSON.stringify(userWithPermissions), cid: contractId },
+  );
+  await gotoAppShell(page);
+}
+
+async function fetchCaptcha(attempt = 0) {
+  if (attempt > 0) {
+    await new Promise((r) => setTimeout(r, 3000 * attempt));
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/captcha`);
+  } catch (err) {
+    if (attempt < 6) return fetchCaptcha(attempt + 1);
+    throw err;
+  }
+  if (res.status === 429 && attempt < 6) {
+    return fetchCaptcha(attempt + 1);
+  }
+  if (!res.ok) throw new Error(`CAPTCHA HTTP ${res.status}`);
+  const data = (await res.json()) as { challengeId: string; question: string };
+  const m = String(data.question).match(/(\d+)\s*\+\s*(\d+)/);
+  if (!m) throw new Error(`CAPTCHA no parseable: ${data.question}`);
+  return { challengeId: data.challengeId, answer: Number(m[1]) + Number(m[2]) };
+}
+
+export function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) base64 += '=';
+    return JSON.parse(Buffer.from(base64, 'base64').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return null;
+  }
+}
+
+export function decodeJwtOperationalConfig(
+  token: string,
+): TenantOperationalSnapshot | null {
+  const payload = decodeJwtPayload(token);
+  const raw = payload?.operationalConfig;
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.hasNightShift !== 'boolean') return null;
+  return {
+    hasNightShift: o.hasNightShift,
+    dayShiftStartTime:
+      typeof o.dayShiftStartTime === 'string' ? o.dayShiftStartTime : undefined,
+    nightShiftStartTime:
+      typeof o.nightShiftStartTime === 'string'
+        ? o.nightShiftStartTime
+        : undefined,
+    blockNegativeStock:
+      typeof o.blockNegativeStock === 'boolean'
+        ? o.blockNegativeStock
+        : undefined,
+  };
+}
+
+function decodeJwtPermissions(token: string): string[] {
+  const payload = decodeJwtPayload(token);
+  if (!Array.isArray(payload?.permissions)) return [];
+  return payload.permissions.filter((p): p is string => typeof p === 'string');
+}
+
+export async function apiLogin(email: string, attempt = 0) {
+  if (attempt > 0) {
+    await new Promise((r) => setTimeout(r, 4000 * attempt));
+  }
+  const captcha = await fetchCaptcha();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantCode: TENANT_CODE,
+        email,
+        password: PASSWORD,
+        challengeId: captcha.challengeId,
+        challengeAnswer: captcha.answer,
+      }),
+    });
+  } catch (error) {
+    if (attempt < 6) return apiLogin(email, attempt + 1);
+    throw error;
+  }
+  const body = (await res.json()) as {
+    access_token?: string;
+    user?: {
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      allowedContracts?: string[];
+      [key: string]: unknown;
+    };
+    message?: string;
+  };
+  if (res.status === 429 && attempt < 6) {
+    return apiLogin(email, attempt + 1);
+  }
+  if (!res.ok) {
+    throw new Error(`Login ${email}: ${res.status} ${JSON.stringify(body)}`);
+  }
+  const token = body.access_token;
+  const user = body.user;
+  if (!token || !user) throw new Error(`Login ${email}: respuesta incompleta`);
+  return { token, user, permissions: decodeJwtPermissions(token) };
+}
+
+async function loginWithRetry(email: string) {
+  return apiLogin(email);
+}
+
+export async function seedBrowserSession(page: Page, email: string) {
+  const { token, user, permissions } = await loginWithRetry(email);
+  const userWithPermissions = { ...user, permissions };
+  let contractId = 'ALL';
+  if (
+    user.role !== 'ADMIN' &&
+    user.role !== 'SUPER_ADMIN' &&
+    user.allowedContracts?.length &&
+    !user.allowedContracts.includes('ALL')
+  ) {
+    contractId = user.allowedContracts[0];
+  }
+
+  await page.goto('/auth/login');
+  await page.evaluate(
+    ({ token: t, userJson, cid }) => {
+      localStorage.setItem('tpm_token', t);
+      localStorage.setItem('tpm_user', userJson);
+      localStorage.setItem('tpm_contract_id', cid);
+    },
+    { token, userJson: JSON.stringify(userWithPermissions), cid: contractId },
+  );
+  await gotoAppShell(page);
+}
+
+export async function findPendingPurchaseOrderId(email: string): Promise<string | null> {
+  const { token } = await apiLogin(email);
+  const res = await fetch(`${API_BASE}/purchase-orders?status=PENDING_APPROVAL&pageSize=5`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { data?: { id: string }[]; items?: { id: string }[] };
+  const row = body.data?.[0] ?? body.items?.[0];
+  return row?.id ?? null;
+}

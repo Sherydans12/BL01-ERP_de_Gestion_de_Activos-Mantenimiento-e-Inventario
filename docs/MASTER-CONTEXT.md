@@ -2,8 +2,8 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-05-19 |
-| **Versión documento** | 1.0 |
+| **Última modificación** | 2026-06-08 |
+| **Versión documento** | 1.1 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
 > Documento maestro de arquitectura funcional, lógica de negocio y estructura de datos.  
@@ -77,9 +77,10 @@ API de contratos: [`SitesController`](../backend/src/features/sites/sites.contro
 | `Equipment` | `equipments` | N→1 `Tenant`; N→0..1 `Contract`; N→0..1 `Subcontract` |
 | `MeterAdjustment` | `meter_adjustments` | N→1 `Equipment`, `User` |
 | `EquipmentMeterLog` | `equipment_meter_logs` | N→1 `Tenant`, `Equipment`, `User` (fuente: `OT`, `MANUAL`, `TELEMETRY`) |
+| `EquipmentAvailability` / `AvailabilityEvent` | `equipment_availabilities` / `availability_events` | Snapshot único por turno (M2) + ledger cronológico de eventos operacionales M2/M3 (`MANUAL`, `OT`, `FAULT_REPORT`, `LEGACY_SNAPSHOT`) |
 | `AssetCostRecord` | `asset_cost_records` | N→1 `Equipment`; opcional `PurchaseOrder`, `WorkOrder`, `WarehouseReceipt` |
 
-**Reglas de datos:** `@@unique([tenantId, internalId])`, placas y VIN únicos por tenant. `isOperational` y `cumulativeDowntimeHours` reflejan indisponibilidad por OT.
+**Reglas de datos:** `@@unique([tenantId, internalId])`, placas y VIN únicos por tenant. `isOperational` y `cumulativeDowntimeHours` reflejan indisponibilidad por OT y por **fallas ALTAS** (M3). `currentMeter` es alimentado por OT, M1 (lubricantes), M2 (disponibilidad) y M3 (fallas) vía `applyCurrentMeterChange` — ver §2.4 «Ecosistema de Operaciones y Flota».
 
 Código: [`equipments`](../backend/src/features/equipments/), [`meter-adjustments`](../backend/src/features/meter-adjustments/).
 
@@ -274,7 +275,8 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
   - `finalMeter` ≥ `initialMeter` salvo `MeterAdjustment` reciente que justifique reinicio.
   - `closureEquipmentOperational` booleano obligatorio.
   - Repuestos/fluidos de inventario → `warehouseId` obligatorio.
-  - Por parte/fluido con `inventoryItem.isInventory`: descuenta `ItemStock`, `InventoryTransaction` `WORK_ORDER_ISSUE`, congela `unitCost`; stock negativo → `isPendingRegularization = true`.
+  - Por parte/fluido con `inventoryItem.isInventory`: descuenta vía **`InventoryStockService.performTransactionCore`** (`WORK_ORDER_ISSUE`), congela `unitCost`. Stock negativo → `isPendingRegularization = true` **salvo** `TenantOperationalConfig.blockNegativeStock = true` → `BadRequestException`.
+  - Fluidos: validación UoM (`allowsDecimals`), umbral de consumo inusual (`confirmedLargeFluidDispatch` en cierre).
   - Horómetro vía `applyCurrentMeterChange` (`EquipmentMeterLog` fuente OT).
   - Opcional `AssetCostRecord` tipo `WORK_ORDER`.
 
@@ -298,7 +300,7 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
 - Ver decisión 2026-05-19: [decisiones.md](agentes/decisiones.md).
 
 **W2W (`InventoryTransferService`):**
-- Roles: `ADMIN`, `SUPERVISOR`, `SUPER_ADMIN`.
+- PBAC: `inventory:transfer:read` / `create` / `approve`; alcance contrato en `USER`.
 - `create`: `TRANSFER_OUT`, estado `SHIPPED`.
 - `confirmReception`: `TRANSFER_IN`; CPP destino = promedio ponderado.
 
@@ -335,6 +337,89 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
 | Payloads SRC (mirror frontend) | purchases | [`purchases.interface.ts`](../frontend/src/app/core/models/purchases.interface.ts) |
 | `CreateTenantRoleDto` / `UpdateTenantRoleDto` | tenant-roles | [`dto/`](../backend/src/features/tenant-roles/dto/) |
 | Notificaciones | notification-settings | [`dto/`](../backend/src/features/notification-settings/dto/) |
+
+### 2.4 Ecosistema de Operaciones y Flota (M1 · M2 · M3 ↔ `Equipment`)
+
+Los tres módulos de Operaciones en terreno —**M1 Consumo de Lubricantes**, **M2 Disponibilidad Operativa Diaria** y **M3 Registro e Informe de Fallas**— **no son silos**: convergen sobre la entidad [`Equipment`](../backend/prisma/schema.prisma) y comparten dos señales transversales que el resto del sistema (Maestro de Flota, modales de detalle, OTs, costeo) consume como **fuente única de verdad (SSOT)**:
+
+1. **`currentMeter`** — horómetro/odómetro vigente del equipo.
+2. **`isOperational`** — bandera booleana de estado operativo (en servicio / fuera de servicio).
+
+Código backend: [`lube-reports`](../backend/src/features/lube-reports/), [`equipment-availability`](../backend/src/features/equipment-availability/), [`fault-reports`](../backend/src/features/fault-reports/), [`equipments`](../backend/src/features/equipments/), [`work-orders`](../backend/src/features/work-orders/).
+
+#### A) Alimentación de `currentMeter` (helper único)
+
+Todo avance de medidor pasa por el helper atómico **[`applyCurrentMeterChange`](../backend/src/features/equipments/equipment-meter-sync.ts)**, que escribe en `EquipmentMeterLog` (auditoría inmutable) y actualiza `Equipment.currentMeter` dentro de la misma transacción. **Regla universal: el medidor nunca retrocede.** Cada módulo aporta una `MeterLogSource` distinta:
+
+| Módulo | Disparador | Condición | `MeterLogSource` | Si retrocede |
+|--------|-----------|-----------|------------------|--------------|
+| **M1 Lubricantes** | `LubeReportsService.create` (`meterReading`) | `> currentMeter` | `MANUAL` | **Rechaza** (`BadRequestException`) |
+| **M2 Disponibilidad** | `EquipmentAvailabilityService.create` (`meterReading`) | `> currentMeter` | `AVAILABILITY_REPORT` | Silent ignore (lectura tardía) |
+| **M3 Fallas** | `FaultReportsService.create` (`meterAtFault`) | `> currentMeter` | `FAULT_REPORT` | Silent ignore |
+| OT (cierre) | `WorkOrdersService` (`finalMeter`) | `≥ initialMeter` | `OT` | Validación de cierre |
+
+Consecuencia transversal: cualquier reporte en terreno (un despacho de aceite, un parte de disponibilidad o una falla) **mantiene vivo el horómetro** que usan las proyecciones PM y el Maestro de Flota, sin requerir un registro manual de horas aparte.
+
+#### B) Control de `isOperational` (quién lo mueve)
+
+`isOperational` es la señal imperativa que consumen Maestro de Flota, tablero y modal de equipo. Para garantizar la consistencia e integridad transaccional del estado de los equipos, el **`EquipmentOperationalOrchestratorService` es el único punto de mutación autorizada** de este atributo en la base de datos (encargado de actualizar `isOperational`, registrar `AvailabilityEvent` en el Ledger, gatillar stubs de fallas M3, y emitir alertas a través del dispatcher).
+
+Los flujos coordinados por el orquestador son:
+
+| Origen | Evento | Efecto sobre `isOperational` |
+|--------|--------|------------------------------|
+| **M3 Falla ALTA (`HIGH`)** | `FaultReportsService.create` | `false` + crea `WorkOrder(NO_PROGRAMADA_REACTIVA, affectsAvailability=SI, detentionStartedAt=eventDate)` en la misma `$transaction` Serializable |
+| **M3 Falla MEDIA (`MEDIUM`)** | `FaultReportsService.create` | **Sin cambio** — crea `WorkOrder(NO_PROGRAMADA_CORRECTIVA, affectsAvailability=NO)` |
+| **M3 Falla BAJA (`LOW`)** | `FaultReportsService.create` | **Sin cambio** — solo registra el reporte (`OPEN`) |
+| **M2 Disponibilidad `DOWN_FAILURE` / `DOWN_MAINTENANCE`** | `EquipmentOperationalOrchestratorService` dentro de `EquipmentAvailabilityService` | `false`; si no existe RF activo (`OPEN` o `LINKED` con OT no cerrada), crea stub `FaultReport` `OPEN/LOW` (`FAULT_REP`) para completar diagnóstico |
+| **M2 Disponibilidad `OPERATIONAL`** | Nuevo parte o edición tras último M2 `DOWN_*` | `true`; el estado anterior se resuelve desde el mismo turno editado, el turno DAY del mismo día para NIGHT, o el último parte previo del equipo |
+| **OT** | `updateStatus → IN_PROGRESS` con `affectsAvailability=SI` | `false` |
+| **OT** | `updateStatus → CLOSED` | `isOperational = closureEquipmentOperational` (booleano obligatorio); si `affectsAvailability=SI` acumula `cumulativeDowntimeHours += metricHm` |
+
+**Relación M3 ↔ M2:** M3 sigue siendo el flujo rico de diagnóstico/OT por criticidad. M2 puede declarar indisponibilidad operacional de turno y crear un RF stub LOW para no perder trazabilidad; el supervisor o mantenedor completa el detalle en M3. `GET /unreported` sigue filtrando `isOperational: true` para no exigir parte a equipos detenidos, salvo que vuelvan a quedar operativos por M2 `OPERATIONAL` u OT cerrada.
+
+**Modelo híbrido M2/M3 (2026-06-09):** `EquipmentAvailability` permanece como snapshot declarativo de M2 por turno y mantiene el cálculo actual de PA%. El ledger `AvailabilityEvent` se ha desacoplado de M2 (su FK es opcional) para permitir que flujos ajenos a los turnos (ej. Fallas M3 vía `faultReportId`) inserten eventos cronológicos de forma directa. Además, el Ledger implementa un algoritmo de **inserción cronológica estricta (P1B1)** que repara dinámicamente los vecinos (`previousStatus` y `elapsedMinutes`) frente a eventos asíncronos o backfill, usando una tupla técnica de precedencia (`eventAt`, `createdAt`, `id`). La migración `20260608_add_availability_events` inicializó el ledger y la `20260609...` lo desacopló de los snapshots.
+
+```mermaid
+flowchart TD
+  subgraph Terreno
+    M1[M1 · Lube Report]
+    M2[M2 · Disponibilidad]
+    M3[M3 · Fault Report]
+  end
+  M1 -->|meterReading MANUAL| MC[applyCurrentMeterChange]
+  M2 -->|meterReading AVAILABILITY_REPORT| MC
+  M3 -->|meterAtFault FAULT_REPORT| MC
+  MC --> EQ[(Equipment.currentMeter)]
+  M3 -->|HIGH| OPF[isOperational = false]
+  M3 -->|HIGH/MEDIUM| OT[WorkOrder no programada]
+  M2 -->|DOWN_*| OPD[isOperational = false + RF LOW stub]
+  M2 -->|OPERATIONAL tras último DOWN_*| OPU[isOperational = true]
+  OT -->|IN_PROGRESS affectsAvailability=SI| OPF
+  OT -->|CLOSED closureEquipmentOperational| EQOP[(Equipment.isOperational)]
+  OPF --> EQOP
+  OPD --> EQOP
+  OPU --> EQOP
+```
+
+#### C) Costeo e inventario (M1 y fluidos OT)
+
+M1 cruza con Inventario y Finanzas en transacción Serializable: descuenta `ItemStock` desde bodega `VIRTUAL` (camión lubricador) vía **`performTransactionCore`** (`OUT`, `referenceType=LUBE_DISPATCH`), CPP congelado e imputa `AssetCostRecord(LUBE_DISPATCH)`. El cierre de OT usa el mismo núcleo para repuestos y fluidos (`WORK_ORDER_ISSUE`).
+
+**Stock negativo (regla transversal):**
+
+| `blockNegativeStock` | Comportamiento |
+|---------------------|----------------|
+| `false` (default) | Permite saldo negativo; marca `isPendingRegularization` en kardex |
+| `true` | Rechaza con `BadRequestException` — mensaje unificado vía `stock-quantity.util` |
+
+Flag en [`TenantOperationalConfig`](../backend/prisma/schema.prisma) (`block_negative_stock`); configurable en **Ajustes → Empresa**. Aritmética de cantidades: `Decimal.js` + epsilon `1e-9` en runtime (columna DB sigue `Float`).
+
+**UI:** componente shared [`app-fluid-quantity-row`](../frontend/src/app/shared/components/fluid-quantity-row/) en M1 y OT; stock disponible en picker (`stockAvailableQuantity` = físico − reservas). Ver decisión [2026-06-04 — Integridad de fluidos](agentes/decisiones.md).
+
+#### D) Implicancia para la UI (SSOT en frontend)
+
+El Maestro de Flota y el modal de detalle de equipo reaccionan centralizadamente a `isOperational`, `currentMeter` e historial operacional con `FleetStateService.equipmentUpdated$` (Subject local + BroadcastChannel/localStorage para otras pestañas). `FleetService.notifyEquipmentChanged(equipmentId)` se conserva como alias de compatibilidad y bump de `listVersion` / `equipmentRevision`. M2 emite desde `EquipmentAvailabilityService` tras create/batch/import exitosos; M3 emite desde `FaultReportsService` tras create/escalamiento; M1/OT siguen usando `FleetService.notifyEquipmentChanged`. Además, `GET /equipments` enriquece cada fila con `actionRequiredFault` cuando existe RF `OPEN`/`LINKED` y el último M2 no está en `DOWN_MAINTENANCE`, para visibilidad inmediata en el Maestro. Ver decisiones [2026-06-03 — Integración Transversal de Operaciones](agentes/decisiones.md) y [2026-06-07 — P4 refresh Flota](agentes/decisiones.md).
 
 ---
 
@@ -392,10 +477,11 @@ Base: `environment.apiUrl` + interceptores JWT y contrato activo.
 | Mecanismo | Implementación |
 |-----------|----------------|
 | Login | [`auth.service.ts`](../backend/src/features/auth/auth.service.ts) — anti-enumeración |
-| JWT | Bearer; `sub`, `role`, `permissions[]`, `jti` |
+| JWT | Bearer; `sub`, `role`, `permissions[]`, `jti`, `operationalConfig` (`hasNightShift`, horarios, `blockNegativeStock`) — ver `jwt-operational-config.util.ts` |
 | Sesiones | [`user-session.service.ts`](../backend/src/features/auth/user-session.service.ts) |
 | 2FA | TOTP + email 2FA + step-up — [seguridad-auth.md](agentes/seguridad-auth.md) |
-| SUPER_ADMIN tenant | Header `x-tenant-id` en [`jwt.strategy.ts`](../backend/src/features/auth/strategies/jwt.strategy.ts) |
+| SUPER_ADMIN tenant | Header `x-tenant-id` en [`jwt.strategy.ts`](../backend/src/features/auth/strategies/jwt.strategy.ts); sin `operationalConfig` en JWT — hidratar vía `GET /tenant-config` al elegir tenant |
+| Turnos M2 (frontend) | [`ShiftService`](../frontend/src/app/core/services/shift/shift.service.ts): `hasNightShift`, `coerceShift()`, `currentShift()`; API coerciona `NIGHT`→`DAY` si no hay turno noche |
 | Auditoría | `AuthAuditLog` |
 
 ### 4.2 Multi-tenant y aislamiento por empresa/contrato
@@ -405,7 +491,7 @@ Base: `environment.apiUrl` + interceptores JWT y contrato activo.
 | Datos | `tenantId` en consultas Prisma |
 | Contratos | `UserContract` → `allowedContracts[]` en JWT |
 | Contexto UI | `x-contract-id` / `x-site-id`; `ALL` solo ADMIN/SUPER_ADMIN |
-| MECHANIC/SUPERVISOR | Filtro por `allowedContracts` |
+| `USER` (y perfiles custom) | Filtro por `allowedContracts` en JWT |
 | Compras | `assertUserHasContractAccess` en servicios P2P |
 
 Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arquitectura.mdc).
@@ -418,8 +504,7 @@ Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arqui
 |-----|---------|
 | `SUPER_ADMIN` | Multi-tenant; bypass PBAC |
 | `ADMIN` | Tenant completo; bypass `PermissionsGuard` |
-| `SUPERVISOR` | Operaciones + inventario (por contratos) |
-| `MECHANIC` | OT y consultas operativas |
+| `USER` | Sin privilegios por defecto; capacidades vía `TenantRole.permissions` + contratos `UserContract` |
 
 #### PBAC Compras
 

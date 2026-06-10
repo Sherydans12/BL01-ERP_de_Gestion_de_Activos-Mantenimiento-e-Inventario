@@ -23,42 +23,31 @@ export function normalizeAppPath(url: string): string {
   return path;
 }
 
-function passesNavItemRoles(
-  item: NavItem,
-  role: AppRole | undefined,
-): boolean {
-  if (!item.roles?.length) {
-    return true;
-  }
-  return !!role && item.roles.includes(role);
-}
-
-function passesNavSectionRoles(
-  section: (typeof NAV_SECTIONS)[number],
-  role: AppRole | undefined,
-): boolean {
-  if (!section.roles?.length) {
-    return true;
-  }
-  return !!role && section.roles.includes(role);
-}
-
-/** Primer ítem del menú lateral al que el usuario puede acceder (misma lógica base que el layout). */
-export function findFirstAccessibleNavRoute(auth: AuthService): string | null {
+function navFilterOptions(auth: AuthService) {
   const role = auth.currentUser()?.role as AppRole | undefined;
+  return {
+    hasPlatformRole: (roles: AppRole[]) => !!role && roles.includes(role),
+  };
+}
 
+function isNavItemAccessible(auth: AuthService, item: NavItem): boolean {
+  const [allowed] = filterNavItemsByPermission(
+    [item],
+    (p) => auth.hasPermission(p),
+    (p) => auth.hasPermissionAny(p),
+    navFilterOptions(auth),
+  );
+  return !!allowed;
+}
+
+/** Primer ítem del menú lateral al que el usuario puede acceder (PBAC). */
+export function findFirstAccessibleNavRoute(auth: AuthService): string | null {
   for (const section of NAV_SECTIONS) {
-    if (!passesNavSectionRoles(section, role)) {
-      continue;
-    }
-
-    const roleFiltered = section.items.filter((item) =>
-      passesNavItemRoles(item, role),
-    );
     const visible = filterNavItemsByPermission(
-      roleFiltered,
+      section.items,
       (p) => auth.hasPermission(p),
       (p) => auth.hasPermissionAny(p),
+      navFilterOptions(auth),
     );
 
     if (visible.length > 0) {
@@ -91,30 +80,15 @@ export function canAccessAppPath(auth: AuthService, url: string): boolean {
     return true;
   }
 
-  const role = auth.currentUser()?.role as AppRole | undefined;
-
   for (const section of NAV_SECTIONS) {
-    if (!passesNavSectionRoles(section, role)) {
-      continue;
-    }
-
     for (const item of section.items) {
-      if (!passesNavItemRoles(item, role)) {
-        continue;
-      }
-
       const matches =
         path === item.route || path.startsWith(`${item.route}/`);
       if (!matches) {
         continue;
       }
 
-      const [allowed] = filterNavItemsByPermission(
-        [item],
-        (p) => auth.hasPermission(p),
-        (p) => auth.hasPermissionAny(p),
-      );
-      return !!allowed;
+      return isNavItemAccessible(auth, item);
     }
   }
 

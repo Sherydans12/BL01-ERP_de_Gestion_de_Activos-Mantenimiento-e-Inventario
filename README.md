@@ -4,7 +4,7 @@ Sistema orientado a entornos industriales para el control de flota, mantenimient
 
 ## Estado del proyecto
 
-**Fase actual:** D — Hardening y lógica EAM.
+**Fase actual:** D — Hardening y lógica EAM · Módulo Operaciones v1.0 liberado.
 
 **Cierre v1.1 (Platinum — storage):** Archivos en Cloudflare R2 con modelo **private-first**; punteros relativos en BD; runbook operativo en [docs/SECURITY-STORAGE.md](docs/SECURITY-STORAGE.md).
 
@@ -13,6 +13,8 @@ Sistema orientado a entornos industriales para el control de flota, mantenimient
 **v1.3 — Flujos de compras y catálogo en SRC/recepción:** documento único de flujos operativos (líneas con catálogo, cantidad editable y validada, cadena hasta recepción, un solo botón «Generar orden(es) de compra» en detalle SRC, códigos de inventario `IN####` y sin autogenerar N° de parte en quick-create) en [docs/PURCHASE-FLOWS.md](docs/PURCHASE-FLOWS.md).
 
 **v1.3 Enterprise — Multi-Facturación, Notas de Crédito y Permisos de Sobreseimiento Granulares a Nivel de Usuario:** relación `PurchaseOrder 1:N PurchaseInvoice` (multi-factura por OC), nuevo modelo `PurchaseCreditNote` con integración en la ecuación del 3-Way Match (`∑Facturas − ∑NotasCrédito ≤ MontoRecepcionado`), y reemplazo de roles hardcodeados por el flag dinámico `canOverruleThreeWayMatch` a nivel de usuario. Arquitectura detallada en [docs/PURCHASE-FINANCIAL-CONCILIATION.md](docs/PURCHASE-FINANCIAL-CONCILIATION.md).
+
+**Operations v1.0 — Trinidad Operativa integrada (M1 · M2 · M3):** módulos de Lubricantes, Disponibilidad Diaria y Fallas conectados a la misma fuente de verdad (`currentMeter`, `isOperational`); carga masiva de disponibilidad desde Excel; fallas con evidencia fotográfica y detención automática del equipo; kardex de horómetros a prueba de regresiones; notificaciones push + correo ante equipo fuera de servicio. Notas de liberación en [docs/releases/RELEASE-NOTES-OPERATIONS-v1.md](docs/releases/RELEASE-NOTES-OPERATIONS-v1.md).
 
 Funcionalidades principales:
 

@@ -32,9 +32,7 @@ export async function getFieldDispatchOutstandingForItem(
       _sum: { quantity: true },
     }),
   ]);
-  return (
-    Number(outAgg._sum.quantity ?? 0) - Number(inAgg._sum.quantity ?? 0)
-  );
+  return Number(outAgg._sum.quantity ?? 0) - Number(inAgg._sum.quantity ?? 0);
 }
 
 /** Ítems con saldo neto pendiente de reingreso (salidas FIELD_DISPATCH − reingresos FIELD_RETURN). */

@@ -61,10 +61,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     let tenant = user.tenant;
-    if (
-      effectiveTenantId &&
-      (effectiveTenantId !== user.tenantId || !tenant)
-    ) {
+    if (effectiveTenantId && (effectiveTenantId !== user.tenantId || !tenant)) {
       tenant = await this.prisma.tenant.findUnique({
         where: { id: effectiveTenantId },
       });

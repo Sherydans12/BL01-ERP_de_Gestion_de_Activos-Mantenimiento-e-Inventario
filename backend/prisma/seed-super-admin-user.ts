@@ -14,6 +14,7 @@ import 'dotenv/config';
 import { PrismaClient, UserRole } from '@prisma/client';
 import {
   ensureDefaultTenantRolesForTenant,
+  ensureSuperAdminMirrorRole,
   SYSTEM_MIRROR_ROLE_NAME,
 } from '../src/features/tenant-roles/tenant-role-defaults';
 import * as bcrypt from 'bcrypt';
@@ -40,6 +41,7 @@ async function main() {
   }
 
   await ensureDefaultTenantRolesForTenant(prisma, tenant.id);
+  await ensureSuperAdminMirrorRole(prisma, tenant.id);
 
   const mirrorName = SYSTEM_MIRROR_ROLE_NAME[UserRole.SUPER_ADMIN];
   const tenantRole = await prisma.tenantRole.findFirst({

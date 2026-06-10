@@ -21,7 +21,7 @@ Documento **maestro de canales salientes** que hoy implementa el repo: **Web Pus
 | Registro de suscripción | `POST /api/notifications/subscribe` → `notifications.controller.ts` | Cuerpo estándar Push API; persiste `PushSubscription` (único por `endpoint`). Requiere usuario con `tenantId`. |
 | Modelo Prisma | `PushSubscription` | Por usuario; purga en herramienta SUPER_ADMIN: [`platform-data-admin.md`](platform-data-admin.md). |
 | Frontend | `frontend/src/app/core/services/push-notifications/push-notifications.service.ts` | `SwPush` + Angular Service Worker; clic → navegación según `data`. |
-| Auto-registro | `frontend/src/app/core/layout/layout.component.ts` | Solo roles `ADMIN`, `SUPER_ADMIN`, `SUPERVISOR`; una vez por sesión (`maybeSubscribeOncePerSession`). |
+| Auto-registro | `frontend/src/app/core/layout/layout.component.ts` | Usuarios con `purchases:order:approve` (PBAC); una vez por sesión (`maybeSubscribeOncePerSession`). |
 
 **Variables de entorno (backend):** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, opcional `VAPID_SUBJECT` (default `mailto:admin@baselogic.local`). Si faltan las claves, **no se envía ningún push** (silencioso en runtime salvo log).
 
@@ -115,6 +115,7 @@ Flujo del dispatcher al recibir un `dispatch(eventKey, tenantId, payload)`:
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | `purchase-requisitions.service` → `create` | ADMINs activos del tenant | EMAIL + ccEmails |
 | `PURCHASE_REQUISITION_SUBMITTED` | `purchase-requisitions.service` → `submit` | ADMINs activos del tenant | EMAIL + WEB_PUSH + ccEmails |
 | `INVENTORY_ITEM_CREATED` | `inventory-items.service` → `create`, `quickCreate` | Opt-in **EMAIL** (IDs resueltos en el servicio) + `ccEmails` | EMAIL (+ CC tenant) o solo CC si no hay suscriptores EMAIL |
+| `EQUIPMENT_DOWN` | `fault-reports.service` → `create` (solo `FaultCriticality.HIGH`) | ADMINs activos del tenant + usuarios con `UserContract` al contrato del equipo | EMAIL + WEB_PUSH (opt-in) + ccEmails |
 
 La gobernanza en `/app/configuracion/notificaciones` muestra **más** `eventKey` (catálogo de producto / futuro). Solo los de la tabla anterior tienen **`NotificationDispatcherService.dispatch`** en el código actual; el resto puede persistir preferencias en BD pero aún **no** dispara este motor hasta que el flujo de negocio correspondiente llame a `dispatch` (o siga siendo envío **Directo** vía `EmailService`).
 
@@ -150,3 +151,4 @@ this.notificationDispatcher
 | 2026-05-18 | **Fix dispatcher:** con `userIds` vacío y `ccEmails` del tenant, envío «solo CC» (antes abortaba siempre y `INVENTORY_ITEM_CREATED` nunca enviaba). |
 | 2026-05-18 | **Dispatcher:** si hay pool `userIds` pero nadie con opt-in efectivo (o solo WEB_PUSH sin tareas), **fallback** a correo solo a `ccEmails` cuando el evento está activo (SRC + listas externas). |
 | 2026-05-18 | Correo `INVENTORY_ITEM_CREATED`: el botón «Ver artículo» usa la URL de ficha con **UUID** del registro (`/app/articulos/:id`), no el código `IN####` (evita error Prisma / redirección). |
+|| 2026-06-03 | `EQUIPMENT_DOWN`: nuevo evento de flota/operaciones; dispara `fault-reports.service` al cerrar transaccion de falla ALTA (fire-and-forget). Pool = ADMINs + `UserContract` al contrato del equipo. Deep-link push a /app/operaciones/fallas. Plantilla `buildMailEquipmentDown`. 15 tests en suite domain. |

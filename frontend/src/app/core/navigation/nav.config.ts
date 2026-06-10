@@ -4,32 +4,43 @@ import { O } from '../constants/operations-permissions';
 import { A } from '../constants/admin-permissions';
 
 /** Roles disponibles en el sistema (deben coincidir con Prisma UserRole). */
-export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC' | 'USER';
+export type AppRole = 'SUPER_ADMIN' | 'ADMIN' | 'USER';
 
 /** Descripción de cada rol para mostrar en la interfaz. */
 export const ROLE_LABELS: Record<AppRole, string> = {
   SUPER_ADMIN: 'Super Administrador',
   ADMIN: 'Administrador',
-  SUPERVISOR: 'Supervisor',
-  MECHANIC: 'Mecánico',
   USER: 'Usuario base',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   SUPER_ADMIN: 'Acceso total al sistema. Gestiona múltiples tenants.',
   ADMIN: 'Control total sobre el tenant. Gestiona usuarios, contratos y configuración de la empresa.',
-  SUPERVISOR: 'Supervisa operaciones: órdenes de trabajo, flota, inventario y pautas de mantenimiento.',
-  MECHANIC: 'Opera en terreno: ejecuta órdenes de trabajo asignadas y consulta flota y stock.',
-  USER: 'Sin privilegios por defecto. Configure menú y permisos PBAC según el perfil.',
+  USER: 'Sin privilegios por defecto. Configure permisos PBAC en el perfil (TenantRole).',
 };
 
-/** Filtra ítems de menú según PBAC (tras rutas/roles legacy). */
+export interface NavFilterOptions {
+  /** Rutas de plataforma fuera del catálogo PBAC tenant (`/app/admin/*`). */
+  hasPlatformRole?: (roles: AppRole[]) => boolean;
+}
+
+/**
+ * Filtra ítems del menú lateral: única fuente PBAC (+ excepciones de plataforma).
+ * Sin permiso definido → oculto. `alwaysVisible` solo para cuenta del usuario.
+ */
 export function filterNavItemsByPermission(
   items: NavItem[],
   hasPermission: (p: string | string[]) => boolean,
   hasPermissionAny: (p: string | string[]) => boolean,
+  options?: NavFilterOptions,
 ): NavItem[] {
   return items.filter((item) => {
+    if (item.alwaysVisible) {
+      return true;
+    }
+    if (item.platformRoles?.length) {
+      return options?.hasPlatformRole?.(item.platformRoles) ?? false;
+    }
     if (item.permissionsAny) {
       const any = Array.isArray(item.permissionsAny)
         ? item.permissionsAny
@@ -39,7 +50,7 @@ export function filterNavItemsByPermission(
     if (item.permissions) {
       return hasPermission(item.permissions);
     }
-    return true;
+    return false;
   });
 }
 
@@ -50,12 +61,13 @@ export interface NavItem {
   icon: string;
   /** Si true, routerLinkActive aplica exact matching. */
   exact?: boolean;
+  /** Visible para cualquier usuario autenticado (p. ej. Mi cuenta). */
+  alwaysVisible?: boolean;
   /**
-   * Roles que pueden ver este ítem (permisos por defecto).
-   * `undefined` → visible para todos los roles autenticados.
-   * Estos defaults se sobreescriben si el tenant tiene `sidebarPermissions` configurados.
+   * Rutas de plataforma multi-tenant: no usan PBAC de tenant.
+   * Requiere `hasPlatformRole` en el filtro del layout.
    */
-  roles?: AppRole[];
+  platformRoles?: AppRole[];
   /** PBAC: requiere todos los permisos (AND). Bypass ADMIN / SUPER_ADMIN en `AuthService`. */
   permissions?: string | string[];
   /** PBAC: requiere al menos uno (OR). */
@@ -64,11 +76,6 @@ export interface NavItem {
 
 export interface NavSection {
   label: string;
-  /**
-   * Roles que pueden ver toda la sección (permisos por defecto).
-   * `undefined` → visible para todos los roles autenticados.
-   */
-  roles?: AppRole[];
   items: NavItem[];
 }
 
@@ -79,6 +86,7 @@ const ICONS = {
   home: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
   truck: 'M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0',
   clipboard: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+  droplet: 'M12 3C10 7 6 9.5 6 14a6 6 0 0012 0c0-4.5-4-7-6-11zm0 0v14M9.5 10.5S10.5 12 12 12s2.5-1.5 2.5-1.5',
   cog: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z',
   cube: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
   archive: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
@@ -93,24 +101,8 @@ const ICONS = {
 };
 
 /**
- * Definición centralizada de la barra de navegación lateral.
- *
- * Matriz de permisos por defecto:
- *
- * Módulo                 | MECHANIC | SUPERVISOR | ADMIN | SUPER_ADMIN
- * ---------------------- | -------- | ---------- | ----- | -----------
- * Dashboard              |    ✓     |     ✓      |   ✓   |      ✓
- * Maestro de Flota       |    ✓     |     ✓      |   ✓   |      ✓
- * Órdenes de Trabajo     |    ✓     |     ✓      |   ✓   |      ✓
- * Config. Pautas (PM)    |    –     |     ✓      |   ✓   |      ✓
- * Catálogo Maestro       |    –     |     ✓      |   ✓   |      ✓
- * Gestión de Bodegas     |    –     |     ✓      |   ✓   |      ✓
- * Control de Stock       |    ✓     |     ✓      |   ✓   |      ✓
- * Catálogos Maestros     |    –     |     –      |   ✓   |      ✓
- * Maestro de Contratos   |    –     |     –      |   ✓   |      ✓
- * Config. Empresa        |    –     |     –      |   ✓   |      ✓
- * Gestión de Usuarios    |    –     |     –      |   ✓   |      ✓
- * Roles y Permisos       |    –     |     –      |   ✓   |      ✓
+ * Menú lateral: cada ítem requiere permiso PBAC de lectura (o excepción de plataforma).
+ * Ver `filterNavItemsByPermission` y `docs/agentes/pbac-matriz-verificacion.md`.
  */
 export const NAV_SECTIONS: NavSection[] = [
   {
@@ -127,18 +119,19 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Mi cuenta',
         route: '/app/configuracion',
         icon: ICONS.adjustments,
+        alwaysVisible: true,
       },
       {
         label: 'Seguridad global',
         route: '/app/admin/security',
         icon: ICONS.shieldCheck,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
+        platformRoles: ['SUPER_ADMIN', 'ADMIN'],
       },
       {
         label: 'Empresas (Tenants)',
         route: '/app/admin/platform-data',
         icon: ICONS.collection,
-        roles: ['SUPER_ADMIN'],
+        platformRoles: ['SUPER_ADMIN'],
       },
     ],
   },
@@ -150,6 +143,12 @@ export const NAV_SECTIONS: NavSection[] = [
         route: '/app/flota',
         icon: ICONS.truck,
         permissions: O.EQUIPMENT_READ,
+      },
+      {
+        label: 'Importar Flota Excel',
+        route: '/app/flota/importar',
+        icon: ICONS.documentText,
+        permissions: O.EQUIPMENT_UPDATE,
       },
       {
         label: 'Registro de horómetros',
@@ -174,6 +173,42 @@ export const NAV_SECTIONS: NavSection[] = [
         route: '/app/ots/analytics',
         icon: ICONS.chartBar,
         permissions: O.WORK_ORDER_READ,
+      },
+      {
+        label: 'KPIs Operativos',
+        route: '/app/operaciones/analytics',
+        icon: ICONS.chartBar,
+        permissions: O.WORK_ORDER_READ,
+      },
+      {
+        label: 'Despacho de Lubricantes',
+        route: '/app/operaciones/lubricantes',
+        icon: ICONS.droplet,
+        permissions: O.LUBE_REPORT_READ,
+      },
+      {
+        label: 'Reporte de Disponibilidad',
+        route: '/app/operaciones/disponibilidad/nuevo',
+        icon: ICONS.clipboard,
+        permissions: O.AVAILABILITY_CREATE,
+      },
+      {
+        label: 'Registro de Fallas',
+        route: '/app/operaciones/fallas',
+        icon: ICONS.documentText,
+        permissions: O.FAULT_REPORT_READ,
+      },
+      {
+        label: 'Monitor de Flota',
+        route: '/app/operaciones/disponibilidad/monitor',
+        icon: ICONS.chartBar,
+        permissions: O.AVAILABILITY_MONITOR,
+      },
+      {
+        label: 'Historial Disponibilidad',
+        route: '/app/operaciones/disponibilidad/historial',
+        icon: ICONS.clipboard,
+        permissions: O.AVAILABILITY_READ,
       },
     ],
   },
@@ -222,6 +257,12 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: I.STOCK_READ,
       },
       {
+        label: 'Importar Inventario Excel',
+        route: '/app/inventario/importar',
+        icon: ICONS.documentText,
+        permissionsAny: [I.ITEM_UPDATE, I.STOCK_ADJUST],
+      },
+      {
         label: 'Abastecimiento',
         route: '/app/inventario/abastecimiento',
         icon: ICONS.clipboard,
@@ -231,7 +272,6 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'Compras',
-    roles: ['SUPER_ADMIN', 'ADMIN', 'SUPERVISOR'],
     items: [
       {
         label: 'Requerimientos',
@@ -273,14 +313,12 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Proveedores',
         route: '/app/compras/proveedores',
         icon: ICONS.users,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
         permissions: P.VENDOR_READ,
       },
       {
         label: 'Config. Compras',
         route: '/app/compras/configuracion',
         icon: ICONS.cog,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
         permissions: P.SETTING_READ,
       },
     ],
@@ -292,7 +330,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Catálogos Maestros',
         route: '/app/catalogos',
         icon: ICONS.collection,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
+        permissions: A.TENANT_CONFIG_READ,
       },
       {
         label: 'Maestro de Contratos',

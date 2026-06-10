@@ -1,0 +1,326 @@
+<div class="min-h-screen bg-dark px-4 py-8 sm:px-6 lg:px-10">
+
+  <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15">
+        <svg class="h-6 w-6 text-red-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="text-xl font-semibold text-main">Registro de Fallas</h1>
+        <p class="text-sm text-muted">
+          @if (loading()) { Cargando… }
+          @else { {{ total() | number }} {{ total() === 1 ? 'reporte' : 'reportes' }} }
+        </p>
+      </div>
+    </div>
+
+    <a *appHasPermission="O.FAULT_REPORT_CREATE"
+      routerLink="/app/operaciones/fallas/nuevo"
+      class="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+      </svg>
+      Registrar Falla
+    </a>
+  </header>
+
+  <!-- ── Filtros ────────────────────────────────────────────────────────── -->
+  <section class="mb-6 rounded-2xl bg-surface p-4 shadow-sm">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+
+      <!-- Equipo -->
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Equipo</label>
+        <select [ngModel]="filterEquipmentId()" (ngModelChange)="filterEquipmentId.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todos</option>
+          @for (eq of equipments(); track eq.id) {
+            <option [value]="eq.id">{{ eq.internalId }} — {{ eq.brand }} {{ eq.model }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Criticidad -->
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Criticidad</label>
+        <select [ngModel]="filterCriticality()" (ngModelChange)="filterCriticality.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todas</option>
+          @for (c of FAULT_CRITICALITIES; track c) {
+            <option [value]="c">{{ CRITICALITY_META[c].label }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Estado -->
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Estado</label>
+        <select [ngModel]="filterStatus()" (ngModelChange)="filterStatus.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todos</option>
+          @for (s of STATUS_OPTIONS; track s) {
+            <option [value]="s">{{ STATUS_META[s].label }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Fecha desde -->
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Desde</label>
+        <input type="date" [ngModel]="filterDateFrom()" (ngModelChange)="filterDateFrom.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"/>
+      </div>
+
+      <!-- Fecha hasta -->
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Hasta</label>
+        <input type="date" [ngModel]="filterDateTo()" (ngModelChange)="filterDateTo.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"/>
+      </div>
+    </div>
+
+    <div class="mt-3 flex justify-end gap-2">
+      <button type="button" (click)="clearFilters()"
+        class="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-primary hover:text-main transition-colors">
+        Limpiar
+      </button>
+      <button type="button" (click)="applyFilters()"
+        class="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90 transition-opacity">
+        Filtrar
+      </button>
+    </div>
+  </section>
+
+  <!-- ── Tabla ──────────────────────────────────────────────────────────── -->
+  <div class="rounded-2xl bg-surface shadow-sm overflow-hidden">
+    @if (loading()) {
+      <div class="flex items-center justify-center py-16 text-muted text-sm gap-2">
+        <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        Cargando reportes…
+      </div>
+    } @else if (rows().length === 0) {
+      <div class="flex flex-col items-center justify-center py-16 gap-3 text-muted">
+        <svg class="h-10 w-10" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/>
+        </svg>
+        <p class="text-sm">No hay reportes de fallas con los filtros actuales.</p>
+        <a *appHasPermission="O.FAULT_REPORT_CREATE"
+          routerLink="/app/operaciones/fallas/nuevo"
+          class="text-sm text-primary hover:underline">
+          Registrar primera falla →
+        </a>
+      </div>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-border bg-dark/40">
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Correlativo</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Fecha</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Equipo</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Sistema</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Criticidad</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Estado</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">OT</th>
+              <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            @for (row of rows(); track row.id) {
+              <tr class="hover:bg-dark/30 transition-colors">
+
+                <!-- Correlativo -->
+                <td class="px-4 py-3">
+                  <span class="font-mono text-xs font-semibold text-primary">{{ row.correlative }}</span>
+                </td>
+
+                <!-- Fecha -->
+                <td class="px-4 py-3 text-muted whitespace-nowrap">
+                  {{ row.eventDate | date:'dd/MM/yy HH:mm' }}
+                </td>
+
+                <!-- Equipo -->
+                <td class="px-4 py-3">
+                  <div class="font-medium text-main text-xs">{{ equipmentLabel(row) }}</div>
+                  @if (!row.equipment.isOperational) {
+                    <span class="mt-0.5 inline-block rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                      Fuera de servicio
+                    </span>
+                  }
+                </td>
+
+                <!-- Sistema -->
+                <td class="px-4 py-3 text-muted">
+                  {{ SYSTEM_LABELS[row.affectedSystem] }}
+                </td>
+
+                <!-- Criticidad -->
+                <td class="px-4 py-3">
+                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                    [class]="CRITICALITY_META[row.criticality].badgeClass">
+                    {{ CRITICALITY_META[row.criticality].label }}
+                  </span>
+                </td>
+
+                <!-- Estado: mini-stepper REGISTRADA → OT GENERADA → CERRADA -->
+                <td class="px-4 py-3">
+                  <div class="flex flex-col gap-1">
+                    <!-- Stepper horizontal -->
+                    <div class="flex items-center">
+                      <!-- Paso 1: Registrada -->
+                      <div class="flex flex-col items-center gap-0.5" title="Registrada">
+                        <div class="h-2.5 w-2.5 rounded-full border-2 transition-colors"
+                          [ngClass]="{
+                            'border-slate-400 bg-slate-400':  row.status === 'OPEN',
+                            'border-primary bg-primary':      row.status === 'LINKED',
+                            'border-green-500 bg-green-500':  row.status === 'CLOSED'
+                          }">
+                        </div>
+                        <span class="text-[9px] font-medium leading-none"
+                          [ngClass]="{
+                            'text-slate-400': row.status === 'OPEN',
+                            'text-primary':   row.status === 'LINKED',
+                            'text-green-500': row.status === 'CLOSED'
+                          }">Reg.</span>
+                      </div>
+
+                      <!-- Conector 1 → 2 -->
+                      <div class="mb-3.5 h-px w-5 transition-colors"
+                        [ngClass]="{
+                          'bg-border':    row.status === 'OPEN',
+                          'bg-primary':   row.status === 'LINKED',
+                          'bg-green-500': row.status === 'CLOSED'
+                        }">
+                      </div>
+
+                      <!-- Paso 2: OT Generada -->
+                      <div class="flex flex-col items-center gap-0.5" title="OT Generada">
+                        <div class="h-2.5 w-2.5 rounded-full border-2 transition-colors"
+                          [ngClass]="{
+                            'border-border bg-transparent': row.status === 'OPEN',
+                            'border-primary bg-primary':    row.status === 'LINKED',
+                            'border-green-500 bg-green-500':row.status === 'CLOSED'
+                          }">
+                        </div>
+                        <span class="text-[9px] font-medium leading-none"
+                          [ngClass]="{
+                            'text-border':    row.status === 'OPEN',
+                            'text-primary':   row.status === 'LINKED',
+                            'text-green-500': row.status === 'CLOSED'
+                          }">OT</span>
+                      </div>
+
+                      <!-- Conector 2 → 3 -->
+                      <div class="mb-3.5 h-px w-5 transition-colors"
+                        [ngClass]="{
+                          'bg-border':    row.status !== 'CLOSED',
+                          'bg-green-500': row.status === 'CLOSED'
+                        }">
+                      </div>
+
+                      <!-- Paso 3: Cerrada -->
+                      <div class="flex flex-col items-center gap-0.5" title="Cerrada">
+                        <div class="h-2.5 w-2.5 rounded-full border-2 transition-colors"
+                          [ngClass]="{
+                            'border-border bg-transparent':  row.status !== 'CLOSED',
+                            'border-green-500 bg-green-500': row.status === 'CLOSED'
+                          }">
+                        </div>
+                        <span class="text-[9px] font-medium leading-none"
+                          [ngClass]="{
+                            'text-border':    row.status !== 'CLOSED',
+                            'text-green-500': row.status === 'CLOSED'
+                          }">Cerr.</span>
+                      </div>
+                    </div>
+
+                    <!-- Label del estado actual -->
+                    <span class="inline-flex w-fit items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                      [class]="STATUS_META[row.status].badgeClass">
+                      {{ STATUS_META[row.status].label }}
+                    </span>
+                  </div>
+                </td>
+
+                <!-- OT vinculada -->
+                <td class="px-4 py-3">
+                  @if (row.workOrder) {
+                    <span class="font-mono text-xs text-primary">{{ row.workOrder.correlative }}</span>
+                  } @else {
+                    <span class="text-muted text-xs">—</span>
+                  }
+                </td>
+
+                <!-- Acciones -->
+                <td class="px-4 py-3 text-right">
+                  @if (row.status === 'OPEN' && row.criticality === 'LOW') {
+                    <button
+                      *appHasPermission="O.FAULT_REPORT_MANAGE"
+                      type="button"
+                      [disabled]="generatingOtForId() === row.id"
+                      (click)="generateWorkOrder(row)"
+                      class="inline-flex min-h-[48px] items-center gap-1.5 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-xs font-semibold text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                      @if (generatingOtForId() === row.id) {
+                        <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        <span class="leading-tight">Generando<br>OT…</span>
+                      } @else {
+                        <svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                        </svg>
+                        <span class="leading-tight text-left">Generar<br>OT</span>
+                      }
+                    </button>
+                  } @else {
+                    <span class="text-muted text-xs">—</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginación -->
+      @if (totalPages() > 1) {
+        <div class="flex items-center justify-between border-t border-border px-4 py-3">
+          <p class="text-xs text-muted">
+            Página {{ page() }} de {{ totalPages() }}
+          </p>
+          <div class="flex gap-1">
+            <button type="button" (click)="goToPage(page() - 1)" [disabled]="page() === 1"
+              class="rounded-lg border border-border px-3 py-1 text-xs text-muted hover:text-main disabled:opacity-30 transition-colors">
+              ‹ Ant.
+            </button>
+            @for (p of pageNumbers(); track p) {
+              <button type="button" (click)="goToPage(p)"
+                class="min-w-[32px] rounded-lg border px-2 py-1 text-xs transition-colors"
+                [class.border-primary]="page() === p"
+                [class.text-primary]="page() === p"
+                [class.font-semibold]="page() === p"
+                [class.border-border]="page() !== p"
+                [class.text-muted]="page() !== p">
+                {{ p }}
+              </button>
+            }
+            <button type="button" (click)="goToPage(page() + 1)" [disabled]="page() === totalPages()"
+              class="rounded-lg border border-border px-3 py-1 text-xs text-muted hover:text-main disabled:opacity-30 transition-colors">
+              Sig. ›
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>

@@ -21,7 +21,7 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  async upload(
+  upload(
     key: string,
     buffer: Buffer,
     _mimeType: string,
@@ -32,34 +32,32 @@ export class LocalStorageProvider implements StorageProvider {
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(fullPath, buffer);
-    return { storageKey: key };
+    return Promise.resolve({ storageKey: key });
   }
 
   getPublicUrl(storageKey: string): string {
     return `/uploads/${storageKey}`;
   }
 
-  async getSignedUrl(
-    storageKey: string,
-    _expiresInSeconds: number,
-  ): Promise<string> {
-    return this.getPublicUrl(storageKey);
+  getSignedUrl(storageKey: string, _expiresInSeconds: number): Promise<string> {
+    return Promise.resolve(this.getPublicUrl(storageKey));
   }
 
-  async delete(storageKey: string): Promise<void> {
+  delete(storageKey: string): Promise<void> {
     const fullPath = join(this.basePath, storageKey);
     if (existsSync(fullPath)) {
       unlinkSync(fullPath);
     }
+    return Promise.resolve();
   }
 
-  async readStream(storageKey: string): Promise<Readable> {
+  readStream(storageKey: string): Promise<Readable> {
     const fullPath = join(this.basePath, storageKey);
     if (!existsSync(fullPath)) {
       const err = new Error(`ENOENT: ${storageKey}`) as NodeJS.ErrnoException;
       err.code = 'ENOENT';
       throw err;
     }
-    return createReadStream(fullPath);
+    return Promise.resolve(createReadStream(fullPath));
   }
 }

@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -11,21 +12,55 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule, DatePipe } from '@angular/common';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
+import { FleetStateService } from '../../../core/services/fleet-state/fleet-state.service';
+import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
+import { WorkOrderDetailModalComponent } from '../../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import {
   AssetCostRecord,
+  AssetCostType,
   Equipment,
   EquipmentAnalytics,
   EquipmentMeterLog,
   MeterType,
+  WorkOrder,
 } from '../../../core/models/types';
+import {
+  FaultReportsService,
+  FaultReportRow,
+  CRITICALITY_META,
+  SYSTEM_LABELS,
+  STATUS_META as FAULT_STATUS_META,
+} from '../../../core/services/fault-reports/fault-reports.service';
+import {
+  EquipmentAvailabilityService,
+  AvailabilityRecord,
+  SHIFT_LABELS,
+  STATUS_LABELS as AVAILABILITY_STATUS_LABELS,
+  STATUS_COLORS as AVAILABILITY_STATUS_COLORS,
+} from '../../../core/services/equipment-availability/equipment-availability.service';
+import {
+  LubeReportsService,
+  LubeReportRow,
+} from '../../../core/services/lube-reports/lube-reports.service';
 import {
   EquipmentMeterHistoryTableComponent,
   EquipmentMeterHistoryRow,
 } from '../components/equipment-meter-history-table/equipment-meter-history-table.component';
 
-type TabId = 'ficha' | 'docs' | 'historial' | 'medidores';
+type TabId =
+  | 'ficha'
+  | 'salud'
+  | 'consumos'
+  | 'costos'
+  | 'ots'
+  | 'docs'
+  | 'historial'
+  | 'medidores';
 
 type TimelineEventType = 'OT' | 'METER_ADJ' | 'PURCHASE';
 
@@ -37,6 +72,26 @@ interface DocItem {
   daysLeft: number;
   status: 'VIGENTE' | 'PRÓXIMO' | 'VENCIDO' | 'N/A';
   progress: number;
+}
+
+/** Desglose de costo del activo por tipo (lifecycle cost, Sprint 2.2). */
+interface CostTypeBreakdown {
+  type: AssetCostType;
+  amount: number;
+  pct: number;
+}
+
+/** Fila de repuesto consumido en una OT cerrada (Consumos del activo, Sprint 2.1). */
+interface PartConsumptionRow {
+  key: string;
+  otId: string;
+  otCorrelative: string;
+  date: string;
+  partNumber: string;
+  description: string;
+  quantity: number;
+  unitCost: number | null;
+  lineCost: number | null;
 }
 
 interface TimelineEvent {
@@ -53,7 +108,12 @@ interface TimelineEvent {
 @Component({
   selector: 'app-equipment-detail-modal',
   standalone: true,
-  imports: [CommonModule, DatePipe, EquipmentMeterHistoryTableComponent],
+  imports: [
+    CommonModule,
+    DatePipe,
+    EquipmentMeterHistoryTableComponent,
+    WorkOrderDetailModalComponent,
+  ],
   templateUrl: './equipment-detail-modal.component.html',
   styles: [
     `
@@ -70,7 +130,22 @@ interface TimelineEvent {
 })
 export class EquipmentDetailModalComponent {
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
   private fleetService = inject(FleetService);
+  private fleetState = inject(FleetStateService);
+  // ── Servicios transversales de Operaciones (M1·M2·M3) ──
+  private faultService = inject(FaultReportsService);
+  private availabilityService = inject(EquipmentAvailabilityService);
+  private lubeService = inject(LubeReportsService);
+  private workOrdersService = inject(WorkOrdersService);
+
+  // Mapas de etiquetas/tokens (espejo backend) expuestos a la plantilla.
+  protected readonly criticalityMeta = CRITICALITY_META;
+  protected readonly systemLabels = SYSTEM_LABELS;
+  protected readonly faultStatusMeta = FAULT_STATUS_META;
+  protected readonly shiftLabels = SHIFT_LABELS;
+  protected readonly availabilityStatusLabels = AVAILABILITY_STATUS_LABELS;
+  protected readonly availabilityStatusColors = AVAILABILITY_STATUS_COLORS;
 
   detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
 
@@ -82,6 +157,27 @@ export class EquipmentDetailModalComponent {
   loading = signal(false);
   analytics = signal<EquipmentAnalytics | null>(null);
 
+  // ── Estado de las pestañas transversales (carga perezosa por equipo) ──
+  lastFault = signal<FaultReportRow | null>(null);
+  lastAvailability = signal<AvailabilityRecord | null>(null);
+  lubeReports = signal<LubeReportRow[]>([]);
+  healthLoading = signal(false);
+  consumosLoading = signal(false);
+  private healthLoadedFor: string | null = null;
+  private consumosLoadedFor: string | null = null;
+
+  // ── Pestaña «Órdenes de Trabajo»: OTs en todos los estados del equipo ──
+  allOts = signal<WorkOrder[]>([]);
+  otsLoading = signal(false);
+  private otsLoadedFor: string | null = null;
+
+  /** Última revisión observada por equipo (evita doble fetch al abrir). */
+  private lastRevisionByEquipment = new Map<string, number>();
+
+  // Modal de detalle de OT embebido (no se pierde el contexto del equipo).
+  showOtDetail = signal(false);
+  selectedOtId = signal<string | null>(null);
+
   equipment = computed(() => this.analytics()?.equipment ?? null);
   workOrders = computed(() => this.analytics()?.workOrders ?? []);
   meterAdjustments = computed(() => this.analytics()?.meterAdjustments ?? []);
@@ -89,6 +185,78 @@ export class EquipmentDetailModalComponent {
     () => this.analytics()?.assetCostRecords ?? [],
   );
   meterLogs = computed(() => this.analytics()?.meterLogs ?? []);
+
+  /**
+   * Repuestos consumidos en las OT cerradas del equipo (Sprint 2.1).
+   * Se deriva de `analytics.workOrders[].parts` ya cargado al abrir el modal —
+   * no requiere fetch adicional. Ordenado por fecha de la OT (desc).
+   */
+  partsConsumed = computed<PartConsumptionRow[]>(() => {
+    const rows: PartConsumptionRow[] = [];
+    for (const wo of this.workOrders()) {
+      const date = wo.closedAt ?? wo.createdAt;
+      for (const p of wo.parts ?? []) {
+        const quantity = Number(p.quantity) || 0;
+        const unitCost = p.unitCost != null ? Number(p.unitCost) : null;
+        rows.push({
+          key: p.id ?? `${wo.id}-${p.partNumber}`,
+          otId: wo.id,
+          otCorrelative: wo.correlative,
+          date,
+          partNumber: p.partNumber,
+          description: p.description,
+          quantity,
+          unitCost,
+          lineCost: unitCost != null ? unitCost * quantity : null,
+        });
+      }
+    }
+    return rows.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+  });
+
+  partsTotalCost = computed(() =>
+    this.partsConsumed().reduce((sum, r) => sum + (r.lineCost ?? 0), 0),
+  );
+
+  /**
+   * Costo de ciclo de vida del activo (Sprint 2.2): suma de `assetCostRecords`
+   * (PURCHASE + WORK_ORDER + LUBE_DISPATCH) ya cargados en analytics.
+   */
+  costTotal = computed(() =>
+    this.assetCostRecords().reduce(
+      (sum, r) => sum + (Number(r.amount) || 0),
+      0,
+    ),
+  );
+
+  /** Desglose por `AssetCostType` con subtotal y participación (%), ordenado desc. */
+  costByType = computed<CostTypeBreakdown[]>(() => {
+    const total = this.costTotal();
+    const acc = new Map<AssetCostType, number>();
+    for (const r of this.assetCostRecords()) {
+      const amount = Number(r.amount) || 0;
+      acc.set(r.type, (acc.get(r.type) ?? 0) + amount);
+    }
+    const rows: CostTypeBreakdown[] = [];
+    for (const [type, amount] of acc) {
+      rows.push({
+        type,
+        amount,
+        pct: total > 0 ? (amount / total) * 100 : 0,
+      });
+    }
+    return rows.sort((a, b) => b.amount - a.amount);
+  });
+
+  /** Registros de costo ordenados por fecha desc (para el listado del tab). */
+  costRecordsSorted = computed(() =>
+    [...this.assetCostRecords()].sort(
+      (a, b) =>
+        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    ),
+  );
 
   meterHistoryRows = computed<EquipmentMeterHistoryRow[]>(() => {
     const logs = this.meterLogs();
@@ -228,8 +396,70 @@ export class EquipmentDetailModalComponent {
 
   operationalStatus = computed(() => {
     const eq = this.equipment();
-    if (!eq) return { label: 'Sin datos', color: 'text-muted', bgColor: 'bg-dark' };
-    return { label: 'OPERATIVO', color: 'text-success', bgColor: 'bg-success/10' };
+    if (!eq)
+      return {
+        label: 'Sin datos',
+        color: 'text-muted',
+        bgColor: 'bg-dark',
+        borderColor: 'border-border',
+        dotColor: 'bg-muted',
+        description: 'Sin información operacional disponible.',
+      };
+    if (eq.isOperational === false) {
+      return {
+        label: 'FUERA DE SERVICIO',
+        color: 'text-error',
+        bgColor: 'bg-error/10',
+        borderColor: 'border-error/40',
+        dotColor: 'bg-error',
+        description: 'Detenido por OT activa o falla crítica (ALTA).',
+      };
+    }
+
+    const lastM2 = this.lastAvailability();
+    if (lastM2) {
+      switch (lastM2.status) {
+        case 'STANDBY':
+          return {
+            label: AVAILABILITY_STATUS_LABELS.STANDBY,
+            color: 'text-blue-400',
+            bgColor: 'bg-blue-500/10',
+            borderColor: 'border-blue-500/40',
+            dotColor: 'bg-blue-400',
+            description: 'En Standby según el último reporte de disponibilidad.',
+          };
+        case 'RESERVE_NO_OPERATOR':
+          return {
+            label: AVAILABILITY_STATUS_LABELS.RESERVE_NO_OPERATOR,
+            color: 'text-warning',
+            bgColor: 'bg-warning/10',
+            borderColor: 'border-warning/40',
+            dotColor: 'bg-warning',
+            description: 'En reserva sin operador según el último reporte de disponibilidad.',
+          };
+        case 'DOWN_FAILURE':
+        case 'DOWN_MAINTENANCE':
+          return {
+            label: AVAILABILITY_STATUS_LABELS[lastM2.status],
+            color: 'text-error',
+            bgColor: 'bg-error/10',
+            borderColor: 'border-error/40',
+            dotColor: 'bg-error',
+            description: 'Detenido según el último reporte de disponibilidad.',
+          };
+        default:
+          break;
+      }
+    }
+
+    return {
+      label: 'OPERATIVO',
+      color: 'text-success',
+      bgColor: 'bg-success/10',
+      borderColor: 'border-success/40',
+      dotColor: 'bg-success',
+      description: 'Disponible para operación.',
+    };
   });
 
   documentItems = computed<DocItem[]>(() => {
@@ -308,14 +538,27 @@ export class EquipmentDetailModalComponent {
     for (const rec of costs) {
       const oc = rec.purchaseOrder?.correlative;
       const wr = rec.warehouseReceipt?.correlative;
+      const ot = rec.workOrder?.correlative;
+      let title: string;
+      let subtitle: string;
+      if (rec.type === 'WORK_ORDER') {
+        title = ot ? `Repuestos/fluidos (OT ${ot})` : 'Repuestos y fluidos de OT';
+        subtitle = 'Consumibles imputados al cierre de la orden de trabajo';
+      } else if (rec.type === 'LUBE_DISPATCH') {
+        title = 'Despacho de lubricantes';
+        subtitle = 'Costo de lubricantes imputado al activo';
+      } else {
+        title = oc ? `Compra externa (OC ${oc})` : 'Compra externa imputada';
+        subtitle = wr
+          ? `Recepción de bodega ${wr} — costo proporcional a lo recibido`
+          : 'Recepción de bodega — costo proporcional a lo recibido';
+      }
       events.push({
         id: rec.id,
         type: 'PURCHASE',
         date: rec.recordedAt,
-        title: oc ? `Compra externa (OC ${oc})` : 'Compra externa imputada',
-        subtitle: wr
-          ? `Recepción de bodega ${wr} — costo proporcional a lo recibido`
-          : 'Recepción de bodega — costo proporcional a lo recibido',
+        title,
+        subtitle,
         icon: 'purchase',
         color: 'text-emerald-400',
         meta: this.formatPurchaseCostMeta(rec),
@@ -330,11 +573,72 @@ export class EquipmentDetailModalComponent {
   });
 
   tabs: { id: TabId; label: string; icon: string }[] = [
-    { id: 'ficha', label: 'Ficha Técnica', icon: 'cpu' },
+    { id: 'ficha', label: 'Información Base', icon: 'cpu' },
+    { id: 'salud', label: 'Salud y Operación', icon: 'heart-pulse' },
+    { id: 'ots', label: 'Órdenes de Trabajo', icon: 'wrench' },
+    { id: 'consumos', label: 'Consumos', icon: 'droplet' },
+    { id: 'costos', label: 'Costos', icon: 'banknotes' },
     { id: 'medidores', label: 'Historial de Medidores', icon: 'gauge' },
     { id: 'docs', label: 'Documentación', icon: 'file-text' },
     { id: 'historial', label: 'Historial', icon: 'activity' },
   ];
+
+  /** Etiqueta, color de barra y de texto para cada tipo de costo del activo. */
+  assetCostTypeMeta(type: AssetCostType): {
+    label: string;
+    bar: string;
+    text: string;
+  } {
+    switch (type) {
+      case 'WORK_ORDER':
+        return {
+          label: 'Repuestos y fluidos (OT)',
+          bar: 'bg-warning',
+          text: 'text-warning',
+        };
+      case 'LUBE_DISPATCH':
+        return {
+          label: 'Lubricantes',
+          bar: 'bg-primary',
+          text: 'text-primary',
+        };
+      case 'PURCHASE':
+      default:
+        return {
+          label: 'Compras externas (OC)',
+          bar: 'bg-emerald-400',
+          text: 'text-emerald-400',
+        };
+    }
+  }
+
+  /** Etiqueta + token de color para el estado de una OT (espejo backend OtStatus). */
+  otStatusMeta(status: string): { label: string; cls: string } {
+    switch (status) {
+      case 'OPEN':
+        return {
+          label: 'Abierta',
+          cls: 'text-primary bg-primary/10 border-primary/20',
+        };
+      case 'IN_PROGRESS':
+        return {
+          label: 'En progreso',
+          cls: 'text-warning bg-warning/10 border-warning/20',
+        };
+      case 'ON_HOLD':
+        return {
+          label: 'En espera',
+          cls: 'text-muted bg-dark border-border',
+        };
+      case 'CLOSED':
+        return {
+          label: 'Cerrada',
+          cls: 'text-success bg-success/10 border-success/20',
+        };
+      default:
+        return { label: status, cls: 'text-muted bg-dark border-border' };
+    }
+  }
 
   private formatMeterSourceLabel(log: EquipmentMeterLog): string {
     switch (log.source) {
@@ -346,6 +650,10 @@ export class EquipmentDetailModalComponent {
         return 'Telemetría';
       case 'MANUAL':
         return 'Manual / ajuste';
+      case 'AVAILABILITY_REPORT':
+        return 'Reporte de disponibilidad';
+      case 'FAULT_REPORT':
+        return 'Reporte de falla';
       default:
         return String(log.source);
     }
@@ -358,9 +666,13 @@ export class EquipmentDetailModalComponent {
         const open = this.isOpen();
         if (id && open) {
           this.loadAnalytics(id);
+          // Reinicia el estado de las pestañas transversales para el nuevo equipo.
+          this.activeTab.set('ficha');
+          this.resetCrossModuleState();
         } else {
           this.analytics.set(null);
           this.activeTab.set('ficha');
+          this.resetCrossModuleState();
         }
       },
       { allowSignalWrites: true },
@@ -378,21 +690,154 @@ export class EquipmentDetailModalComponent {
         { injector: this.injector },
       );
     });
+
+    effect(
+      () => {
+        const id = this.equipmentId();
+        const open = this.isOpen();
+        if (!id || !open) return;
+
+        const rev = this.fleetService.equipmentRevision(id)();
+        const prev = this.lastRevisionByEquipment.get(id) ?? 0;
+        if (rev <= prev) return;
+        this.lastRevisionByEquipment.set(id, rev);
+        if (prev === 0 && rev === 0) return;
+
+        this.loadAnalytics(id);
+        this.resetCrossModuleState();
+        this.loadHealth(id);
+      },
+      { allowSignalWrites: true },
+    );
+
+    this.fleetState.equipmentUpdated$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((equipmentId) => {
+        const currentId = this.equipmentId();
+        if (!this.isOpen() || !currentId || currentId !== equipmentId) return;
+
+        this.loadAnalytics(currentId, { silent: true });
+        this.healthLoadedFor = null;
+        this.lastFault.set(null);
+        this.lastAvailability.set(null);
+        this.loadHealth(currentId);
+      });
   }
 
-  private loadAnalytics(id: string): void {
-    this.loading.set(true);
+  private loadAnalytics(id: string, options?: { silent?: boolean }): void {
+    if (!options?.silent) {
+      this.loading.set(true);
+    }
     this.fleetService.getEquipmentAnalytics(id).subscribe({
       next: (data) => {
         this.analytics.set(data);
-        this.loading.set(false);
+        if (!options?.silent) {
+          this.loading.set(false);
+        }
+        this.loadHealth(id);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        if (!options?.silent) {
+          this.loading.set(false);
+        }
+      },
     });
   }
 
   selectTab(tab: TabId): void {
     this.activeTab.set(tab);
+    const id = this.equipmentId();
+    if (!id) return;
+    // Carga perezosa al abrir las pestañas transversales (M1/M2/M3 + OTs).
+    if (tab === 'salud') this.loadHealth(id);
+    if (tab === 'consumos') this.loadConsumos(id);
+    if (tab === 'ots') this.loadOts(id);
+  }
+
+  /** Pestaña «Órdenes de Trabajo»: OTs del equipo en todos los estados (no solo cerradas). */
+  private loadOts(id: string): void {
+    if (this.otsLoadedFor === id) return;
+    this.otsLoadedFor = id;
+    this.otsLoading.set(true);
+
+    this.workOrdersService
+      .getWorkOrdersFiltered({ equipmentId: id, limit: 20 })
+      .pipe(catchError(() => of(null)))
+      .subscribe({
+        next: (res) => {
+          this.allOts.set((res?.data ?? []) as WorkOrder[]);
+          this.otsLoading.set(false);
+        },
+        error: () => this.otsLoading.set(false),
+      });
+  }
+
+  /** Abre el detalle de la OT sin cerrar el modal del equipo (contexto preservado). */
+  openOtDetail(otId: string): void {
+    this.selectedOtId.set(otId);
+    this.showOtDetail.set(true);
+  }
+
+  closeOtDetail(): void {
+    this.showOtDetail.set(false);
+    this.selectedOtId.set(null);
+  }
+
+  /** Pestaña 2 «Salud y Operación»: última falla (M3) + último parte de disponibilidad (M2). */
+  private loadHealth(id: string): void {
+    if (this.healthLoadedFor === id) return;
+    this.healthLoadedFor = id;
+    this.healthLoading.set(true);
+
+    forkJoin({
+      fault: this.faultService
+        .getReports({ equipmentId: id, pageSize: 1 })
+        .pipe(catchError(() => of(null))),
+      availability: this.availabilityService
+        .getAll({ equipmentId: id, pageSize: 1 })
+        .pipe(catchError(() => of(null))),
+    }).subscribe({
+      next: ({ fault, availability }) => {
+        this.lastFault.set(fault?.data?.[0] ?? null);
+        this.lastAvailability.set(availability?.data?.[0] ?? null);
+        this.healthLoading.set(false);
+      },
+      error: () => this.healthLoading.set(false),
+    });
+  }
+
+  /** Pestaña 3 «Consumos»: últimos 5 despachos de lubricantes (M1) del equipo. */
+  private loadConsumos(id: string): void {
+    if (this.consumosLoadedFor === id) return;
+    this.consumosLoadedFor = id;
+    this.consumosLoading.set(true);
+
+    this.lubeService
+      .getReports({ equipmentId: id, pageSize: 5 })
+      .pipe(catchError(() => of(null)))
+      .subscribe({
+        next: (res) => {
+          this.lubeReports.set(res?.data ?? []);
+          this.consumosLoading.set(false);
+        },
+        error: () => this.consumosLoading.set(false),
+      });
+  }
+
+  private resetCrossModuleState(): void {
+    this.healthLoadedFor = null;
+    this.consumosLoadedFor = null;
+    this.lastFault.set(null);
+    this.lastAvailability.set(null);
+    this.lubeReports.set([]);
+    this.healthLoading.set(false);
+    this.consumosLoading.set(false);
+    // OTs
+    this.otsLoadedFor = null;
+    this.allOts.set([]);
+    this.otsLoading.set(false);
+    this.showOtDetail.set(false);
+    this.selectedOtId.set(null);
   }
 
   onBackdropClick(event: MouseEvent): void {
@@ -427,8 +872,33 @@ export class EquipmentDetailModalComponent {
     }
   }
 
+  formatDateOnly(value: string | Date | null | undefined): string {
+    if (!value) return '—';
+
+    if (typeof value === 'string') {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+
   formatNumber(value: number): string {
     return value.toLocaleString('es-CL');
+  }
+
+  formatMoney(value: number | null): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      maximumFractionDigits: 0,
+    }).format(value);
   }
 
   private formatPurchaseCostMeta(rec: AssetCostRecord): string {

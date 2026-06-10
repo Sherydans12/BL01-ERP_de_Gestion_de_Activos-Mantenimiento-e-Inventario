@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, effect, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { WorkOrdersService } from '../../core/services/work-orders/work-orders.service';
@@ -6,6 +6,8 @@ import type { DashboardStats, DashboardUiModel } from '../../core/models/dashboa
 import { EquipmentDetailModalComponent } from '../fleet/equipment-detail-modal/equipment-detail-modal.component';
 import { WorkOrderDetailModalComponent } from '../work-orders/work-order-detail-modal/work-order-detail-modal.component';
 import { NotificationService } from '../../core/services/notification/notification.service';
+import { EquipmentAvailabilityService } from '../../core/services/equipment-availability/equipment-availability.service';
+import { ShiftService } from '../../core/services/shift/shift.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -22,6 +24,8 @@ import { NotificationService } from '../../core/services/notification/notificati
 export class DashboardComponent implements OnInit {
   private workOrdersService = inject(WorkOrdersService);
   private notificationService = inject(NotificationService);
+  private availabilityService = inject(EquipmentAvailabilityService);
+  protected shiftService = inject(ShiftService);
 
   stats = signal<DashboardUiModel | null>(null);
   lastUpdated = signal<Date>(new Date());
@@ -32,8 +36,18 @@ export class DashboardComponent implements OnInit {
   showOtDetail = signal(false);
   detailOtId = signal<string | null>(null);
 
+  constructor() {
+    effect(() => {
+      if (!this.shiftService.operationalConfigLoaded()) return;
+      this.shiftService.currentShift();
+      this.shiftService.todayIso();
+      this.loadUnreported();
+    });
+  }
+
   ngOnInit() {
     this.loadStats();
+    this.loadUnreported();
   }
 
   loadStats() {
@@ -47,6 +61,26 @@ export class DashboardComponent implements OnInit {
         this.stats.set(null);
       },
     });
+  }
+
+  /**
+   * Equipos sin reporte de disponibilidad en el turno activo (auto-detectado).
+   * No es crítico: si falla, el tile queda en 0 sin romper el dashboard.
+   */
+  loadUnreported() {
+    const date = this.shiftService.todayIso();
+    const shift = this.shiftService.coerceShift(this.shiftService.currentShift());
+    this.availabilityService
+      .getUnreported({ date, shift, page: 1, pageSize: 1 })
+      .subscribe({
+        next: (res) =>
+          this.stats.update((s) =>
+            s ? { ...s, unreportedCount: res.total } : s,
+          ),
+        error: () => {
+          /* silencioso — métrica complementaria */
+        },
+      });
   }
 
   /** Compatibilidad si el API aún no expone bloques nuevos. */
@@ -71,6 +105,10 @@ export class DashboardComponent implements OnInit {
       purchaseRequisitionsAttention: raw.purchaseRequisitionsAttention ?? [],
       purchaseOrdersInbound: raw.purchaseOrdersInbound ?? [],
       lowStocks: low,
+      equiposDetenidos: raw.equiposDetenidos ?? 0,
+      faultReportsOpen: raw.faultReportsOpen ?? 0,
+      // Lo rellena loadUnreported(); se preserva si ya venía seteado por una recarga previa.
+      unreportedCount: this.stats()?.unreportedCount ?? 0,
     };
   }
 

@@ -83,6 +83,10 @@ export interface DashboardStats {
   purchaseRequisitionsAttention?: DashboardPurchaseReqRow[];
   purchaseOrdersInbound?: DashboardPurchaseOrderRow[];
   lowStocks?: DashboardLowStockRow[];
+  /** Equipos con isOperational=false (fuera de servicio). Integración M3/OT. */
+  equiposDetenidos?: number;
+  /** Fallas de terreno (M3) en estado OPEN sin OT vinculada. */
+  faultReportsOpen?: number;
 }
 
 /** Vista del dashboard tras `normalizeStats` (arrays y KPI siempre definidos). */
@@ -94,6 +98,8 @@ export type DashboardUiModel = Omit<
   | 'purchaseRequisitionsAttention'
   | 'purchaseOrdersInbound'
   | 'lowStocks'
+  | 'equiposDetenidos'
+  | 'faultReportsOpen'
 > & {
   kpiStrip: DashboardKpiStrip;
   pmDueSoon: DashboardPmRow[];
@@ -101,4 +107,8 @@ export type DashboardUiModel = Omit<
   purchaseRequisitionsAttention: DashboardPurchaseReqRow[];
   purchaseOrdersInbound: DashboardPurchaseOrderRow[];
   lowStocks: DashboardLowStockRow[];
+  equiposDetenidos: number;
+  faultReportsOpen: number;
+  /** Calculado en el frontend con una llamada separada a /equipment-availability/unreported. */
+  unreportedCount: number;
 };

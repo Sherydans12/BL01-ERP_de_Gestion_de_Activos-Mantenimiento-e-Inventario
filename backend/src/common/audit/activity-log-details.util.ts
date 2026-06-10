@@ -15,7 +15,7 @@ function serializeScalar(v: unknown): unknown {
     try {
       return (v as { toNumber: () => number }).toNumber();
     } catch {
-      return String(v);
+      return (v as { toString: () => string }).toString();
     }
   }
   if (v instanceof Date) return v.toISOString();

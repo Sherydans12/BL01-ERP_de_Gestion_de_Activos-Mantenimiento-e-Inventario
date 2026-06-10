@@ -7,6 +7,7 @@ import {
   buildMailUnusualLogin,
   buildMailSuperAdminStepUp,
   buildMailInventoryItemCreated,
+  buildMailEquipmentDown,
 } from './transactional-mail.builder';
 
 const SAMPLE_BASE = 'https://tpm.ejemplo.cl';
@@ -17,7 +18,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
     build: () =>
       buildMailInviteUser({
         name: 'María Ignacia Pérez',
-        role: 'SUPERVISOR',
+        role: 'USER',
         activationLink: `${SAMPLE_BASE}/auth/activate?token=ejemplo_token_activacion_hex_64`,
         organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),
@@ -28,7 +29,7 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
     build: () =>
       buildMailResendActivation({
         name: 'Juan Mecánico',
-        role: 'MECHANIC',
+        role: 'USER',
         activationLink: `${SAMPLE_BASE}/auth/activate?token=otro_token_reeenvio`,
         organizationLine: 'Transportes Ejemplo S.A. — código TPM',
       }),
@@ -56,7 +57,8 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
   },
   {
     file: '05-codigo-verificacion-super-admin.html',
-    title: 'Código de verificación (2FA por correo — Super Admin, login inusual)',
+    title:
+      'Código de verificación (2FA por correo — Super Admin, login inusual)',
     build: () =>
       buildMailSuperAdminStepUp({
         name: 'Operador de plataforma',
@@ -78,6 +80,22 @@ const SAMPLES: { file: string; title: string; build: () => string }[] = [
         createdAt: '18-05-26, 10:14 a. m.',
         appUrl: SAMPLE_BASE,
         partNumber: 'N74B681',
+      }),
+  },
+  {
+    file: '07-equipo-fuera-de-servicio.html',
+    title: 'Equipo fuera de servicio (EQUIPMENT_DOWN)',
+    build: () =>
+      buildMailEquipmentDown({
+        faultCorrelative: 'RF-00042',
+        equipmentLabel: 'EC-3005 — Caterpillar 980G',
+        affectedSystem: 'Motor',
+        symptom: 'Pérdida de potencia y humo negro persistente en pendiente.',
+        reportedBy: 'Juan Operador',
+        eventDate: '03-06-26, 09:40 a. m.',
+        workOrderCorrelative: 'OT-2026-018',
+        contractName: 'Contrato Minera Norte',
+        appUrl: SAMPLE_BASE,
       }),
   },
 ];
@@ -139,10 +157,7 @@ ${links.join('\n')}
 }
 
 function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 run();

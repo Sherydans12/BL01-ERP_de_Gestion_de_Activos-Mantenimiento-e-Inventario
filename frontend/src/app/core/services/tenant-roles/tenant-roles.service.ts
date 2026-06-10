@@ -8,7 +8,7 @@ export interface TenantRole {
   id: string;
   name: string;
   description?: string | null;
-  baseRole: 'SUPER_ADMIN' | 'MECHANIC' | 'SUPERVISOR' | 'ADMIN' | 'USER';
+  baseRole: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
   routes: string[];
   permissions?: string[];
   createdAt?: string;
@@ -19,7 +19,7 @@ export interface TenantRole {
 export interface CreateTenantRolePayload {
   name: string;
   description?: string;
-  baseRole: 'SUPER_ADMIN' | 'MECHANIC' | 'SUPERVISOR' | 'ADMIN' | 'USER';
+  baseRole: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
   routes: string[];
   permissions?: string[];
 }

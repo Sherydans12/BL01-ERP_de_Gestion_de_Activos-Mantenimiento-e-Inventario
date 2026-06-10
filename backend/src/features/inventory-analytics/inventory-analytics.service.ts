@@ -1,15 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { fetchTenantPdfLogoDataUri } from '../../common/pdf/fetch-tenant-pdf-logo';
+import { StorageService } from '../../common/storage/storage.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   generateValuationFullReportPdfBuffer,
   generateValuationFullReportXlsxBuffer,
   ValuationFullReportData,
 } from './inventory-valuation-full-report.generator';
+import {
+  generateValuationSummaryPdfBuffer,
+  generateValuationSummaryXlsxBuffer,
+} from './inventory-valuation-summary-report.generator';
+import {
+  defaultFullReportOptions,
+  ValuationFullReportOptions,
+} from './full-report-options.types';
+import { applyFullReportOptions } from './apply-full-report-options.util';
 
 @Injectable()
 export class InventoryAnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
+
+  private sqlWarehouseIdsFilter(
+    warehouseIds: string[] | null,
+    warehouseAlias = 'w',
+  ): Prisma.Sql {
+    if (!warehouseIds?.length) return Prisma.empty;
+    return Prisma.sql`AND ${Prisma.raw(warehouseAlias)}.id IN (${Prisma.join(
+      warehouseIds.map((id) => Prisma.sql`${id}::uuid`),
+    )})`;
+  }
 
   private gradingForLeadDays(days: number | null): 'A' | 'B' | 'C' {
     if (days == null) return 'C';
@@ -81,18 +105,26 @@ export class InventoryAnalyticsService {
   /**
    * Datos para reporte maestro (PDF/XLSX): detalle por artículo, resumen y valor por bodega.
    */
-  async buildFullReportData(user: {
-    tenantId: string;
-  }): Promise<ValuationFullReportData> {
+  async buildFullReportData(
+    user: { tenantId: string },
+    reportOptions: ValuationFullReportOptions = defaultFullReportOptions(),
+  ): Promise<ValuationFullReportData> {
     const tenantId = user.tenantId;
     const generatedAt = new Date();
+    const warehouseIds = reportOptions.filters.warehouseIds;
+    const whFilter = this.sqlWarehouseIdsFilter(warehouseIds);
+    const criticalLimit = reportOptions.limits.criticalMaxRows;
+    const deadLimit = reportOptions.limits.deadStockMaxRows;
+    const purchaseTake = reportOptions.limits.purchaseMaxRows;
 
     const lineRows = await this.prisma.$queryRaw<
       {
         family_name: string;
         subcategory_name: string;
-        part_number: string;
+        inventory_code: string | null;
+        part_number: string | null;
         item_name: string;
+        item_description: string | null;
         total_qty: unknown;
         total_val: unknown;
       }[]
@@ -103,8 +135,10 @@ export class InventoryAnalyticsService {
           WHEN leaf.parent_category_id IS NOT NULL THEN leaf.name
           ELSE ''
         END AS subcategory_name,
+        ii.inventory_code,
         ii.part_number,
         ii.name AS item_name,
+        ii.description AS item_description,
         COALESCE(SUM(s.quantity), 0)::double precision AS total_qty,
         COALESCE(SUM(s.quantity * COALESCE(s.unit_cost, 0)), 0)::decimal AS total_val
       FROM inventory_items ii
@@ -113,14 +147,17 @@ export class InventoryAnalyticsService {
       LEFT JOIN item_stocks s ON s.item_id = ii.id
       LEFT JOIN warehouses w ON w.id = s.warehouse_id AND w.tenant_id = ii.tenant_id
       WHERE ii.tenant_id = ${tenantId}::uuid
+      ${whFilter}
       GROUP BY
         ii.id,
         par.name,
         leaf.name,
         leaf.parent_category_id,
+        ii.inventory_code,
         ii.part_number,
-        ii.name
-      ORDER BY family_name ASC, subcategory_name ASC, ii.part_number ASC
+        ii.name,
+        ii.description
+      ORDER BY family_name ASC, subcategory_name ASC, ii.inventory_code ASC NULLS LAST, ii.part_number ASC NULLS LAST
     `);
 
     const lines = lineRows.map((r) => {
@@ -128,10 +165,12 @@ export class InventoryAnalyticsService {
       const totalVal = Number(r.total_val);
       const cpp = totalQty > 1e-9 ? totalVal / totalQty : 0;
       return {
-        familyName: r.family_name,
-        subcategoryName: r.subcategory_name,
-        partNumber: r.part_number,
-        itemName: r.item_name,
+        familyName: r.family_name ?? '—',
+        subcategoryName: r.subcategory_name ?? '',
+        inventoryCode: r.inventory_code?.trim() || '',
+        partNumber: r.part_number?.trim() || '',
+        itemName: r.item_name?.trim() || '—',
+        itemDescription: r.item_description?.trim() || '—',
         totalQty,
         cpp,
         lineValue: totalVal,
@@ -143,24 +182,28 @@ export class InventoryAnalyticsService {
       FROM item_stocks s
       INNER JOIN warehouses w ON w.id = s.warehouse_id AND w.tenant_id = ${tenantId}::uuid
       WHERE s.quantity <= s.min_stock
+      ${whFilter}
     `);
     const itemsBelowMinCount = Number(belowRows[0]?.c ?? 0);
 
     const whRows = await this.prisma.$queryRaw<
-      { code: string; name: string; total_value: unknown }[]
+      { id: string; code: string; name: string; total_value: unknown }[]
     >(Prisma.sql`
       SELECT
+        w.id,
         w.code,
         w.name,
         COALESCE(SUM(s.quantity * COALESCE(s.unit_cost, 0)), 0)::decimal AS total_value
       FROM warehouses w
       LEFT JOIN item_stocks s ON s.warehouse_id = w.id
       WHERE w.tenant_id = ${tenantId}::uuid
+      ${whFilter}
       GROUP BY w.id, w.code, w.name
       ORDER BY w.code ASC
     `);
 
     const byWarehouse = whRows.map((r) => ({
+      warehouseId: r.id,
       warehouseCode: r.code,
       warehouseName: r.name,
       totalValue: Number(r.total_value),
@@ -197,6 +240,7 @@ export class InventoryAnalyticsService {
         item_id: string;
         part_number: string;
         item_name: string;
+        item_description: string | null;
         family_name: string;
         current_stock: unknown;
         min_stock: unknown;
@@ -208,6 +252,7 @@ export class InventoryAnalyticsService {
           ii.id AS item_id,
           ii.part_number,
           ii.name AS item_name,
+          ii.description AS item_description,
           COALESCE(parent.name, leaf.name) AS family_name,
           COALESCE(SUM(s.quantity), 0)::double precision AS current_stock,
           COALESCE(MAX(s.min_stock), 0)::double precision AS min_stock
@@ -215,13 +260,16 @@ export class InventoryAnalyticsService {
         INNER JOIN item_categories leaf ON leaf.id = ii.category_id
         LEFT JOIN item_categories parent ON parent.id = leaf.parent_category_id
         LEFT JOIN item_stocks s ON s.item_id = ii.id
+        LEFT JOIN warehouses w ON w.id = s.warehouse_id AND w.tenant_id = ii.tenant_id
         WHERE ii.tenant_id = ${tenantId}::uuid
-        GROUP BY ii.id, ii.part_number, ii.name, parent.name, leaf.name
+        ${whFilter}
+        GROUP BY ii.id, ii.part_number, ii.name, ii.description, parent.name, leaf.name
       )
       SELECT
         item_id,
         part_number,
         item_name,
+        item_description,
         family_name,
         current_stock,
         min_stock,
@@ -229,14 +277,15 @@ export class InventoryAnalyticsService {
       FROM stock_by_item
       WHERE min_stock > 0 AND current_stock < min_stock
       ORDER BY (min_stock - current_stock) DESC, current_stock ASC
-      LIMIT 10
+      LIMIT ${criticalLimit}
     `);
 
     const criticalItems = criticalRows.map((r) => ({
       itemId: r.item_id,
-      partNumber: r.part_number,
-      itemName: r.item_name,
-      familyName: r.family_name,
+      partNumber: r.part_number?.trim() || '',
+      itemName: r.item_name?.trim() || '—',
+      itemDescription: r.item_description?.trim() || '—',
+      familyName: r.family_name ?? '—',
       currentStock: Number(r.current_stock),
       minStock: Number(r.min_stock),
       riskGap: Number(r.risk_gap),
@@ -247,6 +296,7 @@ export class InventoryAnalyticsService {
         item_id: string;
         part_number: string;
         item_name: string;
+        item_description: string | null;
         family_name: string;
         total_qty: unknown;
         total_val: unknown;
@@ -266,6 +316,7 @@ export class InventoryAnalyticsService {
           ii.id AS item_id,
           ii.part_number,
           ii.name AS item_name,
+          ii.description AS item_description,
           COALESCE(parent.name, leaf.name) AS family_name,
           COALESCE(SUM(s.quantity), 0)::double precision AS total_qty,
           COALESCE(SUM(s.quantity * COALESCE(s.unit_cost, 0)), 0)::decimal AS total_val,
@@ -274,14 +325,17 @@ export class InventoryAnalyticsService {
         INNER JOIN item_categories leaf ON leaf.id = ii.category_id
         LEFT JOIN item_categories parent ON parent.id = leaf.parent_category_id
         LEFT JOIN item_stocks s ON s.item_id = ii.id
+        LEFT JOIN warehouses w ON w.id = s.warehouse_id AND w.tenant_id = ii.tenant_id
         LEFT JOIN last_move lm ON lm.item_id = ii.id
         WHERE ii.tenant_id = ${tenantId}::uuid
-        GROUP BY ii.id, ii.part_number, ii.name, parent.name, leaf.name, lm.last_move_at
+        ${whFilter}
+        GROUP BY ii.id, ii.part_number, ii.name, ii.description, parent.name, leaf.name, lm.last_move_at
       )
       SELECT
         item_id,
         part_number,
         item_name,
+        item_description,
         family_name,
         total_qty,
         total_val
@@ -292,14 +346,15 @@ export class InventoryAnalyticsService {
           last_move_at < (NOW() - INTERVAL '6 months')
         )
       ORDER BY total_val DESC
-      LIMIT 20
+      LIMIT ${deadLimit}
     `);
 
     const deadStockItems = deadStockRows.map((r) => ({
       itemId: r.item_id,
-      partNumber: r.part_number,
-      itemName: r.item_name,
-      familyName: r.family_name,
+      partNumber: r.part_number?.trim() || '',
+      itemName: r.item_name?.trim() || '—',
+      itemDescription: r.item_description?.trim() || '—',
+      familyName: r.family_name ?? '—',
       quantity: Number(r.total_qty),
       totalValue: Number(r.total_val),
     }));
@@ -321,7 +376,7 @@ export class InventoryAnalyticsService {
           status: { notIn: ['DRAFT', 'CANCELLED'] },
         },
         orderBy: { updatedAt: 'desc' },
-        take: 100,
+        take: purchaseTake,
         select: {
           correlative: true,
           status: true,
@@ -787,7 +842,9 @@ export class InventoryAnalyticsService {
       const ic = (item.inventoryCode ?? '')
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
-      const pn = (item.partNumber ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const pn = (item.partNumber ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
       if (normQuery.length < 2) return 0;
       if (ic && ic === normQuery) return 100;
       if (ic && ic.startsWith(normQuery)) return 85;
@@ -849,34 +906,130 @@ export class InventoryAnalyticsService {
     return { query, results: ordered };
   }
 
-  async getFullReportBuffer(
+  private reportDateStamp(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private async loadTenantPdfBranding(tenantId: string) {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: { name: true, pdfLogoUrl: true, primaryColor: true },
+    });
+    const tenantName = tenant?.name ?? 'Empresa';
+    const tenantLogoDataUri = await fetchTenantPdfLogoDataUri(
+      this.storage,
+      tenant?.pdfLogoUrl,
+    );
+    return {
+      tenantName,
+      tenantLogoDataUri,
+      tenantPrimaryColor: tenant?.primaryColor,
+    };
+  }
+
+  /** Resumen ejecutivo por familia (misma vista del panel). */
+  async getValuationSummaryReportBuffer(
     user: { tenantId: string },
     format: 'pdf' | 'xlsx',
   ): Promise<{ buffer: Buffer; filename: string; mimeType: string }> {
-    const data = await this.buildFullReportData(user);
-    const tenant = await this.prisma.tenant.findFirst({
-      where: { id: user.tenantId },
-      select: { name: true },
+    const valuation = await this.getValuationByFamily(user);
+    const { tenantName, tenantLogoDataUri, tenantPrimaryColor } =
+      await this.loadTenantPdfBranding(user.tenantId);
+    const data = {
+      generatedAt: new Date(),
+      grandTotal: valuation.grandTotal,
+      byFamily: valuation.byFamily.map((f) => ({
+        familyName: f.familyName,
+        totalValue: f.totalValue,
+      })),
+    };
+    const stamp = this.reportDateStamp();
+    if (format === 'xlsx') {
+      const buffer = await generateValuationSummaryXlsxBuffer(tenantName, data);
+      return {
+        buffer,
+        filename: `valorizacion-familias-${stamp}.xlsx`,
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
+    }
+    const buffer = await generateValuationSummaryPdfBuffer(tenantName, data, {
+      tenantLogoDataUri,
+      tenantPrimaryColor,
     });
-    const tenantName = tenant?.name ?? 'Empresa';
+    return {
+      buffer,
+      filename: `valorizacion-familias-${stamp}.pdf`,
+      mimeType: 'application/pdf',
+    };
+  }
+
+  async getFullReportMeta(user: { tenantId: string }) {
+    const tenantId = user.tenantId;
+    const [warehouses, valuation, catalogItemCount] = await Promise.all([
+      this.prisma.warehouse.findMany({
+        where: { tenantId },
+        select: { id: true, code: true, name: true },
+        orderBy: { code: 'asc' },
+      }),
+      this.getValuationByFamily(user),
+      this.prisma.inventoryItem.count({ where: { tenantId } }),
+    ]);
+    return {
+      warehouses,
+      families: valuation.byFamily.map((f) => ({
+        familyId: f.familyId,
+        familyName: f.familyName,
+        totalValue: f.totalValue,
+      })),
+      catalogItemCount,
+      grandTotal: valuation.grandTotal,
+    };
+  }
+
+  async getFullReportBuffer(
+    user: { tenantId: string },
+    format: 'pdf' | 'xlsx',
+    reportOptions: ValuationFullReportOptions = defaultFullReportOptions(),
+  ): Promise<{ buffer: Buffer; filename: string; mimeType: string }> {
+    const raw = await this.buildFullReportData(user, reportOptions);
+    const data = applyFullReportOptions(raw, reportOptions);
+    const { tenantName, tenantLogoDataUri, tenantPrimaryColor } =
+      await this.loadTenantPdfBranding(user.tenantId);
+    const stamp = this.reportDateStamp();
 
     if (format === 'xlsx') {
       const buffer = await generateValuationFullReportXlsxBuffer(
         tenantName,
         data,
+        {
+          sections: reportOptions.sections,
+          detailMaxRows: reportOptions.limits.detailMaxRows,
+        },
       );
       return {
         buffer,
-        filename: `valorizacion-maestro-${Date.now()}.xlsx`,
+        filename: `valorizacion-maestro-${stamp}.xlsx`,
         mimeType:
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       };
     }
 
-    const buffer = await generateValuationFullReportPdfBuffer(tenantName, data);
+    const pdfDetailCap =
+      reportOptions.limits.detailMaxRows ?? (format === 'pdf' ? 2500 : null);
+    const buffer = await generateValuationFullReportPdfBuffer(
+      tenantName,
+      data,
+      {
+        tenantLogoDataUri,
+        tenantPrimaryColor,
+        sections: reportOptions.sections,
+        detailMaxRows: pdfDetailCap,
+      },
+    );
     return {
       buffer,
-      filename: `valorizacion-maestro-${Date.now()}.pdf`,
+      filename: `valorizacion-maestro-${stamp}.pdf`,
       mimeType: 'application/pdf',
     };
   }

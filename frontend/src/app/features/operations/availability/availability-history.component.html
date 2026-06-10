@@ -1,0 +1,130 @@
+<div class="min-h-screen bg-dark px-4 py-8 sm:px-6 lg:px-10">
+
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <nav class="flex items-center gap-1.5 text-xs text-muted mb-2">
+        <a routerLink="/app/operaciones/disponibilidad/monitor" class="hover:text-main">Monitor de Flota</a>
+        <span>/</span>
+        <span class="text-main">Historial</span>
+      </nav>
+      <h1 class="text-xl font-semibold text-main">Historial de Disponibilidad</h1>
+      <p class="text-sm text-muted">
+        @if (loading()) { Cargando… }
+        @else { {{ total() | number }} {{ total() === 1 ? 'reporte' : 'reportes' }} }
+      </p>
+    </div>
+    <a routerLink="/app/operaciones/disponibilidad/nuevo"
+      class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90">
+      Nuevo reporte
+    </a>
+  </header>
+
+  <section class="mb-6 rounded-2xl bg-surface border border-border p-4">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Equipo</label>
+        <select [ngModel]="filterEquipmentId()" (ngModelChange)="filterEquipmentId.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main">
+          <option value="">Todos</option>
+          @for (eq of equipments(); track eq.id) {
+            <option [value]="eq.id">{{ eq.internalId }} — {{ eq.brand }} {{ eq.model }}</option>
+          }
+        </select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Turno</label>
+        <select [ngModel]="filterShift()" (ngModelChange)="filterShift.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main">
+          <option value="">Todos</option>
+          @for (s of shiftFilterOptions(); track s) {
+            <option [value]="s">{{ SHIFT_LABELS[s] }}</option>
+          }
+        </select>
+      </div>
+      @if (contractOptions().length > 1) {
+        <div class="flex flex-col gap-1">
+          <label class="text-xs font-medium text-muted">Contrato</label>
+          <select [ngModel]="filterContractId()" (ngModelChange)="filterContractId.set($event)"
+            class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main">
+            <option value="">Todos</option>
+            @for (c of contractOptions(); track c.id) {
+              <option [value]="c.id">{{ c.code }}</option>
+            }
+          </select>
+        </div>
+      }
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Desde</label>
+        <input type="date" [ngModel]="filterDateFrom()" (ngModelChange)="filterDateFrom.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Hasta</label>
+        <input type="date" [ngModel]="filterDateTo()" (ngModelChange)="filterDateTo.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-muted">Buscar</label>
+        <input type="search" placeholder="Código, patente…" [ngModel]="searchDraft()" (ngModelChange)="searchDraft.set($event)"
+          class="h-9 w-full rounded-lg border border-border bg-dark px-3 text-sm text-main" />
+      </div>
+    </div>
+    <div class="mt-4 flex gap-2">
+      <button type="button" (click)="applyFilters()"
+        class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:opacity-90">Filtrar</button>
+      <button type="button" (click)="clearFilters()"
+        class="px-4 py-2 rounded-lg text-sm border border-border text-muted hover:text-main">Limpiar</button>
+    </div>
+  </section>
+
+  <div class="rounded-2xl bg-surface border border-border overflow-hidden">
+    @if (loading()) {
+      <div class="p-8 text-center text-muted animate-pulse">Cargando reportes…</div>
+    } @else if (rows().length === 0) {
+      <div class="p-10 text-center text-muted text-sm">Sin reportes con los filtros actuales.</div>
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border bg-dark/40">
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Fecha</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Turno</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Equipo</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase">Estado</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase hidden md:table-cell">Horómetro</th>
+              <th class="text-left px-4 py-3 text-xs text-muted uppercase hidden lg:table-cell">Reportó</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            @for (row of rows(); track row.id) {
+              <tr class="hover:bg-dark/30">
+                <td class="px-4 py-3 text-main">{{ formatDate(row.reportDate) }}</td>
+                <td class="px-4 py-3 text-muted">{{ SHIFT_LABELS[row.shift] }}</td>
+                <td class="px-4 py-3">
+                  <span class="font-mono text-xs text-muted block">{{ row.equipment.internalId }}</span>
+                  <span class="text-main">{{ row.equipment.brand }} {{ row.equipment.model }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="text-xs font-medium" [ngClass]="STATUS_COLORS[row.status]">{{ STATUS_LABELS[row.status] }}</span>
+                </td>
+                <td class="px-4 py-3 text-muted hidden md:table-cell font-mono text-xs">{{ row.meterReading ?? '—' }}</td>
+                <td class="px-4 py-3 text-muted hidden lg:table-cell text-xs">{{ row.reportedBy.name }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (totalPages() > 1) {
+        <div class="flex items-center justify-between px-4 py-3 border-t border-border">
+          <span class="text-xs text-muted">Página {{ page() }} de {{ totalPages() }}</span>
+          <div class="flex gap-2">
+            <button type="button" (click)="goToPage(page() - 1)" [disabled]="page() <= 1"
+              class="px-3 py-1 rounded-lg text-xs border border-border text-muted disabled:opacity-40">Anterior</button>
+            <button type="button" (click)="goToPage(page() + 1)" [disabled]="page() >= totalPages()"
+              class="px-3 py-1 rounded-lg text-xs border border-border text-muted disabled:opacity-40">Siguiente</button>
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>

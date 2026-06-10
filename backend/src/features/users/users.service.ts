@@ -23,6 +23,11 @@ import { AuthAuditService } from '../auth/auth-audit.service';
 import type { LoginRequestMeta } from '../auth/auth-request.util';
 import { UserSessionService } from '../auth/user-session.service';
 import { EmailService } from '../../common/email/email.service';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import {
+  userHasGlobalRoleBypass,
+  userHasPermission,
+} from '../auth/permissions.util';
 import {
   normalizeEmail,
   prismaEmailInsensitive,
@@ -282,7 +287,7 @@ export class UsersService {
     data: {
       email: string;
       name: string;
-      role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+      role: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
       /** Si se envía, debe pertenecer al tenant; el rol efectivo sale del TenantRole.baseRole */
       customRoleId?: string | null;
       rut?: string;
@@ -453,7 +458,7 @@ export class UsersService {
       });
     }
     if (parts.length === 0) return {};
-    if (parts.length === 1) return parts[0]!;
+    if (parts.length === 1) return parts[0];
     return { AND: parts };
   }
 
@@ -546,7 +551,14 @@ export class UsersService {
   ) {
     const raw = q?.trim() ?? '';
     if (raw.length < 2) {
-      return { items: [] as { id: string; name: string; email: string; roleLabel: string }[] };
+      return {
+        items: [] as {
+          id: string;
+          name: string;
+          email: string;
+          roleLabel: string;
+        }[],
+      };
     }
     const safeLimit = Math.min(20, Math.max(1, Number(limit) || 8));
     const where = this.buildUserListWhere(tenantId, userRole, raw);
@@ -574,23 +586,30 @@ export class UsersService {
     };
   }
 
-  /** Usuarios activos del tenant con rol base mecánico o supervisor (asignación OT). */
+  /** Usuarios activos del tenant asignables a OT (ejecutar, asignar o planificar). */
   async findAssignableForOt(tenantId: string) {
     if (!tenantId) {
       throw new BadRequestException('Tenant no disponible');
     }
-    return this.prisma.user.findMany({
+    const otPermissionKeys = [
+      'operations:work-order:execute',
+      'operations:work-order:assign',
+      'operations:work-order:update',
+    ] as const;
+
+    const permissionOr = otPermissionKeys.map((key) => ({
+      customRole: {
+        is: {
+          permissions: { array_contains: key },
+        },
+      },
+    }));
+
+    const rows = await this.prisma.user.findMany({
       where: {
         tenantId,
         isActive: true,
-        OR: [
-          { role: { in: ['MECHANIC', 'SUPERVISOR'] } },
-          {
-            customRole: {
-              baseRole: { in: ['MECHANIC', 'SUPERVISOR'] },
-            },
-          },
-        ],
+        OR: permissionOr,
       },
       select: {
         id: true,
@@ -598,10 +617,39 @@ export class UsersService {
         email: true,
         role: true,
         customRole: {
-          select: { id: true, name: true, baseRole: true },
+          select: { id: true, name: true, baseRole: true, permissions: true },
         },
       },
       orderBy: { name: 'asc' },
+    });
+
+    return rows.map((u) => {
+      const bearer = {
+        role: u.role,
+        customRole: u.customRole,
+      };
+      const canSuperviseOt =
+        userHasGlobalRoleBypass(u.role) ||
+        userHasPermission(
+          bearer,
+          SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN,
+        ) ||
+        userHasPermission(
+          bearer,
+          SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE,
+        );
+      const canExecuteOt =
+        userHasGlobalRoleBypass(u.role) ||
+        userHasPermission(
+          bearer,
+          SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+        ) ||
+        canSuperviseOt;
+      return {
+        ...u,
+        canExecuteOt,
+        canSuperviseOt,
+      };
     });
   }
 
@@ -624,14 +672,8 @@ export class UsersService {
       );
     }
 
-    if (
-      requesterId &&
-      id === requesterId &&
-      data.isActive === false
-    ) {
-      throw new BadRequestException(
-        'No puede desactivar su propia cuenta.',
-      );
+    if (requesterId && id === requesterId && data.isActive === false) {
+      throw new BadRequestException('No puede desactivar su propia cuenta.');
     }
 
     try {

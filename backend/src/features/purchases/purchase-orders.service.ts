@@ -28,11 +28,7 @@ import {
   buildPurchaseContractScopeFilter,
 } from './purchase-contract-access.util';
 import { syncPurchaseQuotationStatusesFromLineAwards } from './purchase-quotation-status-sync.util';
-import {
-  ActivityAction,
-  Prisma,
-  PurchaseOrderStatus,
-} from '@prisma/client';
+import { ActivityAction, Prisma, PurchaseOrderStatus } from '@prisma/client';
 import type { QuotationStatusChange } from './purchase-quotation-status-sync.util';
 import { EmailService } from '../../common/email/email.service';
 import { StorageService } from '../../common/storage/storage.service';
@@ -151,7 +147,10 @@ export class PurchaseOrdersService {
       },
       {
         requisition: {
-          OR: [{ correlative: contains(term) }, { description: contains(term) }],
+          OR: [
+            { correlative: contains(term) },
+            { description: contains(term) },
+          ],
         },
       },
       {
@@ -168,7 +167,10 @@ export class PurchaseOrdersService {
       },
       {
         workOrder: {
-          OR: [{ correlative: contains(term) }, { description: contains(term) }],
+          OR: [
+            { correlative: contains(term) },
+            { description: contains(term) },
+          ],
         },
       },
       {
@@ -471,7 +473,9 @@ export class PurchaseOrdersService {
               uploadedBy: { select: { id: true, name: true, email: true } },
             },
           })
-        : (Promise.resolve([]) as ReturnType<typeof this.prisma.purchaseDocument.findMany>),
+        : (Promise.resolve([]) as ReturnType<
+            typeof this.prisma.purchaseDocument.findMany
+          >),
     ]);
 
     const resolvedQuotation = order.quotation
@@ -766,7 +770,12 @@ export class PurchaseOrdersService {
         items: {
           include: {
             inventoryItem: {
-              select: { id: true, partNumber: true, name: true },
+              select: {
+                id: true,
+                partNumber: true,
+                name: true,
+                description: true,
+              },
             },
           },
         },
@@ -1430,7 +1439,7 @@ export class PurchaseOrdersService {
       Number(order.totalAmount) < Number(matchingPolicy.minAmount)
     ) {
       throw new BadRequestException(
-        `El monto de la OC (${order.totalAmount}) no alcanza el mínimo requerido para el Nivel ${matchingPolicy.level} (${matchingPolicy.minAmount})`,
+        `El monto de la OC (${String(order.totalAmount)}) no alcanza el mínimo requerido para el Nivel ${matchingPolicy.level} (${String(matchingPolicy.minAmount)})`,
       );
     }
 

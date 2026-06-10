@@ -23,9 +23,18 @@ temp-everything-claude-code/
 temp-ecc-survey/
 temp-uiux-survey/
 temp-ecc-import/
+.codex-manual-cache/
 
 # Log local de hooks Cursor (memoria automática por máquina)
 docs/agentes/sesiones-auto.log.md
 
+# Salidas locales de npm run lint:ci:report
+eslint-ci-full.txt
+eslint-remaining.txt
+backend/eslint-ci-report.json
+
 # Informes locales de auditoría (npm audit JSON, trivy staging, gitleaks, psql, curl) — no versionar
 security-audit-reports/
+
+# Plantilla / consolidado de inventario (uso local e importaciones; no versionar)
+Consolidado de Inventario Plataforma Base Logic -  explicado fila 5.xlsx

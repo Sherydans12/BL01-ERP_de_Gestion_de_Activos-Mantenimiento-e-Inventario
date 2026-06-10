@@ -8,6 +8,8 @@ import {
   type PmIntervalSource,
   type EquipmentPmInput,
 } from './pm-interval';
+import { fetchTenantPdfLogoDataUri } from '../../common/pdf/fetch-tenant-pdf-logo';
+import { StorageService } from '../../common/storage/storage.service';
 import { generateWorkOrderManagementMonthlyPdfBuffer } from './work-order-management-monthly-pdf.generator';
 import { equipmentDisplayLabel } from './equipment-display-label';
 
@@ -102,7 +104,10 @@ export type ProjectedServiceRow = {
 export class WorkOrderAnalyticsService {
   private readonly logger = new Logger(WorkOrderAnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   private async resolveLaborRatePerHour(tenantId: string): Promise<number> {
     const tenant = await this.prisma.tenant.findUnique({
@@ -516,8 +521,12 @@ export class WorkOrderAnalyticsService {
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: user.tenantId },
-      select: { name: true },
+      select: { name: true, pdfLogoUrl: true, primaryColor: true },
     });
+    const tenantLogoDataUri = await fetchTenantPdfLogoDataUri(
+      this.storage,
+      tenant?.pdfLogoUrl,
+    );
 
     const availabilityReferenceLines = [...dashboard.availabilityByEquipment]
       .sort((a, b) => (a.availabilityPct ?? 100) - (b.availabilityPct ?? 100))
@@ -530,26 +539,32 @@ export class WorkOrderAnalyticsService {
             : '—',
       }));
 
-    const buffer = await generateWorkOrderManagementMonthlyPdfBuffer({
-      tenantName: tenant?.name ?? 'Tenant',
-      year,
-      month,
-      contractLabel,
-      dashboard: {
-        kpis: dashboard.kpis,
-        paretoSystems: dashboard.paretoSystems.map((p) => ({
-          label: p.label,
-          otCount: p.otCount,
-        })),
-        programmedSplit: dashboard.programmedSplit,
+    const buffer = await generateWorkOrderManagementMonthlyPdfBuffer(
+      {
+        tenantName: tenant?.name ?? 'Tenant',
+        year,
+        month,
+        contractLabel,
+        dashboard: {
+          kpis: dashboard.kpis,
+          paretoSystems: dashboard.paretoSystems.map((p) => ({
+            label: p.label,
+            otCount: p.otCount,
+          })),
+          programmedSplit: dashboard.programmedSplit,
+        },
+        availabilityReferenceLines,
+        totalAssetCostWo: partsFluidCost,
+        totalLaborHours: hhHours,
+        laborRatePerHour: laborRate,
+        laborCostEstimate,
+        totalMaintenanceEstimate: partsFluidCost + laborCostEstimate,
       },
-      availabilityReferenceLines,
-      totalAssetCostWo: partsFluidCost,
-      totalLaborHours: hhHours,
-      laborRatePerHour: laborRate,
-      laborCostEstimate,
-      totalMaintenanceEstimate: partsFluidCost + laborCostEstimate,
-    });
+      {
+        tenantLogoDataUri,
+        tenantPrimaryColor: tenant?.primaryColor,
+      },
+    );
 
     const mm = String(month).padStart(2, '0');
     const filename = `Resumen_Gestion_Mantenimiento_${year}-${mm}.pdf`;

@@ -2,7 +2,7 @@
 
 Flujo **main → producción** y rama **`develop` → QA/staging** (Coolify). CI en GitHub Actions valida tests antes de merge.
 
-**Última actualización:** 2026-05-24
+**Última actualización:** 2026-06-03
 
 ---
 
@@ -10,7 +10,7 @@ Flujo **main → producción** y rama **`develop` → QA/staging** (Coolify). CI
 
 | Rama | Entorno | Despliegue Coolify | CI (GitHub) |
 |------|---------|-------------------|-------------|
-| **`main`** | Producción | App prod (dominio productivo) | `backend-tests.yml` en push/PR |
+| **`main`** | Producción | App prod (dominio productivo) | `ci.yml` en push/PR |
 | **`develop`** | QA / staging | App QA (subdominio `qa.*` — pendiente en VPS) | Mismo workflow |
 | **`feature/<nombre>`** | Local | — | PR hacia `develop` (recomendado) o `main` |
 
@@ -56,21 +56,28 @@ git checkout -b develop origin/develop
 
 ## 3. CI — GitHub Actions
 
-Workflow: [`.github/workflows/backend-tests.yml`](../../.github/workflows/backend-tests.yml)
+Workflow: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 
 | Paso | Comando | Qué valida |
 |------|---------|------------|
-| Dominio crítico | `npm run test:domain` | 12 specs inventario + compras (~212 tests) |
-| Suite completa | `npm test` | Smoke auth/users/sites + dominio (~220 tests) |
+| Instalación | `npm ci` (backend con `--legacy-peer-deps`) | Dependencias reproducibles |
+| Prisma | `npx prisma generate` | Cliente alineado al schema |
+| Lint backend | `npm run lint:ci` | ESLint + Prettier (`--max-warnings 0`, **sin** `--fix`) |
+| Build backend | `npm run build` | Compila NestJS |
+| Dominio crítico | `npm run test:domain` | **388 tests** en **22** specs (inventario, compras, OT, operaciones, …) |
+| Build frontend | `npm run build` | Compila Angular 18 |
+| Tests frontend | `npm run test:ci` | Karma + ChromeHeadless (`CHROMIUM_FLAGS` en CI) |
 
-**Disparadores:** push y pull_request a `main` y `develop`, solo si cambió `backend/**` o el propio workflow.
+**Disparadores:** `push` y `pull_request` a `main` y `develop` (sin filtro de paths).
 
 **Secrets:** no requiere `DATABASE_URL` (unit tests con mocks).
+
+**Caché:** `actions/cache` sobre `~/.npm` y `node_modules` por lockfile (backend y frontend).
 
 ### Badge opcional en README
 
 ```markdown
-![Backend tests](https://github.com/<ORG>/<REPO>/actions/workflows/backend-tests.yml/badge.svg?branch=main)
+![CI](https://github.com/<ORG>/<REPO>/actions/workflows/ci.yml/badge.svg?branch=main)
 ```
 
 Reemplazar `<ORG>/<REPO>` por el slug real del repositorio en GitHub.
@@ -101,8 +108,10 @@ Producción: [DEPLOY-COOLIFY.md](../DEPLOY-COOLIFY.md).
 
 ---
 
-## 5. Checklist antes de merge a `main`
+## 5. Checklist antes de push a `develop` o merge a `main`
 
+- [ ] `cd backend && npm run lint` (auto-fix Prettier/ESLint) y luego `npm run lint:ci` (gate idéntico a CI)
+- [ ] `cd frontend && npm run build && npm run test:ci` (opcional en cambios solo backend, obligatorio si tocó `frontend/`)
 - [ ] `cd backend && npm run test:domain` (local)
 - [ ] PR con CI verde en GitHub
 - [ ] Migraciones probadas en **QA** (`develop` desplegado)
@@ -115,9 +124,18 @@ Producción: [DEPLOY-COOLIFY.md](../DEPLOY-COOLIFY.md).
 
 ```bash
 cd backend
-npm run test:domain    # gate mínimo (dominio)
+npm run lint           # ESLint con --fix (corregir Prettier antes del push)
+npm run lint:ci        # gate idéntico al job CI (--max-warnings 0, sin --fix)
+npm run lint:ci:report # mismo lint + resumen por regla/archivo → eslint-ci-report.json
+npm run test:domain    # gate mínimo (dominio, 22 suites)
 npm test               # suite completa (incluye smoke)
+
+cd ../frontend
+npm run build
+npm run test:ci        # Karma headless (mismo paso que Actions)
 ```
+
+**Lint completo (no inferir desde las ~10 anotaciones de GitHub):** el UI de Actions solo muestra un subconjunto. En local, `lint:ci` lista **todos** los errores; `lint:ci:report` ordena por regla y archivo. Tras generar specs nuevos, ejecutar **`npm run lint`** en `backend/` antes de commitear.
 
 Detalle: [pruebas-unitarias.md](pruebas-unitarias.md).
 
@@ -127,4 +145,7 @@ Detalle: [pruebas-unitarias.md](pruebas-unitarias.md).
 
 | Fecha | Cambio |
 |-------|--------|
-| 2026-05-22 | Rama `develop` creada; CI `backend-tests.yml`; smoke Jest arreglados (`jest-setup` + mocks guards/deps). |
+| 2026-06-03 | CI: formato Prettier en specs/servicios de operaciones y tenant-config; `ci.yml` documenta paridad local (`lint` + `lint:ci`); tabla CI con `test:ci` frontend y **388** tests dominio. |
+| 2026-06-02 | `npm run lint:ci` / `lint:ci:report`; ESLint alineado al repo (unsafe-* off en legado); CI verde. |
+| 2026-05-25 | CI unificado `ci.yml`: lint + build backend/frontend + `test:domain` (313 tests). |
+| 2026-05-22 | Rama `develop` creada; CI inicial; smoke Jest arreglados (`jest-setup` + mocks guards/deps). |

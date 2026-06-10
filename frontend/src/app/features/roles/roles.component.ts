@@ -23,29 +23,26 @@ import { TenantService } from '../../core/services/tenant/tenant.service';
 import { TenantRolesService, TenantRole } from '../../core/services/tenant-roles/tenant-roles.service';
 import { NotificationService } from '../../core/services/notification/notification.service';
 
-type BaseRole = 'MECHANIC' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN';
+type BaseRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
 type ModalMode = 'custom-create' | 'custom-edit' | 'system-edit';
 
-const SYSTEM_ROLES: BaseRole[] = ['MECHANIC', 'SUPERVISOR', 'ADMIN'];
+const SYSTEM_ROLES: BaseRole[] = ['USER', 'ADMIN'];
 
 const BADGE_CLASSES: Record<AppRole, string> = {
   SUPER_ADMIN: 'bg-purple-500/15 text-purple-300 border border-purple-500/30',
   ADMIN: 'bg-primary/15 text-primary border border-primary/30',
-  SUPERVISOR: 'bg-blue-500/15 text-blue-300 border border-blue-500/30',
-  MECHANIC: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/30',
+  USER: 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/30',
 };
 
 const ROLE_ACCENT: Record<BaseRole, string> = {
   ADMIN: 'border-primary/30 hover:border-primary/50',
-  SUPERVISOR: 'border-blue-500/20 hover:border-blue-500/40',
-  MECHANIC: 'border-zinc-500/20 hover:border-zinc-500/40',
+  USER: 'border-zinc-500/20 hover:border-zinc-500/40',
   SUPER_ADMIN: 'border-purple-500/20 hover:border-purple-500/40',
 };
 
 const BASE_ROLE_BADGE: Record<BaseRole, string> = {
   ADMIN: 'bg-primary/15 text-primary border-primary/30',
-  SUPERVISOR: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  MECHANIC: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+  USER: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
   SUPER_ADMIN: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
 };
 
@@ -55,64 +52,15 @@ interface ApiPermGroup {
 }
 
 const BASE_ROLE_API: Record<BaseRole, { summary: string; groups: ApiPermGroup[] }> = {
-  MECHANIC: {
-    summary: 'Operario de campo. Acceso de lectura/ejecución sobre las entidades del día a día.',
+  USER: {
+    summary:
+      'Usuario base sin privilegios por defecto. Los permisos efectivos se definen en el perfil PBAC (TenantRole).',
     groups: [
       {
-        label: 'Órdenes de Trabajo',
+        label: 'PBAC',
         items: [
-          { text: 'Ver y filtrar órdenes asignadas', allowed: true },
-          { text: 'Actualizar estado / agregar notas', allowed: true },
-          { text: 'Crear o reasignar órdenes', allowed: false },
-          { text: 'Eliminar órdenes', allowed: false },
-        ],
-      },
-      {
-        label: 'Flota e Inventario',
-        items: [
-          { text: 'Consultar equipos y flota', allowed: true },
-          { text: 'Registrar lecturas de medidor', allowed: true },
-          { text: 'Consultar stock disponible', allowed: true },
-          { text: 'Crear / modificar artículos del catálogo', allowed: false },
-          { text: 'Gestionar bodegas o movimientos de stock', allowed: false },
-        ],
-      },
-      {
-        label: 'Administración',
-        items: [
-          { text: 'Gestionar usuarios o invitar nuevos', allowed: false },
-          { text: 'Configurar contratos o empresa', allowed: false },
-          { text: 'Editar catálogos maestros', allowed: false },
-        ],
-      },
-    ],
-  },
-  SUPERVISOR: {
-    summary: 'Responsable operacional. Puede gestionar mantenimiento e inventario, pero no la administración del tenant.',
-    groups: [
-      {
-        label: 'Órdenes de Trabajo',
-        items: [
-          { text: 'Ver, crear y cerrar órdenes', allowed: true },
-          { text: 'Reasignar y gestionar prioridades', allowed: true },
-          { text: 'Eliminar órdenes', allowed: false },
-        ],
-      },
-      {
-        label: 'Mantenimiento e Inventario',
-        items: [
-          { text: 'Configurar pautas PM (kits)', allowed: true },
-          { text: 'Gestionar catálogo de repuestos', allowed: true },
-          { text: 'Gestionar bodegas y movimientos de stock', allowed: true },
-          { text: 'Registrar y ajustar inventario', allowed: true },
-        ],
-      },
-      {
-        label: 'Administración',
-        items: [
-          { text: 'Gestionar usuarios o invitar nuevos', allowed: false },
-          { text: 'Configurar contratos o empresa', allowed: false },
-          { text: 'Editar catálogos maestros del sistema', allowed: false },
+          { text: 'Capacidades según permisos asignados al perfil', allowed: true },
+          { text: 'Bypass global de API (solo ADMIN / SUPER_ADMIN)', allowed: false },
         ],
       },
     ],
@@ -177,17 +125,11 @@ function buildNavRows(): NavRow[] {
   return rows;
 }
 
-/** Default routes per role from nav.config (used when no sidebarPermissions override). */
-function buildDefaultRoutes(role: BaseRole): Set<string> {
-  const routes = new Set<string>();
-  for (const section of NAV_SECTIONS) {
-    const sectionOk = !section.roles || section.roles.includes(role);
-    for (const item of section.items) {
-      const itemOk = !item.roles || item.roles.includes(role);
-      if (sectionOk && itemOk) routes.add(item.route);
-    }
-  }
-  return routes;
+/**
+ * @deprecated El menú se deriva de PBAC (`gobernanza-roles`). Sin override en tenant, no hay rutas por defecto.
+ */
+function buildDefaultRoutes(_role: BaseRole): Set<string> {
+  return new Set();
 }
 
 @Component({
@@ -753,7 +695,7 @@ export class RolesComponent implements OnInit {
   readonly systemRoles = SYSTEM_ROLES;
   readonly navRows: NavRow[] = buildNavRows();
   readonly navSections = NAV_SECTIONS;
-  readonly baseRoles: BaseRole[] = ['MECHANIC', 'SUPERVISOR', 'ADMIN', 'SUPER_ADMIN'];
+  readonly baseRoles: BaseRole[] = ['USER', 'ADMIN', 'SUPER_ADMIN'];
   readonly roleLabels = ROLE_LABELS;
   readonly roleDescriptions = ROLE_DESCRIPTIONS;
   readonly baseRoleApi = BASE_ROLE_API;
@@ -782,7 +724,7 @@ export class RolesComponent implements OnInit {
   modalForm = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(100)]],
     description: [''],
-    baseRole: ['MECHANIC' as BaseRole, Validators.required],
+    baseRole: ['USER' as BaseRole, Validators.required],
   });
 
   selectedRoutes = signal<Set<string>>(new Set());
@@ -842,7 +784,7 @@ export class RolesComponent implements OnInit {
     this.editingCustomRole.set(null);
     this.editingSystemRole.set(null);
     this.modalMode.set('custom-create');
-    this.modalForm.reset({ name: '', description: '', baseRole: 'MECHANIC' });
+    this.modalForm.reset({ name: '', description: '', baseRole: 'USER' });
     this.selectedRoutes.set(new Set());
     this.modalOpen.set(true);
     if (this.activeTab() !== 'custom') {

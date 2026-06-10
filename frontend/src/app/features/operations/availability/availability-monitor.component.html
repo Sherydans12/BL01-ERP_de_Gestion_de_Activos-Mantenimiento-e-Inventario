@@ -1,0 +1,281 @@
+<div class="min-h-screen bg-dark p-4 lg:p-6">
+
+  <!-- Encabezado -->
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-main">Monitor de Flota</h1>
+      <p class="text-muted text-sm mt-1">
+        Tablero del turno — {{ shiftService.shiftLabel() }} · {{ shiftService.shiftHours() }}
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a
+        routerLink="/app/operaciones/disponibilidad/historial"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold border border-border text-muted hover:text-main hover:border-primary/40 transition-colors min-h-[40px]"
+      >
+        Historial
+      </a>
+      <a
+        routerLink="/app/operaciones/disponibilidad/nuevo"
+        [queryParams]="{ date: filterDate(), shift: filterShift() }"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-white hover:opacity-90 transition-opacity min-h-[40px]"
+      >
+        Reportar disponibilidad
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Bar -->
+  @if (summary(); as s) {
+    <div
+      class="rounded-2xl border p-4 mb-6 flex flex-wrap items-center gap-4 lg:gap-6 transition-colors"
+      [ngClass]="s.unreportedCount === 0
+        ? {'border-green-500/30': true, 'bg-green-500/5': true}
+        : {'border-red-500/30': true, 'bg-red-500/5': true}"
+    >
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-medium text-muted uppercase tracking-wide">Total Flota</span>
+        <span class="text-lg font-bold text-main">{{ s.totalFleet }}</span>
+      </div>
+      <div class="w-px h-6 bg-border hidden sm:block"></div>
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-green-400"></span>
+        <span class="text-xs font-medium text-muted uppercase tracking-wide">Reportados</span>
+        <span class="text-lg font-bold text-green-400">{{ s.reportedCount }}</span>
+      </div>
+      <div class="w-px h-6 bg-border hidden sm:block"></div>
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full" [class.bg-red-400]="s.unreportedCount > 0" [class.bg-green-400]="s.unreportedCount === 0"></span>
+        <span class="text-xs font-medium text-muted uppercase tracking-wide">Pendientes</span>
+        <span class="text-lg font-bold" [class.text-red-400]="s.unreportedCount > 0" [class.text-green-400]="s.unreportedCount === 0">{{ s.unreportedCount }}</span>
+      </div>
+      <div class="w-px h-6 bg-border hidden sm:block"></div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-medium text-muted uppercase tracking-wide">Completitud</span>
+        <span class="text-lg font-bold text-main">{{ s.completionPct }}%</span>
+      </div>
+      @if (s.excludedDownCount > 0) {
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-muted uppercase tracking-wide">Excluidos</span>
+          <span class="text-lg font-bold text-orange-400">{{ s.excludedDownCount }}</span>
+        </div>
+      }
+      <div class="ml-auto">
+        @if (s.unreportedCount === 0) {
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+            Flota al 100%
+          </span>
+        } @else {
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
+            {{ s.unreportedCount }} pendiente{{ s.unreportedCount > 1 ? 's' : '' }}
+          </span>
+        }
+      </div>
+    </div>
+
+    @if (s.byContract.length > 1 && isAdminScope()) {
+      <div class="flex flex-wrap gap-2 mb-6">
+        @for (c of s.byContract; track c.contractId) {
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-surface border border-border text-muted">
+            {{ contractLabel(c.contractId) }}:
+            <span class="text-green-400">{{ c.reportedCount }}</span>/<span class="text-main">{{ c.totalFleet }}</span>
+          </span>
+        }
+      </div>
+    }
+
+    @if (statusBreakdownEntries(s).length > 0) {
+      <div class="flex flex-wrap gap-2 mb-6">
+        @for (entry of statusBreakdownEntries(s); track entry.status) {
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-surface border border-border text-muted">
+            <span class="w-2 h-2 rounded-full" [ngClass]="STATUS_DOT[entry.status]"></span>
+            {{ STATUS_LABELS[entry.status] }}: <span class="text-main font-semibold">{{ entry.count }}</span>
+          </span>
+        }
+      </div>
+    }
+  }
+
+  <!-- Filtros -->
+  <div class="bg-surface border border-border rounded-2xl p-5 mb-6 space-y-4">
+    <div class="flex flex-col lg:flex-row gap-4 items-end">
+      <div class="flex-1 w-full">
+        <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Fecha</label>
+        <input type="date" [max]="maxDate" [ngModel]="filterDate()" (ngModelChange)="onDateChange($event)"
+          class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]" />
+      </div>
+      @if (shiftService.hasNightShift()) {
+        <div class="flex-1 w-full">
+          <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Turno</label>
+          <select [ngModel]="filterShift()" (ngModelChange)="onShiftChange($event)"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]">
+            @for (sh of SHIFTS; track sh) {
+              <option [value]="sh">{{ SHIFT_LABELS[sh] }}</option>
+            }
+          </select>
+        </div>
+      }
+      @if (contractOptions().length > 1) {
+        <div class="flex-1 w-full">
+          <label class="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Contrato</label>
+          <select [ngModel]="filterContractId()" (ngModelChange)="onContractChange($event)"
+            class="w-full px-3 py-2 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]">
+            <option value="">Todos los contratos</option>
+            @for (c of contractOptions(); track c.id) {
+              <option [value]="c.id">{{ c.code }} — {{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+      <button type="button" (click)="applyFilters()" [disabled]="isLoading()"
+        class="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:opacity-90 disabled:opacity-50 min-h-[48px] whitespace-nowrap">
+        Consultar
+      </button>
+      <button type="button" (click)="exportTemplate()" [disabled]="isExporting()"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted hover:text-main hover:border-primary/40 disabled:opacity-50 min-h-[48px] whitespace-nowrap">
+        @if (isExporting()) { Exportando… } @else { Excel turno }
+      </button>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div class="relative flex-1">
+        <input type="search" placeholder="Buscar código, patente, marca…" [ngModel]="searchDraft()" (ngModelChange)="onSearchDraftChange($event)"
+          class="w-full px-3 py-2 pl-9 bg-dark border border-border rounded-lg text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[44px]" />
+        <svg class="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      <div class="flex flex-wrap gap-1">
+        @for (tab of TAB_OPTIONS; track tab.id) {
+          <button type="button" (click)="setTab(tab.id)"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors min-h-[36px]"
+            [ngClass]="filterTab() === tab.id
+              ? {'border-primary': true, 'bg-primary/10': true, 'text-primary': true}
+              : {'border-border': true, 'text-muted': true, 'hover:text-main': true}">
+            {{ tab.label }}
+            @if (summary(); as sm) {
+              @if (tab.id === 'REPORTED') { ({{ sm.reportedCount }}) }
+              @if (tab.id === 'PENDING') { ({{ sm.unreportedCount }}) }
+              @if (tab.id === 'EXCLUDED') { ({{ sm.excludedDownCount }}) }
+            }
+          </button>
+        }
+      </div>
+    </div>
+
+    @if (lastQueried()) {
+      <p class="text-xs text-muted">Última consulta: <span class="text-main font-medium">{{ lastQueried() }}</span> · auto-refresh 5 min</p>
+    }
+  </div>
+
+  <!-- Tabla -->
+  @if (isLoading()) {
+    <div class="bg-surface border border-border rounded-2xl p-6 space-y-3 animate-pulse">
+      @for (i of [1, 2, 3, 4, 5]; track i) {
+        <div class="h-10 bg-border rounded"></div>
+      }
+    </div>
+  } @else if (rows().length === 0) {
+    <div class="bg-surface border border-border rounded-2xl p-10 text-center">
+      @if (filterTab() === 'PENDING' && summary()?.unreportedCount === 0) {
+        <h2 class="text-xl font-bold text-green-400 mb-1">¡Flota al 100%!</h2>
+        <p class="text-muted text-sm">Todos los equipos operativos del turno han sido reportados.</p>
+      } @else {
+        <p class="text-muted text-sm">Sin equipos en esta vista con los filtros actuales.</p>
+      }
+    </div>
+  } @else {
+    <div class="bg-surface border border-border rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border bg-dark/40">
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase">Código</th>
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase">Equipo</th>
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase hidden md:table-cell">Patente</th>
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase">Estado turno</th>
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase hidden lg:table-cell">Horómetro</th>
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase hidden xl:table-cell">Reportó</th>
+              <th class="text-left px-4 py-3 text-muted font-medium text-xs uppercase hidden xl:table-cell">Hora</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            @for (row of rows(); track row.equipmentId) {
+              <tr class="hover:bg-dark/40 transition-colors"
+                [ngClass]="row.rowKind === 'EXCLUDED'
+                  ? {'bg-error/5': true, 'border-l-2': true, 'border-error': true}
+                  : {}">
+                <td class="px-4 py-3 font-mono text-xs">
+                  <button type="button" (click)="openEquipmentDetail(row.equipmentId)" class="text-primary hover:underline">{{ row.internalId }}</button>
+                </td>
+                <td class="px-4 py-3 text-main">{{ row.brand }} {{ row.model }}</td>
+                <td class="px-4 py-3 text-muted hidden md:table-cell">{{ row.plate ?? '—' }}</td>
+                <td class="px-4 py-3">
+                  @if (row.rowKind === 'REPORTED' && row.status) {
+                    <span class="inline-flex items-center gap-1.5 text-xs font-medium" [ngClass]="STATUS_COLORS[row.status]">
+                      <span class="w-2 h-2 rounded-full" [ngClass]="STATUS_DOT[row.status]"></span>
+                      {{ STATUS_LABELS[row.status] }}
+                    </span>
+                    @if (hasPendingFaultRegistration(row.equipmentId)) {
+                      <span class="mt-1 inline-flex items-center rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                        Acción pendiente: Registrar falla
+                      </span>
+                    }
+                  } @else if (row.rowKind === 'PENDING') {
+                    <span class="text-xs font-medium text-red-400">Sin reporte</span>
+                  } @else {
+                    <span class="text-xs font-medium text-orange-400">Fuera de servicio</span>
+                    @if (!row.isOperational) {
+                      <span class="block text-[10px] text-muted mt-0.5">isOperational=false</span>
+                    }
+                  }
+                </td>
+                <td class="px-4 py-3 text-muted hidden lg:table-cell font-mono text-xs">
+                  {{ row.meterReading ?? '—' }}
+                </td>
+                <td class="px-4 py-3 text-muted hidden xl:table-cell text-xs">
+                  {{ row.reportedBy?.name ?? '—' }}
+                </td>
+                <td class="px-4 py-3 text-muted hidden xl:table-cell text-xs">
+                  {{ formatReportedAt(row.reportedAt) }}
+                </td>
+                <td class="px-4 py-3 text-right">
+                  @if (row.rowKind === 'PENDING') {
+                    <a [routerLink]="reportLink(row.equipmentId)" [queryParams]="reportQueryParams(row.equipmentId)"
+                      class="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium min-h-[40px]">
+                      Reportar
+                    </a>
+                  } @else if (row.comments) {
+                    <span class="text-xs text-muted" [title]="row.comments">💬</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (totalPages() > 1) {
+        <div class="flex items-center justify-between gap-3 px-4 py-3 border-t border-border">
+          <p class="text-xs text-muted">{{ totalRows() }} equipo{{ totalRows() !== 1 ? 's' : '' }}</p>
+          <div class="flex items-center gap-1">
+            <button type="button" (click)="goToPage(page() - 1)" [disabled]="page() <= 1"
+              class="px-3 py-1 rounded-lg text-xs border border-border text-muted disabled:opacity-40">Anterior</button>
+            <span class="px-2 text-xs text-muted">{{ page() }} / {{ totalPages() }}</span>
+            <button type="button" (click)="goToPage(page() + 1)" [disabled]="page() >= totalPages()"
+              class="px-3 py-1 rounded-lg text-xs border border-border text-muted disabled:opacity-40">Siguiente</button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+@if (showEquipmentDetail()) {
+  <app-equipment-detail-modal
+    [equipmentId]="detailEquipmentId()"
+    [isOpen]="showEquipmentDetail()"
+    (close)="showEquipmentDetail.set(false)"
+  />
+}

@@ -6,6 +6,9 @@ import { I } from './core/constants/inventory-permissions';
 import { O } from './core/constants/operations-permissions';
 import { A } from './core/constants/admin-permissions';
 import { registroHorasCanDeactivate } from './features/meter-capture/registro-horas-can-deactivate.guard';
+import { lubeReportCanDeactivate } from './features/operations/lube-reports/lube-report-can-deactivate.guard';
+import { availabilityFormCanDeactivate } from './features/operations/availability/availability-form-can-deactivate.guard';
+import { faultReportCanDeactivate } from './features/operations/fault-reports/fault-report-can-deactivate.guard';
 
 export const routes: Routes = [
   {
@@ -101,6 +104,18 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'flota/importar',
+        canActivate: [permissionGuard],
+        data: {
+          permissions: O.EQUIPMENT_UPDATE,
+          pageTitle: 'Importar maestro de flota',
+        },
+        loadComponent: () =>
+          import('./features/fleet/fleet-master-import/fleet-master-import.component').then(
+            (m) => m.FleetMasterImportComponent,
+          ),
+      },
+      {
         path: 'flota/registro-horas',
         canActivate: [permissionGuard],
         canDeactivate: [registroHorasCanDeactivate],
@@ -150,6 +165,35 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'operaciones/analytics',
+        canActivate: [permissionGuard],
+        data: { permissions: O.WORK_ORDER_READ, pageTitle: 'KPIs Operativos' },
+        loadComponent: () =>
+          import('./features/analytics/dashboard/dashboard.component').then(
+            (m) => m.OperationsKpiDashboardComponent,
+          ),
+      },
+      // ── Módulo: Despacho de Lubricantes ──────────────────────────────────
+      {
+        path: 'operaciones/lubricantes',
+        canActivate: [permissionGuard],
+        data: { permissions: O.LUBE_REPORT_READ, pageTitle: 'Despachos de Lubricantes' },
+        loadComponent: () =>
+          import('./features/operations/lube-reports/lube-report-list.component').then(
+            (m) => m.LubeReportListComponent,
+          ),
+      },
+      {
+        path: 'operaciones/lubricantes/nuevo',
+        canActivate: [permissionGuard],
+        canDeactivate: [lubeReportCanDeactivate],
+        data: { permissions: O.LUBE_REPORT_CREATE, pageTitle: 'Nuevo Despacho de Lubricante' },
+        loadComponent: () =>
+          import('./features/operations/lube-reports/lube-report-form.component').then(
+            (m) => m.LubeReportFormComponent,
+          ),
+      },
+      {
         path: 'ots/:id',
         canActivate: [permissionGuard],
         data: { permissions: O.WORK_ORDER_READ, pageTitle: 'Orden de trabajo' },
@@ -166,6 +210,64 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/work-orders/work-order-form/work-order-form.component').then(
             (m) => m.WorkOrderFormComponent,
+          ),
+      },
+      // ── Módulo: Disponibilidad Operativa Diaria ───────────────────────────
+      {
+        path: 'operaciones/disponibilidad/nuevo',
+        canActivate: [permissionGuard],
+        canDeactivate: [availabilityFormCanDeactivate],
+        data: { permissions: O.AVAILABILITY_CREATE, pageTitle: 'Reporte de Disponibilidad' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-form.component').then(
+            (m) => m.AvailabilityFormComponent,
+          ),
+      },
+      {
+        path: 'operaciones/disponibilidad/monitor',
+        canActivate: [permissionGuard],
+        data: { permissions: O.AVAILABILITY_MONITOR, pageTitle: 'Monitor de Flota' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-monitor.component').then(
+            (m) => m.AvailabilityMonitorComponent,
+          ),
+      },
+      {
+        path: 'operaciones/disponibilidad/historial',
+        canActivate: [permissionGuard],
+        data: { permissions: O.AVAILABILITY_READ, pageTitle: 'Historial de Disponibilidad' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-history.component').then(
+            (m) => m.AvailabilityHistoryComponent,
+          ),
+      },
+      {
+        path: 'operaciones/disponibilidad/importar',
+        canActivate: [permissionGuard],
+        data: { permissions: O.AVAILABILITY_CREATE, pageTitle: 'Importar Disponibilidad (Excel)' },
+        loadComponent: () =>
+          import('./features/operations/availability/availability-import.component').then(
+            (m) => m.AvailabilityImportComponent,
+          ),
+      },
+      // ── Operaciones: Registro de Fallas ──────────────────────────────────
+      {
+        path: 'operaciones/fallas',
+        canActivate: [permissionGuard],
+        data: { permissions: O.FAULT_REPORT_READ, pageTitle: 'Registro de Fallas' },
+        loadComponent: () =>
+          import('./features/operations/fault-reports/fault-report-list.component').then(
+            (m) => m.FaultReportListComponent,
+          ),
+      },
+      {
+        path: 'operaciones/fallas/nuevo',
+        canActivate: [permissionGuard],
+        canDeactivate: [faultReportCanDeactivate],
+        data: { permissions: O.FAULT_REPORT_CREATE, pageTitle: 'Registrar Falla' },
+        loadComponent: () =>
+          import('./features/operations/fault-reports/fault-report-form.component').then(
+            (m) => m.FaultReportFormComponent,
           ),
       },
       // ── Mantenimiento (pautas PM) ─────────────────────────────────────────
@@ -287,6 +389,30 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/inventory-stock/stock-dashboard/stock-dashboard.component').then(
             (m) => m.StockDashboardComponent,
+          ),
+      },
+      {
+        path: 'inventario/importar',
+        canActivate: [permissionGuard],
+        data: {
+          permissionsAny: [I.ITEM_UPDATE, I.STOCK_ADJUST],
+          pageTitle: 'Importar maestro de inventario',
+        },
+        loadComponent: () =>
+          import('./features/inventory-items/inventory-master-import/inventory-master-import.component').then(
+            (m) => m.InventoryMasterImportComponent,
+          ),
+      },
+      {
+        path: 'inventario/reporte-maestro',
+        canActivate: [permissionGuard],
+        data: {
+          permissions: I.ANALYTICS_REPORT,
+          pageTitle: 'Reporte maestro de valorización',
+        },
+        loadComponent: () =>
+          import('./features/inventory-stock/inventory-master-report/inventory-master-report.component').then(
+            (m) => m.InventoryMasterReportComponent,
           ),
       },
       {

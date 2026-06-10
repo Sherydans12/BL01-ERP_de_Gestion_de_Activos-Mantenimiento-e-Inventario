@@ -29,6 +29,10 @@ import { SecurityAdminModule } from './features/security-admin/security-admin.mo
 import { PlatformDataAdminModule } from './features/platform-data-admin/platform-data-admin.module';
 import { EmailModule } from './common/email/email.module';
 import { NotificationSettingsModule } from './features/notification-settings/notification-settings.module';
+import { LubeReportsModule } from './features/lube-reports/lube-reports.module';
+import { EquipmentAvailabilityModule } from './features/equipment-availability/equipment-availability.module';
+import { FaultReportsModule } from './features/fault-reports/fault-reports.module';
+import { KpiAnalyticsModule } from './features/kpi-analytics/kpi-analytics.module';
 
 @Module({
   imports: [
@@ -60,6 +64,10 @@ import { NotificationSettingsModule } from './features/notification-settings/not
     PlatformDataAdminModule,
     EmailModule,
     NotificationSettingsModule,
+    LubeReportsModule,
+    EquipmentAvailabilityModule,
+    FaultReportsModule,
+    KpiAnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

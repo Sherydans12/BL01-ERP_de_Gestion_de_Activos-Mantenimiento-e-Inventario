@@ -71,6 +71,10 @@ export interface Equipment {
 
   /** Indisponibilidad por OT en curso con impacto en disponibilidad (fuera de servicio). */
   isOperational?: boolean;
+  /** Hay RF OPEN/LINKED sin último M2 en DOWN_MAINTENANCE. */
+  actionRequiredFault?: boolean;
+  activeFaultReportStatus?: 'OPEN' | 'LINKED' | null;
+  activeFaultReportCorrelative?: string | null;
   cumulativeDowntimeHours?: string | number;
 
   // Relaciones Pobladas
@@ -92,6 +96,10 @@ export interface WorkOrderPart {
   partNumber: string;
   description: string;
   quantity: number;
+  /** Costo unitario imputado (CPP al despachar). Puede faltar en repuestos manuales. */
+  unitCost?: number | null;
+  /** Artículo de inventario vinculado, si el repuesto salió del kardex. */
+  inventoryItemId?: string | null;
 }
 
 export interface WorkOrder {
@@ -114,7 +122,12 @@ export interface WorkOrder {
   systems?: any[];
 }
 
-export type MeterLogSource = 'OT' | 'MANUAL' | 'TELEMETRY';
+export type MeterLogSource =
+  | 'OT'
+  | 'MANUAL'
+  | 'TELEMETRY'
+  | 'AVAILABILITY_REPORT'
+  | 'FAULT_REPORT';
 
 /** Historial unificado de lecturas / cambios de medidor (maestro + OT + telemetría). */
 export interface EquipmentMeterLog {
@@ -139,6 +152,7 @@ export interface MeterCaptureBoardRow {
   currentMeter: number;
   meterType: MeterType;
   lastReadingAt: string | null;
+  lastReadingSource: MeterLogSource | null;
   contractCode: string | null;
   subcontractCode: string | null;
 }
@@ -150,13 +164,22 @@ export interface MeterCaptureBoardResponse {
 
 export type MeterBulkSyncErrorCode =
   | 'READING_LOWER_THAN_CURRENT'
-  | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN';
+  | 'EQUIPMENT_NOT_FOUND_OR_FORBIDDEN'
+  | 'READING_JUMP_REQUIRES_CONFIRMATION';
 
 export interface MeterBulkSyncErrorItem {
   equipmentId: string;
   error: MeterBulkSyncErrorCode;
-  /** Medidor actual en BD cuando `error === READING_LOWER_THAN_CURRENT`. */
+  /** Medidor actual en BD en conflictos de lectura o salto. */
   serverValue?: number;
+  /** Delta calculado cuando `error === READING_JUMP_REQUIRES_CONFIRMATION`. */
+  delta?: number;
+}
+
+export interface MeterBulkSyncItem {
+  equipmentId: string;
+  newReading: number;
+  confirmedLargeJump?: boolean;
 }
 
 export interface MeterBulkSyncAppliedItem {
@@ -200,16 +223,19 @@ export interface MeterAdjustment {
   user?: { name: string; email: string };
 }
 
-/** Costos imputados al activo desde recepciones de OC (compras externas). */
+export type AssetCostType = 'PURCHASE' | 'WORK_ORDER' | 'LUBE_DISPATCH';
+
+/** Costos imputados al activo (compras externas, repuestos/fluidos de OT, lubricantes). */
 export interface AssetCostRecord {
   id: string;
   equipmentId: string;
   amount: string | number;
-  type: 'PURCHASE';
-  referenceId: string;
+  type: AssetCostType;
+  referenceId?: string;
   warehouseReceiptId?: string | null;
   recordedAt: string;
-  purchaseOrder?: { correlative: string };
+  purchaseOrder?: { correlative: string } | null;
+  workOrder?: { correlative: string } | null;
   warehouseReceipt?: { correlative: string } | null;
 }
 

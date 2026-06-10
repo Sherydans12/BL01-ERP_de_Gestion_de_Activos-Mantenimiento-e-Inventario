@@ -1,0 +1,65 @@
+<div class="space-y-2">
+  @if (availableStock() !== null) {
+    <div
+      class="fluid-stock-badge"
+      [class.fluid-stock-badge--ok]="!exceedsStock()"
+      [class.fluid-stock-badge--warn]="exceedsStock() && !isBlocking()"
+      [class.fluid-stock-badge--block]="isBlocking()">
+      <span>Disponible: {{ availableStock() | number: '1.0-3' }} {{ unitAbbr() }}</span>
+    </div>
+  }
+
+  <div>
+    <label
+      class="text-[9px] text-muted uppercase tracking-wide"
+      [attr.for]="'fluid-qty-' + itemId()">
+      Cantidad ({{ unitAbbr() }})
+    </label>
+    <input
+      [id]="'fluid-qty-' + itemId()"
+      type="number"
+      [formControl]="quantityControl()"
+      [step]="allowsDecimals() ? '0.01' : '1'"
+      [min]="allowsDecimals() ? '0.01' : '1'"
+      inputmode="decimal"
+      (blur)="onBlurNormalize()"
+      class="fluid-qty-input"
+      [class.fluid-qty-input--error]="formatError() || isBlocking()"
+      [class.fluid-qty-input--warn]="exceedsStock() && !isBlocking() && !formatError()" />
+  </div>
+
+  @if (formatError()) {
+    <p class="text-xs text-red-400">
+      Este artículo no admite decimales (unidad {{ unitAbbr() }}). Ingrese un número entero.
+    </p>
+  }
+
+  @if (exceedsStock() && !formatError()) {
+    @if (isBlocking()) {
+      <p class="text-xs text-red-400">
+        Stock insuficiente. Disponible: {{ availableStock() | number: '1.0-3' }} {{ unitAbbr() }}.
+      </p>
+    } @else {
+      <p class="text-xs text-amber-300">
+        Supera el stock disponible ({{ availableStock() | number: '1.0-3' }} {{ unitAbbr() }}).
+        El despacho quedará pendiente de regularización.
+      </p>
+    }
+  }
+
+  @if (needsLargeConfirm() && !formatError()) {
+    <div class="fluid-large-confirm">
+      <p class="text-xs text-amber-200">
+        Cantidad inusual (supera {{ largeThreshold() }} {{ unitAbbr() }}). Confirme antes de continuar.
+      </p>
+      <label class="flex items-start gap-2 text-xs text-main cursor-pointer">
+        <input
+          type="checkbox"
+          class="mt-0.5 rounded border-border"
+          [checked]="confirmedLargeDispatch()"
+          (change)="onLargeConfirm($event)" />
+        <span>Confirmar cantidad inusual</span>
+      </label>
+    </div>
+  }
+</div>

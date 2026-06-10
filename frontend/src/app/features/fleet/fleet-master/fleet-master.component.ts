@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   OnInit,
@@ -10,9 +11,11 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { O } from '../../../core/constants/operations-permissions';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import {
   FormBuilder,
   FormGroup,
@@ -26,11 +29,9 @@ import { AuthService } from '../../../core/services/auth/auth.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
 import { EquipmentDetailModalComponent } from '../equipment-detail-modal/equipment-detail-modal.component';
-import { ExportService } from '../../../core/services/export/export.service';
+import { FleetStateService } from '../../../core/services/fleet-state/fleet-state.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs/operators';
-import { PdfService } from '../../../core/services/pdf/pdf.service';
-import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
 import { ContractsService } from '../../../core/services/contracts/contracts.service';
 
 // IMPORTAMOS LAS INTERFACES GLOBALES (Mirroring del Schema)
@@ -46,10 +47,15 @@ import { Equipment, MeterType, Contract } from '../../../core/models/types';
     ConfirmModalComponent,
     EquipmentDetailModalComponent,
     HasPermissionDirective,
+    RouterLink,
   ],
   templateUrl: './fleet-master.component.html',
   styles: [
     `
+      :host {
+        display: block;
+      }
+
       :host dialog.equipment-register-dialog {
         box-sizing: border-box;
         width: 100vw;
@@ -65,14 +71,13 @@ export class FleetMasterComponent implements OnInit {
   protected readonly o = O;
 
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
   private fb = inject(FormBuilder);
   private catalogService = inject(CatalogService);
   private fleetService = inject(FleetService);
+  private fleetState = inject(FleetStateService);
   private contractsService = inject(ContractsService);
   private notificationService = inject(NotificationService);
-  private exportService = inject(ExportService);
-  private pdfService = inject(PdfService);
-  private workOrdersService = inject(WorkOrdersService);
   authService = inject(AuthService);
 
   readonly isEquipmentFormReadOnly = computed(() => {
@@ -110,6 +115,7 @@ export class FleetMasterComponent implements OnInit {
 
   hasDuplicateError = signal(false);
   isDownloadingPdf = signal<string | null>(null);
+  isExportingExcel = signal(false);
 
   // Modal Confirmación
   showConfirmModal = signal(false);
@@ -202,17 +208,39 @@ export class FleetMasterComponent implements OnInit {
         this.loadFleet();
       });
 
+    // Recarga reactiva: ante cambio de contrato global o invalidación externa de caché
+    // (p. ej. tras reportar una falla crítica en /fallas) la lista se vuelve a pedir.
+    // El primer disparo se omite; la carga inicial la hace ngOnInit con cache-bust.
     effect(
       () => {
-        const contractId = this.authService.currentContractId();
+        this.authService.currentContractId();
+        this.fleetService.listVersion();
+        if (!this.scopeInitialized) {
+          this.scopeInitialized = true;
+          return;
+        }
         this.currentPage.set(1);
         this.loadFleet();
       },
       { allowSignalWrites: true },
     );
+
+    this.fleetState.equipmentUpdated$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((equipmentId) => {
+        if (this.fleet().some((eq) => eq.id === equipmentId)) {
+          this.loadFleet();
+        }
+      });
   }
 
+  /** Evita doble carga: el effect reactivo omite su primera ejecución. */
+  private scopeInitialized = false;
+
   ngOnInit() {
+    // Refetch al entrar a la vista (anti-stale: si venimos de /fallas, vemos el
+    // equipo detenido de inmediato). El componente se recrea en cada navegación.
+    this.loadFleet();
     this.loadContracts();
     this.catalogService.loadCatalogs().subscribe({
       error: () => undefined,
@@ -257,6 +285,7 @@ export class FleetMasterComponent implements OnInit {
       search: this.searchQuery() || undefined,
       type: this.filterType() || undefined,
       brand: this.filterBrand() || undefined,
+      noCache: true,
     };
 
     this.fleetService.getEquipments(params).subscribe({
@@ -538,6 +567,7 @@ export class FleetMasterComponent implements OnInit {
     if (this.isEditMode && this.currentEditId) {
       this.fleetService.updateEquipment(this.currentEditId, payload).subscribe({
         next: () => {
+          this.fleetService.notifyEquipmentChanged(this.currentEditId!);
           this.loadFleet();
           this.closeModal();
           this.notificationService.success('Equipo actualizado exitosamente.');
@@ -561,59 +591,66 @@ export class FleetMasterComponent implements OnInit {
   }
 
   exportToExcel() {
-    const data = this.fleet();
-    if (data.length === 0) {
-      this.notificationService.warning('No hay datos para exportar.');
-      return;
-    }
+    if (this.isExportingExcel()) return;
 
-    const headersMap = {
-      mineInternalId: 'N° int. mina',
-      internalId: 'N° Interno',
-      plate: 'Patente',
-      ownership: 'Tipo de propiedad',
-      isSubleased: 'Subarriendo',
-      subleaseCompanyName: 'Empresa subarriendo',
-      type: 'Tipo',
-      brand: 'Marca',
-      model: 'Modelo',
-      meterType: 'Medición',
-      currentMeter: 'Medidor Actual',
-      vin: 'VIN',
-      engineNumber: 'N° Motor',
-      serialNumber: 'N° Serie',
-      year: 'Año',
-      techReviewExp: 'Vence RT',
-      circPermitExp: 'Vence P. Circ',
-      soapExp: 'Vence SOAP',
-      mechanicalCertExp: 'Vence Cert. Mec',
-      liabilityPolicyExp: 'Vence Póliza RC',
-    };
+    this.isExportingExcel.set(true);
+    const contractId = this.authService.currentContractId();
+    this.fleetService
+      .downloadFleetMasterExcel({
+        contractId: contractId && contractId !== 'ALL' ? contractId : null,
+      })
+      .pipe(finalize(() => this.isExportingExcel.set(false)))
+      .subscribe({
+        next: (blob) => {
+          if (!blob?.size) {
+            this.notificationService.error('El Excel generado está vacío.');
+            return;
+          }
+          this.downloadBlob(
+            blob,
+            `BaseLogic_Maestro_Flota_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          );
+          this.notificationService.success('Excel maestro de flota generado.');
+        },
+        error: () => {
+          this.notificationService.error('No se pudo generar el Excel de flota.');
+        },
+      });
+  }
 
-    this.exportService.exportToExcel(data, 'Maestro_Flota', headersMap);
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   downloadResume(eq: Equipment) {
     this.isDownloadingPdf.set(eq.id);
-    this.notificationService.info('Generando Hoja de Vida...');
+    this.notificationService.info('Generando hoja de vida...');
 
-    this.workOrdersService
-      .getWorkOrdersFiltered({
-        equipmentId: eq.id,
-        status: 'CLOSED',
-        limit: 10,
-      })
+    this.fleetService
+      .getEquipmentResumePdf(eq.id)
       .pipe(finalize(() => this.isDownloadingPdf.set(null)))
       .subscribe({
-        next: (res) => {
-          this.pdfService.generateEquipmentResume(eq, res.data);
+        next: (blob) => {
+          if (!blob?.size) {
+            this.notificationService.error('Respuesta PDF vacía');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const safePlate = (eq.plate ?? '').replace(/[^\w-]+/g, '_');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `HOJA_VIDA_${eq.internalId}${safePlate ? `_${safePlate}` : ''}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
           this.notificationService.success('PDF generado exitosamente.');
         },
-        error: (err) => {
-          console.error('Error fetching history for PDF', err);
-          this.notificationService.error(
-            'Error al obtener el historial de mantenimiento.',
-          );
+        error: () => {
+          this.notificationService.error('No se pudo generar la hoja de vida PDF.');
         },
       });
   }

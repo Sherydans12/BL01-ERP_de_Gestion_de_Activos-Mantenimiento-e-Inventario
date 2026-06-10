@@ -1,0 +1,358 @@
+<div class="max-w-5xl mx-auto space-y-6 pb-10">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <a
+        routerLink="/app/inventario/stock"
+        class="text-xs font-mono text-muted hover:text-primary transition-colors"
+      >
+        ← Volver a stock
+      </a>
+      <h1 class="text-2xl font-bold text-main tracking-tight mt-2">
+        Reporte maestro de valorización
+      </h1>
+      <p class="text-sm text-muted mt-1 max-w-2xl">
+        Configure secciones, filtros y límites antes de descargar. Las preferencias
+        se guardan en este navegador.
+      </p>
+    </div>
+    @if (meta(); as m) {
+      <div
+        class="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-right shrink-0"
+      >
+        <p class="text-[10px] font-mono text-muted uppercase tracking-wider">
+          Valor total (referencia)
+        </p>
+        <p class="text-xl font-bold font-mono text-primary">
+          ${{ m.grandTotal | number: '1.0-0' }}
+        </p>
+      </div>
+    }
+  </div>
+
+  @if (!hasReportPermission()) {
+    <div
+      class="rounded-xl border border-border bg-surface p-6 text-sm text-muted"
+    >
+      Su rol no incluye el permiso
+      <span class="font-mono text-main">inventory:analytics:report</span>.
+      Solicite acceso al administrador del tenant.
+    </div>
+  } @else if (metaLoading()) {
+    <p class="text-sm text-muted font-mono animate-pulse py-12 text-center">
+      Cargando catálogos…
+    </p>
+  } @else {
+  <!-- Presets -->
+  <section class="rounded-xl border border-border bg-surface p-5">
+    <h2
+      class="text-xs font-mono font-bold text-primary uppercase tracking-wider mb-3"
+    >
+      Plantillas rápidas
+    </h2>
+    <div class="flex flex-wrap gap-2">
+      @for (p of presetEntries; track p.id) {
+        <button
+          type="button"
+          (click)="applyPreset(p.id)"
+          class="text-left rounded-lg border border-border hover:border-primary/50 bg-dark px-3 py-2 max-w-[200px] transition-colors"
+        >
+          <span class="block text-xs font-mono font-bold text-main">{{
+            p.label
+          }}</span>
+          <span class="block text-[10px] text-muted mt-0.5 leading-snug">{{
+            p.description
+          }}</span>
+        </button>
+      }
+      <button
+        type="button"
+        (click)="resetToDefaults()"
+        class="text-[10px] font-mono px-3 py-2 rounded-lg border border-border text-muted hover:text-main"
+      >
+        Restablecer
+      </button>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Secciones -->
+    <section class="rounded-xl border border-border bg-surface p-5">
+      <h2
+        class="text-xs font-mono font-bold text-primary uppercase tracking-wider mb-3"
+      >
+        Secciones del documento
+      </h2>
+      <ul class="space-y-2 text-sm">
+        <li class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="sec-wh"
+            [checked]="options().sections.warehouseSummary"
+            (change)="updateSection('warehouseSummary', $any($event.target).checked)"
+          />
+          <label for="sec-wh" class="text-main">Valor por bodega</label>
+        </li>
+        <li class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="sec-fam"
+            [checked]="options().sections.familySummary"
+            (change)="updateSection('familySummary', $any($event.target).checked)"
+          />
+          <label for="sec-fam" class="text-main">Valorización por familia</label>
+        </li>
+        <li class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="sec-crit"
+            [checked]="options().sections.criticalItems"
+            (change)="updateSection('criticalItems', $any($event.target).checked)"
+          />
+          <label for="sec-crit" class="text-main">Ítems críticos (bajo mínimo)</label>
+        </li>
+        <li class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="sec-dead"
+            [checked]="options().sections.deadStock"
+            (change)="updateSection('deadStock', $any($event.target).checked)"
+          />
+          <label for="sec-dead" class="text-main">Stock muerto (≥ 6 meses sin mov.)</label>
+        </li>
+        <li class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="sec-detail"
+            [checked]="options().sections.itemDetail"
+            (change)="updateSection('itemDetail', $any($event.target).checked)"
+          />
+          <label for="sec-detail" class="text-main">Detalle por artículo</label>
+        </li>
+        <li class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="sec-pr"
+            [checked]="options().sections.purchases"
+            (change)="updateSection('purchases', $any($event.target).checked)"
+          />
+          <label for="sec-pr" class="text-main">SRC / OC (compras)</label>
+        </li>
+      </ul>
+      @if (!anySectionSelected()) {
+        <p class="text-xs text-red-400 mt-3 font-mono">
+          Debe incluir al menos una sección.
+        </p>
+      }
+    </section>
+
+    <!-- Límites y filtros -->
+    <section class="rounded-xl border border-border bg-surface p-5 space-y-4">
+      <h2
+        class="text-xs font-mono font-bold text-primary uppercase tracking-wider"
+      >
+        Filtros y límites
+      </h2>
+
+      <label class="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          [checked]="options().onlyWithStock"
+          (change)="patchOptions({ onlyWithStock: $any($event.target).checked })"
+        />
+        <span class="text-main">Solo artículos con stock &gt; 0 (detalle)</span>
+      </label>
+
+      <div>
+        <label class="block text-xs font-mono text-muted mb-1 uppercase"
+          >Máx. líneas detalle (vacío = sin tope en Excel; PDF ~2500)</label
+        >
+        <input
+          type="number"
+          min="0"
+          step="100"
+          class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm font-mono text-main"
+          [ngModel]="options().detailMaxRows"
+          (ngModelChange)="patchOptions({ detailMaxRows: $event === '' || $event == null ? null : +$event })"
+        />
+      </div>
+
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <label class="block text-[10px] font-mono text-muted mb-1">Críticos</label>
+          <input
+            type="number"
+            min="1"
+            max="500"
+            class="w-full bg-dark border border-border rounded-lg px-2 py-1.5 text-sm font-mono"
+            [ngModel]="options().criticalMaxRows"
+            (ngModelChange)="patchOptions({ criticalMaxRows: +$event })"
+          />
+        </div>
+        <div>
+          <label class="block text-[10px] font-mono text-muted mb-1">Stock muerto</label>
+          <input
+            type="number"
+            min="1"
+            max="500"
+            class="w-full bg-dark border border-border rounded-lg px-2 py-1.5 text-sm font-mono"
+            [ngModel]="options().deadStockMaxRows"
+            (ngModelChange)="patchOptions({ deadStockMaxRows: +$event })"
+          />
+        </div>
+        <div>
+          <label class="block text-[10px] font-mono text-muted mb-1">SRC</label>
+          <input
+            type="number"
+            min="1"
+            max="500"
+            class="w-full bg-dark border border-border rounded-lg px-2 py-1.5 text-sm font-mono"
+            [ngModel]="options().purchaseMaxRows"
+            (ngModelChange)="patchOptions({ purchaseMaxRows: +$event })"
+          />
+        </div>
+      </div>
+
+      @if (estimatedDetailHint(); as hint) {
+        <p class="text-[10px] font-mono text-muted">
+          Estimado detalle: hasta ~{{ hint | number }} líneas según catálogo y filtros.
+        </p>
+      }
+    </section>
+  </div>
+
+  <!-- Bodegas -->
+  @if (meta(); as m) {
+    <section class="rounded-xl border border-border bg-surface p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2
+          class="text-xs font-mono font-bold text-primary uppercase tracking-wider"
+        >
+          Bodegas
+          @if (selectedWarehouseCount() > 0) {
+            <span class="text-muted font-normal"
+              >({{ selectedWarehouseCount() }} seleccionadas)</span
+            >
+          } @else {
+            <span class="text-muted font-normal">(todas)</span>
+          }
+        </h2>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            (click)="selectAllWarehouses()"
+            class="text-[10px] font-mono text-primary hover:underline"
+          >
+            Todas
+          </button>
+          <button
+            type="button"
+            (click)="clearWarehouses()"
+            class="text-[10px] font-mono text-muted hover:underline"
+          >
+            Limpiar
+          </button>
+        </div>
+      </div>
+      <div
+        class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-1"
+      >
+        @for (wh of m.warehouses; track wh.id) {
+          <label
+            class="flex items-center gap-2 text-sm font-mono bg-dark rounded-lg px-2 py-1.5 border border-border cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              [checked]="isWarehouseSelected(wh.id)"
+              (change)="toggleWarehouse(wh.id, $any($event.target).checked)"
+            />
+            <span class="text-main truncate"
+              >{{ wh.code }} — {{ wh.name }}</span
+            >
+          </label>
+        }
+      </div>
+    </section>
+
+    <!-- Familias -->
+    <section class="rounded-xl border border-border bg-surface p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2
+          class="text-xs font-mono font-bold text-primary uppercase tracking-wider"
+        >
+          Familias
+          @if (selectedFamilyCount() > 0) {
+            <span class="text-muted font-normal"
+              >({{ selectedFamilyCount() }} seleccionadas)</span
+            >
+          } @else {
+            <span class="text-muted font-normal">(todas)</span>
+          }
+        </h2>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            (click)="selectAllFamilies()"
+            class="text-[10px] font-mono text-primary hover:underline"
+          >
+            Todas
+          </button>
+          <button
+            type="button"
+            (click)="clearFamilies()"
+            class="text-[10px] font-mono text-muted hover:underline"
+          >
+            Limpiar
+          </button>
+        </div>
+      </div>
+      <div
+        class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1"
+      >
+        @for (fam of m.families; track fam.familyId) {
+          <label
+            class="flex items-center justify-between gap-2 text-sm bg-dark rounded-lg px-3 py-2 border border-border cursor-pointer"
+          >
+            <span class="flex items-center gap-2 min-w-0">
+              <input
+                type="checkbox"
+                [checked]="isFamilySelected(fam.familyName)"
+                (change)="toggleFamily(fam.familyName, $any($event.target).checked)"
+              />
+              <span class="text-main truncate">{{ fam.familyName }}</span>
+            </span>
+            <span class="text-[10px] font-mono text-muted shrink-0">{{
+              fam.totalValue | number: '1.0-0'
+            }}</span>
+          </label>
+        }
+      </div>
+    </section>
+  }
+
+  <!-- Acciones -->
+  <div
+    class="sticky bottom-4 z-10 flex flex-wrap gap-3 justify-end rounded-xl border border-border bg-surface/95 backdrop-blur-sm p-4 shadow-lg"
+  >
+    <button
+      type="button"
+      (click)="download('pdf')"
+      [disabled]="downloadBusy() || !anySectionSelected()"
+      class="font-mono text-sm px-5 py-2.5 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-40"
+    >
+      @if (downloadBusy()) {
+        Generando…
+      } @else {
+        Descargar PDF
+      }
+    </button>
+    <button
+      type="button"
+      (click)="download('xlsx')"
+      [disabled]="downloadBusy() || !anySectionSelected()"
+      class="font-mono text-sm px-5 py-2.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-40"
+    >
+      Descargar Excel
+    </button>
+  </div>
+  }
+</div>

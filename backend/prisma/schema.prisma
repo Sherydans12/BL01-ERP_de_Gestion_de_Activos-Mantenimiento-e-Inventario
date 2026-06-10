@@ -10,69 +10,83 @@ datasource db {
 // 1. MAESTRO DE FLOTA (EQUIPMENT)
 // ==========================================
 model Equipment {
-  id                    String      @id @default(uuid()) @db.Uuid
-  tenantId              String      @map("tenant_id") @db.Uuid
-  contractId            String?     @map("contract_id") @db.Uuid // Asignación directa
-  subcontractId         String?     @map("subcontract_id") @db.Uuid // Asignación indirecta
-  mineInternalId        String?     @map("mine_internal_id") @db.VarChar(50)
-  internalId            String      @map("internal_id") @db.VarChar(50)
-  plate                 String?     @db.VarChar(20)
-  type                  String      @db.VarChar(50)
-  brand                 String      @db.VarChar(50)
-  model                 String      @db.VarChar(50)
-  
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  contractId     String? @map("contract_id") @db.Uuid // Asignación directa
+  subcontractId  String? @map("subcontract_id") @db.Uuid // Asignación indirecta
+  mineInternalId String? @map("mine_internal_id") @db.VarChar(50)
+  internalId     String  @map("internal_id") @db.VarChar(50)
+  plate          String? @db.VarChar(20)
+  type           String  @db.VarChar(50)
+  brand          String  @db.VarChar(50)
+  model          String  @db.VarChar(50)
+
   // Lógica de Medición (Evolucionado)
-  meterType             MeterType   @default(HOURS) @map("meter_type")
-  initialMeter          Int         @default(0) @map("initial_meter")
-  currentMeter          Int         @default(0) @map("current_meter")
-  
+  meterType    MeterType @default(HOURS) @map("meter_type")
+  initialMeter Int       @default(0) @map("initial_meter")
+  currentMeter Int       @default(0) @map("current_meter")
+
   // Identificación Extendida
-  vin                   String?     @db.VarChar(50)
-  engineNumber          String?     @map("engine_number") @db.VarChar(50)
-  serialNumber          String?     @map("serial_number") @db.VarChar(80)
-  year                  Int?
+  vin          String? @db.VarChar(50)
+  engineNumber String? @map("engine_number") @db.VarChar(50)
+  serialNumber String? @map("serial_number") @db.VarChar(80)
+  year         Int?
 
   // Operación y Mantenimiento (Evolucionado)
-  fuelType              String?     @map("fuel_type") @db.VarChar(50)
-  driveType             String?     @map("drive_type") @db.VarChar(50)
-  /** Nombre del ítem de catálogo OWNERSHIP (Tipo de Propiedad). */
-  ownership             String?     @db.VarChar(50)
-  isSubleased           Boolean     @default(false) @map("is_subleased")
-  /** Empresa a la que se arrienda el activo (obligatorio si isSubleased). */
-  subleaseCompanyName   String?     @map("sublease_company_name") @db.VarChar(200)
-  maintenanceFrequency  Int?        @map("maintenance_frequency")
-  /** Intervalo PM en horas o km según meterType (250, 500, 600, 10000…). Si null, usa reglas por tipo en cliente. */
-  pmIntervalOverride    Int?        @map("pm_interval_override")
-  lastMaintenanceDate   DateTime?   @map("last_maintenance_date") @db.Date
-  lastMaintenanceMeter  Int?        @map("last_maintenance_meter")
-  lastMaintenanceType   String?     @map("last_maintenance_type") @db.VarChar(100)
-  
-  // Vencimientos Legales (Evolucionado)
-  techReviewExp         DateTime?   @map("tech_review_exp") @db.Date
-  circPermitExp         DateTime?   @map("circ_permit_exp") @db.Date
-  soapExp               DateTime?   @map("soap_exp") @db.Date
-  mechanicalCertExp     DateTime?   @map("mechanical_cert_exp") @db.Date
-  liabilityPolicyExp    DateTime?   @map("liability_policy_exp") @db.Date
+  fuelType             String?   @map("fuel_type") @db.VarChar(50)
+  driveType            String?   @map("drive_type") @db.VarChar(50)
+  /**
+   * Nombre del ítem de catálogo OWNERSHIP (Tipo de Propiedad).
+   */
+  ownership            String?   @db.VarChar(50)
+  isSubleased          Boolean   @default(false) @map("is_subleased")
+  /**
+   * Empresa a la que se arrienda el activo (obligatorio si isSubleased).
+   */
+  subleaseCompanyName  String?   @map("sublease_company_name") @db.VarChar(200)
+  maintenanceFrequency Int?      @map("maintenance_frequency")
+  /**
+   * Intervalo PM en horas o km según meterType (250, 500, 600, 10000…). Si null, usa reglas por tipo en cliente.
+   */
+  pmIntervalOverride   Int?      @map("pm_interval_override")
+  lastMaintenanceDate  DateTime? @map("last_maintenance_date") @db.Date
+  lastMaintenanceMeter Int?      @map("last_maintenance_meter")
+  lastMaintenanceType  String?   @map("last_maintenance_type") @db.VarChar(100)
 
-  /** False cuando hay OT abierta/en curso que declara fuera de servicio al equipo. */
-  isOperational         Boolean     @default(true) @map("is_operational")
-  /** Horas acumuladas de indisponibilidad atribuibles a OT (detención con impacto disponibilidad). */
+  // Vencimientos Legales (Evolucionado)
+  techReviewExp      DateTime? @map("tech_review_exp") @db.Date
+  circPermitExp      DateTime? @map("circ_permit_exp") @db.Date
+  soapExp            DateTime? @map("soap_exp") @db.Date
+  mechanicalCertExp  DateTime? @map("mechanical_cert_exp") @db.Date
+  liabilityPolicyExp DateTime? @map("liability_policy_exp") @db.Date
+
+  /**
+   * False cuando hay OT abierta/en curso que declara fuera de servicio al equipo.
+   */
+  isOperational           Boolean @default(true) @map("is_operational")
+  /**
+   * Horas acumuladas de indisponibilidad atribuibles a OT (detención con impacto disponibilidad).
+   */
   cumulativeDowntimeHours Decimal @default(0) @map("cumulative_downtime_hours") @db.Decimal(14, 4)
 
   // Auditoría
-  createdAt             DateTime    @default(now()) @map("created_at")
-  updatedAt             DateTime    @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  tenant                Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contract              Contract?    @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  subcontract           Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
-  workOrders            WorkOrder[]
-  meterAdjustments      MeterAdjustment[]
-  meterLogs             EquipmentMeterLog[]
-  purchaseRequisitions  PurchaseRequisition[] @relation("RequisitionEquipment")
-  purchaseOrders        PurchaseOrder[]       @relation("OrderEquipment")
-  assetCostRecords      AssetCostRecord[]
+  tenant               Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract             Contract?               @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract          Subcontract?            @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  workOrders           WorkOrder[]
+  meterAdjustments     MeterAdjustment[]
+  meterLogs            EquipmentMeterLog[]
+  purchaseRequisitions PurchaseRequisition[]   @relation("RequisitionEquipment")
+  purchaseOrders       PurchaseOrder[]         @relation("OrderEquipment")
+  assetCostRecords     AssetCostRecord[]
+  lubeReports          LubeReport[]
+  availabilities       EquipmentAvailability[]
+  availabilityEvents   AvailabilityEvent[]
+  faultReports         FaultReport[]
 
   @@unique([tenantId, internalId])
   @@unique([tenantId, plate])
@@ -84,18 +98,18 @@ model Equipment {
 // 2. CATÁLOGOS GLOBALES (SYSTEMS, FLUIDS)
 // ==========================================
 model CatalogItem {
-  id                  String            @id @default(uuid()) @db.Uuid
-  tenantId            String            @map("tenant_id") @db.Uuid
-  code                String            @db.VarChar(20) // Ej: SYS-01, FLD-01
-  name                String            @db.VarChar(100)
-  category            CatalogCategory
-  isActive            Boolean           @default(true) @map("is_active")
+  id       String          @id @default(uuid()) @db.Uuid
+  tenantId String          @map("tenant_id") @db.Uuid
+  code     String          @db.VarChar(20) // Ej: SYS-01, FLD-01
+  name     String          @db.VarChar(100)
+  category CatalogCategory
+  isActive Boolean         @default(true) @map("is_active")
 
   // Relaciones
   tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   systemInterventions WorkOrderSystem[]
   fluidConsumptions   WorkOrderFluid[]
-  fluidSamples        FluidSample[]     // NUEVA RELACIÓN: Muestras APD por sistema
+  fluidSamples        FluidSample[] // NUEVA RELACIÓN: Muestras APD por sistema
 
   @@unique([tenantId, code])
   @@map("catalog_items")
@@ -115,115 +129,136 @@ enum CatalogCategory {
 // 3. ÓRDENES DE TRABAJO (OT)
 // ==========================================
 model WorkOrder {
-  id                String            @id @default(uuid()) @db.Uuid
-  tenantId          String            @map("tenant_id") @db.Uuid
-  /** Usuario que registró la OT (auditoría). */
-  createdByUserId   String?           @map("created_by_user_id") @db.Uuid
-  subcontractId     String?           @map("subcontract_id") @db.Uuid
-  warehouseId       String?           @map("warehouse_id") @db.Uuid // Bodega de consumo (Integración Fase C)
-  correlative       String            @db.VarChar(30)
-  equipmentId       String            @map("equipment_id") @db.Uuid
-  type              OtType            @default(NUEVA)
-  category          OtCategory
-  maintenanceType   MaintenanceType   @map("maintenance_type")
-  status            OtStatus          @default(OPEN)
-  responsible       String?           @db.VarChar(100)
-  
-  initialMeter      Int               @map("initial_meter")
-  /** Opcional hasta que supervisor complete horómetro al cierre o edición. */
-  finalMeter        Int?              @map("final_meter")
-  description       String            @db.Text
-  
-  hasBacklog        Boolean           @default(false) @map("has_backlog")
+  id              String          @id @default(uuid()) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  /**
+   * Usuario que registró la OT (auditoría).
+   */
+  createdByUserId String?         @map("created_by_user_id") @db.Uuid
+  subcontractId   String?         @map("subcontract_id") @db.Uuid
+  warehouseId     String?         @map("warehouse_id") @db.Uuid // Bodega de consumo (Integración Fase C)
+  correlative     String          @db.VarChar(30)
+  equipmentId     String          @map("equipment_id") @db.Uuid
+  type            OtType          @default(NUEVA)
+  category        OtCategory
+  maintenanceType MaintenanceType @map("maintenance_type")
+  status          OtStatus        @default(OPEN)
+  responsible     String?         @db.VarChar(100)
 
-  detentionStartedAt     DateTime?  @map("detention_started_at")
-  detentionEndedAt       DateTime?  @map("detention_ended_at")
-  detentionInitialMeter  Int?       @map("detention_initial_meter")
-  detentionFinalMeter    Int?       @map("detention_final_meter")
+  initialMeter Int    @map("initial_meter")
+  /**
+   * Opcional hasta que supervisor complete horómetro al cierre o edición.
+   */
+  finalMeter   Int?   @map("final_meter")
+  description  String @db.Text
 
-  /** Ventana de atención mecánica (datetime local → UTC). */
+  hasBacklog Boolean @default(false) @map("has_backlog")
+
+  detentionStartedAt    DateTime? @map("detention_started_at")
+  detentionEndedAt      DateTime? @map("detention_ended_at")
+  detentionInitialMeter Int?      @map("detention_initial_meter")
+  detentionFinalMeter   Int?      @map("detention_final_meter")
+
+  /**
+   * Ventana de atención mecánica (datetime local → UTC).
+   */
   mechanicAttentionStartedAt DateTime? @map("mechanic_attention_started_at")
   mechanicAttentionEndedAt   DateTime? @map("mechanic_attention_ended_at")
 
-  /** Cantidad de técnicos (HH = HM × personnelQuantity al cierre). */
+  /**
+   * Cantidad de técnicos (HH = HM × personnelQuantity al cierre).
+   */
   personnelQuantity Int @default(1) @map("personnel_quantity")
 
-  clientAttributedStart  DateTime?  @map("client_attributed_start")
-  clientAttributedEnd    DateTime?  @map("client_attributed_end")
-  clientAttributedReason String?    @map("client_attributed_reason") @db.Text
+  clientAttributedStart  DateTime? @map("client_attributed_start")
+  clientAttributedEnd    DateTime? @map("client_attributed_end")
+  clientAttributedReason String?   @map("client_attributed_reason") @db.Text
 
-  affectsAvailability  AvailabilityImpact?  @map("affects_availability")
-  /** Tags multi-selección: PROGRAMADA, NO_PROGRAMADA, ACCIDENTE_INCIDENTE, OT_ABIERTA_CONTINUIDAD, OT_ABIERTA_GEN_BCK, POSIBLE_GARANTIA */
-  classificationTags   String[]   @default([]) @map("classification_tags")
+  affectsAvailability AvailabilityImpact? @map("affects_availability")
+  /**
+   * Tags multi-selección: PROGRAMADA, NO_PROGRAMADA, ACCIDENTE_INCIDENTE, OT_ABIERTA_CONTINUIDAD, OT_ABIERTA_GEN_BCK, POSIBLE_GARANTIA
+   */
+  classificationTags  String[]            @default([]) @map("classification_tags")
 
-  workLocation  EquipmentWorkLocation? @map("work_location")
-  metricHm      Decimal?  @map("metric_hm") @db.Decimal(14, 4)
-  metricHh      Decimal?  @map("metric_hh") @db.Decimal(14, 4)
-  workShift     WorkShift? @map("work_shift")
+  workLocation EquipmentWorkLocation? @map("work_location")
+  metricHm     Decimal?               @map("metric_hm") @db.Decimal(14, 4)
+  metricHh     Decimal?               @map("metric_hh") @db.Decimal(14, 4)
+  workShift    WorkShift?             @map("work_shift")
 
   initialRequestDescription String? @map("initial_request_description") @db.Text
-  intervenedSystemsJson      Json?  @map("intervened_systems_json")
-  symptomsText               String? @map("symptoms_text") @db.Text
-  causeText                  String? @map("cause_text") @db.Text
-  workPerformedDescription    String? @map("work_performed_description") @db.Text
+  intervenedSystemsJson     Json?   @map("intervened_systems_json")
+  symptomsText              String? @map("symptoms_text") @db.Text
+  causeText                 String? @map("cause_text") @db.Text
+  workPerformedDescription  String? @map("work_performed_description") @db.Text
 
-  techniciansNames               String? @map("technicians_names") @db.Text
-  /** IDs de usuarios (mecánicos) asociados como participantes. */
-  participantUserIds             String[] @default([]) @map("participant_user_ids")
-  /** Usuario supervisor elegido para validación de turno. */
-  shiftSupervisorUserId          String? @map("shift_supervisor_user_id") @db.Uuid
-  responsibleMechanicName        String? @map("responsible_mechanic_name") @db.VarChar(150)
-  responsibleMechanicSignature    String? @map("responsible_mechanic_signature") @db.VarChar(255)
-  shiftSupervisorName             String? @map("shift_supervisor_name") @db.VarChar(150)
-  shiftSupervisorSignature       String? @map("shift_supervisor_signature") @db.VarChar(255)
+  techniciansNames             String?  @map("technicians_names") @db.Text
+  /**
+   * IDs de usuarios (mecánicos) asociados como participantes.
+   */
+  participantUserIds           String[] @default([]) @map("participant_user_ids")
+  /**
+   * Usuario supervisor elegido para validación de turno.
+   */
+  shiftSupervisorUserId        String?  @map("shift_supervisor_user_id") @db.Uuid
+  responsibleMechanicName      String?  @map("responsible_mechanic_name") @db.VarChar(150)
+  responsibleMechanicSignature String?  @map("responsible_mechanic_signature") @db.VarChar(255)
+  shiftSupervisorName          String?  @map("shift_supervisor_name") @db.VarChar(150)
+  shiftSupervisorSignature     String?  @map("shift_supervisor_signature") @db.VarChar(255)
 
-  /** Ciclo PM 1–4 cuando aplica */
+  /**
+   * Ciclo PM 1–4 cuando aplica
+   */
   pmCycleNumber Int? @map("pm_cycle_number")
 
-  /** Primer paso a EN_CURSO (auditoría). */
-  inProgressAt      DateTime?         @map("in_progress_at")
-  /** Respuesta al cierre: equipo quedó operativo sí/no. */
-  closureEquipmentOperational Boolean? @map("closure_equipment_operational")
+  /**
+   * Primer paso a EN_CURSO (auditoría).
+   */
+  inProgressAt                DateTime? @map("in_progress_at")
+  /**
+   * Respuesta al cierre: equipo quedó operativo sí/no.
+   */
+  closureEquipmentOperational Boolean?  @map("closure_equipment_operational")
 
   // Auditoría
-  createdAt         DateTime          @default(now()) @map("created_at")
-  syncedAt          DateTime?         @map("synced_at")
-  closedAt          DateTime?         @map("closed_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  syncedAt  DateTime? @map("synced_at")
+  closedAt  DateTime? @map("closed_at")
 
   // Relaciones
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdByUser     User?             @relation("WorkOrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  shiftSupervisorUser User?           @relation("WorkOrderShiftSupervisor", fields: [shiftSupervisorUserId], references: [id], onDelete: SetNull)
-  subcontract       Subcontract?      @relation(fields: [subcontractId], references: [id], onDelete: SetNull)
-  equipment         Equipment         @relation(fields: [equipmentId], references: [id])
-  warehouse         Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  systems           WorkOrderSystem[]
-  fluids            WorkOrderFluid[]
-  tasks             WorkOrderTask[]
-  parts             WorkOrderPart[]
-  fluidSamples      FluidSample[]
+  tenant               Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser        User?                       @relation("WorkOrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  shiftSupervisorUser  User?                       @relation("WorkOrderShiftSupervisor", fields: [shiftSupervisorUserId], references: [id], onDelete: SetNull)
+  subcontract          Subcontract?                @relation(fields: [subcontractId], references: [id], onDelete: SetNull)
+  equipment            Equipment                   @relation(fields: [equipmentId], references: [id])
+  warehouse            Warehouse?                  @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  systems              WorkOrderSystem[]
+  fluids               WorkOrderFluid[]
+  tasks                WorkOrderTask[]
+  parts                WorkOrderPart[]
+  fluidSamples         FluidSample[]
   stockReservations    StockReservation[]
-  purchaseRequisitions PurchaseRequisition[] @relation("RequisitionWorkOrder")
-  purchaseOrders       PurchaseOrder[]       @relation("OrderWorkOrder")
+  purchaseRequisitions PurchaseRequisition[]       @relation("RequisitionWorkOrder")
+  purchaseOrders       PurchaseOrder[]             @relation("OrderWorkOrder")
   assetCostRecords     AssetCostRecord[]
   backlogItems         WorkOrderBacklogItem[]
   fluidCompartments    WorkOrderFluidCompartment[]
+  faultReport          FaultReport?                @relation("FaultReportWorkOrder")
 
   @@unique([tenantId, correlative])
   @@map("work_orders")
 }
 
 model WorkOrderBacklogItem {
-  id           String        @id @default(uuid()) @db.Uuid
-  tenantId     String        @map("tenant_id") @db.Uuid
-  workOrderId  String        @map("work_order_id") @db.Uuid
-  description  String        @db.Text
-  status       BacklogStatus @default(PENDING)
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  workOrderId String        @map("work_order_id") @db.Uuid
+  description String        @db.Text
+  status      BacklogStatus @default(PENDING)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  workOrder   WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status])
   @@map("work_order_backlog_items")
@@ -238,8 +273,8 @@ model WorkOrderFluidCompartment {
   action          FluidAction
   inventoryItemId String?          @map("inventory_item_id") @db.Uuid
 
-  workOrder      WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  inventoryItem  InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  workOrder     WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
 
   @@index([inventoryItemId])
   @@map("work_order_fluid_compartments")
@@ -310,26 +345,26 @@ enum BacklogStatus {
 // 4. TABLAS INTERMEDIAS Y COMPONENTES DE OT
 // ==========================================
 model WorkOrderSystem {
-  workOrderId   String      @map("work_order_id") @db.Uuid
-  catalogItemId String      @map("catalog_item_id") @db.Uuid
+  workOrderId   String @map("work_order_id") @db.Uuid
+  catalogItemId String @map("catalog_item_id") @db.Uuid
 
-  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  workOrder   WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  catalogItem CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
 
   @@id([workOrderId, catalogItemId])
   @@map("work_order_systems")
 }
 
 model WorkOrderFluid {
-  id            String      @id @default(uuid()) @db.Uuid
-  workOrderId   String      @map("work_order_id") @db.Uuid
-  catalogItemId String      @map("catalog_item_id") @db.Uuid
-  
-  liters        Float
-  action        FluidAction
+  id            String @id @default(uuid()) @db.Uuid
+  workOrderId   String @map("work_order_id") @db.Uuid
+  catalogItemId String @map("catalog_item_id") @db.Uuid
 
-  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  liters Float
+  action FluidAction
+
+  workOrder   WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  catalogItem CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
 
   @@map("work_order_fluids")
 }
@@ -342,18 +377,18 @@ enum FluidAction {
 // --- EXTENSIÓN TPM: TAREAS, REPUESTOS Y MUESTRAS ---
 
 model WorkOrderTask {
-  id              String      @id @default(uuid()) @db.Uuid
-  workOrderId     String      @map("work_order_id") @db.Uuid
-  description     String      @db.VarChar(255)
-  action          TaskAction? @default(INSPECT)
-  estimatedHours  Float?      @map("estimated_hours")
-  isCompleted     Boolean     @default(false) @map("is_completed")
-  observation     String?     @db.Text
-  measurement     Float?    
-  trackingCode    String?     @map("tracking_code") @db.VarChar(50)
-  
-  workOrder       WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  
+  id             String      @id @default(uuid()) @db.Uuid
+  workOrderId    String      @map("work_order_id") @db.Uuid
+  description    String      @db.VarChar(255)
+  action         TaskAction? @default(INSPECT)
+  estimatedHours Float?      @map("estimated_hours")
+  isCompleted    Boolean     @default(false) @map("is_completed")
+  observation    String?     @db.Text
+  measurement    Float?
+  trackingCode   String?     @map("tracking_code") @db.VarChar(50)
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
   @@map("work_order_tasks")
 }
 
@@ -366,33 +401,33 @@ enum TaskAction {
 }
 
 model WorkOrderPart {
-  id              String         @id @default(uuid()) @db.Uuid
-  workOrderId     String         @map("work_order_id") @db.Uuid
-  
-  inventoryItemId String?        @map("inventory_item_id") @db.Uuid 
-  
-  partNumber      String         @map("part_number") @db.VarChar(50)
-  description     String         @db.VarChar(100)
-  quantity        Float          @default(1)
+  id          String @id @default(uuid()) @db.Uuid
+  workOrderId String @map("work_order_id") @db.Uuid
 
-  unitCost        Float?         @map("unit_cost")
-  
-  workOrder       WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-  
+  inventoryItemId String? @map("inventory_item_id") @db.Uuid
+
+  partNumber  String @map("part_number") @db.VarChar(50)
+  description String @db.VarChar(100)
+  quantity    Float  @default(1)
+
+  unitCost Float? @map("unit_cost")
+
+  workOrder     WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
   @@map("work_order_parts")
 }
 
 model FluidSample {
-  id              String       @id @default(uuid()) @db.Uuid
-  workOrderId     String       @map("work_order_id") @db.Uuid
-  systemId        String       @map("system_id") @db.Uuid // Motor, Transmisión, etc.
-  bottleCode      String       @map("bottle_code") @db.VarChar(50) // Código del frasco APD
-  status          SampleStatus @default(PENDING)
-  results         String?      @db.Text
-  
-  workOrder       WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  system          CatalogItem  @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  id          String       @id @default(uuid()) @db.Uuid
+  workOrderId String       @map("work_order_id") @db.Uuid
+  systemId    String       @map("system_id") @db.Uuid // Motor, Transmisión, etc.
+  bottleCode  String       @map("bottle_code") @db.VarChar(50) // Código del frasco APD
+  status      SampleStatus @default(PENDING)
+  results     String?      @db.Text
+
+  workOrder WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  system    CatalogItem @relation(fields: [systemId], references: [id], onDelete: Restrict)
 
   @@map("fluid_samples")
 }
@@ -408,34 +443,34 @@ enum SampleStatus {
 // ==========================================
 
 model MaintenanceKit {
-  id              String                 @id @default(uuid()) @db.Uuid
-  tenantId        String                 @map("tenant_id") @db.Uuid
-  contractId      String                 @map("contract_id") @db.Uuid
-  subcontractId   String?                @map("subcontract_id") @db.Uuid
-  code            String                 @db.VarChar(50) 
-  name            String                 @db.VarChar(100)
-  description     String?                @db.Text
-  
-  equipmentBrand  String?                @map("equipment_brand") @db.VarChar(50)
-  equipmentModel  String?                @map("equipment_model") @db.VarChar(50)
-  
-parts           MaintenanceKitPart[]
-  
-  contract        Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  subcontract     Subcontract?           @relation(fields: [subcontractId], references: [id], onDelete: Cascade) // NUEVA RELACIÓN
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  contractId    String  @map("contract_id") @db.Uuid
+  subcontractId String? @map("subcontract_id") @db.Uuid
+  code          String  @db.VarChar(50)
+  name          String  @db.VarChar(100)
+  description   String? @db.Text
+
+  equipmentBrand String? @map("equipment_brand") @db.VarChar(50)
+  equipmentModel String? @map("equipment_model") @db.VarChar(50)
+
+  parts MaintenanceKitPart[]
+
+  contract    Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  subcontract Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Cascade) // NUEVA RELACIÓN
 
   @@unique([tenantId, code])
   @@map("maintenance_kits")
 }
 
 model MaintenanceKitPart {
-  id              String         @id @default(uuid()) @db.Uuid
-  kitId           String         @map("kit_id") @db.Uuid
-  partNumber      String         @map("part_number") @db.VarChar(50)
-  description     String         @db.VarChar(100)
-  quantity        Float          @default(1)
+  id          String @id @default(uuid()) @db.Uuid
+  kitId       String @map("kit_id") @db.Uuid
+  partNumber  String @map("part_number") @db.VarChar(50)
+  description String @db.VarChar(100)
+  quantity    Float  @default(1)
 
-  kit             MaintenanceKit @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  kit MaintenanceKit @relation(fields: [kitId], references: [id], onDelete: Cascade)
 
   @@map("maintenance_kit_parts")
 }
@@ -517,103 +552,117 @@ model LoginStepUpChallenge {
 }
 
 model User {
-  id                  String          @id @default(uuid()) @db.Uuid
-  email               String          @unique @db.VarChar(100)
-  password            String          @db.VarChar(255)
-  name                String          @db.VarChar(100)
+  id                   String    @id @default(uuid()) @db.Uuid
+  email                String    @unique @db.VarChar(100)
+  password             String    @db.VarChar(255)
+  name                 String    @db.VarChar(100)
   /// Nombre de pila (perfil). Si null, la UI puede derivar de `name`.
-  firstName           String?         @map("first_name") @db.VarChar(100)
+  firstName            String?   @map("first_name") @db.VarChar(100)
   /// Apellido(s) (perfil). Si null, la UI puede derivar de `name`.
-  lastName            String?         @map("last_name") @db.VarChar(100)
+  lastName             String?   @map("last_name") @db.VarChar(100)
   /// Ruta pública servida bajo `/uploads/...` (StorageService local).
-  avatarUrl           String?         @map("avatar_url") @db.VarChar(500)
-  role                UserRole        @default(MECHANIC)
-  isActive            Boolean         @default(false) @map("is_active")
-  activationToken     String?         @map("activation_token") @db.VarChar(255)
-  resetPasswordToken  String?         @map("reset_password_token") @db.VarChar(255)
-  resetPasswordExpires DateTime?      @map("reset_password_expires")
+  avatarUrl            String?   @map("avatar_url") @db.VarChar(500)
+  role                 UserRole  @default(USER)
+  isActive             Boolean   @default(false) @map("is_active")
+  activationToken      String?   @map("activation_token") @db.VarChar(255)
+  resetPasswordToken   String?   @map("reset_password_token") @db.VarChar(255)
+  resetPasswordExpires DateTime? @map("reset_password_expires")
   /// Hasta cuándo no se permite login (fuerza bruta).
-  lockoutUntil        DateTime?       @map("lockout_until")
+  lockoutUntil         DateTime? @map("lockout_until")
   /// Si true, envía correo cuando el login exitoso difiere en IP o país respecto al anterior.
-  notifyUnusualLogin  Boolean         @default(true) @map("notify_unusual_login")
+  notifyUnusualLogin   Boolean   @default(true) @map("notify_unusual_login")
 
   /// Segundo factor TOTP (Google Authenticator, etc.); hoy soportado en flujo Super Admin.
-  totpEnabled           Boolean         @default(false) @map("totp_enabled")
+  totpEnabled         Boolean @default(false) @map("totp_enabled")
   /// 2FA por correo electrónico habilitado por el propio usuario o forzado por la empresa.
-  email2faEnabled       Boolean         @default(false) @map("email_2fa_enabled")
+  email2faEnabled     Boolean @default(false) @map("email_2fa_enabled")
   /// Secreto TOTP cifrado en reposo (AES-256-GCM + base64).
-  totpSecretEncrypted   String?         @map("totp_secret_encrypted") @db.Text
+  totpSecretEncrypted String? @map("totp_secret_encrypted") @db.Text
 
-  rut                 String?         @db.VarChar(20)
-  phone               String?         @db.VarChar(20)
-  birthDate           DateTime?       @map("birth_date") @db.Date
-  position            String?         @db.VarChar(100)
+  rut       String?   @db.VarChar(20)
+  phone     String?   @db.VarChar(20)
+  birthDate DateTime? @map("birth_date") @db.Date
+  position  String?   @db.VarChar(100)
 
   /// Permiso explícito para autorizar discrepancias de 3-way match (short shipment) en facturas de compra.
-  canOverruleThreeWayMatch Boolean     @default(false) @map("can_overrule_three_way_match")
+  canOverruleThreeWayMatch Boolean @default(false) @map("can_overrule_three_way_match")
 
-  createdAt           DateTime        @default(now()) @map("created_at")
-  updatedAt           DateTime        @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenantId            String?         @map("tenant_id") @db.Uuid
-  customRoleId        String?         @map("custom_role_id") @db.Uuid
+  tenantId     String? @map("tenant_id") @db.Uuid
+  customRoleId String? @map("custom_role_id") @db.Uuid
 
-  tenant              Tenant?         @relation(fields: [tenantId], references: [id])
-  customRole          TenantRole?     @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
-  contractAccess      UserContract[]  
-  inventoryTransactions InventoryTransaction[]
-  meterAdjustments    MeterAdjustment[]
-  equipmentMeterLogs  EquipmentMeterLog[]
+  tenant                   Tenant?                   @relation(fields: [tenantId], references: [id])
+  customRole               TenantRole?               @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
+  contractAccess           UserContract[]
+  inventoryTransactions    InventoryTransaction[]
+  meterAdjustments         MeterAdjustment[]
+  equipmentMeterLogs       EquipmentMeterLog[]
   inventoryItemAttachments InventoryItemAttachment[]
 
-  purchaseRequisitions    PurchaseRequisition[]      @relation("RequisitionRequester")
-  purchaseOrderApprovals  PurchaseOrderApproval[]    @relation("POApprover")
-  approvalPolicyUsers     ApprovalPolicyUser[]       @relation("ApprovalPolicyUsers")
-  warehouseReceipts       WarehouseReceipt[]         @relation("ReceiptReceiver")
-  activityLogs            ActivityLog[]
-  pushSubscriptions       PushSubscription[]
-  inventoryTransfersCreated InventoryTransfer[] @relation("InventoryTransferCreatedBy")
-  purchaseDocumentsUploaded PurchaseDocument[]
-  authAuditLogs            AuthAuditLog[]
-  loginStepUpChallenges     LoginStepUpChallenge[]
-  sessions                 UserSession[]
-  workOrdersCreated        WorkOrder[]           @relation("WorkOrderCreatedBy")
-  workOrdersSupervised     WorkOrder[]           @relation("WorkOrderShiftSupervisor")
-  purchaseInvoiceThreeWayOverrules PurchaseInvoice[] @relation("PurchaseInvoiceThreeWayOverruleApprover")
-  userNotificationSettings UserNotificationSetting[]
+  purchaseRequisitions             PurchaseRequisition[]     @relation("RequisitionRequester")
+  purchaseOrderApprovals           PurchaseOrderApproval[]   @relation("POApprover")
+  approvalPolicyUsers              ApprovalPolicyUser[]      @relation("ApprovalPolicyUsers")
+  warehouseReceipts                WarehouseReceipt[]        @relation("ReceiptReceiver")
+  activityLogs                     ActivityLog[]
+  pushSubscriptions                PushSubscription[]
+  inventoryTransfersCreated        InventoryTransfer[]       @relation("InventoryTransferCreatedBy")
+  purchaseDocumentsUploaded        PurchaseDocument[]
+  authAuditLogs                    AuthAuditLog[]
+  loginStepUpChallenges            LoginStepUpChallenge[]
+  sessions                         UserSession[]
+  workOrdersCreated                WorkOrder[]               @relation("WorkOrderCreatedBy")
+  workOrdersSupervised             WorkOrder[]               @relation("WorkOrderShiftSupervisor")
+  purchaseInvoiceThreeWayOverrules PurchaseInvoice[]         @relation("PurchaseInvoiceThreeWayOverruleApprover")
+  userNotificationSettings         UserNotificationSetting[]
+  lubeReports                      LubeReport[]
+  equipmentAvailabilities          EquipmentAvailability[]   @relation("AvailabilityReportedBy")
+  availabilityEvents               AvailabilityEvent[]       @relation("AvailabilityEventReportedBy")
+  faultReportsReported             FaultReport[]             @relation("FaultReportedBy")
 
   @@unique([tenantId, rut])
   @@map("users")
 }
 
 model Tenant {
-  id                    String                @id @default(uuid()) @db.Uuid
-  code                  String                @unique @db.VarChar(20)
-  name                  String                @db.VarChar(100)
-  
-  rut                   String?               @db.VarChar(20)
-  address               String?               @db.VarChar(255)
-  phone                 String?               @db.VarChar(20)
-  /** Ciudad o comuna (facturación / pie de OC). */
-  city                  String?               @map("city") @db.VarChar(120)
-  /** Razón social para facturas y PDF de OC (p. ej. «TPM Minería SpA»). Si vacío, se usa `name`. */
-  invoiceLegalName      String?               @map("invoice_legal_name") @db.VarChar(200)
-  /** Texto del recuadro de aviso en el PDF de OC (saltos de línea permitidos). Si vacío, se usa texto por defecto en código. */
-  ocPdfLegalNotice       String?               @map("oc_pdf_legal_notice") @db.Text
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(20)
+  name String @db.VarChar(100)
 
-  logoUrl               String?               @map("logo_url") @db.VarChar(255)
-  /** Variante del logo del menú para tema claro (barra lateral). Si es null, se usa `logoUrl`. */
-  logoLightUrl          String?               @map("logo_light_url") @db.VarChar(255)
-  /** Logo horizontal para PDFs de compras (OC, SRC, reporte ejecutivo). Independiente del logo del menú (`logoUrl`). */
-  pdfLogoUrl            String?               @map("pdf_logo_url") @db.VarChar(255)
-  primaryColor          String                @default("#FF3366") @map("primary_color") @db.VarChar(50)
-  laborRatePerHour      Decimal?              @default(0) @map("labor_rate_per_hour") @db.Decimal(12, 2)
-  backgroundPreference  BackgroundPreference  @default(DARK) @map("background_preference")
-  sidebarPermissions    Json?                 @map("sidebar_permissions")
+  rut              String? @db.VarChar(20)
+  address          String? @db.VarChar(255)
+  phone            String? @db.VarChar(20)
+  /**
+   * Ciudad o comuna (facturación / pie de OC).
+   */
+  city             String? @map("city") @db.VarChar(120)
+  /**
+   * Razón social para facturas y PDF de OC (p. ej. «TPM Minería SpA»). Si vacío, se usa `name`.
+   */
+  invoiceLegalName String? @map("invoice_legal_name") @db.VarChar(200)
+  /**
+   * Texto del recuadro de aviso en el PDF de OC (saltos de línea permitidos). Si vacío, se usa texto por defecto en código.
+   */
+  ocPdfLegalNotice String? @map("oc_pdf_legal_notice") @db.Text
 
-  isActive              Boolean               @default(true) @map("is_active")
-  
-  contracts             Contract[]    
+  logoUrl              String?              @map("logo_url") @db.VarChar(255)
+  /**
+   * Variante del logo del menú para tema claro (barra lateral). Si es null, se usa `logoUrl`.
+   */
+  logoLightUrl         String?              @map("logo_light_url") @db.VarChar(255)
+  /**
+   * Logo horizontal para PDFs de compras (OC, SRC, reporte ejecutivo). Independiente del logo del menú (`logoUrl`).
+   */
+  pdfLogoUrl           String?              @map("pdf_logo_url") @db.VarChar(255)
+  primaryColor         String               @default("#FF3366") @map("primary_color") @db.VarChar(50)
+  laborRatePerHour     Decimal?             @default(0) @map("labor_rate_per_hour") @db.Decimal(12, 2)
+  backgroundPreference BackgroundPreference @default(DARK) @map("background_preference")
+  sidebarPermissions   Json?                @map("sidebar_permissions")
+
+  isActive Boolean @default(true) @map("is_active")
+
+  contracts             Contract[]
   users                 User[]
   equipments            Equipment[]
   equipmentMeterLogs    EquipmentMeterLog[]
@@ -624,31 +673,59 @@ model Tenant {
   inventoryItems        InventoryItem[]
   inventorySuppliers    InventorySupplier[]
   itemCategories        ItemCategory[]
-  unitOfMeasures       UnitOfMeasure[]
+  unitOfMeasures        UnitOfMeasure[]
   tenantRoles           TenantRole[]
 
-  vendors               Vendor[]
-  purchaseSettings      PurchaseSettings?
-  purchaseRequisitions  PurchaseRequisition[]
-  purchaseQuotations    PurchaseQuotation[]
-  purchaseOrders        PurchaseOrder[]
-  warehouseReceipts     WarehouseReceipt[]
-  purchaseInvoices      PurchaseInvoice[]
-  assetCostRecords      AssetCostRecord[]
-  sequenceCounters      SequenceCounter[]
-  activityLogs          ActivityLog[]
-  pushSubscriptions     PushSubscription[]
-  inventoryItemAttachments InventoryItemAttachment[]
-  inventoryTransfers    InventoryTransfer[]
-  purchaseDocuments     PurchaseDocument[]
-  purchaseCreditNotes   PurchaseCreditNote[]
+  vendors                    Vendor[]
+  purchaseSettings           PurchaseSettings?
+  purchaseRequisitions       PurchaseRequisition[]
+  purchaseQuotations         PurchaseQuotation[]
+  purchaseOrders             PurchaseOrder[]
+  warehouseReceipts          WarehouseReceipt[]
+  purchaseInvoices           PurchaseInvoice[]
+  assetCostRecords           AssetCostRecord[]
+  sequenceCounters           SequenceCounter[]
+  activityLogs               ActivityLog[]
+  pushSubscriptions          PushSubscription[]
+  inventoryItemAttachments   InventoryItemAttachment[]
+  inventoryTransfers         InventoryTransfer[]
+  purchaseDocuments          PurchaseDocument[]
+  purchaseCreditNotes        PurchaseCreditNote[]
   tenantNotificationSettings TenantNotificationSetting[]
   userNotificationSettings   UserNotificationSetting[]
+  lubeReports                LubeReport[]
+  equipmentAvailabilities    EquipmentAvailability[]
+  availabilityEvents         AvailabilityEvent[]
+  faultReports               FaultReport[]
+  operationalConfig          TenantOperationalConfig?
 
-  createdAt             DateTime              @default(now()) @map("created_at")
-  updatedAt             DateTime              @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("tenants")
+}
+
+/// Configuración operativa por tenant: gestión de turnos.
+/// Lazy-created: si no existe se usan los defaults del sistema (DAY-only = false, horarios 08:00/20:00).
+model TenantOperationalConfig {
+  id       String @id @default(cuid())
+  tenantId String @unique @map("tenant_id") @db.Uuid
+
+  /// Si el tenant opera con turno noche. false = solo Turno Día.
+  hasNightShift       Boolean @default(true) @map("has_night_shift")
+  /// Hora de inicio del Turno Día en formato HH:mm (24h).
+  dayShiftStartTime   String  @default("08:00") @map("day_shift_start_time") @db.VarChar(5)
+  /// Hora de inicio del Turno Noche en formato HH:mm (24h).
+  nightShiftStartTime String  @default("20:00") @map("night_shift_start_time") @db.VarChar(5)
+  /// Si true, las salidas de stock no pueden dejar saldo negativo (BadRequest en lugar de regularización pendiente).
+  blockNegativeStock  Boolean @default(false) @map("block_negative_stock")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_operational_configs")
 }
 
 model TenantRole {
@@ -657,14 +734,14 @@ model TenantRole {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String   @db.VarChar(100)
   description String?  @db.VarChar(255)
-  baseRole    UserRole @default(MECHANIC) @map("base_role")
+  baseRole    UserRole @default(USER) @map("base_role")
   routes      Json     @default("[]")
   /// Capacidades PBAC para API (independiente de `routes` en UI).
   permissions Json     @default("[]")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  users              User[]
+  users User[]
 
   @@unique([tenantId, name])
   @@map("tenant_roles")
@@ -673,8 +750,6 @@ model TenantRole {
 enum UserRole {
   SUPER_ADMIN
   ADMIN
-  SUPERVISOR
-  MECHANIC
   USER
 }
 
@@ -687,57 +762,60 @@ enum BackgroundPreference {
 // 7. CONTRATOS Y SUBCONTRATOS
 // ==========================================
 model Contract {
-  id            String          @id @default(uuid()) @db.Uuid
-  tenantId      String          @map("tenant_id") @db.Uuid
-  code          String          @db.VarChar(50)
-  name          String          @db.VarChar(100)
-  isActive      Boolean         @default(true) @map("is_active")
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  code     String  @db.VarChar(50)
+  name     String  @db.VarChar(100)
+  isActive Boolean @default(true) @map("is_active")
 
-  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  subcontracts  Subcontract[]
-  users         UserContract[]
-  equipments    Equipment[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subcontracts    Subcontract[]
+  users           UserContract[]
+  equipments      Equipment[]
   maintenanceKits MaintenanceKit[]
   warehouses      Warehouse[]
 
-  purchaseRequisitions PurchaseRequisition[]
-  purchaseOrders       PurchaseOrder[]
+  purchaseRequisitions    PurchaseRequisition[]
+  purchaseOrders          PurchaseOrder[]
+  lubeReports             LubeReport[]
+  equipmentAvailabilities EquipmentAvailability[]
+  faultReports            FaultReport[]
 
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, code])
   @@map("contracts")
 }
 
 model Subcontract {
-  id            String          @id @default(uuid()) @db.Uuid
-  contractId    String          @map("contract_id") @db.Uuid
-  code          String          @db.VarChar(50)
-  name          String          @db.VarChar(100)
-  isActive      Boolean         @default(true) @map("is_active")
+  id         String  @id @default(uuid()) @db.Uuid
+  contractId String  @map("contract_id") @db.Uuid
+  code       String  @db.VarChar(50)
+  name       String  @db.VarChar(100)
+  isActive   Boolean @default(true) @map("is_active")
 
-  contract      Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  equipments    Equipment[]
-  workOrders    WorkOrder[]
-  maintenanceKits MaintenanceKit[]
-  warehouses      Warehouse[]
+  contract             Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  equipments           Equipment[]
+  workOrders           WorkOrder[]
+  maintenanceKits      MaintenanceKit[]
+  warehouses           Warehouse[]
   purchaseRequisitions PurchaseRequisition[]
   purchaseOrders       PurchaseOrder[]
 
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([contractId, code])
   @@map("subcontracts")
 }
 
 model UserContract {
-  userId        String          @map("user_id") @db.Uuid
-  contractId    String          @map("contract_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+  contractId String @map("contract_id") @db.Uuid
 
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contract      Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
   @@id([userId, contractId])
   @@map("user_contracts")
@@ -750,9 +828,9 @@ model UserContract {
 /// Proveedor habitual asociado a artículos de inventario (catálogo por tenant).
 /// Independiente del módulo de compras (PurchaseOrder / Quotation).
 model InventorySupplier {
-  id        String  @id @default(uuid()) @db.Uuid
-  tenantId  String  @map("tenant_id") @db.Uuid
-  name      String  @db.VarChar(150)
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name     String @db.VarChar(150)
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
@@ -763,19 +841,19 @@ model InventorySupplier {
 }
 
 model ItemCategory {
-  id               String         @id @default(uuid()) @db.Uuid
-  tenantId         String         @map("tenant_id") @db.Uuid
-  name             String         @db.VarChar(100)
-  description      String?        @db.Text
+  id               String  @id @default(uuid()) @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
+  name             String  @db.VarChar(100)
+  description      String? @db.Text
   /// Nivel 1 (familia): null. Nivel 2 (subcategoría): referencia a la familia.
-  parentCategoryId String?        @map("parent_category_id") @db.Uuid
+  parentCategoryId String? @map("parent_category_id") @db.Uuid
   /// true = familia de nivel 1 (sin padre). Los artículos solo se vinculan a subcategorías (hojas).
-  isGlobal         Boolean        @default(false) @map("is_global")
+  isGlobal         Boolean @default(false) @map("is_global")
 
-  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parentCategory   ItemCategory?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: Restrict)
-  childCategories  ItemCategory[] @relation("CategoryHierarchy")
-  items            InventoryItem[]
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentCategory  ItemCategory?   @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: Restrict)
+  childCategories ItemCategory[]  @relation("CategoryHierarchy")
+  items           InventoryItem[]
 
   @@index([tenantId])
   @@index([tenantId, parentCategoryId])
@@ -784,12 +862,12 @@ model ItemCategory {
 
 /// Unidades de medida configurables por tenant (maestro).
 model UnitOfMeasure {
-  id             String   @id @default(uuid()) @db.Uuid
-  tenantId       String   @map("tenant_id") @db.Uuid
-  name           String   @db.VarChar(100)
-  abbreviation   String   @db.VarChar(20)
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  name           String  @db.VarChar(100)
+  abbreviation   String  @db.VarChar(20)
   /// Si true, permite cantidades fraccionarias (ej. KG, LT, MT). Si false, solo enteros (ej. UN).
-  allowsDecimals Boolean  @default(false) @map("allows_decimals")
+  allowsDecimals Boolean @default(false) @map("allows_decimals")
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
@@ -800,94 +878,96 @@ model UnitOfMeasure {
 }
 
 model WarehouseBin {
-  id          String    @id @default(uuid()) @db.Uuid
-  warehouseId String    @map("warehouse_id") @db.Uuid
-  code        String    @db.VarChar(50)
-  label       String?   @db.VarChar(100)
+  id          String  @id @default(uuid()) @db.Uuid
+  warehouseId String  @map("warehouse_id") @db.Uuid
+  code        String  @db.VarChar(50)
+  label       String? @db.VarChar(100)
 
-  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  stocks      ItemStock[]
+  warehouse Warehouse   @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stocks    ItemStock[]
 
   @@unique([warehouseId, code])
   @@map("warehouse_bins")
 }
 
 model Warehouse {
-  id              String       @id @default(uuid()) @db.Uuid
-  tenantId        String       @map("tenant_id") @db.Uuid
-  contractId      String       @map("contract_id") @db.Uuid 
-  subcontractId   String?      @map("subcontract_id") @db.Uuid // NUEVO: Bodega asignable a Subcontrato
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  contractId    String  @map("contract_id") @db.Uuid
+  subcontractId String? @map("subcontract_id") @db.Uuid // NUEVO: Bodega asignable a Subcontrato
 
-  code            String        @db.VarChar(50)
-  name            String        @db.VarChar(100)
-  location        String?       @db.VarChar(255)
-  type            WarehouseType @default(PHYSICAL)
-  isActive        Boolean       @default(true) @map("is_active")
+  code     String        @db.VarChar(50)
+  name     String        @db.VarChar(100)
+  location String?       @db.VarChar(255)
+  type     WarehouseType @default(PHYSICAL)
+  isActive Boolean       @default(true) @map("is_active")
 
-  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contract        Contract     @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  subcontract     Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
-  
-  bins              WarehouseBin[]
-  stocks            ItemStock[]
-  transactions      InventoryTransaction[]
-  workOrders        WorkOrder[]
-  stockReservations StockReservation[]
-  warehouseReceipts WarehouseReceipt[]
-  outboundTransfers  InventoryTransfer[] @relation("InventoryTransferOrigin")
-  inboundTransfers   InventoryTransfer[] @relation("InventoryTransferDestination")
-  inventoryItemsAsPolicyTarget InventoryItem[] @relation("InventoryItemPolicyTargetWarehouse")
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract    Contract     @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract Subcontract? @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+
+  bins                         WarehouseBin[]
+  stocks                       ItemStock[]
+  transactions                 InventoryTransaction[]
+  workOrders                   WorkOrder[]
+  stockReservations            StockReservation[]
+  warehouseReceipts            WarehouseReceipt[]
+  outboundTransfers            InventoryTransfer[]    @relation("InventoryTransferOrigin")
+  inboundTransfers             InventoryTransfer[]    @relation("InventoryTransferDestination")
+  inventoryItemsAsPolicyTarget InventoryItem[]        @relation("InventoryItemPolicyTargetWarehouse")
+  lubeReports                  LubeReport[]
 
   @@unique([tenantId, code])
   @@map("warehouses")
 }
 
 model InventoryItem {
-  id              String        @id @default(uuid()) @db.Uuid
-  tenantId        String        @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   /// SKU interno ERP (alta vía API: siempre autogenerado IN####; importación/script puede fijar valor; no editable por PUT).
-  inventoryCode   String?       @map("inventory_code") @db.VarChar(60)
+  inventoryCode String? @map("inventory_code") @db.VarChar(60)
 
   /// Payload estable para QR / pistola (típicamente INV:<uuid>).
-  qrCode          String        @map("qr_code") @db.VarChar(120)
+  qrCode            String  @map("qr_code") @db.VarChar(120)
   /// Número de parte (opcional; obligatorio para repuestos, innecesario en insumos sin referencia).
-  partNumber      String?       @map("part_number") @db.VarChar(50)
-  name            String        @db.VarChar(150)
-  description     String?       @db.Text
+  partNumber        String? @map("part_number") @db.VarChar(50)
+  name              String  @db.VarChar(150)
+  description       String? @db.Text
   /// Subcategoría (nivel 2); la familia se obtiene vía itemCategory.parentCategory.
-  categoryId       String         @map("category_id") @db.Uuid
-  unitOfMeasureId  String         @map("unit_of_measure_id") @db.Uuid
-  brand            String?        @db.VarChar(50)
+  categoryId        String  @map("category_id") @db.Uuid
+  unitOfMeasureId   String  @map("unit_of_measure_id") @db.Uuid
+  brand             String? @db.VarChar(50)
   /// Equipos / marcas / modelos compatibles (texto libre para cruce con flota).
-  compatibilityInfo String?     @map("compatibility_info") @db.Text
+  compatibilityInfo String? @map("compatibility_info") @db.Text
   /// Proveedor habitual del artículo (distinto al proveedor de OC en módulo de compras).
-  supplierId        String?      @map("supplier_id") @db.Uuid
+  supplierId        String? @map("supplier_id") @db.Uuid
 
-  isSerialized    Boolean       @default(false) @map("is_serialized")
-  isInventory     Boolean       @default(true)  @map("is_inventory")
-  isAsset         Boolean       @default(false) @map("is_asset")
-  isConsumable    Boolean       @default(true)  @map("is_consumable")
+  isSerialized Boolean @default(false) @map("is_serialized")
+  isInventory  Boolean @default(true) @map("is_inventory")
+  isAsset      Boolean @default(false) @map("is_asset")
+  isConsumable Boolean @default(true) @map("is_consumable")
 
   /// Bodega en la que, al primer movimiento que cree `item_stocks`, se aplicarán policyMinStock / policyMaxStock (sin fila hasta entonces).
-  policyTargetWarehouseId String?   @map("policy_target_warehouse_id") @db.Uuid
-  policyMinStock          Float?    @map("policy_min_stock")
-  policyMaxStock          Float?    @map("policy_max_stock")
+  policyTargetWarehouseId String? @map("policy_target_warehouse_id") @db.Uuid
+  policyMinStock          Float?  @map("policy_min_stock")
+  policyMaxStock          Float?  @map("policy_max_stock")
 
-  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  itemCategory      ItemCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  inventorySupplier InventorySupplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  unitOfMeasure     UnitOfMeasure  @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
-  policyTargetWarehouse Warehouse? @relation("InventoryItemPolicyTargetWarehouse", fields: [policyTargetWarehouseId], references: [id], onDelete: SetNull)
-  stocks            ItemStock[]
-  transactions      InventoryTransaction[]
+  tenant                     Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemCategory               ItemCategory                @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  inventorySupplier          InventorySupplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  unitOfMeasure              UnitOfMeasure               @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
+  policyTargetWarehouse      Warehouse?                  @relation("InventoryItemPolicyTargetWarehouse", fields: [policyTargetWarehouseId], references: [id], onDelete: SetNull)
+  stocks                     ItemStock[]
+  transactions               InventoryTransaction[]
   workOrderParts             WorkOrderPart[]
   workOrderFluidCompartments WorkOrderFluidCompartment[]
-  stockReservations StockReservation[]
-  requisitionItems  RequisitionItem[]
-  purchaseOrderItems PurchaseOrderItem[]
-  attachments        InventoryItemAttachment[]
-  inventoryTransferLines InventoryTransferLine[]
+  stockReservations          StockReservation[]
+  requisitionItems           RequisitionItem[]
+  purchaseOrderItems         PurchaseOrderItem[]
+  attachments                InventoryItemAttachment[]
+  inventoryTransferLines     InventoryTransferLine[]
+  lubeReportLines            LubeReportLine[]
 
   @@unique([tenantId, partNumber])
   @@unique([tenantId, qrCode])
@@ -919,47 +999,47 @@ model InventoryItemAttachment {
 }
 
 model ItemStock {
-  id              String        @id @default(uuid()) @db.Uuid
-  warehouseId     String        @map("warehouse_id") @db.Uuid
-  itemId          String        @map("item_id") @db.Uuid
-  binId           String?       @map("bin_id") @db.Uuid
-  
-  quantity        Float         @default(0) 
-  unitCost        Decimal?      @map("unit_cost") @db.Decimal(18, 4)
-  minStock        Float         @default(0) @map("min_stock")
-  maxStock        Float         @default(0) @map("max_stock")
+  id          String  @id @default(uuid()) @db.Uuid
+  warehouseId String  @map("warehouse_id") @db.Uuid
+  itemId      String  @map("item_id") @db.Uuid
+  binId       String? @map("bin_id") @db.Uuid
+
+  quantity Float    @default(0)
+  unitCost Decimal? @map("unit_cost") @db.Decimal(18, 4)
+  minStock Float    @default(0) @map("min_stock")
+  maxStock Float    @default(0) @map("max_stock")
   /// Ubicación física en esta bodega (pasillo/estante; independiente por bodega).
-  location        String?       @map("location") @db.VarChar(120)
+  location String?  @map("location") @db.VarChar(120)
 
-  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  item            InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  bin             WarehouseBin? @relation(fields: [binId], references: [id], onDelete: SetNull)
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  bin       WarehouseBin? @relation(fields: [binId], references: [id], onDelete: SetNull)
 
-  @@unique([warehouseId, itemId]) 
+  @@unique([warehouseId, itemId])
   @@map("item_stocks")
 }
 
 model InventoryTransaction {
-  id              String          @id @default(uuid()) @db.Uuid
-  warehouseId     String          @map("warehouse_id") @db.Uuid
-  itemId          String          @map("item_id") @db.Uuid
-  userId          String          @map("user_id") @db.Uuid 
-  
-  type            TransactionType
-  quantity        Float           
-  previousStock   Float           @map("previous_stock") 
-  newStock        Float           @map("new_stock")      
-  
-  referenceId     String?         @map("reference_id") @db.Uuid 
-  referenceType   String?         @map("reference_type") @db.VarChar(50) 
-  notes           String?         @db.Text
-  isPendingRegularization Boolean @default(false) @map("is_pending_regularization")
-  
-  date            DateTime        @default(now())
+  id          String @id @default(uuid()) @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
+  itemId      String @map("item_id") @db.Uuid
+  userId      String @map("user_id") @db.Uuid
 
-  warehouse       Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  item            InventoryItem   @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  user            User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type          TransactionType
+  quantity      Float
+  previousStock Float           @map("previous_stock")
+  newStock      Float           @map("new_stock")
+
+  referenceId             String? @map("reference_id") @db.Uuid
+  referenceType           String? @map("reference_type") @db.VarChar(50)
+  notes                   String? @db.Text
+  isPendingRegularization Boolean @default(false) @map("is_pending_regularization")
+
+  date DateTime @default(now())
+
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   /// Listados/kardex por bodega y rango temporal (tenant vía warehouse).
   @@index([warehouseId, date])
@@ -970,11 +1050,13 @@ model InventoryTransaction {
 }
 
 enum TransactionType {
-  IN      
-  OUT     
-  ADJUST  
+  IN
+  OUT
+  ADJUST
   RETURN
-  /** Devolución a bodega de material despachado a una OT (trazabilidad explícita). */
+  /**
+   * Devolución a bodega de material despachado a una OT (trazabilidad explícita).
+   */
   WORK_ORDER_RETURN
   PURCHASE_RECEIPT
   WORK_ORDER_ISSUE
@@ -998,22 +1080,22 @@ model InventoryTransfer {
   createdById            String                  @map("created_by_id") @db.Uuid
   createdAt              DateTime                @default(now()) @map("created_at")
 
-  tenant                 Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  originWarehouse        Warehouse     @relation("InventoryTransferOrigin", fields: [originWarehouseId], references: [id], onDelete: Restrict)
-  destinationWarehouse   Warehouse     @relation("InventoryTransferDestination", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
-  createdBy              User          @relation("InventoryTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  lines                  InventoryTransferLine[]
+  tenant               Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  originWarehouse      Warehouse               @relation("InventoryTransferOrigin", fields: [originWarehouseId], references: [id], onDelete: Restrict)
+  destinationWarehouse Warehouse               @relation("InventoryTransferDestination", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
+  createdBy            User                    @relation("InventoryTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lines                InventoryTransferLine[]
 
   @@index([tenantId, createdAt])
   @@map("inventory_transfers")
 }
 
 model InventoryTransferLine {
-  id         String   @id @default(uuid()) @db.Uuid
-  transferId String   @map("transfer_id") @db.Uuid
-  itemId     String   @map("item_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  transferId String  @map("transfer_id") @db.Uuid
+  itemId     String  @map("item_id") @db.Uuid
   quantity   Float
-  unitCost   Decimal  @map("unit_cost") @db.Decimal(18, 4)
+  unitCost   Decimal @map("unit_cost") @db.Decimal(18, 4)
 
   transfer InventoryTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
   item     InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
@@ -1026,16 +1108,16 @@ model InventoryTransferLine {
 // 9. AJUSTES DE MEDIDOR (HORÓMETRO/ODÓMETRO)
 // ==========================================
 model MeterAdjustment {
-  id            String    @id @default(uuid()) @db.Uuid
-  equipmentId   String    @map("equipment_id") @db.Uuid
-  userId        String    @map("user_id") @db.Uuid
-  oldValue      Int       @map("old_value")
-  newValue      Int       @map("new_value")
-  date          DateTime  @default(now())
-  reason        String?   @db.Text
+  id          String   @id @default(uuid()) @db.Uuid
+  equipmentId String   @map("equipment_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  oldValue    Int      @map("old_value")
+  newValue    Int      @map("new_value")
+  date        DateTime @default(now())
+  reason      String?  @db.Text
 
-  equipment     Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@map("meter_adjustments")
 }
@@ -1044,18 +1126,20 @@ enum MeterLogSource {
   OT
   MANUAL
   TELEMETRY
+  AVAILABILITY_REPORT
+  FAULT_REPORT
 }
 
 model EquipmentMeterLog {
-  id           String          @id @default(uuid()) @db.Uuid
-  tenantId     String          @map("tenant_id") @db.Uuid
-  equipmentId  String          @map("equipment_id") @db.Uuid
-  oldValue     Decimal         @map("old_value") @db.Decimal(14, 4)
-  newValue     Decimal         @map("new_value") @db.Decimal(14, 4)
-  source       MeterLogSource
-  sourceId     String?         @map("source_id") @db.VarChar(80)
-  date         DateTime        @default(now()) @map("date")
-  userId       String          @map("user_id") @db.Uuid
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  equipmentId String         @map("equipment_id") @db.Uuid
+  oldValue    Decimal        @map("old_value") @db.Decimal(14, 4)
+  newValue    Decimal        @map("new_value") @db.Decimal(14, 4)
+  source      MeterLogSource
+  sourceId    String?        @map("source_id") @db.VarChar(80)
+  date        DateTime       @default(now()) @map("date")
+  userId      String         @map("user_id") @db.Uuid
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
@@ -1067,21 +1151,21 @@ model EquipmentMeterLog {
 
 /// Costos imputados al activo desde compras (PURCHASE) u órdenes de trabajo (WORK_ORDER).
 model AssetCostRecord {
-  id                 String            @id @default(uuid()) @db.Uuid
-  tenantId           String            @map("tenant_id") @db.Uuid
-  equipmentId        String            @map("equipment_id") @db.Uuid
-  amount             Decimal           @db.Decimal(18, 2)
+  id                 String        @id @default(uuid()) @db.Uuid
+  tenantId           String        @map("tenant_id") @db.Uuid
+  equipmentId        String        @map("equipment_id") @db.Uuid
+  amount             Decimal       @db.Decimal(18, 2)
   type               AssetCostType
-  purchaseOrderId    String?           @map("purchase_order_id") @db.Uuid
-  workOrderId        String?           @map("work_order_id") @db.Uuid
-  warehouseReceiptId String?           @unique @map("warehouse_receipt_id") @db.Uuid
-  recordedAt         DateTime          @default(now()) @map("recorded_at")
+  purchaseOrderId    String?       @map("purchase_order_id") @db.Uuid
+  workOrderId        String?       @map("work_order_id") @db.Uuid
+  warehouseReceiptId String?       @unique @map("warehouse_receipt_id") @db.Uuid
+  recordedAt         DateTime      @default(now()) @map("recorded_at")
 
-  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  equipment          Equipment         @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  purchaseOrder      PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  workOrder          WorkOrder?        @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
-  warehouseReceipt   WarehouseReceipt? @relation(fields: [warehouseReceiptId], references: [id], onDelete: SetNull)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  equipment        Equipment         @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  purchaseOrder    PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  workOrder        WorkOrder?        @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  warehouseReceipt WarehouseReceipt? @relation(fields: [warehouseReceiptId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, equipmentId])
   @@index([tenantId, recordedAt])
@@ -1091,6 +1175,22 @@ model AssetCostRecord {
 enum AssetCostType {
   PURCHASE
   WORK_ORDER
+  LUBE_DISPATCH
+}
+
+/// Turno operativo: Día o Noche.
+enum ShiftType {
+  DAY
+  NIGHT
+}
+
+/// Estado declarado del equipo en el reporte de disponibilidad del turno.
+enum OperationalStatus {
+  OPERATIONAL // Operativo
+  STANDBY // Standby
+  RESERVE_NO_OPERATOR // Reserva sin operador
+  DOWN_FAILURE // Detenido por Falla
+  DOWN_MAINTENANCE // Detenido por Mantención
 }
 
 enum WarehouseType {
@@ -1103,16 +1203,16 @@ enum WarehouseType {
 // 10. RESERVAS DE STOCK (OTs ABIERTAS)
 // ==========================================
 model StockReservation {
-  id            String        @id @default(uuid()) @db.Uuid
-  workOrderId   String        @map("work_order_id") @db.Uuid
-  itemId        String        @map("item_id") @db.Uuid
-  warehouseId   String        @map("warehouse_id") @db.Uuid
-  quantity      Float
-  createdAt     DateTime      @default(now()) @map("created_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  workOrderId String   @map("work_order_id") @db.Uuid
+  itemId      String   @map("item_id") @db.Uuid
+  warehouseId String   @map("warehouse_id") @db.Uuid
+  quantity    Float
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  workOrder WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@unique([workOrderId, itemId, warehouseId])
   @@map("stock_reservations")
@@ -1122,14 +1222,14 @@ model StockReservation {
 // 11. CONTADOR DE SECUENCIAS (CORRELATIVOS)
 // ==========================================
 model SequenceCounter {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  documentType  String   @map("document_type") @db.VarChar(10)
-  prefix        String   @db.VarChar(10)
-  lastNumber    Int      @default(0) @map("last_number")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  documentType String   @map("document_type") @db.VarChar(10)
+  prefix       String   @db.VarChar(10)
+  lastNumber   Int      @default(0) @map("last_number")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, documentType])
   @@map("sequence_counters")
@@ -1139,25 +1239,27 @@ model SequenceCounter {
 // 12. MAESTRO DE PROVEEDORES
 // ==========================================
 model Vendor {
-  id            String    @id @default(uuid()) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  code          String    @db.VarChar(50)
-  name          String    @db.VarChar(200)
-  rut           String?   @db.VarChar(20)
-  contactName   String?   @map("contact_name") @db.VarChar(100)
-  contactEmail  String?   @map("contact_email") @db.VarChar(100)
-  contactPhone  String?   @map("contact_phone") @db.VarChar(20)
-  address       String?   @db.VarChar(255)
-  /** Giro comercial (PDF OC, datos proveedor). */
+  id               String  @id @default(uuid()) @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
+  code             String  @db.VarChar(50)
+  name             String  @db.VarChar(200)
+  rut              String? @db.VarChar(20)
+  contactName      String? @map("contact_name") @db.VarChar(100)
+  contactEmail     String? @map("contact_email") @db.VarChar(100)
+  contactPhone     String? @map("contact_phone") @db.VarChar(20)
+  address          String? @db.VarChar(255)
+  /**
+   * Giro comercial (PDF OC, datos proveedor).
+   */
   businessActivity String? @map("business_activity") @db.VarChar(255)
-  fax           String?   @db.VarChar(30)
-  city          String?   @db.VarChar(120)
-  isActive      Boolean   @default(true) @map("is_active")
+  fax              String? @db.VarChar(30)
+  city             String? @db.VarChar(120)
+  isActive         Boolean @default(true) @map("is_active")
 
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   quotations       PurchaseQuotation[]
   purchaseInvoices PurchaseInvoice[]
 
@@ -1170,33 +1272,33 @@ model Vendor {
 // 13. CONFIGURACIÓN DINÁMICA DE COMPRAS
 // ==========================================
 model PurchaseSettings {
-  id                           String   @id @default(uuid()) @db.Uuid
-  tenantId                     String   @unique @map("tenant_id") @db.Uuid
-  approvalThreshold            Decimal  @default(0) @map("approval_threshold") @db.Decimal(18, 2)
-  currency                     String   @default("CLP") @db.VarChar(10)
+  id                           String  @id @default(uuid()) @db.Uuid
+  tenantId                     String  @unique @map("tenant_id") @db.Uuid
+  approvalThreshold            Decimal @default(0) @map("approval_threshold") @db.Decimal(18, 2)
+  currency                     String  @default("CLP") @db.VarChar(10)
   /// Margen relativo (p. ej. 1 = 1%) para el match factura vs OC / recepción (3-way match).
-  invoiceMatchTolerancePercent Decimal  @default(1) @map("invoice_match_tolerance_percent") @db.Decimal(9, 4)
+  invoiceMatchTolerancePercent Decimal @default(1) @map("invoice_match_tolerance_percent") @db.Decimal(9, 4)
 
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  approvalPolicies   ApprovalPolicy[]
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  approvalPolicies ApprovalPolicy[]
 
   @@map("purchase_settings")
 }
 
 model ApprovalPolicy {
-  id                  String           @id @default(uuid()) @db.Uuid
-  purchaseSettingsId  String           @map("purchase_settings_id") @db.Uuid
-  tenantId            String           @map("tenant_id") @db.Uuid
-  level               Int
-  description         String?          @db.VarChar(100)
-  minAmount           Decimal          @default(0) @db.Decimal(18, 2) @map("min_amount")
+  id                 String  @id @default(uuid()) @db.Uuid
+  purchaseSettingsId String  @map("purchase_settings_id") @db.Uuid
+  tenantId           String  @map("tenant_id") @db.Uuid
+  level              Int
+  description        String? @db.VarChar(100)
+  minAmount          Decimal @default(0) @map("min_amount") @db.Decimal(18, 2)
 
-  purchaseSettings    PurchaseSettings @relation(fields: [purchaseSettingsId], references: [id], onDelete: Cascade)
-  allowedUsers        ApprovalPolicyUser[]
-  approvals           PurchaseOrderApproval[]
+  purchaseSettings PurchaseSettings        @relation(fields: [purchaseSettingsId], references: [id], onDelete: Cascade)
+  allowedUsers     ApprovalPolicyUser[]
+  approvals        PurchaseOrderApproval[]
 
   @@unique([tenantId, level])
   @@map("approval_policies")
@@ -1205,14 +1307,14 @@ model ApprovalPolicy {
 /// Usuarios autorizados para firmar en un nivel de aprobación específico.
 /// Reemplaza el enfoque anterior basado en TenantRole.
 model ApprovalPolicyUser {
-  id        String         @id @default(uuid()) @db.Uuid
-  policyId  String         @map("policy_id") @db.Uuid
-  userId    String         @map("user_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  policyId String @map("policy_id") @db.Uuid
+  userId   String @map("user_id") @db.Uuid
   /// Desnormalizado para queries multi-tenant seguras sin JOIN adicional.
-  tenantId  String         @map("tenant_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  policy    ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  user      User           @relation("ApprovalPolicyUsers", fields: [userId], references: [id], onDelete: Cascade)
+  policy ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  user   User           @relation("ApprovalPolicyUsers", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([policyId, userId])
   @@index([tenantId, userId])
@@ -1225,31 +1327,31 @@ model ApprovalPolicyUser {
 
 // -- Requerimientos de Compra --
 model PurchaseRequisition {
-  id              String              @id @default(uuid()) @db.Uuid
-  tenantId        String              @map("tenant_id") @db.Uuid
-  contractId      String              @map("contract_id") @db.Uuid
-  subcontractId   String?             @map("subcontract_id") @db.Uuid
-  correlative     String              @db.VarChar(30)
-  requestedById   String              @map("requested_by_id") @db.Uuid
-  status          RequisitionStatus   @default(DRAFT)
-  description     String              @db.Text
-  justification   String?             @db.Text
-  equipmentId     String?             @map("equipment_id") @db.Uuid
-  workOrderId     String?             @map("work_order_id") @db.Uuid
-  priority        RequisitionPriority @default(MEDIUM)
+  id            String              @id @default(uuid()) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  contractId    String              @map("contract_id") @db.Uuid
+  subcontractId String?             @map("subcontract_id") @db.Uuid
+  correlative   String              @db.VarChar(30)
+  requestedById String              @map("requested_by_id") @db.Uuid
+  status        RequisitionStatus   @default(DRAFT)
+  description   String              @db.Text
+  justification String?             @db.Text
+  equipmentId   String?             @map("equipment_id") @db.Uuid
+  workOrderId   String?             @map("work_order_id") @db.Uuid
+  priority      RequisitionPriority @default(MEDIUM)
 
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contract        Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  subcontract     Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
-  requestedBy     User                @relation("RequisitionRequester", fields: [requestedById], references: [id])
-  equipment       Equipment?          @relation("RequisitionEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
-  workOrder       WorkOrder?          @relation("RequisitionWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
-  items           RequisitionItem[]
-  quotations      PurchaseQuotation[]
-  purchaseOrders  PurchaseOrder[]
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract       Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract    Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  requestedBy    User                @relation("RequisitionRequester", fields: [requestedById], references: [id])
+  equipment      Equipment?          @relation("RequisitionEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
+  workOrder      WorkOrder?          @relation("RequisitionWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
+  items          RequisitionItem[]
+  quotations     PurchaseQuotation[]
+  purchaseOrders PurchaseOrder[]
 
   @@unique([tenantId, correlative])
   @@index([tenantId, equipmentId])
@@ -1260,67 +1362,69 @@ model PurchaseRequisition {
 }
 
 model RequisitionItem {
-  id              String              @id @default(uuid()) @db.Uuid
-  requisitionId   String              @map("requisition_id") @db.Uuid
-  inventoryItemId String?             @map("inventory_item_id") @db.Uuid
-  description     String              @db.VarChar(255)
+  id                     String   @id @default(uuid()) @db.Uuid
+  requisitionId          String   @map("requisition_id") @db.Uuid
+  inventoryItemId        String?  @map("inventory_item_id") @db.Uuid
+  description            String   @db.VarChar(255)
   /// Nº de parte libre (opcional; refina la solicitud aunque no exista en inventario)
-  partNumber      String?             @map("part_number") @db.VarChar(80)
+  partNumber             String?  @map("part_number") @db.VarChar(80)
   /// Notas / especificación opcional (marca deseada, alternativos, etc.)
-  itemNotes       String?             @map("item_notes") @db.VarChar(500)
-  quantity        Float
-  unitOfMeasure   String              @map("unit_of_measure") @db.VarChar(20)
-  estimatedCost   Decimal?            @map("estimated_cost") @db.Decimal(18, 2)
+  itemNotes              String?  @map("item_notes") @db.VarChar(500)
+  quantity               Float
+  unitOfMeasure          String   @map("unit_of_measure") @db.VarChar(20)
+  estimatedCost          Decimal? @map("estimated_cost") @db.Decimal(18, 2)
   /// Línea de cotización adjudicada para compra (split multiproveedor).
-  awardedQuotationItemId String?     @map("awarded_quotation_item_id") @db.Uuid
+  awardedQuotationItemId String?  @map("awarded_quotation_item_id") @db.Uuid
 
-  requisition            PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
-  inventoryItem          InventoryItem?      @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-  quotationItems         QuotationItem[]
-  awardedQuotationItem   QuotationItem?      @relation("RequisitionItemAward", fields: [awardedQuotationItemId], references: [id], onDelete: SetNull)
+  requisition          PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  inventoryItem        InventoryItem?      @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  quotationItems       QuotationItem[]
+  awardedQuotationItem QuotationItem?      @relation("RequisitionItemAward", fields: [awardedQuotationItemId], references: [id], onDelete: SetNull)
 
   @@map("requisition_items")
 }
 
 // -- Cotizaciones --
 model PurchaseQuotation {
-  id              String              @id @default(uuid()) @db.Uuid
-  tenantId        String              @map("tenant_id") @db.Uuid
-  requisitionId   String              @map("requisition_id") @db.Uuid
-  vendorId        String              @map("vendor_id") @db.Uuid
-  totalAmount     Decimal             @map("total_amount") @db.Decimal(18, 2)
-  currency        String              @default("CLP") @db.VarChar(10)
-  deliveryDays    Int?                @map("delivery_days")
-  /** Plazo de pago pactado en la oferta (días desde factura; ej. 30 → «30 días» en OC). */
-  paymentDays     Int?                @map("payment_days")
-  validUntil      DateTime?           @map("valid_until")
-  attachmentUrl   String?             @map("attachment_url") @db.VarChar(500)
-  status          QuotationStatus     @default(RECEIVED)
-  isWinner        Boolean             @default(false) @map("is_winner")
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  requisitionId String          @map("requisition_id") @db.Uuid
+  vendorId      String          @map("vendor_id") @db.Uuid
+  totalAmount   Decimal         @map("total_amount") @db.Decimal(18, 2)
+  currency      String          @default("CLP") @db.VarChar(10)
+  deliveryDays  Int?            @map("delivery_days")
+  /**
+   * Plazo de pago pactado en la oferta (días desde factura; ej. 30 → «30 días» en OC).
+   */
+  paymentDays   Int?            @map("payment_days")
+  validUntil    DateTime?       @map("valid_until")
+  attachmentUrl String?         @map("attachment_url") @db.VarChar(500)
+  status        QuotationStatus @default(RECEIVED)
+  isWinner      Boolean         @default(false) @map("is_winner")
 
-  createdAt       DateTime            @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  requisition     PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
-  vendor          Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  items           QuotationItem[]
-  purchaseOrders  PurchaseOrder[]
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requisition    PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  vendor         Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  items          QuotationItem[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("purchase_quotations")
 }
 
 model QuotationItem {
-  id                String            @id @default(uuid()) @db.Uuid
-  quotationId       String            @map("quotation_id") @db.Uuid
-  requisitionItemId String            @map("requisition_item_id") @db.Uuid
-  unitPrice         Decimal           @map("unit_price") @db.Decimal(18, 2)
-  brand             String?           @db.VarChar(100)
-  notes             String?           @db.VarChar(255)
+  id                String  @id @default(uuid()) @db.Uuid
+  quotationId       String  @map("quotation_id") @db.Uuid
+  requisitionItemId String  @map("requisition_item_id") @db.Uuid
+  unitPrice         Decimal @map("unit_price") @db.Decimal(18, 2)
+  brand             String? @db.VarChar(100)
+  notes             String? @db.VarChar(255)
 
-  quotation                    PurchaseQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  requisitionItem              RequisitionItem   @relation(fields: [requisitionItemId], references: [id], onDelete: Restrict)
-  requisitionItemsWithThisAward RequisitionItem[] @relation("RequisitionItemAward")
-  purchaseOrderLines           PurchaseOrderItem[]
+  quotation                     PurchaseQuotation   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  requisitionItem               RequisitionItem     @relation(fields: [requisitionItemId], references: [id], onDelete: Restrict)
+  requisitionItemsWithThisAward RequisitionItem[]   @relation("RequisitionItemAward")
+  purchaseOrderLines            PurchaseOrderItem[]
 
   @@map("quotation_items")
 }
@@ -1343,28 +1447,34 @@ model PurchaseOrder {
   pdfUrl             String?             @map("pdf_url") @db.Text
   equipmentId        String?             @map("equipment_id") @db.Uuid
   workOrderId        String?             @map("work_order_id") @db.Uuid
-  /** Momento en que la OC quedó marcada como enviada al proveedor (KPI lead time). */
+  /**
+   * Momento en que la OC quedó marcada como enviada al proveedor (KPI lead time).
+   */
   sentAt             DateTime?           @map("sent_at")
-  /** Dirección de entrega acordada (puede distingirse de la dirección fiscal del proveedor). */
+  /**
+   * Dirección de entrega acordada (puede distingirse de la dirección fiscal del proveedor).
+   */
   deliveryAddress    String?             @map("delivery_address") @db.VarChar(500)
-  /** Condición de pago declarada en la OC (ej. «30 días», «Contado»). */
+  /**
+   * Condición de pago declarada en la OC (ej. «30 días», «Contado»).
+   */
   paymentTerms       String?             @map("payment_terms") @db.VarChar(120)
 
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contract           Contract            @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  subcontract        Subcontract?        @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
-  requisition        PurchaseRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
-  quotation          PurchaseQuotation?  @relation(fields: [quotationId], references: [id], onDelete: SetNull)
-  equipment          Equipment?          @relation("OrderEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
-  workOrder          WorkOrder?          @relation("OrderWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
-  items              PurchaseOrderItem[]
-  approvals          PurchaseOrderApproval[]
-  receipts           WarehouseReceipt[]
-  assetCostRecords   AssetCostRecord[]
-  purchaseInvoices   PurchaseInvoice[]
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract            Contract                @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  subcontract         Subcontract?            @relation(fields: [subcontractId], references: [id], onDelete: Restrict)
+  requisition         PurchaseRequisition?    @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  quotation           PurchaseQuotation?      @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  equipment           Equipment?              @relation("OrderEquipment", fields: [equipmentId], references: [id], onDelete: SetNull)
+  workOrder           WorkOrder?              @relation("OrderWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
+  items               PurchaseOrderItem[]
+  approvals           PurchaseOrderApproval[]
+  receipts            WarehouseReceipt[]
+  assetCostRecords    AssetCostRecord[]
+  purchaseInvoices    PurchaseInvoice[]
   purchaseCreditNotes PurchaseCreditNote[]
 
   @@unique([tenantId, correlative])
@@ -1377,19 +1487,19 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String         @id @default(uuid()) @db.Uuid
-  purchaseOrderId String         @map("purchase_order_id") @db.Uuid
-  inventoryItemId String?        @map("inventory_item_id") @db.Uuid
-  description     String         @db.VarChar(255)
-  quantity        Float
-  unitCost        Decimal        @map("unit_cost") @db.Decimal(18, 2)
+  id                    String  @id @default(uuid()) @db.Uuid
+  purchaseOrderId       String  @map("purchase_order_id") @db.Uuid
+  inventoryItemId       String? @map("inventory_item_id") @db.Uuid
+  description           String  @db.VarChar(255)
+  quantity              Float
+  unitCost              Decimal @map("unit_cost") @db.Decimal(18, 2)
   /// Línea de cotización origen (idempotencia split y trazabilidad; IVA por OC en factura asociada).
-  sourceQuotationItemId String?  @map("source_quotation_item_id") @db.Uuid
+  sourceQuotationItemId String? @map("source_quotation_item_id") @db.Uuid
 
-  purchaseOrder        PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  inventoryItem        InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
-  sourceQuotationItem  QuotationItem? @relation(fields: [sourceQuotationItemId], references: [id], onDelete: SetNull)
-  receiptItems         ReceiptItem[]
+  purchaseOrder       PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItem       InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  sourceQuotationItem QuotationItem? @relation(fields: [sourceQuotationItemId], references: [id], onDelete: SetNull)
+  receiptItems        ReceiptItem[]
 
   @@index([sourceQuotationItemId])
   @@map("purchase_order_items")
@@ -1397,21 +1507,21 @@ model PurchaseOrderItem {
 
 // -- Firmas de Aprobación --
 model PurchaseOrderApproval {
-  id              String              @id @default(uuid()) @db.Uuid
-  purchaseOrderId String              @map("purchase_order_id") @db.Uuid
-  policyId        String              @map("policy_id") @db.Uuid
-  approvedById    String              @map("approved_by_id") @db.Uuid
+  id              String             @id @default(uuid()) @db.Uuid
+  purchaseOrderId String             @map("purchase_order_id") @db.Uuid
+  policyId        String             @map("policy_id") @db.Uuid
+  approvedById    String             @map("approved_by_id") @db.Uuid
   level           Int
-  comment         String?             @db.Text
-  signatureHash   String              @map("signature_hash") @db.VarChar(64)
+  comment         String?            @db.Text
+  signatureHash   String             @map("signature_hash") @db.VarChar(64)
   /// Estado de la OC al momento de firmar; usado para verificar el hash sin depender del estado actual.
-  hashedStatus    String?             @map("hashed_status") @db.VarChar(40)
-  integrityStatus SignatureIntegrity  @default(VALID) @map("integrity_status")
-  approvedAt      DateTime            @default(now()) @map("approved_at")
+  hashedStatus    String?            @map("hashed_status") @db.VarChar(40)
+  integrityStatus SignatureIntegrity @default(VALID) @map("integrity_status")
+  approvedAt      DateTime           @default(now()) @map("approved_at")
 
-  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  policy          ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
-  approvedBy      User           @relation("POApprover", fields: [approvedById], references: [id])
+  purchaseOrder PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  policy        ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  approvedBy    User           @relation("POApprover", fields: [approvedById], references: [id])
 
   @@unique([purchaseOrderId, level])
   @@map("purchase_order_approvals")
@@ -1429,13 +1539,13 @@ model WarehouseReceipt {
   observations    String?       @db.Text
   receivedAt      DateTime?     @map("received_at")
 
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  receivedBy      User          @relation("ReceiptReceiver", fields: [receivedById], references: [id])
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedBy      User             @relation("ReceiptReceiver", fields: [receivedById], references: [id])
   items           ReceiptItem[]
   assetCostRecord AssetCostRecord?
 
@@ -1444,44 +1554,54 @@ model WarehouseReceipt {
 }
 
 model ReceiptItem {
-  id                String            @id @default(uuid()) @db.Uuid
-  receiptId         String            @map("receipt_id") @db.Uuid
-  orderItemId       String            @map("order_item_id") @db.Uuid
-  quantityExpected  Float             @map("quantity_expected")
-  quantityReceived  Float             @map("quantity_received")
+  id                String  @id @default(uuid()) @db.Uuid
+  receiptId         String  @map("receipt_id") @db.Uuid
+  orderItemId       String  @map("order_item_id") @db.Uuid
+  quantityExpected  Float   @map("quantity_expected")
+  quantityReceived  Float   @map("quantity_received")
   /// Cantidad ya confirmada y movida a stock. El delta (quantityReceived - quantityConfirmed)
   /// es lo que se mueve en la próxima confirmación. Permite confirmaciones parciales sucesivas
   /// sobre la misma guía sin duplicar movimientos de inventario.
-  quantityConfirmed Float             @default(0) @map("quantity_confirmed")
-  observations      String?           @db.Text
+  quantityConfirmed Float   @default(0) @map("quantity_confirmed")
+  observations      String? @db.Text
 
-  receipt           WarehouseReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  orderItem         PurchaseOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  receipt   WarehouseReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItem PurchaseOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
 
   @@map("receipt_items")
 }
 
 /// Factura de proveedor vinculada a una OC (relación 1:1). Validación 3-way match vs OC y recepciones.
 model PurchaseInvoice {
-  id              String                @id @default(uuid()) @db.Uuid
-  tenantId        String                @map("tenant_id") @db.Uuid
-  vendorId        String                @map("vendor_id") @db.Uuid
-  purchaseOrderId String                @map("purchase_order_id") @db.Uuid
-  invoiceNumber   String                @map("invoice_number") @db.VarChar(80)
-  emissionDate    DateTime              @map("emission_date")
-  /** Vencimiento pactado para el calendario de pagos. */
-  dueDate         DateTime?             @map("due_date")
-  totalAmount     Decimal               @map("total_amount") @db.Decimal(18, 2)
-  /** Monto neto afecto (registro manual; opcional). */
-  netAmount       Decimal?              @map("net_amount") @db.Decimal(18, 2)
-  /** IVA u otros impuestos (registro manual; opcional). */
-  taxAmount       Decimal?              @map("tax_amount") @db.Decimal(18, 2)
-  status          PurchaseInvoiceStatus @default(PENDING)
-  pdfUrl          String?               @map("pdf_url") @db.VarChar(500)
-  /** Referencia bancaria / comprobante al registrar el pago. */
-  paymentReference String?              @map("payment_reference") @db.VarChar(120)
-  /** Momento en que se registró el pago efectivo. */
-  paidAt          DateTime?             @map("paid_at")
+  id               String                @id @default(uuid()) @db.Uuid
+  tenantId         String                @map("tenant_id") @db.Uuid
+  vendorId         String                @map("vendor_id") @db.Uuid
+  purchaseOrderId  String                @map("purchase_order_id") @db.Uuid
+  invoiceNumber    String                @map("invoice_number") @db.VarChar(80)
+  emissionDate     DateTime              @map("emission_date")
+  /**
+   * Vencimiento pactado para el calendario de pagos.
+   */
+  dueDate          DateTime?             @map("due_date")
+  totalAmount      Decimal               @map("total_amount") @db.Decimal(18, 2)
+  /**
+   * Monto neto afecto (registro manual; opcional).
+   */
+  netAmount        Decimal?              @map("net_amount") @db.Decimal(18, 2)
+  /**
+   * IVA u otros impuestos (registro manual; opcional).
+   */
+  taxAmount        Decimal?              @map("tax_amount") @db.Decimal(18, 2)
+  status           PurchaseInvoiceStatus @default(PENDING)
+  pdfUrl           String?               @map("pdf_url") @db.VarChar(500)
+  /**
+   * Referencia bancaria / comprobante al registrar el pago.
+   */
+  paymentReference String?               @map("payment_reference") @db.VarChar(120)
+  /**
+   * Momento en que se registró el pago efectivo.
+   */
+  paidAt           DateTime?             @map("paid_at")
 
   /// Excepción manual (short shipment, etc.): 3-way forzado a MATCHED si factura ≤ recepcionado.
   threeWayMatchOverruled     Boolean   @default(false) @map("three_way_match_overruled")
@@ -1489,14 +1609,14 @@ model PurchaseInvoice {
   threeWayMatchOverruledById String?   @map("three_way_match_overruled_by_id") @db.Uuid
   threeWayMatchOverruleNotes String?   @map("three_way_match_overrule_notes") @db.Text
 
-  createdAt       DateTime              @default(now()) @map("created_at")
-  updatedAt       DateTime              @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vendor          Vendor                @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  purchaseOrder   PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  threeWayMatchOverruledBy User? @relation("PurchaseInvoiceThreeWayOverruleApprover", fields: [threeWayMatchOverruledById], references: [id], onDelete: SetNull)
-  creditNotes      PurchaseCreditNote[]
+  tenant                   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendor                   Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  purchaseOrder            PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  threeWayMatchOverruledBy User?                @relation("PurchaseInvoiceThreeWayOverruleApprover", fields: [threeWayMatchOverruledById], references: [id], onDelete: SetNull)
+  creditNotes              PurchaseCreditNote[]
 
   @@index([tenantId, vendorId])
   @@index([tenantId, dueDate])
@@ -1507,22 +1627,22 @@ model PurchaseInvoice {
 /// Nota de crédito de proveedor vinculada a una OC (y opcionalmente a una factura específica).
 /// Su monto se resta al total facturado acumulado en el cálculo del 3-way match.
 model PurchaseCreditNote {
-  id                String        @id @default(uuid()) @db.Uuid
-  tenantId          String        @map("tenant_id") @db.Uuid
-  purchaseOrderId   String        @map("purchase_order_id") @db.Uuid
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  purchaseOrderId   String   @map("purchase_order_id") @db.Uuid
   /// Factura específica a la que aplica (opcional; si null aplica a la OC entera).
-  purchaseInvoiceId String?       @map("purchase_invoice_id") @db.Uuid
-  creditNoteNumber  String        @map("credit_note_number") @db.VarChar(80)
-  emissionDate      DateTime      @map("emission_date")
-  totalAmount       Decimal       @map("total_amount") @db.Decimal(18, 2)
-  notes             String?       @db.Text
+  purchaseInvoiceId String?  @map("purchase_invoice_id") @db.Uuid
+  creditNoteNumber  String   @map("credit_note_number") @db.VarChar(80)
+  emissionDate      DateTime @map("emission_date")
+  totalAmount       Decimal  @map("total_amount") @db.Decimal(18, 2)
+  notes             String?  @db.Text
 
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  purchaseOrder     PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, creditNoteNumber, purchaseOrderId])
   @@index([tenantId, purchaseOrderId])
@@ -1599,11 +1719,17 @@ enum PurchaseOrderStatus {
   PARTIALLY_APPROVED
   APPROVED
   REJECTED
-  /** Documento comunicado / despacho administrativo al proveedor (sustituye el legado SENT_TO_SUPPLIER). */
+  /**
+   * Documento comunicado / despacho administrativo al proveedor (sustituye el legado SENT_TO_SUPPLIER).
+   */
   SENT
-  /** Pedido formalizado al proveedor (mismo derecho de recepción que SENT). */
+  /**
+   * Pedido formalizado al proveedor (mismo derecho de recepción que SENT).
+   */
   ORDERED
-  /** Legado (antes de SENT); no usar en flujos nuevos. */
+  /**
+   * Legado (antes de SENT); no usar en flujos nuevos.
+   */
   SENT_TO_SUPPLIER
   PARTIALLY_RECEIVED
   RECEIVED
@@ -1626,19 +1752,19 @@ enum SignatureIntegrity {
 // AUDITORÍA DE COMPRAS (ActivityLog)
 // ==========================================
 model ActivityLog {
-  id          String         @id @default(uuid()) @db.Uuid
-  tenantId    String         @map("tenant_id") @db.Uuid
-  userId      String         @map("user_id") @db.Uuid
-  action      ActivityAction
-  entityType  String         @map("entity_type") @db.VarChar(40)
-  entityId    String         @map("entity_id") @db.VarChar(36)
-  details     Json
-  ipAddress   String?        @map("ip_address") @db.VarChar(64)
-  userAgent   String?        @map("user_agent") @db.Text
-  createdAt   DateTime       @default(now()) @map("created_at")
+  id         String         @id @default(uuid()) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  action     ActivityAction
+  entityType String         @map("entity_type") @db.VarChar(40)
+  entityId   String         @map("entity_id") @db.VarChar(36)
+  details    Json
+  ipAddress  String?        @map("ip_address") @db.VarChar(64)
+  userAgent  String?        @map("user_agent") @db.Text
+  createdAt  DateTime       @default(now()) @map("created_at")
 
-  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, createdAt])
@@ -1657,8 +1783,8 @@ model PushSubscription {
   auth      String   @db.VarChar(256)
   createdAt DateTime @default(now()) @map("created_at")
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([userId])
@@ -1685,18 +1811,18 @@ enum NotificationChannel {
 /// Interruptor maestro por evento y tenant: si `enabled = false`, ningún usuario
 /// del tenant recibe ese tipo de notificación, independientemente de su config.
 model TenantNotificationSetting {
-  id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
   /// Clave estable del evento; véase `notification-events.ts`.
-  eventKey  String   @map("event_key") @db.VarChar(100)
-  enabled   Boolean  @default(true)
+  eventKey String   @map("event_key") @db.VarChar(100)
+  enabled  Boolean  @default(true)
   /// Correos adicionales fijos que siempre reciben copia (CC) cuando el evento se despacha vía EMAIL.
-  ccEmails  String[] @default([]) @map("cc_emails")
+  ccEmails String[] @default([]) @map("cc_emails")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, eventKey])
   @@index([tenantId])
@@ -1706,22 +1832,226 @@ model TenantNotificationSetting {
 /// Suscripción individual: cada usuario puede activar / desactivar un canal
 /// por evento. Si no existe registro, se asume el canal activo por defecto.
 model UserNotificationSetting {
-  id        String              @id @default(uuid()) @db.Uuid
-  tenantId  String              @map("tenant_id") @db.Uuid
-  userId    String              @map("user_id") @db.Uuid
+  id       String              @id @default(uuid()) @db.Uuid
+  tenantId String              @map("tenant_id") @db.Uuid
+  userId   String              @map("user_id") @db.Uuid
   /// Clave estable del evento; véase `notification-events.ts`.
-  eventKey  String              @map("event_key") @db.VarChar(100)
-  channel   NotificationChannel
-  enabled   Boolean             @default(true)
+  eventKey String              @map("event_key") @db.VarChar(100)
+  channel  NotificationChannel
+  enabled  Boolean             @default(true)
 
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId, eventKey, channel])
   @@index([tenantId, eventKey])
   @@index([userId])
   @@map("user_notification_settings")
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: CONSUMO DE LUBRICANTES
+// ---------------------------------------------------------------------
+
+model LubeReport {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  contractId   String   @map("contract_id") @db.Uuid
+  equipmentId  String   @map("equipment_id") @db.Uuid
+  warehouseId  String   @map("warehouse_id") @db.Uuid // Bodega origen (Fija o Virtual/Camión)
+  userId       String   @map("user_id") @db.Uuid
+  correlative  String   @db.VarChar(30) // Ej: RCL-0001
+  dispatchDate DateTime @map("dispatch_date")
+  meterReading Int?     @map("meter_reading") // Horómetro capturado (opcional)
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract  Contract         @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  equipment Equipment        @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  lines     LubeReportLine[]
+
+  @@index([tenantId, dispatchDate])
+  @@index([tenantId, equipmentId])
+  @@map("lube_reports")
+}
+
+model LubeReportLine {
+  id       String  @id @default(uuid()) @db.Uuid
+  reportId String  @map("report_id") @db.Uuid
+  itemId   String  @map("item_id") @db.Uuid
+  quantity Float
+  unitCost Decimal @map("unit_cost") @db.Decimal(18, 4) // CPP congelado al momento del despacho
+
+  report LubeReport    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@map("lube_report_lines")
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: DISPONIBILIDAD OPERATIVA DIARIA
+// ---------------------------------------------------------------------
+
+/// Reporte de estado por turno (Día/Noche) para cada equipo de la flota.
+/// Restricción: un equipo no puede tener más de un reporte por fecha y turno.
+/// Si `meterReading` supera `equipment.currentMeter`, se actualiza el horómetro
+/// vía `applyCurrentMeterChange` con source `AVAILABILITY_REPORT`.
+model EquipmentAvailability {
+  id           String  @id @default(uuid()) @db.Uuid
+  tenantId     String  @map("tenant_id") @db.Uuid
+  contractId   String? @map("contract_id") @db.Uuid
+  equipmentId  String  @map("equipment_id") @db.Uuid
+  reportedById String  @map("reported_by_id") @db.Uuid
+
+  /// Fecha del turno (solo fecha, sin componente horaria).
+  reportDate   DateTime          @map("report_date") @db.Date
+  shift        ShiftType
+  status       OperationalStatus
+  /// Horómetro declarado por el supervisor. Si supera el actual del equipo, se actualiza.
+  meterReading Int?              @map("meter_reading")
+  comments     String?           @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract   Contract?           @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  equipment  Equipment           @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy User                @relation("AvailabilityReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  events     AvailabilityEvent[]
+
+  /// Un equipo solo puede tener un reporte por fecha y turno dentro del mismo tenant.
+  @@unique([tenantId, equipmentId, reportDate, shift])
+  @@index([tenantId, reportDate, shift])
+  @@index([tenantId, equipmentId])
+  @@map("equipment_availabilities")
+}
+
+enum AvailabilityEventSource {
+  MANUAL
+  OT
+  FAULT_REPORT
+  LEGACY_SNAPSHOT
+}
+
+/// Ledger de transiciones de disponibilidad. El snapshot sigue siendo
+/// EquipmentAvailability; este modelo conserva cada evento dentro del turno.
+model AvailabilityEvent {
+  id             String                  @id @default(uuid()) @db.Uuid
+  tenantId       String                  @map("tenant_id") @db.Uuid
+  availabilityId String?                 @map("availability_id") @db.Uuid
+  faultReportId  String?                 @unique @map("fault_report_id") @db.Uuid
+  equipmentId    String                  @map("equipment_id") @db.Uuid
+  reportedById   String?                 @map("reported_by_id") @db.Uuid
+  status         OperationalStatus
+  previousStatus OperationalStatus?      @map("previous_status")
+  meterReading   Int?                    @map("meter_reading")
+  comments       String?                 @db.VarChar(500)
+  eventAt        DateTime                @map("event_at")
+  source         AvailabilityEventSource @default(MANUAL)
+  elapsedMinutes Int?                    @map("elapsed_minutes")
+  createdAt      DateTime                @default(now()) @map("created_at")
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  availability EquipmentAvailability? @relation(fields: [availabilityId], references: [id], onDelete: SetNull)
+  equipment    Equipment              @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy   User?                  @relation("AvailabilityEventReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  faultReport  FaultReport?           @relation("AvailabilityEventFaultReport", fields: [faultReportId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, equipmentId, eventAt])
+  @@index([tenantId, availabilityId, eventAt])
+  @@map("availability_events")
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: REGISTRO DE FALLAS (CORRECTIVO IMPREVISTO)
+// ---------------------------------------------------------------------
+
+/// Sistema del equipo afectado por la falla.
+enum AffectedSystem {
+  MOTOR
+  HYDRAULIC // Hidráulico
+  ELECTRICAL // Eléctrico
+  POWER_TRAIN // Tren de Potencia
+  STRUCTURE // Estructura
+  GET_WEAR // Desgaste (GET)
+  TIRES_TRACKS // Neumáticos/Orugas
+}
+
+/// Criticidad del evento de falla declarada por el operador.
+enum FaultCriticality {
+  HIGH // ALTA  — Detiene el equipo
+  MEDIUM // MEDIA — Opera con restricciones
+  LOW // BAJA  — Falla menor
+}
+
+/// Estado del reporte de falla a lo largo de su ciclo de vida.
+enum FaultReportStatus {
+  OPEN // Registrado, sin OT vinculada (BAJA o pendiente de planificador)
+  LINKED // OT creada automáticamente (ALTA o MEDIA)
+  CLOSED // Cerrado manualmente o por cierre de la OT asociada
+}
+
+/// Evento correctivo imprevisto en terreno.
+/// Criticidad ALTA → crea WorkOrder (NO_PROGRAMADA_REACTIVA) + isOperational = false.
+/// Criticidad MEDIA → crea WorkOrder (NO_PROGRAMADA_CORRECTIVA), sin impacto inmediato en disponibilidad.
+/// Criticidad BAJA  → solo registra el reporte; el planificador decide si genera OT.
+model FaultReport {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @map("tenant_id") @db.Uuid
+  contractId   String @map("contract_id") @db.Uuid
+  equipmentId  String @map("equipment_id") @db.Uuid
+  reportedById String @map("reported_by_id") @db.Uuid
+  correlative  String @db.VarChar(30) // RF-XXXXX vía SequenceCounter
+
+  eventDate          DateTime          @map("event_date")
+  meterAtFault       Int?              @map("meter_at_fault") // Horómetro al momento de la falla (opcional)
+  affectedSystem     AffectedSystem    @map("affected_system")
+  criticality        FaultCriticality
+  symptomDescription String            @map("symptom_description") @db.Text
+  status             FaultReportStatus @default(OPEN)
+
+  /// FK a la OT generada automáticamente (solo ALTA y MEDIA). Unique: una OT solo puede originarse en un reporte.
+  workOrderId String? @unique @map("work_order_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contract          Contract                @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  equipment         Equipment               @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  reportedBy        User                    @relation("FaultReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  workOrder         WorkOrder?              @relation("FaultReportWorkOrder", fields: [workOrderId], references: [id], onDelete: SetNull)
+  attachments       FaultReportAttachment[]
+  availabilityEvent AvailabilityEvent?      @relation("AvailabilityEventFaultReport")
+
+  @@unique([tenantId, correlative])
+  @@index([tenantId, equipmentId])
+  @@index([tenantId, criticality, status])
+  @@index([tenantId, eventDate])
+  @@map("fault_reports")
+}
+
+/// Evidencia multimedia adjunta a un reporte de falla (fotos / videos).
+/// Límite: 3 archivos por reporte, 10 MB cada uno.
+/// Tipos permitidos: image/jpeg, image/png, image/webp, video/mp4.
+model FaultReportAttachment {
+  id            String   @id @default(uuid()) @db.Uuid
+  faultReportId String   @map("fault_report_id") @db.Uuid
+  storageKey    String   @map("storage_key") @db.VarChar(500)
+  fileName      String   @map("file_name") @db.VarChar(255)
+  fileType      String   @map("file_type") @db.VarChar(100)
+  sizeBytes     Int      @map("size_bytes")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  faultReport FaultReport @relation(fields: [faultReportId], references: [id], onDelete: Cascade)
+
+  @@index([faultReportId])
+  @@map("fault_report_attachments")
 }

@@ -24,6 +24,7 @@ import { ContractsService } from '../../../core/services/contracts/contracts.ser
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { Contract } from '../../../core/models/types';
 import { AuthService } from '../../../core/services/auth/auth.service';
+import { O } from '../../../core/constants/operations-permissions';
 import { equipmentDisplayLabel } from '../../../core/utils/equipment-display-label';
 
 Chart.register(...registerables);
@@ -123,12 +124,7 @@ export class WorkOrderAnalyticsDashboardComponent implements OnInit, OnDestroy {
   });
 
   canExportMonthlyPdf = computed(() => {
-    const role = this.auth.currentUser()?.role;
-    if (
-      role !== 'ADMIN' &&
-      role !== 'SUPER_ADMIN' &&
-      role !== 'SUPERVISOR'
-    ) {
+    if (!this.auth.hasPermission(O.WORK_ORDER_READ)) {
       return false;
     }
     return !this.isLoading() && !this.isExportingPdf();

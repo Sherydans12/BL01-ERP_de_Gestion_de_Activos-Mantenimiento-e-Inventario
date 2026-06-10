@@ -1,31 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
 import { WorkOrdersService } from './work-orders.service';
-import {
-  getPolicyThresholdsForNewItemStockRow,
-  clearItemStockPolicyIfMatchesWarehouse,
-} from '../inventory-items/inventory-item-stock-policy.helper';
+import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 jest.mock('../equipments/equipment-meter-sync', () => ({
   applyCurrentMeterChange: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../inventory-items/inventory-item-stock-policy.helper');
 
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 const mockApplyCurrentMeterChange = jest.mocked(applyCurrentMeterChange);
-const mockGetPolicyThresholds = jest.mocked(getPolicyThresholdsForNewItemStockRow);
-const mockClearItemStockPolicy = jest.mocked(clearItemStockPolicyIfMatchesWarehouse);
 
 describe('WorkOrdersService — updateStatus (CLOSED)', () => {
   let service: WorkOrdersService;
   let prisma: DeepMockProxy<PrismaService>;
   let tx: DeepMockProxy<Prisma.TransactionClient>;
+  let inventoryStockService: { performTransactionCore: jest.Mock };
 
   const tenantId = '11111111-1111-1111-1111-111111111111';
   const woId = '22222222-2222-2222-2222-222222222222';
@@ -35,7 +32,16 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
   const fluidItemId = '77777777-7777-4777-8777-777777777777';
   const userId = '66666666-6666-6666-6666-666666666666';
 
-  const user = { id: userId, tenantId, role: 'ADMIN' };
+  const adminUser = { id: userId, tenantId, role: 'ADMIN' };
+  const pbacCloserUser = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    permissions: [
+      SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE,
+      SystemPermissions.OPERATIONS_WORK_ORDER_CLOSE,
+    ],
+  };
 
   const detentionStart = new Date('2024-06-01T08:00:00.000Z');
   const detentionEnd = new Date('2024-06-01T12:00:00.000Z');
@@ -69,7 +75,9 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
           ? overrides.detentionStartedAt
           : detentionStart,
       detentionEndedAt:
-        'detentionEndedAt' in overrides ? overrides.detentionEndedAt : detentionEnd,
+        'detentionEndedAt' in overrides
+          ? overrides.detentionEndedAt
+          : detentionEnd,
       mechanicAttentionStartedAt:
         'mechanicAttentionStartedAt' in overrides
           ? overrides.mechanicAttentionStartedAt
@@ -84,6 +92,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [] as string[],
       equipment: {
         currentMeter: 1000,
+        meterType: 'HOURS',
         internalId: 'EQ-01',
         brand: 'Cat',
         model: 'M1',
@@ -104,20 +113,72 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     tx = mockDeep<Prisma.TransactionClient>();
-    mockGetPolicyThresholds.mockResolvedValue({ minStock: 0, maxStock: 0 });
-    mockClearItemStockPolicy.mockResolvedValue(undefined);
+    inventoryStockService = {
+      performTransactionCore: jest.fn().mockResolvedValue({
+        stock: { quantity: 8, unitCost: 25 },
+        transaction: { isPendingRegularization: false },
+      }),
+    };
     mockApplyCurrentMeterChange.mockClear();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    // P0: mock por defecto para resolveReturnToService (sin bloqueadores)
+    tx.faultReport.findMany.mockResolvedValue([] as never);
+    tx.workOrder.findMany.mockResolvedValue([] as never);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkOrdersService,
         { provide: PrismaService, useValue: prisma },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
-        { provide: EmailService, useValue: { sendMail: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        {
+          provide: EmailService,
+          useValue: { sendMail: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: InventoryStockService,
+          useValue: inventoryStockService,
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
 
     service = module.get(WorkOrdersService);
+  });
+
+  it('cierra OT con usuario PBAC (execute + close) sin repuestos', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    const result = await service.updateStatus(pbacCloserUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    expect(result.status).toBe('CLOSED');
   });
 
   it('rechaza cierre sin fechas de detención', async () => {
@@ -129,7 +190,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -150,7 +211,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -171,7 +232,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -183,7 +244,10 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     const wo = openWorkOrder({ parts: [], affectsAvailability: 'SI' });
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
-      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
       return (fn as (client: typeof tx) => Promise<unknown>)(tx);
@@ -193,9 +257,11 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [],
       equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
     } as never);
-    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
@@ -219,7 +285,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -229,12 +295,14 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
 
   it('exige indicar si el equipo quedó operativo al cerrar', async () => {
     prisma.$transaction.mockImplementation(async (fn) => {
-      tx.workOrder.findFirst.mockResolvedValue(openWorkOrder({ parts: [] }) as never);
+      tx.workOrder.findFirst.mockResolvedValue(
+        openWorkOrder({ parts: [] }) as never,
+      );
       return (fn as (client: typeof tx) => Promise<unknown>)(tx);
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
       }),
@@ -245,10 +313,10 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     const wo = openWorkOrder();
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
-      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
-      tx.itemStock.findUnique.mockResolvedValue({ quantity: 10, unitCost: 25 } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
       tx.workOrderPart.update.mockResolvedValue({} as never);
       tx.assetCostRecord.create.mockResolvedValue({} as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
@@ -260,9 +328,11 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [],
       equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
     } as never);
-    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
@@ -286,7 +356,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         closureEquipmentOperational: true,
       }),
@@ -302,7 +372,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -319,13 +389,10 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         }),
       );
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
-      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
-      tx.itemStock.findUnique.mockResolvedValue({
-        quantity: 10,
-        unitCost: 25,
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
       } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
       tx.workOrderPart.update.mockResolvedValue({} as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
@@ -336,25 +403,28 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [],
       equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
     } as never);
-    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
 
-    const result = await service.updateStatus(user, woId, {
+    const result = await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
     });
 
     expect(result.status).toBe('CLOSED');
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(inventoryStockService.performTransactionCore).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
         type: 'WORK_ORDER_ISSUE',
         quantity: 2,
-        previousStock: 10,
-        newStock: 8,
+        itemId,
         referenceType: 'WORK_ORDER',
         referenceId: woId,
       }),
-    });
+      adminUser,
+    );
     expect(tx.stockReservation.deleteMany).toHaveBeenCalledWith({
       where: { workOrderId: woId },
     });
@@ -380,7 +450,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         closureEquipmentOperational: true,
       }),
@@ -396,17 +466,21 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
           liters: 3.5,
           inventoryItemId: fluidItemId,
           fluidType: 'HID-OIL',
-          inventoryItem: { isInventory: true, partNumber: 'HID-OIL' },
+          inventoryItem: {
+            isInventory: true,
+            partNumber: 'HID-OIL',
+            unitOfMeasure: { abbreviation: 'LT', allowsDecimals: true },
+          },
         },
       ],
     });
 
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
-      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
-      tx.itemStock.findUnique.mockResolvedValue({ quantity: 20, unitCost: 12 } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
       return (fn as (client: typeof tx) => Promise<unknown>)(tx);
@@ -416,21 +490,26 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [],
       equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
     } as never);
-    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: true,
     });
 
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(inventoryStockService.performTransactionCore).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
         type: 'WORK_ORDER_ISSUE',
         quantity: 3.5,
-        notes: expect.stringContaining('Consumo fluido OT OT-100'),
+        itemId: fluidItemId,
+        referenceType: 'WORK_ORDER',
       }),
-    });
+      adminUser,
+    );
   });
 
   it('rechaza medidor final menor al inicial sin ajuste previo', async () => {
@@ -447,7 +526,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     });
 
     await expect(
-      service.updateStatus(user, woId, {
+      service.updateStatus(adminUser, woId, {
         status: 'CLOSED',
         warehouseId,
         closureEquipmentOperational: true,
@@ -455,12 +534,86 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
     ).rejects.toThrow(/medidor final/);
   });
 
-  it('sincroniza medidor del equipo al cerrar con finalMeter', async () => {
-    const wo = openWorkOrder({ parts: [], finalMeter: 1500 });
+  it('rechaza cierre si finalMeter es menor al currentMeter del equipo', async () => {
+    const wo = openWorkOrder({
+      parts: [],
+      initialMeter: 900,
+      finalMeter: 950,
+    });
+    (wo.equipment as { currentMeter: number }).currentMeter = 1000;
 
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
-      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(
+      service.updateStatus(adminUser, woId, {
+        status: 'CLOSED',
+        warehouseId,
+        closureEquipmentOperational: true,
+      }),
+    ).rejects.toThrow(/no puede ser menor al medidor actual/);
+    expect(mockApplyCurrentMeterChange).not.toHaveBeenCalled();
+  });
+
+  it('exige confirmedLargeJump al cerrar con salto atípico de medidor', async () => {
+    const wo = openWorkOrder({
+      parts: [],
+      finalMeter: 1030,
+    });
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+
+    await expect(
+      service.updateStatus(adminUser, woId, {
+        status: 'CLOSED',
+        warehouseId,
+        closureEquipmentOperational: true,
+      }),
+    ).rejects.toThrow(/salto atípico/);
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant' } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+      confirmedLargeJump: true,
+    });
+
+    expect(mockApplyCurrentMeterChange).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ newMeter: 1030 }),
+    );
+  });
+
+  it('sincroniza medidor del equipo al cerrar con finalMeter', async () => {
+    const wo = openWorkOrder({ parts: [], finalMeter: 1015 });
+
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
       return (fn as (client: typeof tx) => Promise<unknown>)(tx);
@@ -470,9 +623,11 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: [],
       equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
     } as never);
-    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant Test' } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       warehouseId,
       closureEquipmentOperational: false,
@@ -484,7 +639,7 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         tenantId,
         equipmentId: equipId,
         oldMeter: 1000,
-        newMeter: 1500,
+        newMeter: 1015,
         sourceId: woId,
       }),
     );
@@ -501,13 +656,29 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: { get: configGet } },
         { provide: EmailService, useValue: { sendMail } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
 
     prisma.$transaction.mockImplementation(async (fn) => {
       tx.workOrder.findFirst.mockResolvedValue(wo as never);
-      tx.workOrder.update.mockResolvedValue({ ...wo, status: 'CLOSED' } as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
       tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
       tx.equipment.update.mockResolvedValue({} as never);
       return (fn as (client: typeof tx) => Promise<unknown>)(tx);
@@ -517,9 +688,11 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       classificationTags: ['POSIBLE_GARANTIA'],
       equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
     } as never);
-    prisma.tenant.findUnique.mockResolvedValue({ name: 'Acme Minera' } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Acme Minera',
+    } as never);
 
-    await service.updateStatus(user, woId, {
+    await service.updateStatus(adminUser, woId, {
       status: 'CLOSED',
       closureEquipmentOperational: true,
     });
@@ -531,6 +704,175 @@ describe('WorkOrdersService — updateStatus (CLOSED)', () => {
       }),
     );
   });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // P0 — Bloqueadores operacionales al cerrar OT
+  // ────────────────────────────────────────────────────────────────────────────
+
+  it('P0: cierre con closureEquipmentOperational=true y otra falla HIGH activa mantiene equipo detenido', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      // P0: falla HIGH activa impide reactivación
+      tx.faultReport.findMany.mockResolvedValue([
+        { id: 'fr-block', correlative: 'RF-00050', status: 'OPEN' },
+      ] as never);
+      tx.workOrder.findMany.mockResolvedValue([] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    // Equipment debe mantenerse isOperational=false porque existe bloqueador
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+      }),
+    });
+  });
+
+  it('P0: cierre con closureEquipmentOperational=true y otra OT bloqueante mantiene equipo detenido', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      tx.faultReport.findMany.mockResolvedValue([] as never);
+      // P0: otra OT con affectsAvailability=SI sigue activa
+      tx.workOrder.findMany.mockResolvedValue([
+        {
+          id: 'wo-other',
+          correlative: 'OT-2026-099',
+          status: 'IN_PROGRESS',
+          affectsAvailability: 'SI',
+        },
+      ] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+      }),
+    });
+  });
+
+  it('P0: cierre con closureEquipmentOperational=false mantiene equipo detenido sin consultar bloqueadores', async () => {
+    const wo = openWorkOrder({ parts: [] });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: false,
+    });
+
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+      }),
+    });
+    // No se debe consultar bloqueadores si el usuario indica que el equipo queda detenido
+    expect(tx.faultReport.findMany).not.toHaveBeenCalled();
+  });
+
+  it('P0: acumula downtime aunque el equipo siga detenido por bloqueadores', async () => {
+    const wo = openWorkOrder({ parts: [], affectsAvailability: 'SI' });
+    prisma.$transaction.mockImplementation(async (fn) => {
+      tx.workOrder.findFirst.mockResolvedValue(wo as never);
+      tx.workOrder.update.mockResolvedValue({
+        ...wo,
+        status: 'CLOSED',
+      } as never);
+      tx.stockReservation.deleteMany.mockResolvedValue({ count: 0 } as never);
+      tx.equipment.update.mockResolvedValue({} as never);
+      // Bloqueador: otra falla HIGH
+      tx.faultReport.findMany.mockResolvedValue([
+        { id: 'fr-x', correlative: 'RF-00099', status: 'OPEN' },
+      ] as never);
+      tx.workOrder.findMany.mockResolvedValue([] as never);
+      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+    });
+    prisma.workOrder.findFirst.mockResolvedValue({
+      correlative: 'OT-100',
+      classificationTags: [],
+      equipment: { internalId: 'EQ-01', brand: 'Cat', model: 'M1' },
+    } as never);
+    prisma.tenant.findUnique.mockResolvedValue({
+      name: 'Tenant Test',
+    } as never);
+
+    await service.updateStatus(adminUser, woId, {
+      status: 'CLOSED',
+      warehouseId,
+      closureEquipmentOperational: true,
+    });
+
+    // Downtime se acumula independientemente del resultado de bloqueadores
+    expect(tx.equipment.update).toHaveBeenCalledWith({
+      where: { id: equipId },
+      data: expect.objectContaining({
+        isOperational: false,
+        cumulativeDowntimeHours: { increment: 4 },
+      }),
+    });
+  });
 });
 
 describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
@@ -541,7 +883,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
   const woId = '22222222-2222-2222-2222-222222222222';
   const equipId = '33333333-3333-3333-3333-333333333333';
   const userId = '66666666-6666-6666-6666-666666666666';
-  const user = { id: userId, tenantId, role: 'ADMIN' };
+  const inProgressUser = { id: userId, tenantId, role: 'ADMIN' };
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -549,8 +891,24 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
       providers: [
         WorkOrdersService,
         { provide: PrismaService, useValue: prisma },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
@@ -573,7 +931,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     } as never);
     prisma.equipment.update.mockResolvedValue({} as never);
 
-    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+    await service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' });
 
     expect(prisma.equipment.update).toHaveBeenCalledWith({
       where: { id: equipId },
@@ -598,9 +956,12 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
       inProgressAt: null,
     };
     prisma.workOrder.findFirst.mockResolvedValue(wo as never);
-    prisma.workOrder.update.mockResolvedValue({ ...wo, status: 'IN_PROGRESS' } as never);
+    prisma.workOrder.update.mockResolvedValue({
+      ...wo,
+      status: 'IN_PROGRESS',
+    } as never);
 
-    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+    await service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' });
 
     expect(prisma.equipment.update).not.toHaveBeenCalled();
   });
@@ -618,7 +979,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     prisma.workOrder.findFirst.mockResolvedValue(wo as never);
     prisma.workOrder.update.mockResolvedValue(wo as never);
 
-    await service.updateStatus(user, woId, { status: 'IN_PROGRESS' });
+    await service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' });
 
     expect(prisma.equipment.update).not.toHaveBeenCalled();
     expect(prisma.workOrder.update).toHaveBeenCalledWith({
@@ -631,7 +992,7 @@ describe('WorkOrdersService — updateStatus (IN_PROGRESS)', () => {
     prisma.workOrder.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.updateStatus(user, woId, { status: 'IN_PROGRESS' }),
+      service.updateStatus(inProgressUser, woId, { status: 'IN_PROGRESS' }),
     ).rejects.toThrow(/Orden no encontrada/);
   });
 });
@@ -653,8 +1014,24 @@ describe('WorkOrdersService — promoteBacklogItem', () => {
       providers: [
         WorkOrdersService,
         { provide: PrismaService, useValue: prisma },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
         { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(WorkOrdersService);
@@ -751,5 +1128,448 @@ describe('WorkOrdersService — promoteBacklogItem', () => {
       }),
     );
     createSpy.mockRestore();
+  });
+});
+
+describe('WorkOrdersService — create', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const woId = '22222222-2222-2222-2222-222222222222';
+  const equipId = '33333333-3333-3333-3333-333333333333';
+  const warehouseId = '44444444-4444-4444-4444-444444444444';
+  const contractId = '77777777-7777-7777-7777-777777777777';
+  const itemId = '55555555-5555-5555-5555-555555555555';
+  const catalogSystemId = '88888888-8888-8888-8888-888888888888';
+  const userId = '66666666-6666-6666-6666-666666666666';
+
+  const adminUser = { id: userId, tenantId, role: 'ADMIN' };
+
+  const validCreateDto = () => ({
+    equipmentId: equipId,
+    warehouseId,
+    affectsAvailability: 'NO' as const,
+    systems: [catalogSystemId],
+    symptomsText: 'Pérdida de presión hidráulica',
+    workPerformedDescription: 'Revisión y reparación de manguera',
+    detentionInitialMeter: 1200,
+    initialMeter: 1200,
+  });
+
+  const equipmentRow = {
+    id: equipId,
+    tenantId,
+    contractId,
+    subcontractId: null,
+    currentMeter: 1200,
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    service = module.get(WorkOrdersService);
+
+    prisma.equipment.findFirst.mockResolvedValue(equipmentRow as never);
+    prisma.warehouse.findFirst.mockResolvedValue({
+      id: warehouseId,
+      tenantId,
+      contractId,
+    } as never);
+    prisma.workOrder.count.mockResolvedValue(2);
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+    tx.workOrder.create.mockResolvedValue({
+      id: woId,
+      tenantId,
+      correlative: 'OT-2026-003',
+      status: 'OPEN',
+      initialMeter: 1200,
+    } as never);
+    tx.workOrder.findUnique.mockResolvedValue({
+      id: woId,
+      equipment: equipmentRow,
+      warehouse: { id: warehouseId },
+      systems: [],
+      parts: [],
+    } as never);
+  });
+
+  it('rechaza equipo inexistente o fuera del tenant', async () => {
+    prisma.equipment.findFirst.mockResolvedValue(null);
+
+    await expect(service.create(adminUser, validCreateDto())).rejects.toThrow(
+      /equipo especificado no existe/,
+    );
+    expect(prisma.equipment.findFirst).toHaveBeenCalledWith({
+      where: { id: equipId, tenantId },
+    });
+  });
+
+  it('rechaza bodega que no pertenece al contrato del equipo', async () => {
+    prisma.warehouse.findFirst.mockResolvedValue(null);
+
+    await expect(service.create(adminUser, validCreateDto())).rejects.toThrow(
+      /bodega seleccionada no es válida/,
+    );
+    expect(prisma.warehouse.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: warehouseId,
+          tenantId,
+          contractId,
+        }),
+      }),
+    );
+  });
+
+  it('inicializa horómetro y crea OT en transacción con correlativo por tenant', async () => {
+    const result = await service.create(adminUser, validCreateDto());
+
+    expect(prisma.workOrder.count).toHaveBeenCalledWith({
+      where: { tenantId },
+    });
+    expect(tx.workOrder.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId,
+        equipmentId: equipId,
+        status: 'OPEN',
+        initialMeter: 1200,
+        detentionInitialMeter: 1200,
+        warehouseId,
+        createdByUserId: userId,
+      }),
+    });
+    expect(result).toEqual(expect.objectContaining({ id: woId }));
+  });
+
+  it('crea reservas de stock al incluir repuestos y bodega', async () => {
+    tx.inventoryItem.findFirst.mockResolvedValue({
+      id: itemId,
+      partNumber: 'PN-01',
+      name: 'Filtro',
+    } as never);
+
+    await service.create(adminUser, {
+      ...validCreateDto(),
+      parts: [
+        {
+          partNumber: 'PN-01',
+          description: 'Filtro',
+          quantity: 3,
+          inventoryItemId: itemId,
+        },
+      ],
+    });
+
+    expect(tx.stockReservation.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          workOrderId: woId,
+          itemId,
+          warehouseId,
+          quantity: 3,
+        },
+      ],
+    });
+  });
+});
+
+describe('WorkOrdersService — update (repuestos y reservas)', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+  let tx: DeepMockProxy<Prisma.TransactionClient>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const woId = '22222222-2222-2222-2222-222222222222';
+  const warehouseId = '44444444-4444-4444-4444-444444444444';
+  const itemId = '55555555-5555-5555-5555-555555555555';
+  const userId = '66666666-6666-6666-6666-666666666666';
+
+  const plannerUser = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    permissions: [SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE],
+  };
+
+  const fieldUser = {
+    id: '99999999-9999-9999-9999-999999999999',
+    tenantId,
+    role: 'USER',
+    permissions: [SystemPermissions.OPERATIONS_WORK_ORDER_EXECUTE],
+  };
+
+  const openWo = {
+    id: woId,
+    tenantId,
+    status: 'OPEN',
+    shiftSupervisorUserId: null,
+    warehouseId: null,
+  };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    tx = mockDeep<Prisma.TransactionClient>();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    service = module.get(WorkOrdersService);
+    prisma.workOrder.findFirst.mockResolvedValue(openWo as never);
+    prisma.$transaction.mockImplementation(async (fn) =>
+      (fn as (client: typeof tx) => Promise<unknown>)(tx),
+    );
+    tx.workOrder.findUnique.mockResolvedValue({
+      id: woId,
+      warehouseId,
+    } as never);
+    tx.workOrder.findFirst.mockResolvedValue({
+      id: woId,
+      subcontract: null,
+      equipment: { contract: null, subcontract: null },
+      warehouse: true,
+      systems: [],
+      fluids: [],
+      fluidCompartments: [],
+      tasks: [],
+      parts: [],
+      fluidSamples: [],
+      backlogItems: [],
+      stockReservations: [],
+      purchaseRequisitions: [],
+      purchaseOrders: [],
+    } as never);
+    tx.inventoryItem.findFirst.mockResolvedValue({
+      id: itemId,
+      partNumber: 'PN-REP',
+      name: 'Repuesto',
+    } as never);
+  });
+
+  it('rechaza edición de OT cerrada', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue({
+      ...openWo,
+      status: 'CLOSED',
+    } as never);
+
+    await expect(
+      service.update(plannerUser, woId, { symptomsText: 'Cambio' }),
+    ).rejects.toThrow(/OT cerrada/);
+  });
+
+  it('rechaza edición en IN_PROGRESS sin permiso de planificación ni supervisión', async () => {
+    prisma.workOrder.findFirst.mockResolvedValue({
+      ...openWo,
+      status: 'IN_PROGRESS',
+      shiftSupervisorUserId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    } as never);
+
+    await expect(
+      service.update(fieldUser, woId, { symptomsText: 'Intento' }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('reemplaza reservas al actualizar repuestos con bodega asignada', async () => {
+    await service.update(plannerUser, woId, {
+      parts: [
+        {
+          partNumber: 'PN-REP',
+          description: 'Repuesto',
+          quantity: 4,
+          inventoryItemId: itemId,
+        },
+      ],
+    });
+
+    expect(tx.stockReservation.deleteMany).toHaveBeenCalledWith({
+      where: { workOrderId: woId },
+    });
+    expect(tx.workOrderPart.deleteMany).toHaveBeenCalledWith({
+      where: { workOrderId: woId },
+    });
+    expect(tx.stockReservation.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          workOrderId: woId,
+          itemId,
+          warehouseId,
+          quantity: 4,
+        },
+      ],
+    });
+  });
+
+  it('no crea reservas si la OT no tiene bodega efectiva', async () => {
+    tx.workOrder.findUnique.mockResolvedValue({
+      id: woId,
+      warehouseId: null,
+    } as never);
+
+    await service.update(plannerUser, woId, {
+      parts: [
+        {
+          partNumber: 'PN-REP',
+          description: 'Repuesto',
+          quantity: 2,
+          inventoryItemId: itemId,
+        },
+      ],
+    });
+
+    expect(tx.stockReservation.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rechaza repuesto sin vínculo al catálogo de inventario', async () => {
+    await expect(
+      service.update(plannerUser, woId, {
+        parts: [
+          {
+            partNumber: 'X',
+            description: 'Sin catálogo',
+            quantity: 1,
+            inventoryItemId: '',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/vinculada a un ítem del inventario/);
+  });
+});
+
+describe('WorkOrdersService — getStats (integración transversal)', () => {
+  let service: WorkOrdersService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const userId = '66666666-6666-6666-6666-666666666666';
+  const adminUser = { id: userId, tenantId, role: 'ADMIN' };
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkOrdersService,
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        { provide: EmailService, useValue: { sendMail: jest.fn() } },
+        {
+          provide: InventoryStockService,
+          useValue: {
+            performTransactionCore: jest.fn().mockResolvedValue({
+              stock: { unitCost: 0 },
+              transaction: {},
+            }),
+          },
+        },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
+      ],
+    }).compile();
+    service = module.get(WorkOrdersService);
+
+    // El orden refleja la secuencia del Promise.all en getStats().
+    // workOrder.count: OPEN, IN_PROGRESS, ON_HOLD, CLOSED
+    prisma.workOrder.count
+      .mockResolvedValueOnce(2) // OPEN
+      .mockResolvedValueOnce(1) // IN_PROGRESS
+      .mockResolvedValueOnce(0) // ON_HOLD
+      .mockResolvedValueOnce(5); // CLOSED
+    // equipment.count: expiredDocs, totalEquipments, equiposDetenidos
+    prisma.equipment.count
+      .mockResolvedValueOnce(3) // expiredDocs
+      .mockResolvedValueOnce(10) // totalEquipments
+      .mockResolvedValueOnce(4); // equiposDetenidos (isOperational=false)
+    prisma.workOrder.groupBy.mockResolvedValue([] as never);
+    prisma.workOrder.findMany
+      .mockResolvedValueOnce([] as never) // lastClosed
+      .mockResolvedValueOnce([] as never); // openOtsHot
+    prisma.equipment.findMany
+      .mockResolvedValueOnce([] as never) // topAlertsData
+      .mockResolvedValueOnce([] as never); // equipmentForPm
+    prisma.purchaseRequisition.findMany.mockResolvedValue([] as never);
+    prisma.purchaseOrder.findMany.mockResolvedValue([] as never);
+    prisma.purchaseRequisition.count.mockResolvedValue(0);
+    prisma.purchaseOrder.count.mockResolvedValue(0);
+    prisma.itemStock.findMany.mockResolvedValue([] as never);
+    prisma.faultReport.count.mockResolvedValue(7); // faultReportsOpen
+  });
+
+  it('devuelve equiposDetenidos contando equipos con isOperational=false', async () => {
+    const stats = await service.getStats(adminUser);
+
+    expect(stats.equiposDetenidos).toBe(4);
+    expect(prisma.equipment.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isOperational: false }),
+      }),
+    );
+  });
+
+  it('devuelve faultReportsOpen contando fallas en estado OPEN', async () => {
+    const stats = await service.getStats(adminUser);
+
+    expect(stats.faultReportsOpen).toBe(7);
+    expect(prisma.faultReport.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId, status: 'OPEN' }),
+      }),
+    );
   });
 });

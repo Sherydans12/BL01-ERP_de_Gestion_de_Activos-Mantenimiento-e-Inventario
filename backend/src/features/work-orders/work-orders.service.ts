@@ -4,7 +4,14 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
+import { Readable } from 'stream';
+import { StorageService } from '../../common/storage/storage.service';
+import {
+  generateWorkOrderPdfBuffer,
+  type WoPdfOrder,
+} from './work-order-pdf.generator';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../common/email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -21,21 +28,38 @@ import {
   MeterLogSource,
 } from '@prisma/client';
 import { applyCurrentMeterChange } from '../equipments/equipment-meter-sync';
+import { getMeterJumpLimit } from '../equipments/meter-jump-limits.util';
+import { resolveReturnToService } from '../equipments/operational-blockers';
 import {
   buildEquipmentContractAccessOr,
   buildPurchaseContractScopeFilter,
   isTenantWideContractAccess,
 } from '../../common/contract-scope.util';
 import Decimal from 'decimal.js';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { userHasPermission } from '../auth/permissions.util';
 
+import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 import {
-  getPolicyThresholdsForNewItemStockRow,
-  clearItemStockPolicyIfMatchesWarehouse,
-} from '../inventory-items/inventory-item-stock-policy.helper';
+  assertLargeDispatchConfirmed,
+  assertQuantityAllowedForUom,
+} from '../../common/inventory/fluid-dispatch-limits.util';
 
 function truncateForDb(s: string, max: number): string {
   if (!s) return '';
   return s.length <= max ? s : s.slice(0, max);
+}
+
+function resolveWorkOrderPartNumber(inv: {
+  partNumber?: string | null;
+  inventoryCode?: string | null;
+  name: string;
+}): string {
+  const pn = inv.partNumber?.trim();
+  if (pn) return truncateForDb(pn, 50);
+  const code = inv.inventoryCode?.trim();
+  if (code) return truncateForDb(code, 50);
+  return truncateForDb(inv.name, 50);
 }
 
 /** Alineado a `frontend/.../pm-interval.ts` para KPI de próximo PM en dashboard. */
@@ -327,6 +351,8 @@ export class WorkOrdersService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly config: ConfigService,
+    private readonly inventoryStockService: InventoryStockService,
+    private readonly storage: StorageService,
   ) {}
 
   private async notifyWarrantyStakeholders(params: {
@@ -334,8 +360,7 @@ export class WorkOrdersService {
     equipmentLabel: string;
     tenantName?: string;
   }) {
-    const raw =
-      this.config.get<string>('WARRANTY_NOTIFY_EMAILS')?.trim() ?? '';
+    const raw = this.config.get<string>('WARRANTY_NOTIFY_EMAILS')?.trim() ?? '';
     const recipients = raw
       .split(/[,;\s]+/)
       .map((s) => s.trim())
@@ -386,7 +411,7 @@ export class WorkOrdersService {
     return where;
   }
 
-  async create(user: any, dto: CreateWorkOrderDto, activeContract?: string) {
+  async create(user: any, dto: CreateWorkOrderDto, _activeContract?: string) {
     const tenantId = user.tenantId;
 
     try {
@@ -686,7 +711,12 @@ export class WorkOrdersService {
             }
             const inv = await tx.inventoryItem.findFirst({
               where: { id: invItemId, tenantId },
-              select: { id: true, partNumber: true, name: true },
+              select: {
+                id: true,
+                partNumber: true,
+                inventoryCode: true,
+                name: true,
+              },
             });
             if (!inv) {
               throw new BadRequestException(
@@ -695,7 +725,7 @@ export class WorkOrdersService {
             }
             partsData.push({
               workOrderId: workOrder.id,
-              partNumber: inv.partNumber,
+              partNumber: resolveWorkOrderPartNumber(inv),
               description: truncateForDb(inv.name, 100),
               quantity: Number(p.quantity),
               inventoryItemId: inv.id,
@@ -872,7 +902,9 @@ export class WorkOrdersService {
       }
     } else {
       const authFilter = {
-        OR: buildEquipmentContractAccessOr(user) as Prisma.EquipmentWhereInput['OR'],
+        OR: buildEquipmentContractAccessOr(
+          user,
+        ) as Prisma.EquipmentWhereInput['OR'],
       };
       filterEqConditions.push(authFilter);
       filterWoConditions.push({ equipment: authFilter });
@@ -914,6 +946,8 @@ export class WorkOrdersService {
       requisitionPipelineCount,
       poAwaitingInboundCount,
       itemStockCandidates,
+      equiposDetenidos,
+      faultReportsOpen,
     ] = await Promise.all([
       this.prisma.workOrder.count({
         where: { ...whereBaseWO, status: 'OPEN' },
@@ -1082,6 +1116,19 @@ export class WorkOrdersService {
         },
         take: 150,
       }),
+      // Equipos fuera de servicio (isOperational=false) — distinto de "en mantenimiento"
+      // (que es proxy por OT abierta). Lo mutan fallas ALTAS (M3) y OTs.
+      this.prisma.equipment.count({
+        where: { ...whereBaseEq, isOperational: false },
+      }),
+      // Fallas de terreno (M3) sin OT vinculada todavía — pendientes de planificación.
+      this.prisma.faultReport.count({
+        where: {
+          tenantId,
+          status: 'OPEN',
+          equipment: { AND: filterEqConditions },
+        },
+      }),
     ]);
 
     const equiposEnMantenimientoCount = activeOts.length;
@@ -1173,7 +1220,138 @@ export class WorkOrdersService {
       purchaseRequisitionsAttention: requisitionsAttention,
       purchaseOrdersInbound,
       lowStocks,
+      equiposDetenidos,
+      faultReportsOpen,
     };
+  }
+
+  /** Logo tenant embebido en HTML del PDF (evita URLs firmadas inaccesibles desde Chromium). */
+  private async tryFetchTenantLogoDataUri(
+    storageKey: string | null | undefined,
+  ): Promise<string | null> {
+    const raw = storageKey?.trim();
+    if (!raw) return null;
+    try {
+      const url = (await this.storage.getReadOnlyUrl(raw)).trim();
+      if (!url) return null;
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 12_000);
+      const res = await fetch(url, { signal: ac.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const ct =
+        res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+      if (!ct.startsWith('image/')) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 2_500_000) return null;
+      return `data:${ct};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * PDF formal de OT (HTML + Chromium), alineado a plantilla OC/SRC.
+   */
+  async getWorkOrderPdfStream(
+    user: any,
+    id: string,
+    activeContract?: string,
+  ): Promise<Readable> {
+    const where = this.workOrderAccessWhere(user, id, activeContract);
+    const order = await this.prisma.workOrder.findFirst({
+      where,
+      include: {
+        tenant: {
+          select: {
+            name: true,
+            rut: true,
+            pdfLogoUrl: true,
+            primaryColor: true,
+          },
+        },
+        createdByUser: { select: { name: true, email: true } },
+        shiftSupervisorUser: { select: { name: true, email: true } },
+        subcontract: { select: { id: true, name: true, code: true } },
+        warehouse: { select: { id: true, code: true, name: true } },
+        equipment: {
+          include: {
+            contract: { select: { id: true, name: true, code: true } },
+            subcontract: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                contractId: true,
+              },
+            },
+          },
+        },
+        systems: { include: { catalogItem: true } },
+        fluids: { include: { catalogItem: true } },
+        tasks: true,
+        parts: { include: { inventoryItem: true } },
+        fluidSamples: {
+          include: { system: { select: { id: true, name: true } } },
+        },
+        fluidCompartments: {
+          include: {
+            inventoryItem: {
+              select: {
+                id: true,
+                partNumber: true,
+                name: true,
+                inventoryCode: true,
+              },
+            },
+          },
+        },
+        backlogItems: true,
+        stockReservations: {
+          include: {
+            item: {
+              select: {
+                partNumber: true,
+                name: true,
+                description: true,
+                inventoryCode: true,
+              },
+            },
+            warehouse: { select: { code: true, name: true } },
+          },
+        },
+        purchaseRequisitions: {
+          select: { id: true, correlative: true, status: true },
+        },
+        purchaseOrders: {
+          select: { id: true, correlative: true, status: true },
+        },
+        faultReport: {
+          select: {
+            correlative: true,
+            criticality: true,
+            affectedSystem: true,
+            status: true,
+            eventDate: true,
+            symptomDescription: true,
+            meterAtFault: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Orden de trabajo no encontrada');
+    }
+
+    const tenantLogoDataUri = await this.tryFetchTenantLogoDataUri(
+      order.tenant.pdfLogoUrl,
+    );
+    const buffer = await generateWorkOrderPdfBuffer(
+      order as unknown as WoPdfOrder,
+      { tenantLogoDataUri },
+    );
+    return Readable.from(buffer);
   }
 
   async findOne(user: any, id: string, activeContract?: string) {
@@ -1243,13 +1421,22 @@ export class WorkOrdersService {
       throw new BadRequestException('No se puede editar una OT cerrada.');
     }
 
-    if (
-      user.role === 'MECHANIC' &&
-      (existing.status === 'IN_PROGRESS' || existing.status === 'ON_HOLD')
-    ) {
-      throw new ForbiddenException(
-        'En OT en curso o en pausa solo un supervisor o administrador puede modificar el formulario.',
-      );
+    if (existing.status === 'IN_PROGRESS' || existing.status === 'ON_HOLD') {
+      const canEditInProgress =
+        userHasPermission(
+          user,
+          SystemPermissions.OPERATIONS_WORK_ORDER_UPDATE,
+        ) ||
+        userHasPermission(
+          user,
+          SystemPermissions.OPERATIONS_WORK_ORDER_ASSIGN,
+        ) ||
+        existing.shiftSupervisorUserId === user.id;
+      if (!canEditInProgress) {
+        throw new ForbiddenException(
+          'En OT en curso o en pausa solo quien supervise la OT o tenga permiso de planificación puede modificar el formulario.',
+        );
+      }
     }
 
     const parseOptDate = (s?: string | null) =>
@@ -1533,7 +1720,12 @@ export class WorkOrdersService {
               }
               const inv = await tx.inventoryItem.findFirst({
                 where: { id: invItemId, tenantId },
-                select: { id: true, partNumber: true, name: true },
+                select: {
+                  id: true,
+                  partNumber: true,
+                  inventoryCode: true,
+                  name: true,
+                },
               });
               if (!inv) {
                 throw new BadRequestException(
@@ -1542,7 +1734,7 @@ export class WorkOrdersService {
               }
               partsData.push({
                 workOrderId: id,
-                partNumber: inv.partNumber,
+                partNumber: resolveWorkOrderPartNumber(inv),
                 description: truncateForDb(inv.name, 100),
                 quantity: Number(p.quantity),
                 inventoryItemId: inv.id,
@@ -1755,11 +1947,19 @@ export class WorkOrdersService {
       status: string;
       warehouseId?: string;
       closureEquipmentOperational?: boolean;
+      confirmedLargeJump?: boolean;
+      confirmedLargeFluidDispatch?: boolean;
     },
     activeContract?: string,
   ) {
     const tenantId = user.tenantId;
-    const { status, warehouseId, closureEquipmentOperational } = body;
+    const {
+      status,
+      warehouseId,
+      closureEquipmentOperational,
+      confirmedLargeJump,
+      confirmedLargeFluidDispatch,
+    } = body;
     const where = this.workOrderAccessWhere(user, id, activeContract);
 
     const userId = user.id || user.sub;
@@ -1781,7 +1981,14 @@ export class WorkOrdersService {
                       select: {
                         id: true,
                         partNumber: true,
+                        inventoryCode: true,
                         isInventory: true,
+                        unitOfMeasure: {
+                          select: {
+                            abbreviation: true,
+                            allowsDecimals: true,
+                          },
+                        },
                       },
                     },
                   },
@@ -1898,10 +2105,25 @@ export class WorkOrdersService {
             });
 
             if (workOrder.finalMeter != null) {
+              const current = workOrder.equipment.currentMeter ?? 0;
+              if (workOrder.finalMeter < current) {
+                throw new BadRequestException(
+                  `El medidor final (${workOrder.finalMeter}) no puede ser menor al medidor actual del equipo (${current}).`,
+                );
+              }
+              const delta = workOrder.finalMeter - current;
+              const jumpLimit = getMeterJumpLimit(
+                workOrder.equipment.meterType,
+              );
+              if (delta > jumpLimit && confirmedLargeJump !== true) {
+                throw new BadRequestException(
+                  `El medidor final implica un salto atípico (+${delta} respecto al medidor actual). Confirme el cierre con confirmedLargeJump.`,
+                );
+              }
               await applyCurrentMeterChange(tx, {
                 tenantId,
                 equipmentId: workOrder.equipmentId,
-                oldMeter: workOrder.equipment.currentMeter,
+                oldMeter: current,
                 newMeter: workOrder.finalMeter,
                 source: MeterLogSource.OT,
                 sourceId: workOrder.id,
@@ -1913,70 +2135,22 @@ export class WorkOrdersService {
 
             if (inventoryParts.length > 0 && effectiveWarehouseId) {
               for (const part of inventoryParts) {
-                const currentStock = await tx.itemStock.findUnique({
-                  where: {
-                    warehouseId_itemId: {
+                const { stock } =
+                  await this.inventoryStockService.performTransactionCore(
+                    tx,
+                    {
                       warehouseId: effectiveWarehouseId,
                       itemId: part.inventoryItemId,
+                      type: 'WORK_ORDER_ISSUE',
+                      quantity: part.quantity,
+                      referenceId: workOrder.id,
+                      referenceType: 'WORK_ORDER',
+                      notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}`,
                     },
-                  },
-                });
+                    user,
+                  );
 
-                const previousQty = currentStock?.quantity || 0;
-                const newQty = previousQty - part.quantity;
-                const isPendingRegularization = newQty < 0;
-
-                const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
-
-                const policyDefaults = !currentStock
-                  ? await getPolicyThresholdsForNewItemStockRow(
-                      tx,
-                      tenantId,
-                      part.inventoryItemId,
-                      effectiveWarehouseId,
-                    )
-                  : { minStock: 0, maxStock: 0 };
-
-                await tx.itemStock.upsert({
-                  where: {
-                    warehouseId_itemId: {
-                      warehouseId: effectiveWarehouseId,
-                      itemId: part.inventoryItemId,
-                    },
-                  },
-                  update: { quantity: newQty },
-                  create: {
-                    warehouseId: effectiveWarehouseId,
-                    itemId: part.inventoryItemId,
-                    quantity: newQty,
-                    unitCost: 0,
-                    minStock: policyDefaults.minStock,
-                    maxStock: policyDefaults.maxStock,
-                  },
-                });
-
-                await clearItemStockPolicyIfMatchesWarehouse(
-                  tx,
-                  tenantId,
-                  part.inventoryItemId,
-                  effectiveWarehouseId,
-                );
-
-                await tx.inventoryTransaction.create({
-                  data: {
-                    type: 'WORK_ORDER_ISSUE',
-                    quantity: part.quantity,
-                    previousStock: previousQty,
-                    newStock: newQty,
-                    isPendingRegularization,
-                    referenceId: workOrder.id,
-                    referenceType: 'WORK_ORDER',
-                    notes: `Consumo OT ${workOrder.correlative} - ${part.partNumber}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
-                    warehouse: { connect: { id: effectiveWarehouseId } },
-                    item: { connect: { id: part.inventoryItemId } },
-                    user: { connect: { id: userId } },
-                  },
-                });
+                const frozenUnitCost = Number(stock?.unitCost ?? 0);
 
                 await tx.workOrderPart.update({
                   where: { id: part.id },
@@ -1993,73 +2167,49 @@ export class WorkOrdersService {
               for (const fc of inventoryFluids) {
                 const qty = Number(fc.liters);
                 const itemId = fc.inventoryItemId as string;
+                const invItem = fc.inventoryItem;
+                const itemLabel =
+                  invItem?.partNumber?.trim() ||
+                  invItem?.inventoryCode?.trim() ||
+                  fc.fluidType ||
+                  itemId;
+                const unitAbbr = invItem?.unitOfMeasure?.abbreviation ?? 'LT';
+                const allowsDecimals =
+                  invItem?.unitOfMeasure?.allowsDecimals ?? true;
 
-                const currentStock = await tx.itemStock.findUnique({
-                  where: {
-                    warehouseId_itemId: {
-                      warehouseId: effectiveWarehouseId,
-                      itemId,
-                    },
-                  },
-                });
+                assertQuantityAllowedForUom(
+                  qty,
+                  allowsDecimals,
+                  itemLabel,
+                  unitAbbr,
+                );
+                assertLargeDispatchConfirmed(
+                  qty,
+                  unitAbbr,
+                  allowsDecimals,
+                  confirmedLargeFluidDispatch,
+                  itemLabel,
+                );
 
-                const previousQty = currentStock?.quantity || 0;
-                const newQty = previousQty - qty;
-                const isPendingRegularization = newQty < 0;
-                const frozenUnitCost = Number(currentStock?.unitCost ?? 0);
                 const pn =
                   fc.inventoryItem?.partNumber ?? fc.fluidType ?? 'fluid';
 
-                const policyDefaults = !currentStock
-                  ? await getPolicyThresholdsForNewItemStockRow(
-                      tx,
-                      tenantId,
-                      itemId,
-                      effectiveWarehouseId,
-                    )
-                  : { minStock: 0, maxStock: 0 };
-
-                await tx.itemStock.upsert({
-                  where: {
-                    warehouseId_itemId: {
+                const { stock } =
+                  await this.inventoryStockService.performTransactionCore(
+                    tx,
+                    {
                       warehouseId: effectiveWarehouseId,
                       itemId,
+                      type: 'WORK_ORDER_ISSUE',
+                      quantity: qty,
+                      referenceId: workOrder.id,
+                      referenceType: 'WORK_ORDER',
+                      notes: `Consumo fluido OT ${workOrder.correlative} (${fc.compartment}) — ${pn}`,
                     },
-                  },
-                  update: { quantity: newQty },
-                  create: {
-                    warehouseId: effectiveWarehouseId,
-                    itemId,
-                    quantity: newQty,
-                    unitCost: 0,
-                    minStock: policyDefaults.minStock,
-                    maxStock: policyDefaults.maxStock,
-                  },
-                });
+                    user,
+                  );
 
-                await clearItemStockPolicyIfMatchesWarehouse(
-                  tx,
-                  tenantId,
-                  itemId,
-                  effectiveWarehouseId,
-                );
-
-                await tx.inventoryTransaction.create({
-                  data: {
-                    type: 'WORK_ORDER_ISSUE',
-                    quantity: qty,
-                    previousStock: previousQty,
-                    newStock: newQty,
-                    isPendingRegularization,
-                    referenceId: workOrder.id,
-                    referenceType: 'WORK_ORDER',
-                    notes: `Consumo fluido OT ${workOrder.correlative} (${fc.compartment}) — ${pn}${isPendingRegularization ? ' [STOCK NEGATIVO - REQUIERE REGULARIZACIÓN]' : ''}`,
-                    warehouse: { connect: { id: effectiveWarehouseId } },
-                    item: { connect: { id: itemId } },
-                    user: { connect: { id: userId } },
-                  },
-                });
-
+                const frozenUnitCost = Number(stock?.unitCost ?? 0);
                 totalConsumableCost = totalConsumableCost.plus(
                   new Decimal(qty).mul(new Decimal(frozenUnitCost)),
                 );
@@ -2083,10 +2233,22 @@ export class WorkOrdersService {
               where: { workOrderId: workOrder.id },
             });
 
+            // ── P0: evaluar bloqueadores antes de reactivar ─────────────────
+            let effectiveOperational = false;
+            if (closureEquipmentOperational === true) {
+              const decision = await resolveReturnToService(
+                tx,
+                tenantId,
+                workOrder.equipmentId,
+                { excludeWorkOrderId: workOrder.id },
+              );
+              effectiveOperational = decision.allowed;
+            }
+
             await tx.equipment.update({
               where: { id: workOrder.equipmentId },
               data: {
-                isOperational: closureEquipmentOperational === true,
+                isOperational: effectiveOperational,
                 ...(workOrder.affectsAvailability === 'SI'
                   ? {
                       cumulativeDowntimeHours: {

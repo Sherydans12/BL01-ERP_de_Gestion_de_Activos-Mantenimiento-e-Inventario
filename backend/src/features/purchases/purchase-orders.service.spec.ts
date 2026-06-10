@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -17,18 +16,16 @@ import { PurchaseOrdersService } from './purchase-orders.service';
 import { assertUserHasContractAccess } from './purchase-contract-access.util';
 
 jest.mock('./purchase-contract-access.util', () => {
-  const actual = jest.requireActual<typeof import('./purchase-contract-access.util')>(
-    './purchase-contract-access.util',
-  );
+  const actual = jest.requireActual<
+    typeof import('./purchase-contract-access.util')
+  >('./purchase-contract-access.util');
   return {
     ...actual,
     assertUserHasContractAccess: jest.fn(),
   };
 });
 jest.mock('./purchase-quotation-status-sync.util', () => ({
-  syncPurchaseQuotationStatusesFromLineAwards: jest
-    .fn()
-    .mockResolvedValue([]),
+  syncPurchaseQuotationStatusesFromLineAwards: jest.fn().mockResolvedValue([]),
 }));
 
 const mockAssertContractAccess = jest.mocked(assertUserHasContractAccess);
@@ -340,9 +337,9 @@ describe('PurchaseOrdersService — reject', () => {
   it('rechaza OC inexistente', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue(null);
 
-    await expect(
-      service.reject(orderId, 'motivo', user),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.reject(orderId, 'motivo', user)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('rechaza OC que no está en flujo de aprobación', async () => {
@@ -354,9 +351,9 @@ describe('PurchaseOrdersService — reject', () => {
       notes: null,
     } as never);
 
-    await expect(
-      service.reject(orderId, 'motivo', user),
-    ).rejects.toThrow('La OC no está pendiente de aprobación');
+    await expect(service.reject(orderId, 'motivo', user)).rejects.toThrow(
+      'La OC no está pendiente de aprobación',
+    );
   });
 
   it('marca la OC como REJECTED y registra auditoría', async () => {
@@ -423,9 +420,9 @@ describe('PurchaseOrdersService — reject', () => {
       notes: null,
     } as never);
 
-    await expect(
-      service.reject(orderId, 'motivo', user),
-    ).rejects.toThrow('La OC no está pendiente de aprobación');
+    await expect(service.reject(orderId, 'motivo', user)).rejects.toThrow(
+      'La OC no está pendiente de aprobación',
+    );
   });
 });
 
@@ -490,9 +487,9 @@ describe('PurchaseOrdersService — cancel', () => {
   it('rechaza OC inexistente', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue(null);
 
-    await expect(
-      service.cancel(orderId, cancelReason, user),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.cancel(orderId, cancelReason, user)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('exige motivo de anulación', async () => {
@@ -500,9 +497,9 @@ describe('PurchaseOrdersService — cancel', () => {
       baseCancelOrder() as never,
     );
 
-    await expect(
-      service.cancel(orderId, '  ', user),
-    ).rejects.toThrow(/motivo de anulación/);
+    await expect(service.cancel(orderId, '  ', user)).rejects.toThrow(
+      /motivo de anulación/,
+    );
   });
 
   it('rechaza anulación en estado terminal', async () => {
@@ -510,9 +507,9 @@ describe('PurchaseOrdersService — cancel', () => {
       baseCancelOrder({ status: 'RECEIVED' }) as never,
     );
 
-    await expect(
-      service.cancel(orderId, cancelReason, user),
-    ).rejects.toThrow(/no puede anularse en su estado actual/);
+    await expect(service.cancel(orderId, cancelReason, user)).rejects.toThrow(
+      /no puede anularse en su estado actual/,
+    );
   });
 
   it('rechaza anulación con recepciones operativas confirmadas', async () => {
@@ -521,9 +518,9 @@ describe('PurchaseOrdersService — cancel', () => {
     );
     prisma.warehouseReceipt.count.mockResolvedValue(2);
 
-    await expect(
-      service.cancel(orderId, cancelReason, user),
-    ).rejects.toThrow(/recepciones de bodega confirmadas/);
+    await expect(service.cancel(orderId, cancelReason, user)).rejects.toThrow(
+      /recepciones de bodega confirmadas/,
+    );
   });
 
   it('permite anular OC PARTIALLY_RECEIVED sin guías confirmadas', async () => {
@@ -652,9 +649,9 @@ describe('PurchaseOrdersService — markAsSentToSupplier', () => {
   it('rechaza OC inexistente', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue(null);
 
-    await expect(
-      service.markAsSentToSupplier(orderId, user),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.markAsSentToSupplier(orderId, user)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('solo permite envío desde estado APPROVED', async () => {
@@ -665,9 +662,9 @@ describe('PurchaseOrdersService — markAsSentToSupplier', () => {
       status: 'PENDING_APPROVAL',
     } as never);
 
-    await expect(
-      service.markAsSentToSupplier(orderId, user),
-    ).rejects.toThrow(/orden aprobada puede marcarse como enviada/);
+    await expect(service.markAsSentToSupplier(orderId, user)).rejects.toThrow(
+      /orden aprobada puede marcarse como enviada/,
+    );
   });
 
   it('marca SENT, persiste sentAt y audita el evento', async () => {
@@ -682,7 +679,9 @@ describe('PurchaseOrdersService — markAsSentToSupplier', () => {
       status: 'SENT',
       sentAt: new Date('2026-05-22T15:00:00.000Z'),
     } as never);
-    prisma.user.findUnique.mockResolvedValue({ name: 'Comprador Test' } as never);
+    prisma.user.findUnique.mockResolvedValue({
+      name: 'Comprador Test',
+    } as never);
 
     const result = await service.markAsSentToSupplier(orderId, user);
 
@@ -835,9 +834,9 @@ describe('PurchaseOrdersService — forceClose', () => {
       status: 'APPROVED',
     } as never);
 
-    await expect(
-      service.forceClose(orderId, reason, user),
-    ).rejects.toThrow(/parcialmente recibida/);
+    await expect(service.forceClose(orderId, reason, user)).rejects.toThrow(
+      /parcialmente recibida/,
+    );
   });
 
   it('exige justificación', async () => {
@@ -847,17 +846,17 @@ describe('PurchaseOrdersService — forceClose', () => {
       status: 'PARTIALLY_RECEIVED',
     } as never);
 
-    await expect(
-      service.forceClose(orderId, '  ', user),
-    ).rejects.toThrow(/justificación/);
+    await expect(service.forceClose(orderId, '  ', user)).rejects.toThrow(
+      /justificación/,
+    );
   });
 
   it('rechaza cierre si la OC no existe', async () => {
     prisma.purchaseOrder.findFirst.mockResolvedValue(null);
 
-    await expect(
-      service.forceClose(orderId, reason, user),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.forceClose(orderId, reason, user)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('cierra OC y completa guías PENDING/PARTIAL', async () => {
@@ -1579,11 +1578,10 @@ describe('PurchaseOrdersService — notifyApproversForPendingSignatureBatch', ()
           s: { requisitionCorrelative: string; vendorNames: string[] },
         ) => Promise<void>;
       }
-    ).notifyApproversForPendingSignatureBatch(
-      tenantId,
-      [orderId],
-      { requisitionCorrelative: 'SRC-88', vendorNames: ['ACME'] },
-    );
+    ).notifyApproversForPendingSignatureBatch(tenantId, [orderId], {
+      requisitionCorrelative: 'SRC-88',
+      vendorNames: ['ACME'],
+    });
 
     expect(sendNotification).toHaveBeenCalledWith(
       signerId,

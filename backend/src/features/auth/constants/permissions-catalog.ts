@@ -33,7 +33,8 @@ export const PURCHASES_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.PURCHASES_REQUISITION_CREATE,
             label: 'Crear borrador',
-            description: 'Crear un requerimiento de compra en estado borrador (DRAFT).',
+            description:
+              'Crear un requerimiento de compra en estado borrador (DRAFT).',
           },
           {
             key: SystemPermissions.PURCHASES_REQUISITION_UPDATE_OWN,
@@ -71,17 +72,20 @@ export const PURCHASES_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.PURCHASES_REQUISITION_MANAGE_QUOTATIONS,
             label: 'Gestionar cotizaciones',
-            description: 'Registrar cotizaciones y seleccionar ganadora a nivel cabecera.',
+            description:
+              'Registrar cotizaciones y seleccionar ganadora a nivel cabecera.',
           },
           {
             key: SystemPermissions.PURCHASES_REQUISITION_AWARD_LINES,
             label: 'Adjudicar líneas',
-            description: 'Asignar proveedor, cantidad y precio por línea antes de la OC.',
+            description:
+              'Asignar proveedor, cantidad y precio por línea antes de la OC.',
           },
           {
             key: SystemPermissions.PURCHASES_REQUISITION_DUPLICATE,
             label: 'Duplicar',
-            description: 'Duplicar un requerimiento como plantilla en borrador.',
+            description:
+              'Duplicar un requerimiento como plantilla en borrador.',
           },
         ],
       },
@@ -91,7 +95,8 @@ export const PURCHASES_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.PURCHASES_ORDER_READ,
             label: 'Ver órdenes de compra',
-            description: 'Listar OC, detalle, PDF, historial y elegibles para recepción.',
+            description:
+              'Listar OC, detalle, PDF, historial y elegibles para recepción.',
           },
           {
             key: SystemPermissions.PURCHASES_ORDER_CREATE_FROM_REQUISITION,
@@ -121,7 +126,8 @@ export const PURCHASES_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.PURCHASES_ORDER_FORCE_CLOSE,
             label: 'Forzar cierre',
-            description: 'Cerrar OC con pendientes (recepciones/facturas) con motivo.',
+            description:
+              'Cerrar OC con pendientes (recepciones/facturas) con motivo.',
           },
           {
             key: SystemPermissions.PURCHASES_ORDER_REJECT,
@@ -136,7 +142,8 @@ export const PURCHASES_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.PURCHASES_ORDER_UPDATE_LOGISTICS,
             label: 'Logística',
-            description: 'Actualizar dirección de entrega y condiciones de pago.',
+            description:
+              'Actualizar dirección de entrega y condiciones de pago.',
           },
           {
             key: SystemPermissions.PURCHASES_ORDER_UPDATE_SENSITIVE,
@@ -291,7 +298,8 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.INVENTORY_ITEM_CREATE,
             label: 'Crear artículos',
-            description: 'Alta completa o rápida (quick-create) en el catálogo.',
+            description:
+              'Alta completa o rápida (quick-create) en el catálogo.',
           },
           {
             key: SystemPermissions.INVENTORY_ITEM_UPDATE,
@@ -301,7 +309,8 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.INVENTORY_ITEM_DELETE,
             label: 'Desactivar artículos',
-            description: 'Desactivar o eliminar artículos del catálogo (según reglas del servicio).',
+            description:
+              'Desactivar o eliminar artículos del catálogo (según reglas del servicio).',
           },
         ],
       },
@@ -311,12 +320,14 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.INVENTORY_WAREHOUSE_READ,
             label: 'Ver bodegas',
-            description: 'Listar bodegas, detalle y ubicaciones (bins) por almacén.',
+            description:
+              'Listar bodegas, detalle y ubicaciones (bins) por almacén.',
           },
           {
             key: SystemPermissions.INVENTORY_WAREHOUSE_MANAGE,
             label: 'Gestionar bodegas',
-            description: 'Crear, editar y desactivar bodegas y sus ubicaciones internas.',
+            description:
+              'Crear, editar y desactivar bodegas y sus ubicaciones internas.',
           },
         ],
       },
@@ -326,12 +337,14 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.INVENTORY_CATEGORY_READ,
             label: 'Ver categorías',
-            description: 'Consultar familias, subfamilias y jerarquía de categorías.',
+            description:
+              'Consultar familias, subfamilias y jerarquía de categorías.',
           },
           {
             key: SystemPermissions.INVENTORY_CATEGORY_MANAGE,
             label: 'Gestionar categorías',
-            description: 'Crear, editar y eliminar familias / categorías de ítems.',
+            description:
+              'Crear, editar y eliminar familias / categorías de ítems.',
           },
         ],
       },
@@ -351,7 +364,8 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.INVENTORY_TRANSFER_APPROVE,
             label: 'Confirmar recepción',
-            description: 'Confirmar ingreso en bodega destino (movimiento a stock).',
+            description:
+              'Confirmar ingreso en bodega destino (movimiento a stock).',
           },
         ],
       },
@@ -369,6 +383,45 @@ export const INVENTORY_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
             label: 'Ajustar stock',
             description:
               'Movimientos manuales, devoluciones, niveles min/max y ajustes de inventario físico (kardex).',
+          },
+          {
+            key: SystemPermissions.INVENTORY_STOCK_VIEW_COST,
+            label: 'Ver costos de stock',
+            description:
+              'Visualizar costo unitario, CPP y valorización en kardex, picker y reportes de inventario.',
+          },
+        ],
+      },
+      {
+        name: 'Proveedores (inventario)',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_SUPPLIER_READ,
+            label: 'Ver proveedores de inventario',
+            description: 'Listar proveedores del maestro ligero de inventario.',
+          },
+          {
+            key: SystemPermissions.INVENTORY_SUPPLIER_MANAGE,
+            label: 'Gestionar proveedores de inventario',
+            description:
+              'Alta y baja de proveedores en el maestro de inventario.',
+          },
+        ],
+      },
+      {
+        name: 'Analítica de inventario',
+        permissions: [
+          {
+            key: SystemPermissions.INVENTORY_ANALYTICS_READ,
+            label: 'Ver analítica',
+            description:
+              'Valorización por familia, desempeño de proveedores y búsqueda global (command palette).',
+          },
+          {
+            key: SystemPermissions.INVENTORY_ANALYTICS_REPORT,
+            label: 'Reportes contables',
+            description:
+              'Reporte maestro de valorización (PDF/Excel) y variación de ahorro (cierre contable).',
           },
         ],
       },
@@ -398,12 +451,14 @@ export const OPERATIONS_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.OPERATIONS_EQUIPMENT_UPDATE,
             label: 'Editar equipos',
-            description: 'Modificar ficha, datos operativos y documentación del activo.',
+            description:
+              'Modificar ficha, datos operativos y documentación del activo.',
           },
           {
             key: SystemPermissions.OPERATIONS_EQUIPMENT_DELETE,
             label: 'Desactivar equipos',
-            description: 'Desactivar o dar de baja equipos del maestro (según reglas del servicio).',
+            description:
+              'Desactivar o dar de baja equipos del maestro (según reglas del servicio).',
           },
         ],
       },
@@ -485,13 +540,77 @@ export const OPERATIONS_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.OPERATIONS_BACKLOG_READ,
             label: 'Ver backlog',
-            description: 'Listar ítems de backlog asociados a órdenes de trabajo.',
+            description:
+              'Listar ítems de backlog asociados a órdenes de trabajo.',
           },
           {
             key: SystemPermissions.OPERATIONS_BACKLOG_MANAGE,
             label: 'Gestionar backlog',
             description:
               'Agregar, actualizar, promover ítems de backlog y convertirlos en tareas u OT.',
+          },
+        ],
+      },
+      {
+        name: 'Consumo de lubricantes',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_LUBE_REPORT_READ,
+            label: 'Ver reportes de lubricantes',
+            description:
+              'Consultar el historial de despachos de lubricantes por equipo y bodega.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_LUBE_REPORT_CREATE,
+            label: 'Registrar despacho de lubricante',
+            description:
+              'Crear un reporte de consumo de lubricante asociado a un equipo, actualizando el horómetro y el kardex de inventario.',
+          },
+        ],
+      },
+      {
+        name: 'Disponibilidad operativa diaria',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_AVAILABILITY_READ,
+            label: 'Ver reportes de disponibilidad',
+            description:
+              'Consultar el historial de reportes de estado por turno (Día/Noche) de los equipos.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_AVAILABILITY_CREATE,
+            label: 'Registrar disponibilidad del turno',
+            description:
+              'Ingresar el estado operativo de un equipo para el turno actual (Operativo, Standby, Detenido, etc.) y actualizar el horómetro.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_AVAILABILITY_MONITOR,
+            label: 'Monitorear flota por turno',
+            description:
+              'Acceder al panel de alerta que muestra los equipos sin reporte en el turno activo y los KPIs de disponibilidad de la flota.',
+          },
+        ],
+      },
+      {
+        name: 'Registro de fallas (correctivo imprevisto)',
+        permissions: [
+          {
+            key: SystemPermissions.OPERATIONS_FAULT_REPORT_READ,
+            label: 'Ver reportes de fallas',
+            description:
+              'Listar y consultar el detalle de eventos de falla registrados por equipo, con filtros por criticidad, sistema afectado y estado.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_FAULT_REPORT_CREATE,
+            label: 'Registrar falla',
+            description:
+              'Crear un reporte de falla en terreno. Fallas ALTA y MEDIA generan automáticamente una OT correctiva y actualizan el horómetro del equipo.',
+          },
+          {
+            key: SystemPermissions.OPERATIONS_FAULT_REPORT_MANAGE,
+            label: 'Gestionar reportes de fallas',
+            description:
+              'Cerrar reportes de falla BAJA manualmente o convertirlos en OT. Disponible para planificadores y supervisores.',
           },
         ],
       },
@@ -571,8 +690,7 @@ export const ADMIN_CONFIG_PERMISSIONS_CATALOG: PermissionCatalogModule[] = [
           {
             key: SystemPermissions.ADMIN_CONTRACT_MANAGE,
             label: 'Gestionar contratos',
-            description:
-              'Crear, editar y eliminar contratos y subcontratos.',
+            description: 'Crear, editar y eliminar contratos y subcontratos.',
           },
         ],
       },

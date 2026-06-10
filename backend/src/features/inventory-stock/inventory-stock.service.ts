@@ -2,10 +2,14 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { userCanAccessContractId } from '../../common/contract-scope.util';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
+import { fetchTenantPdfLogoDataUri } from '../../common/pdf/fetch-tenant-pdf-logo';
+import { StorageService } from '../../common/storage/storage.service';
 import { generatePhysicalCountSheetPdfBuffer } from './physical-count-sheet-pdf.generator';
 import {
   getPolicyThresholdsForNewItemStockRow,
@@ -16,6 +20,15 @@ import {
   FIELD_RETURN_REFERENCE_TYPE,
 } from '../../common/inventory/field-dispatch.constants';
 import { getFieldDispatchOutstandingForItem } from '../../common/inventory/field-dispatch-outstanding';
+import { userCanViewInventoryCost } from '../auth/permissions.util';
+import {
+  addStockQty,
+  subtractStockQty,
+  isStockQtyNegative,
+  wouldStockGoNegative,
+  insufficientStockMessage,
+  STOCK_QTY_EPSILON,
+} from '../../common/inventory/stock-quantity.util';
 
 export interface PerformTransactionDto {
   warehouseId: string;
@@ -45,7 +58,30 @@ export interface UpdateStockLevelsDto {
 
 @Injectable()
 export class InventoryStockService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
+
+  private assertWarehouseContractAccess(
+    user: { role?: string; allowedContracts?: string[] },
+    warehouse: { contractId: string },
+  ): void {
+    if (!userCanAccessContractId(user, warehouse.contractId)) {
+      throw new ForbiddenException(
+        'No tiene acceso al contrato de esta bodega.',
+      );
+    }
+  }
+
+  private async loadWarehouseForUser(warehouseId: string, user: any) {
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, tenantId: user.tenantId },
+    });
+    if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    this.assertWarehouseContractAccess(user, warehouse);
+    return warehouse;
+  }
 
   private ensureItemDescription<
     T extends { description?: string | null; name?: string | null },
@@ -58,15 +94,11 @@ export class InventoryStockService {
     };
   }
 
-  private isMechanic(user: { role?: string } | null | undefined): boolean {
-    return user?.role === 'MECHANIC';
-  }
-
   private maskCostValue(
-    user: { role?: string } | null | undefined,
+    user: { role?: string; permissions?: string[] } | null | undefined,
     value: number | null,
   ): number | null {
-    if (!this.isMechanic(user)) return value;
+    if (userCanViewInventoryCost(user)) return value;
     return 0;
   }
 
@@ -80,7 +112,7 @@ export class InventoryStockService {
     itemId: string,
     newQuantity: number,
   ): Promise<void> {
-    if (new Decimal(newQuantity).lt(0)) return;
+    if (isStockQtyNegative(newQuantity)) return;
     await tx.inventoryTransaction.updateMany({
       where: {
         warehouseId,
@@ -391,16 +423,10 @@ export class InventoryStockService {
     opts?: { location?: string },
   ) {
     const tenantId = user.tenantId as string;
-    const warehouse = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-    });
-    if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    await this.loadWarehouseForUser(warehouseId, user);
 
     const fieldOutstandingByItem =
-      await this.mapFieldDispatchOutstandingForWarehouse(
-        tenantId,
-        warehouseId,
-      );
+      await this.mapFieldDispatchOutstandingForWarehouse(tenantId, warehouseId);
 
     const loc = opts?.location?.trim();
     const where: Prisma.ItemStockWhereInput = { warehouseId };
@@ -454,8 +480,7 @@ export class InventoryStockService {
         ...r,
         reservedQuantity,
         availableQuantity,
-        fieldDispatchOutstandingQty:
-          fieldOutstandingByItem.get(r.itemId) ?? 0,
+        fieldDispatchOutstandingQty: fieldOutstandingByItem.get(r.itemId) ?? 0,
         unitCost: this.maskCostValue(
           user,
           r.unitCost != null ? Number(r.unitCost) : null,
@@ -529,9 +554,7 @@ export class InventoryStockService {
       ...new Set(
         rows
           .filter(
-            (r) =>
-              r.referenceId &&
-              r.referenceType === 'PURCHASE_RECEIPT',
+            (r) => r.referenceId && r.referenceType === 'PURCHASE_RECEIPT',
           )
           .map((r) => r.referenceId as string),
       ),
@@ -587,8 +610,7 @@ export class InventoryStockService {
       ...new Set(
         rows
           .filter(
-            (r) =>
-              r.referenceType === 'INVENTORY_TRANSFER' && r.referenceId,
+            (r) => r.referenceType === 'INVENTORY_TRANSFER' && r.referenceId,
           )
           .map((r) => r.referenceId as string),
       ),
@@ -631,10 +653,7 @@ export class InventoryStockService {
 
     return rows.map((row) => {
       const trace: Record<string, unknown> = {};
-      if (
-        row.referenceType === 'PURCHASE_RECEIPT' &&
-        row.referenceId
-      ) {
+      if (row.referenceType === 'PURCHASE_RECEIPT' && row.referenceId) {
         const rc = receiptMap.get(row.referenceId);
         if (rc) {
           trace.warehouseReceipt = {
@@ -681,6 +700,7 @@ export class InventoryStockService {
     user: any,
     opts?: { itemId?: string; page?: number; pageSize?: number },
   ) {
+    await this.loadWarehouseForUser(warehouseId, user);
     const tenantId = user.tenantId as string;
     const where: Prisma.InventoryTransactionWhereInput = {
       warehouseId,
@@ -748,13 +768,7 @@ export class InventoryStockService {
     user: any,
   ): Promise<{ location: string | null; quantityOnHand: number }> {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada.');
-    }
+    await this.loadWarehouseForUser(warehouseId, user);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -782,13 +796,7 @@ export class InventoryStockService {
     user: any,
   ) {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada.');
-    }
+    await this.loadWarehouseForUser(warehouseId, user);
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
       select: { id: true },
@@ -888,11 +896,7 @@ export class InventoryStockService {
     user: any,
   ) {
     const tenantId = user.tenantId as string;
-    const warehouse = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true },
-    });
-    if (!warehouse) throw new NotFoundException('Bodega no encontrada');
+    await this.loadWarehouseForUser(warehouseId, user);
 
     const item = await this.prisma.inventoryItem.findFirst({
       where: { id: itemId, tenantId },
@@ -962,10 +966,8 @@ export class InventoryStockService {
           )
         : { minStock: 0, maxStock: 0 };
 
-      const finalMin =
-        minStock ?? current?.minStock ?? policyDefaults.minStock;
-      const finalMax =
-        maxStock ?? current?.maxStock ?? policyDefaults.maxStock;
+      const finalMin = minStock ?? current?.minStock ?? policyDefaults.minStock;
+      const finalMax = maxStock ?? current?.maxStock ?? policyDefaults.maxStock;
       if (hasMin || hasMax) {
         if (finalMax > 0 && finalMax < finalMin) {
           throw new BadRequestException(
@@ -1016,13 +1018,7 @@ export class InventoryStockService {
     opts: { page?: number; pageSize?: number },
   ) {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { id: true, code: true, name: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada');
-    }
+    const wh = await this.loadWarehouseForUser(warehouseId, user);
 
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 25));
@@ -1096,7 +1092,7 @@ export class InventoryStockService {
           s.unitCost != null ? Number(s.unitCost) : null,
         ),
         physicalShortageQty,
-        debtValue: this.isMechanic(user) ? 0 : debtValue,
+        debtValue: userCanViewInventoryCost(user) ? debtValue : 0,
         location: s.location,
         bin: s.bin,
         item: this.ensureItemDescription(s.item),
@@ -1112,6 +1108,39 @@ export class InventoryStockService {
       /** Recepciones abiertas contra OC solo aprobadas (no marcadas como enviadas): inconsistencia administrativa. */
       receiptsOnApprovedOrdersOnlyCount,
     };
+  }
+
+  private async tenantBlocksNegativeStock(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<boolean> {
+    const cfg = await tx.tenantOperationalConfig.findUnique({
+      where: { tenantId },
+      select: { blockNegativeStock: true },
+    });
+    return cfg?.blockNegativeStock ?? false;
+  }
+
+  private async throwIfBlockedNegativeStock(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    itemId: string,
+    previousQty: number,
+    deductQty: number,
+  ): Promise<void> {
+    if (!wouldStockGoNegative(previousQty, deductQty)) return;
+    const block = await this.tenantBlocksNegativeStock(tx, tenantId);
+    if (!block) return;
+
+    const item = await tx.inventoryItem.findFirst({
+      where: { id: itemId, tenantId },
+      select: { partNumber: true, inventoryCode: true },
+    });
+    const label =
+      item?.partNumber?.trim() || item?.inventoryCode?.trim() || itemId;
+    throw new BadRequestException(
+      insufficientStockMessage(label, previousQty, deductQty),
+    );
   }
 
   /**
@@ -1162,6 +1191,7 @@ export class InventoryStockService {
       where: { id: dto.warehouseId, tenantId: user.tenantId },
     });
     if (!warehouse) throw new NotFoundException('Bodega no válida.');
+    this.assertWarehouseContractAccess(user, warehouse);
 
     const refType = dto.referenceType?.trim() ?? '';
     if (refType === FIELD_DISPATCH_REFERENCE_TYPE && dto.type !== 'OUT') {
@@ -1187,7 +1217,7 @@ export class InventoryStockService {
         dto.warehouseId,
         dto.itemId,
       );
-      if (dto.quantity > outstanding + 1e-6) {
+      if (dto.quantity > outstanding + STOCK_QTY_EPSILON) {
         throw new BadRequestException(
           `La cantidad de reingreso (${dto.quantity}) supera lo pendiente desde terreno (${outstanding}).`,
         );
@@ -1209,7 +1239,7 @@ export class InventoryStockService {
     let isPendingRegularization = false;
 
     if (dto.type === 'IN') {
-      newQty = previousQty + dto.quantity;
+      newQty = addStockQty(previousQty, dto.quantity);
 
       if (dto.unitCost && dto.unitCost > 0) {
         const cQ = new Decimal(previousQty);
@@ -1219,20 +1249,36 @@ export class InventoryStockService {
         const totalQty = cQ.plus(rQ);
         newUnitCost = totalQty.isZero()
           ? dto.unitCost
-          : parseFloat(
-              cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4),
-            );
+          : parseFloat(cQ.mul(cC).plus(rQ.mul(rC)).div(totalQty).toFixed(4));
       }
-    } else if (dto.type === 'OUT') {
-      newQty = previousQty - dto.quantity;
-      if (newQty < 0) {
+    } else if (dto.type === 'OUT' || dto.type === 'WORK_ORDER_ISSUE') {
+      await this.throwIfBlockedNegativeStock(
+        tx,
+        user.tenantId,
+        dto.itemId,
+        previousQty,
+        dto.quantity,
+      );
+      newQty = subtractStockQty(previousQty, dto.quantity);
+      if (isStockQtyNegative(newQty)) {
         isPendingRegularization = true;
       }
     } else if (dto.type === 'ADJUST') {
-      newQty = previousQty + dto.quantity;
-      if (newQty < 0) {
+      newQty = addStockQty(previousQty, dto.quantity);
+      if (isStockQtyNegative(newQty)) {
+        await this.throwIfBlockedNegativeStock(
+          tx,
+          user.tenantId,
+          dto.itemId,
+          previousQty,
+          subtractStockQty(previousQty, newQty),
+        );
         isPendingRegularization = true;
       }
+    } else {
+      throw new BadRequestException(
+        `Tipo de transacción no soportado: ${dto.type}.`,
+      );
     }
 
     const policyDefaults = !currentStock
@@ -1320,6 +1366,9 @@ export class InventoryStockService {
     note: string;
   }> {
     const tenantId = user.tenantId as string;
+    if (opts?.warehouseId) {
+      await this.loadWarehouseForUser(opts.warehouseId, user);
+    }
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
@@ -1545,13 +1594,7 @@ export class InventoryStockService {
     warehouseId: string,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const tenantId = user.tenantId as string;
-    const wh = await this.prisma.warehouse.findFirst({
-      where: { id: warehouseId, tenantId },
-      select: { code: true, name: true },
-    });
-    if (!wh) {
-      throw new NotFoundException('Bodega no encontrada.');
-    }
+    const wh = await this.loadWarehouseForUser(warehouseId, user);
 
     const stocks = await this.prisma.itemStock.findMany({
       where: { warehouseId, warehouse: { tenantId } },
@@ -1569,23 +1612,41 @@ export class InventoryStockService {
     });
 
     const pdfRows = stocks.map((r) => {
-      const rawDesc = r.item.description?.trim() || r.item.name?.trim() || '—';
+      const itemName = (r.item.name ?? '').trim() || '—';
+      const rawDesc = (r.item.description ?? '').trim() || '—';
       const description =
-        rawDesc.length > 120 ? `${rawDesc.slice(0, 117)}…` : rawDesc;
+        rawDesc.length > 200 ? `${rawDesc.slice(0, 197)}…` : rawDesc;
       return {
         inventoryCode: (r.item.inventoryCode ?? '').trim() || '—',
         partNumber: (r.item.partNumber ?? '').trim() || '—',
+        itemName,
         description,
         location: (r.location ?? '').trim(),
       };
     });
 
-    const buffer = await generatePhysicalCountSheetPdfBuffer({
-      warehouseCode: wh.code,
-      warehouseName: wh.name,
-      generatedAt: new Date(),
-      rows: pdfRows,
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: { name: true, pdfLogoUrl: true, primaryColor: true },
     });
+    const tenantLogoDataUri = await fetchTenantPdfLogoDataUri(
+      this.storage,
+      tenant?.pdfLogoUrl,
+    );
+
+    const buffer = await generatePhysicalCountSheetPdfBuffer(
+      {
+        warehouseCode: wh.code,
+        warehouseName: wh.name,
+        generatedAt: new Date(),
+        rows: pdfRows,
+      },
+      {
+        tenantName: tenant?.name,
+        tenantLogoDataUri,
+        tenantPrimaryColor: tenant?.primaryColor,
+      },
+    );
     const safe = `${wh.code}-conteo-fisico`.replace(/[^a-zA-Z0-9._-]+/g, '_');
     return { buffer, filename: `${safe}.pdf` };
   }

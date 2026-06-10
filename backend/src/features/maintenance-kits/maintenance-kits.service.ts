@@ -93,7 +93,7 @@ export class MaintenanceKitsService {
 
   async update(id: string, dto: CreateKitDto, user: any) {
     const tenantId = user.tenantId;
-    const kit = await this.findOne(id, user); // Valida que exista y pertenezca al tenant
+    await this.findOne(id, user); // Valida que exista y pertenezca al tenant
 
     return this.prisma.$transaction(async (tx) => {
       // Borramos los repuestos anteriores y creamos los nuevos (más seguro que hacer upserts manuales)

@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { WorkOrdersService } from '../../../core/services/work-orders/work-orders.service';
-import { ReportService } from '../../../core/services/report/report.service';
 import { FleetService } from '../../../core/services/fleet/fleet.service';
 import { NotificationService } from '../../../core/services/notification/notification.service';
 import { ConfirmModalComponent } from '../../../shared/components/confirm-modal/confirm-modal.component';
@@ -39,7 +38,6 @@ export class WorkOrderListComponent implements OnInit {
   protected readonly o = O;
 
   private workOrdersService = inject(WorkOrdersService);
-  private reportService = inject(ReportService);
   private fleetService = inject(FleetService);
   private notificationService = inject(NotificationService);
   private exportService = inject(ExportService);
@@ -228,9 +226,22 @@ export class WorkOrderListComponent implements OnInit {
   }
 
   viewPdf(id: string) {
-    this.workOrdersService.getWorkOrder(id).subscribe({
-      next: (otData) => this.reportService.generateOTReport(otData),
-      error: (err) => console.error('Error al generar PDF:', err),
+    const ot = this.workOrders().find((o) => o.id === id);
+    const correlative = ot?.correlative ?? id;
+    this.workOrdersService.getWorkOrderPdf(id).subscribe({
+      next: (blob) => {
+        if (!blob?.size) {
+          this.notificationService.error('Respuesta PDF vacía');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank', 'noopener,noreferrer');
+        setTimeout(() => URL.revokeObjectURL(url), 120_000);
+        this.notificationService.success(`PDF de ${correlative} generado`);
+      },
+      error: () => {
+        this.notificationService.error('No se pudo generar el PDF de la OT');
+      },
     });
   }
 

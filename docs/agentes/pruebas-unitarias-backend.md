@@ -4,26 +4,35 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-05-22
+**Última actualización:** 2026-06-08 (M2 Snapshot + Event Ledger)
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **280 tests** en **13** archivos (sin PostgreSQL real).
+**Suite ejecutable hoy:** **412 tests** en **25** archivos (sin PostgreSQL real; verificado con `npm run test:domain` el 2026-06-08).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
-| **Inventario — stock/kardex** | ~88 % del núcleo | 41 | Stock, devoluciones OT, IRA, PDF (§3.2) |
+| **Horómetro — helper `applyCurrentMeterChange`** | 100 % | 7 | Casos 1–7: happy path, silent skip (`oldMeter === newMeter`), fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL, fecha explícita, orden log→update (§3.12 — nuevo) |
+| **Horómetro — integración transversal M1/M2/M3** | 100 % | 4 | Caos en Terreno (5000→5050→5100 con M1 rechazado), lenient M2, lenient M3, doble avance secuencial (§3.13 — nuevo) |
+| **Disponibilidad operativa diaria** | ~98 % | 34 | `create`/`findUnreported`/`commitImport` happy paths, ConflictException P2002, horómetro AVAILABILITY_REPORT, ledger `AvailabilityEvent`, `findUnreported` diff Set, `findAll` paginado, **guard hasNightShift=false** y restauración `OPERATIONAL` tras último M2 `DOWN_*` |
+| **Lubricantes — reporte consumo** | ~95 % núcleo `createReport` | 18 | Happy path vía `performTransactionCore`, stock negativo, `blockNegativeStock`, fracciones UoM, `confirmedLargeDispatch`, horómetro, bodega/equipo (§3.10) |
+| **Inventario — stock/kardex** | ~90 % del núcleo | 42 | Stock, `blockNegativeStock` en OUT, devoluciones OT, IRA, PDF (§3.2) |
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
 | **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
-| **Inventario — transferencias W2W** | ~90 % mutación/recepción | 20 | W2W + validaciones recepción (§3.3) |
+| **Inventario — transferencias W2W** | ~90 % mutación/recepción | 22 | W2W + alcance contrato en `getTransferById` (§3.3) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~90 % | 30 | CRUD factura + 3-way + pago (§4) |
-| **Mantenimiento — OT cierre** | ~92 % cierre + backlog | 22 | CLOSED, `IN_PROGRESS`, `promoteBacklogItem` (§3.6) |
+| **Compras — NC** | ~98 % create/remove + neto 3-way | 14 | Bloqueo `remove` si OC `CLOSED` (§4.5) |
+| **Flota — equipos** | ~70 % create/update/bulk | 6 | ABAC contrato + `bulkSyncMeterReadings` (§3.8) |
+| **Auth — login JWT** | ~40 % login PBAC | 3 | Permisos TenantRole + lockout (§5.1) |
+| **Flota — ajustes medidor** | ~80 % `create` | 3 | Reinicio con justificación motor (§3.9) |
+| **Mantenimiento — OT** | ~80 % ciclo + reservas | 32 | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
+| **Users — asignables OT** | ~90 % `findAssignableForOt` | 5 | Permisos JSON PBAC (`operations:work-order:*`) (§3.7) |
 | **Compras — util firma** | 100 % util | 4 | `signature.util` |
 | **Auth / users / sites** | Smoke only | — | No sustituyen dominio |
 
@@ -33,6 +42,22 @@ npm run test:domain
 # Sesión larga (agente o dev):
 npm run test:domain:watch
 ```
+
+### Iteración 2026-06-07 — P4 refresh Flota
+
+- **`EquipmentAvailabilityService.commitImport`** (+1): cubre que un parte `OPERATIONAL` posterior al último M2 `DOWN_FAILURE` restaura `Equipment.isOperational=true` y retorna `sideEffects[]` para refrescar Maestro/modal.
+- Regla backend asociada: `previousStatus` de M2 se resuelve desde la misma celda editada, DAY del mismo día para NIGHT o el último parte previo del equipo.
+
+### Iteración 2026-06-08 — M2 Snapshot + Event Ledger
+
+- **`AvailabilityEventService`** (+3): eventos múltiples por un mismo snapshot, timeline ASC por `eventAt` y migración backfill `LEGACY_SNAPSHOT` idempotente sin mutar snapshots.
+- `npm run test:domain` suma `availability-event.service.spec` al bloque crítico.
+
+### Iteración N+12 (2026-06-03) — hecho
+
+- **`applyCurrentMeterChange`** (+7): `equipment-meter-sync.spec.ts` nuevo. Casos: happy path Decimal, silent skip `oldMeter===newMeter`, fuentes AVAILABILITY_REPORT / FAULT_REPORT / MANUAL con sourceId, fecha explícita, orden log→update. 100 % del helper cubierto.
+- **Cross-Module horómetro** (+4): `operations-cross-modules.spec.ts` nuevo. Usa implementación **real** del helper (sin mock) + estado mutable compartido entre M1/M2/M3. Escenarios: "Caos en Terreno" (5000→5050→5100, M1 rechazado sin alterar estado), lenient M2, lenient M3, doble avance secuencial M2→M3. Documenta la asimetría strict/lenient entre módulos.
+- Suite dominio: **391 tests · 22 archivos**.
 
 ### Iteración N+7 (2026-05-22) — hecho
 
@@ -97,11 +122,32 @@ npm run test:domain:watch
 - **`PurchaseInvoicesService`** (+5): `recordPayment` (ref obligatoria, solo MATCHED, PAID); `remove` (bloquea PAID, delete).
 - **`WorkOrdersService.promoteBacklogItem`** (+3): rechaza no PENDING; `TO_TASK`; `TO_NEW_OT`.
 
-### Siguiente paso recomendado (iteración N+19)
+### Iteración N+19 (2026-05-24) — hecho
 
-1. **`work-orders.update`**: reservas de stock al cambiar repuestos.
-2. **`purchase-credit-notes`**: flujo create/apply contra factura.
-3. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
+- **`WorkOrdersService`** (+9): `create` (tenant, equipo/contrato, horómetro); `update` (reservas repuestos, PBAC `IN_PROGRESS`, OT cerrada).
+- **`UsersService.findAssignableForOt`** (+4): query `tenantRole.permissions` con `array_contains` (`execute` / `assign` / `update`); flags `canExecuteOt` / `canSuperviseOt`; sin filtro legacy `MECHANIC`/`SUPERVISOR`.
+- **`purchase-credit-notes`** (+5): conciliación 3-way vía `PurchaseInvoicesService` real (neto factura − NC); `remove` con OC `CLOSED` (comportamiento actual documentado).
+- **`test:domain`**: incluye `users.service.spec` (14 suites, **300** tests).
+
+### Iteración N+20 / N+21 (2026-05-24) — hecho
+
+- **`PurchaseCreditNotesService.remove`**: bloquea si OC `CLOSED` (+2 tests).
+- **`EquipmentsService`**: ABAC en `create`/`update`; spec `bulkSyncMeterReadings` 50+2 (+6 tests).
+- **`AuthService.login`**: JWT con `permissions` PBAC; lockout 423 (+3 tests).
+- **`MeterAdjustmentsService.create`**: lectura &lt; actual exige justificación motor ≥15 chars (+3 tests).
+- **`test:domain`**: 17 suites, **313** tests.
+
+### Iteración N+22 (2026-06-02) — hecho
+
+- **`LubeReportsService.createReport`** (+8): happy path (stock, kardex, horómetro, assetCost); stock negativo → `isPendingRegularization`; horómetro igual/omitido → no actualiza medidor; horómetro regresivo → `BadRequestException`; bodega fuera de contrato → `BadRequestException`; bodega/equipo inexistentes → `NotFoundException`.
+- **`test:domain`**: nuevo spec en suite aislada; **321** tests totales (313 previos + 8 lubricantes).
+
+### Siguiente paso recomendado (iteración N+23)
+
+1. **`LubeReportsService`**: controlador REST + PBAC; spec de controller (smoke).
+2. **`work-orders.update`**: validar stock físico insuficiente al editar repuestos (si producto lo exige).
+3. **`equipments.findAll` / `remove`**: alcance contrato y borrado con OT asociadas.
+4. Cobertura CI (`test:cov`) con umbral en carpetas críticas (opcional).
 
 ---
 
@@ -148,7 +194,8 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 
 | Archivo spec | Servicio / ámbito | Tests | Notas |
 |--------------|-------------------|-------|-------|
-| `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **41** | Movimientos, devoluciones OT, IRA, PDF (§3.2) |
+| `features/inventory-stock/inventory-stock.service.spec.ts` | **Inventario — stock y kardex** | **42** | Movimientos, `blockNegativeStock`, devoluciones OT, IRA, PDF (§3.2) |
+| `common/inventory/stock-quantity.util.spec.ts` | **Util — precisión decimal stock** | **3** | Resta, epsilon, `wouldStockGoNegative` |
 | `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **38** | Ciclo SRC + `update` (§4.9) |
 | `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
 | `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **20** | Mutación, recepción, listado (§3.3) |
@@ -158,19 +205,22 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
 | `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **17** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |
-| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **3** | `updateStatus` CLOSED + consumo stock (§3.6) |
-| `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **8** | `create`/`remove`, P2002, revalidación 3-way (§4) |
+| `features/work-orders/work-orders.service.spec.ts` | **Mantenimiento — OT** | **32** | `create`, `update` (reservas), `updateStatus`, backlog (§3.6) |
+| `features/purchases/purchase-credit-notes.service.spec.ts` | **Compras — NC** | **14** | `remove` bloqueado si OC `CLOSED`; neto 3-way (§4.5) |
+| `features/users/users.service.spec.ts` | **Users — OT asignables** | **5** | `findAssignableForOt` PBAC JSON (§3.7) |
+| `features/equipments/equipments.service.spec.ts` | **Flota — equipos** | **7** | `create`/`update` ABAC; bulk 50+2 (§3.8); `getAnalytics` incluye `parts` (Sprint 2.1) |
+| `features/auth/auth.service.spec.ts` | **Auth — login** | **3** | JWT permissions + lockout (§5.1) |
+| `features/meter-adjustments/meter-adjustments.service.spec.ts` | **Flota — ajustes** | **3** | Reinicio medidor con motivo (§3.9) |
+| `features/lube-reports/lube-reports.service.spec.ts` | **Lubricantes — reporte consumo** | **18** | `createReport` vía `performTransactionCore`, stock, UoM, consumo inusual (§3.10) |
 | `common/crypto/signature.util.spec.ts` | **Firma OC (hash)** | **4** | `generateSignatureHash` / `verifySignatureIntegrity` (§4) |
-| `features/auth/auth.service.spec.ts` | Auth | 1 | Smoke (`should be defined`) |
 | `features/auth/auth.controller.spec.ts` | Auth controller | — | Smoke |
-| `features/users/users.service.spec.ts` | Users | 1 | Smoke |
 | `features/users/users.controller.spec.ts` | Users controller | — | Smoke |
 | `features/sites/sites.service.spec.ts` | Sites | 1 | Smoke |
 | `features/sites/sites.controller.spec.ts` | Sites controller | — | Smoke |
 | `app.controller.spec.ts` | App | — | Smoke |
 | `prisma/prisma.service.spec.ts` | PrismaService | — | Smoke |
 
-**Suite dominio crítico (2026-05-22):** 280 tests passed (inventario 103 + compras 155 + OT 22).
+**Suite dominio crítico (2026-05-24):** 313 tests passed (inventario 105 + compras 160 + OT 32 + users 5 + flota 9 + auth 3).
 
 ---
 
@@ -190,22 +240,22 @@ Documentación de dominio: [inventario-stock-transferencias-kardex.md](inventari
 
 ### 3.2 Spec: `inventory-stock.service.spec.ts`
 
-**Última ejecución:** 40 passed (2026-05-22).
+**Última ejecución:** 42 passed (2026-06-04).
 
 #### Bloques `describe` y casos
 
 | Bloque | Qué valida |
 |--------|------------|
 | `clearPendingRegularizationFlags` | No-op si saldo &lt; 0; `updateMany` si saldo ≥ 0 |
-| `performTransactionCore` | Usuario requerido; cantidad &gt; 0 (excepto ADJUST); bodega válida; **IN** + CPP ponderado; **OUT** + flag regularización; **ADJUST** negativo; **FIELD_DISPATCH** solo OUT; **FIELD_RETURN** costo y tope terreno; política min/max al crear `item_stock` |
+| `performTransactionCore` | Usuario requerido; cantidad &gt; 0 (excepto ADJUST); bodega válida; **IN** + CPP ponderado; **OUT** + flag regularización; **OUT** + `blockNegativeStock` → rechazo; **ADJUST** negativo; **FIELD_DISPATCH** solo OUT; **FIELD_RETURN** costo y tope terreno; política min/max al crear `item_stock` |
 | `performTransaction` | `$transaction` con `Serializable` |
-| `performReturn` | Cantidad positiva; sin salidas OT; tope vs consumo; happy path `WORK_ORDER_RETURN`; enmascaramiento costo **MECHANIC** |
+| `performReturn` | Cantidad positiva; sin salidas OT; tope vs consumo; happy path `WORK_ORDER_RETURN`; enmascaramiento costo sin `inventory:stock:view_cost` |
 | `updateStockLevels` | Bodega inexistente; payload vacío; max &lt; min |
 | `getTransactionsByWarehouse — enrichTransactionsTrace` | Trace recepción/OC; transferencia IN; `saldoPendienteAdjust` en ADJUST |
 | `getSupplyAlerts` | Filtro bajo mínimo; `suggestedOrderQty`; sin `groupBy` si no hay alertas |
 | `getInventoryRecordAccuracy` | IRA 30 días; denominador cero; tope 0–100%; filtro bodega |
 | `regularización pendiente` | `getPendingRegularizations`, `getPendingCount`, página paginada |
-| `getStockByWarehouse` | Reservas, terreno, costo MECHANIC, filtro ubicación |
+| `getStockByWarehouse` | Reservas, terreno, enmascaramiento costo PBAC, filtro ubicación |
 | `buildPhysicalCountSheetPdf` | Bodega inexistente; generador mockeado + filename |
 | `getStockPosition` | Ubicación normalizada; quantity 0 sin fila |
 
@@ -216,14 +266,14 @@ Documentación de dominio: [inventario-stock-transferencias-kardex.md](inventari
 
 ### 3.3 Spec: `inventory-transfer.service.spec.ts`
 
-**Última ejecución:** 16 passed (2026-05-22).
+**Última ejecución:** 22 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
-| `executeTransfer` | Rol MECHANIC; origen=destino; sin líneas; cantidad inválida; UoM sin decimales; stock insuficiente; happy path `SHIPPED` + `TRANSFER_OUT` + línea con `unitCost` origen |
+| `executeTransfer` | Sin `inventory:transfer:create`; origen=destino; sin líneas; cantidad inválida; UoM sin decimales; stock insuficiente; happy path `SHIPPED` + `TRANSFER_OUT` + línea con `unitCost` origen |
 | `confirmReception` | Not found; estado ≠ `SHIPPED`; contrato destino; **CPP ponderado** en destino (6×10 + 4×5 → 8); stock nuevo en destino con política; `TRANSFER_IN` + `clearPendingRegularizationFlags` |
-| `listTransfers` | Paginación + `lineCount`; filtro contratos SUPERVISOR |
-| `getTransferById` | Not found; `reception` en `COMPLETED` vía último `TRANSFER_IN` |
+| `listTransfers` | Paginación + `lineCount`; filtro `allowedContracts` (USER) |
+| `getTransferById` | Not found (sin registro / sin alcance contrato); `reception` en `COMPLETED` vía último `TRANSFER_IN` |
 
 Mocks: `InventoryStockService.clearPendingRegularizationFlags`; `inventory-item-stock-policy.helper`.
 
@@ -258,18 +308,67 @@ Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.
 
 ### 3.6 Spec: `work-orders.service.spec.ts`
 
-**Última ejecución:** 22 passed (2026-05-22).
+**Última ejecución:** 32 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
-| `updateStatus` CLOSED / IN_PROGRESS | Cierre, downtime, stock, medidor, garantía, disponibilidad |
+| `create` | `tenantId` en equipo; equipo inexistente; contrato fuera de alcance; `initialMeter` + `detentionInitialMeter` |
+| `update (repuestos y reservas)` | OT cerrada → error; `IN_PROGRESS` sin `operations:work-order:plan` → `ForbiddenException`; reemplazo `stockReservation.createMany`; sin bodega no reserva; repuesto sin `inventoryItemId` |
+| `updateStatus` CLOSED / IN_PROGRESS | Cierre con `USER`+permisos PBAC; reglas negocio (downtime, stock, medidor, garantía); `IN_PROGRESS` |
 | `promoteBacklogItem` | `TO_TASK`, `TO_NEW_OT`, validación PENDING |
 
 Mocks: `equipment-meter-sync` (`applyCurrentMeterChange`); `inventory-item-stock-policy.helper`; `EmailService` + `WARRANTY_NOTIFY_EMAILS`.
 
 #### Pendiente (mantenimiento)
 
-- [ ] `update` con reemplazo de repuestos y `stockReservation`
+- [ ] Validar stock físico insuficiente en `update` (hoy solo reservas; el cierre mueve kardex)
+
+### 3.7 Spec: `users.service.spec.ts`
+
+**Última ejecución:** 5 passed (2026-05-24). Incluido en `npm run test:domain`.
+
+| Bloque | Casos |
+|--------|-------|
+| `findAssignableForOt` | `tenantId` vacío → `[]`; `user.findMany` con `OR` + `permissions array_contains` (`execute`, `assign`, `update`); flags derivados; **sin** `role IN (MECHANIC, SUPERVISOR)` en el `where` |
+
+Nota: el alcance por contrato en OT se valida en otros flujos (`create` OT, listados); este método filtra solo por tenant + permisos del `TenantRole`.
+
+### 3.8 Spec: `equipments.service.spec.ts`
+
+**Última ejecución:** 6 passed (2026-05-24).
+
+| Bloque | Casos |
+|--------|-------|
+| `create` | USER sin `allowedContracts` → error; alta OK con contrato permitido |
+| `update` | Equipo fuera de alcance; patch permitido |
+| `bulkSyncMeterReadings` | 50 OK + 2 `READING_LOWER_THAN_CURRENT`; `EQUIPMENT_NOT_FOUND_OR_FORBIDDEN` sin abortar lote |
+
+Mock: `equipment-meter-sync.applyCurrentMeterChange`.
+
+### 3.9 Spec: `meter-adjustments.service.spec.ts`
+
+**Última ejecución:** 3 passed (2026-05-24).
+
+| Bloque | Casos |
+|--------|-------|
+| `create` | `newValue` &lt; `currentMeter` sin motivo → error; reinicio con justificación ≥15 chars + `meterAdjustment` en BD; equipo inexistente |
+
+### 3.10 Spec: `lube-reports.service.spec.ts`
+
+**Última ejecución:** 18 passed (2026-06-04).
+
+Mocks: `InventoryStockService.performTransactionCore`; `jest.mock('../equipments/equipment-meter-sync')` → `applyCurrentMeterChange`; `SequenceService.getNextCorrelative` stub.
+
+| Bloque | Casos |
+|--------|-------|
+| `createReport` — happy path | Delega a `performTransactionCore` (`OUT / LUBE_DISPATCH`) + horómetro + `assetCostRecord` |
+| `createReport` — stock negativo | Despacho > stock → delega; regularización vía core |
+| `createReport` — `blockNegativeStock` | Core rechaza → propagación de error |
+| `createReport` — fracciones UoM | `allowsDecimals=false` + cantidad decimal → `BadRequestException` |
+| `createReport` — consumo inusual | Sin `confirmedLargeDispatch` → error |
+| `createReport` — horómetro regresivo | Rollback total (no llama core) |
+| `findAll` / `findOne` | Listado y detalle con mock de `InventoryStockService` |
+| `createReport` — equipo no existe | `equipment.findFirst` → null → `NotFoundException` |
 
 ---
 
@@ -380,13 +479,15 @@ Mocks: `jest.mock('./purchase-contract-access.util')`; `AuditService.log`; servi
 
 ### 4.5 Spec: `purchase-credit-notes.service.spec.ts`
 
-**Última ejecución:** 8 passed (2026-05-22).
+**Última ejecución:** 14 passed (2026-05-24).
 
 | Bloque | Casos |
 |--------|-------|
 | `create` | Monto/fecha inválidos; OC/factura; `P2002` → `ConflictException`; audit + `validateInvoiceMatch` × N facturas activas |
 | `remove` | Not found; delete + revalidación |
 | `findByPurchaseOrder` | Listado con acceso a contrato |
+| `conciliación 3-way (monto neto facturas − NC)` | `PurchaseInvoicesService` real: MATCHED sin NC; MATCHED con neto 10000−3000=7000 vs OC 7000; DISCREPANCY neto &gt; recepción |
+| `remove — OC cerrada` | Rechaza si OC `CLOSED`; permite delete si OC activa |
 
 ### 4.6 Spec: `signature.util.spec.ts`
 
@@ -460,7 +561,21 @@ Mocks: `purchase-quotation-status-sync.util`, `purchase-requisition-reconciliati
 
 ---
 
-## 5. Checklist al añadir un spec nuevo
+## 5. Auth y seguridad
+
+### 5.1 Spec: `auth.service.spec.ts`
+
+**Última ejecución:** 3 passed (2026-05-24). Incluido en `npm run test:domain`.
+
+| Bloque | Casos |
+|--------|-------|
+| `login` | JWT con `permissions` desde `TenantRole` (kebab-case); sin rol legacy en payload; lockout 423; fallo de contraseña sin token |
+
+Mock: `bcrypt.compare`, `AuthAuditService`, `CaptchaService`, `UserSessionService`.
+
+---
+
+## 6. Checklist al añadir un spec nuevo
 
 1. Crear `*.service.spec.ts` junto al servicio (o `*.util.spec.ts` para funciones puras).
 2. Registrar el archivo en la tabla §2 de este documento.

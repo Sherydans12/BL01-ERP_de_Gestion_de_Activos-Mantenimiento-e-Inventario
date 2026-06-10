@@ -1,3 +1,40 @@
+## TPM — scripts de dominio
+
+### Compras PBAC (API)
+
+Personas de prueba y simulación HTTP del módulo P2P:
+
+```bash
+cd backend
+npm run seed:compras-pbac-personas
+
+# Matriz 43 permisos + flujos A–J + cobertura K–S
+npm run simulate:compras-pbac -- --all
+
+# Por fase
+npm run simulate:compras-pbac -- --matrix
+npm run simulate:compras-pbac -- --flow
+npm run simulate:compras-pbac -- --extended
+npm run simulate:compras-pbac -- --coverage
+```
+
+Variables: `API_BASE`, `TENANT_CODE`, `PBAC_TEST_PASSWORD`, `PBAC_LOGIN_DELAY_MS` (default 2000; subir si hay 429 en login).
+
+### E2E UI (Playwright)
+
+Smoke PBAC del menú Compras (`e2e/`). Requiere backend `:3000` y personas seed.
+
+```bash
+cd e2e
+npm install
+npm run install:browsers
+E2E_SKIP_WEBSERVER=1 npm run test:compras-pbac
+```
+
+Variables: `E2E_BASE_URL` (default `http://localhost:4200`), `E2E_API_BASE`, `TENANT_CODE`, `PBAC_TEST_PASSWORD`.
+
+---
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>

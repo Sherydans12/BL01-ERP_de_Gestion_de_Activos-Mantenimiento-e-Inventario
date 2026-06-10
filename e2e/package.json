@@ -1,0 +1,28 @@
+{
+  "name": "tpm-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:compras": "playwright test tests/compras",
+    "test:compras:smoke": "playwright test tests/compras/01-pbac-navigation.spec.ts",
+    "test:compras:p2p": "playwright test tests/compras/02-p2p-full-ui.spec.ts",
+    "test:compras-pbac": "playwright test tests/compras/01-pbac-navigation.spec.ts",
+    "test:inventario": "playwright test tests/inventario",
+    "test:inventario:w2w": "playwright test tests/inventario/02-w2w-lifecycle.spec.ts",
+    "test:operaciones": "playwright test tests/operaciones",
+    "test:operaciones:ot-inventory": "playwright test tests/operaciones/cross-module-ot-inventory.spec.ts",
+    "test:operations:lifecycle": "playwright test tests/e2e-operations-lifecycle.spec.ts",
+    "test:chaos": "playwright test tests/e2e-chaos-resilience.spec.ts",
+    "test:operations:p0": "playwright test tests/e2e-operations-p0-integrity.spec.ts",
+    "test:operations:p1": "playwright test tests/e2e-operations-p1-m2-availability.spec.ts",
+    "test:operations:shift": "playwright test tests/e2e-operations-shift-policy.spec.ts",
+    "test:operations:p2": "playwright test tests/e2e-operations-p2-inventory-cross.spec.ts",
+    "test:ui": "playwright test --ui",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,9 +13,9 @@ import {
 } from '../inventory-items/inventory-item-stock-policy.helper';
 
 jest.mock('./purchase-contract-access.util', () => {
-  const actual = jest.requireActual<typeof import('./purchase-contract-access.util')>(
-    './purchase-contract-access.util',
-  );
+  const actual = jest.requireActual<
+    typeof import('./purchase-contract-access.util')
+  >('./purchase-contract-access.util');
   return {
     ...actual,
     assertUserHasContractAccess: jest.fn(),
@@ -29,7 +28,9 @@ jest.mock('./purchase-requisition-auto-close.util', () => ({
 jest.mock('../inventory-items/inventory-item-stock-policy.helper');
 
 const mockAssertContractAccess = jest.mocked(assertUserHasContractAccess);
-const mockGetPolicyThresholds = jest.mocked(getPolicyThresholdsForNewItemStockRow);
+const mockGetPolicyThresholds = jest.mocked(
+  getPolicyThresholdsForNewItemStockRow,
+);
 const mockClearItemStockPolicy = jest.mocked(
   clearItemStockPolicyIfMatchesWarehouse,
 );
@@ -72,8 +73,7 @@ describe('WarehouseReceiptsService', () => {
         id: poId,
         status: 'SENT',
         correlative: 'OC-900',
-        equipmentId:
-          'equipmentId' in overrides ? overrides.equipmentId : null,
+        equipmentId: 'equipmentId' in overrides ? overrides.equipmentId : null,
         contract: { id: contractId, code: 'C1', name: 'Contrato' },
       },
       items: [
@@ -120,297 +120,313 @@ describe('WarehouseReceiptsService', () => {
   });
 
   describe('confirm', () => {
-  it('rechaza confirmación sin delta nuevo (quantityConfirmed ya cubre recibido)', async () => {
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValue(buildReceipt({ quantityConfirmed: 4 }) as never);
+    it('rechaza confirmación sin delta nuevo (quantityConfirmed ya cubre recibido)', async () => {
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(buildReceipt({ quantityConfirmed: 4 }) as never);
 
-    await expect(service.confirm(receiptId, user)).rejects.toThrow(
-      /No hay cantidades nuevas para confirmar/,
-    );
-  });
+      await expect(service.confirm(receiptId, user)).rejects.toThrow(
+        /No hay cantidades nuevas para confirmar/,
+      );
+    });
 
-  it('rechaza guía ya COMPLETED', async () => {
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValue(buildReceipt({ status: 'COMPLETED' }) as never);
+    it('rechaza guía ya COMPLETED', async () => {
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(buildReceipt({ status: 'COMPLETED' }) as never);
 
-    await expect(service.confirm(receiptId, user)).rejects.toThrow(
-      /completamente confirmada/,
-    );
-  });
+      await expect(service.confirm(receiptId, user)).rejects.toThrow(
+        /completamente confirmada/,
+      );
+    });
 
-  it('confirma delta a stock con PURCHASE_RECEIPT y CPP en bodega', async () => {
-    const before = buildReceipt({ quantityConfirmed: 1 });
-    const after = buildReceipt({ status: 'PARTIAL', quantityConfirmed: 4 });
+    it('confirma delta a stock con PURCHASE_RECEIPT y CPP en bodega', async () => {
+      const before = buildReceipt({ quantityConfirmed: 1 });
+      const after = buildReceipt({ status: 'PARTIAL', quantityConfirmed: 4 });
 
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValueOnce(before as never)
-      .mockResolvedValueOnce(after as never);
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValueOnce(before as never)
+        .mockResolvedValueOnce(after as never);
 
-    prisma.$transaction.mockImplementation(async (fn, opts) => {
-      expect(opts).toEqual(
+      prisma.$transaction.mockImplementation(async (fn, opts) => {
+        expect(opts).toEqual(
+          expect.objectContaining({
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          }),
+        );
+        tx.warehouse.findFirst.mockResolvedValue({
+          id: warehouseId,
+          tenantId,
+          isActive: true,
+        } as never);
+        tx.receiptItem.groupBy.mockResolvedValue([] as never);
+        tx.receiptItem.update.mockResolvedValue({} as never);
+        tx.itemStock.findUnique.mockResolvedValue({
+          quantity: 6,
+          unitCost: 200,
+        } as never);
+        tx.itemStock.upsert.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.warehouseReceipt.update.mockResolvedValue({} as never);
+        tx.purchaseOrder.update.mockResolvedValue({} as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await service.confirm(receiptId, user);
+
+      expect(tx.receiptItem.update).toHaveBeenCalledWith({
+        where: { id: 'ri-1' },
+        data: { quantityConfirmed: 4 },
+      });
+      expect(tx.itemStock.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          update: expect.objectContaining({
+            quantity: { increment: 3 },
+          }),
         }),
       );
-      tx.warehouse.findFirst.mockResolvedValue({
-        id: warehouseId,
-        tenantId,
-        isActive: true,
-      } as never);
-      tx.receiptItem.groupBy.mockResolvedValue([] as never);
-      tx.receiptItem.update.mockResolvedValue({} as never);
-      tx.itemStock.findUnique.mockResolvedValue({
-        quantity: 6,
-        unitCost: 200,
-      } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
-      tx.warehouseReceipt.update.mockResolvedValue({} as never);
-      tx.purchaseOrder.update.mockResolvedValue({} as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
-    });
-
-    await service.confirm(receiptId, user);
-
-    expect(tx.receiptItem.update).toHaveBeenCalledWith({
-      where: { id: 'ri-1' },
-      data: { quantityConfirmed: 4 },
-    });
-    expect(tx.itemStock.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({
-          quantity: { increment: 3 },
+      expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'PURCHASE_RECEIPT',
+          quantity: 3,
+          previousStock: 6,
+          newStock: 9,
+          referenceId: receiptId,
         }),
-      }),
-    );
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        type: 'PURCHASE_RECEIPT',
-        quantity: 3,
-        previousStock: 6,
-        newStock: 9,
-        referenceId: receiptId,
-      }),
-    });
-    expect(stockService.clearPendingRegularizationFlags).toHaveBeenCalled();
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: 'WAREHOUSE_RECEIPT',
-        newValue: expect.objectContaining({
-          event: 'warehouse_receipt_partial',
+      });
+      expect(stockService.clearPendingRegularizationFlags).toHaveBeenCalled();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'WAREHOUSE_RECEIPT',
+          newValue: expect.objectContaining({
+            event: 'warehouse_receipt_partial',
+          }),
         }),
-      }),
-    );
-  });
-
-  it('marca recepción y OC como completadas cuando se cubre la orden', async () => {
-    const receipt = buildReceipt({ quantityConfirmed: 0 });
-    receipt.items[0].quantityReceived = 10;
-
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValueOnce(receipt as never)
-      .mockResolvedValueOnce({ ...receipt, status: 'COMPLETED' } as never);
-
-    prisma.$transaction.mockImplementation(async (fn) => {
-      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
-      tx.receiptItem.groupBy.mockResolvedValue([] as never);
-      tx.receiptItem.update.mockResolvedValue({} as never);
-      tx.itemStock.findUnique.mockResolvedValue(null);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
-      tx.warehouseReceipt.update.mockResolvedValue({} as never);
-      tx.purchaseOrder.update.mockResolvedValue({} as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      );
     });
 
-    await service.confirm(receiptId, user);
+    it('marca recepción y OC como completadas cuando se cubre la orden', async () => {
+      const receipt = buildReceipt({ quantityConfirmed: 0 });
+      receipt.items[0].quantityReceived = 10;
 
-    expect(tx.warehouseReceipt.update).toHaveBeenCalledWith({
-      where: { id: receiptId },
-      data: expect.objectContaining({ status: 'COMPLETED' }),
-    });
-    expect(tx.purchaseOrder.update).toHaveBeenCalledWith({
-      where: { id: poId },
-      data: { status: 'RECEIVED' },
-    });
-  });
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValueOnce(receipt as never)
+        .mockResolvedValueOnce({ ...receipt, status: 'COMPLETED' } as never);
 
-  it('rechaza sobre-recepción al confirmar (suma otras guías)', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(buildReceipt() as never);
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+        tx.receiptItem.groupBy.mockResolvedValue([] as never);
+        tx.receiptItem.update.mockResolvedValue({} as never);
+        tx.itemStock.findUnique.mockResolvedValue(null);
+        tx.itemStock.upsert.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.warehouseReceipt.update.mockResolvedValue({} as never);
+        tx.purchaseOrder.update.mockResolvedValue({} as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
 
-    prisma.$transaction.mockImplementation(async (fn) => {
-      tx.warehouse.findFirst.mockResolvedValue({
-        id: warehouseId,
-        tenantId,
-        isActive: true,
-      } as never);
-      tx.receiptItem.groupBy.mockResolvedValue([
-        { orderItemId: 'oi-1', _sum: { quantityReceived: 8 } },
-      ] as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
-    });
+      await service.confirm(receiptId, user);
 
-    await expect(service.confirm(receiptId, user)).rejects.toThrow(
-      /cantidad pendiente en la Orden de Compra/,
-    );
-  });
-
-  it('rechaza confirmación si la bodega está inactiva o no existe', async () => {
-    jest.spyOn(service, 'findById').mockResolvedValue(buildReceipt() as never);
-
-    prisma.$transaction.mockImplementation(async (fn) => {
-      tx.warehouse.findFirst.mockResolvedValue(null);
-      tx.receiptItem.groupBy.mockResolvedValue([] as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      expect(tx.warehouseReceipt.update).toHaveBeenCalledWith({
+        where: { id: receiptId },
+        data: expect.objectContaining({ status: 'COMPLETED' }),
+      });
+      expect(tx.purchaseOrder.update).toHaveBeenCalledWith({
+        where: { id: poId },
+        data: { status: 'RECEIVED' },
+      });
     });
 
-    await expect(service.confirm(receiptId, user)).rejects.toThrow(
-      /bodega de recepción no existe/,
-    );
-  });
+    it('rechaza sobre-recepción al confirmar (suma otras guías)', async () => {
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(buildReceipt() as never);
 
-  it('imputa costo PURCHASE al equipo cuando la OC tiene equipmentId', async () => {
-    const receipt = buildReceipt({ quantityConfirmed: 0, equipmentId });
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst.mockResolvedValue({
+          id: warehouseId,
+          tenantId,
+          isActive: true,
+        } as never);
+        tx.receiptItem.groupBy.mockResolvedValue([
+          { orderItemId: 'oi-1', _sum: { quantityReceived: 8 } },
+        ] as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
 
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValueOnce(receipt as never)
-      .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
-
-    prisma.$transaction.mockImplementation(async (fn) => {
-      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId } as never);
-      tx.receiptItem.groupBy.mockResolvedValue([] as never);
-      tx.receiptItem.update.mockResolvedValue({} as never);
-      tx.itemStock.findUnique.mockResolvedValue({ quantity: 0, unitCost: 0 } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
-      tx.assetCostRecord.create.mockResolvedValue({} as never);
-      tx.warehouseReceipt.update.mockResolvedValue({} as never);
-      tx.purchaseOrder.update.mockResolvedValue({} as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      await expect(service.confirm(receiptId, user)).rejects.toThrow(
+        /cantidad pendiente en la Orden de Compra/,
+      );
     });
 
-    await service.confirm(receiptId, user);
+    it('rechaza confirmación si la bodega está inactiva o no existe', async () => {
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(buildReceipt() as never);
 
-    expect(tx.assetCostRecord.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        tenantId,
-        equipmentId,
-        type: 'PURCHASE',
-        purchaseOrderId: poId,
-        warehouseReceiptId: receiptId,
-        amount: '1000.00',
-      }),
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst.mockResolvedValue(null);
+        tx.receiptItem.groupBy.mockResolvedValue([] as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await expect(service.confirm(receiptId, user)).rejects.toThrow(
+        /bodega de recepción no existe/,
+      );
     });
-  });
 
-  it('confirma multi-línea: solo inventario a stock y gasto directo en audit', async () => {
-    const receipt = buildReceipt({ quantityConfirmed: 0 });
-    receipt.items = [
-      {
-        id: 'ri-inv',
-        orderItemId: 'oi-inv',
-        quantityReceived: 2,
-        quantityConfirmed: 0,
-        observations: null,
-        quantityPendingOnPurchase: 8,
-        orderItem: {
-          quantity: 10,
-          unitCost: 100,
-          inventoryItemId: itemId,
-          inventoryItem: { isInventory: true },
+    it('imputa costo PURCHASE al equipo cuando la OC tiene equipmentId', async () => {
+      const receipt = buildReceipt({ quantityConfirmed: 0, equipmentId });
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValueOnce(receipt as never)
+        .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst.mockResolvedValue({
+          id: warehouseId,
+          tenantId,
+        } as never);
+        tx.receiptItem.groupBy.mockResolvedValue([] as never);
+        tx.receiptItem.update.mockResolvedValue({} as never);
+        tx.itemStock.findUnique.mockResolvedValue({
+          quantity: 0,
+          unitCost: 0,
+        } as never);
+        tx.itemStock.upsert.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.assetCostRecord.create.mockResolvedValue({} as never);
+        tx.warehouseReceipt.update.mockResolvedValue({} as never);
+        tx.purchaseOrder.update.mockResolvedValue({} as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await service.confirm(receiptId, user);
+
+      expect(tx.assetCostRecord.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tenantId,
+          equipmentId,
+          type: 'PURCHASE',
+          purchaseOrderId: poId,
+          warehouseReceiptId: receiptId,
+          amount: '1000.00',
+        }),
+      });
+    });
+
+    it('confirma multi-línea: solo inventario a stock y gasto directo en audit', async () => {
+      const receipt = buildReceipt({ quantityConfirmed: 0 });
+      receipt.items = [
+        {
+          id: 'ri-inv',
+          orderItemId: 'oi-inv',
+          quantityReceived: 2,
+          quantityConfirmed: 0,
+          observations: null,
+          quantityPendingOnPurchase: 8,
+          orderItem: {
+            quantity: 10,
+            unitCost: 100,
+            inventoryItemId: itemId,
+            inventoryItem: { isInventory: true },
+          },
         },
-      },
-      {
-        id: 'ri-exp',
-        orderItemId: 'oi-exp',
-        quantityReceived: 1,
-        quantityConfirmed: 0,
-        observations: 'Servicio',
-        quantityPendingOnPurchase: 4,
-        orderItem: {
-          quantity: 5,
-          unitCost: 500,
-          inventoryItemId: expenseItemId,
-          inventoryItem: { isInventory: false },
+        {
+          id: 'ri-exp',
+          orderItemId: 'oi-exp',
+          quantityReceived: 1,
+          quantityConfirmed: 0,
+          observations: 'Servicio',
+          quantityPendingOnPurchase: 4,
+          orderItem: {
+            quantity: 5,
+            unitCost: 500,
+            inventoryItemId: expenseItemId,
+            inventoryItem: { isInventory: false },
+          },
         },
-      },
-    ];
+      ];
 
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValueOnce(receipt as never)
-      .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValueOnce(receipt as never)
+        .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
 
-    prisma.$transaction.mockImplementation(async (fn) => {
-      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId, tenantId } as never);
-      tx.receiptItem.groupBy.mockResolvedValue([] as never);
-      tx.receiptItem.update.mockResolvedValue({} as never);
-      tx.itemStock.findUnique.mockResolvedValue({ quantity: 4, unitCost: 80 } as never);
-      tx.itemStock.upsert.mockResolvedValue({} as never);
-      tx.inventoryTransaction.create.mockResolvedValue({} as never);
-      tx.warehouseReceipt.update.mockResolvedValue({} as never);
-      tx.purchaseOrder.update.mockResolvedValue({} as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
-    });
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst.mockResolvedValue({
+          id: warehouseId,
+          tenantId,
+        } as never);
+        tx.receiptItem.groupBy.mockResolvedValue([] as never);
+        tx.receiptItem.update.mockResolvedValue({} as never);
+        tx.itemStock.findUnique.mockResolvedValue({
+          quantity: 4,
+          unitCost: 80,
+        } as never);
+        tx.itemStock.upsert.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.warehouseReceipt.update.mockResolvedValue({} as never);
+        tx.purchaseOrder.update.mockResolvedValue({} as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
 
-    await service.confirm(receiptId, user);
+      await service.confirm(receiptId, user);
 
-    expect(tx.receiptItem.update).toHaveBeenCalledTimes(2);
-    expect(tx.itemStock.upsert).toHaveBeenCalledTimes(1);
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledTimes(1);
-    expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        type: 'PURCHASE_RECEIPT',
-        itemId,
-        quantity: 2,
-      }),
-    });
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        newValue: expect.objectContaining({
-          directExpenseItems: 1,
-          stockTrackedArticles: 1,
-          skippedItems: 1,
+      expect(tx.receiptItem.update).toHaveBeenCalledTimes(2);
+      expect(tx.itemStock.upsert).toHaveBeenCalledTimes(1);
+      expect(tx.inventoryTransaction.create).toHaveBeenCalledTimes(1);
+      expect(tx.inventoryTransaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'PURCHASE_RECEIPT',
+          itemId,
+          quantity: 2,
         }),
-      }),
-    );
-  });
-
-  it('omite líneas de gasto directo y audita skippedItems', async () => {
-    const receipt = buildReceipt({ quantityConfirmed: 0 });
-    receipt.items[0].orderItem.inventoryItem = { isInventory: false };
-
-    jest
-      .spyOn(service, 'findById')
-      .mockResolvedValueOnce(receipt as never)
-      .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
-
-    prisma.$transaction.mockImplementation(async (fn) => {
-      tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
-      tx.receiptItem.groupBy.mockResolvedValue([] as never);
-      tx.receiptItem.update.mockResolvedValue({} as never);
-      tx.warehouseReceipt.update.mockResolvedValue({} as never);
-      tx.purchaseOrder.update.mockResolvedValue({} as never);
-      return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          newValue: expect.objectContaining({
+            directExpenseItems: 1,
+            stockTrackedArticles: 1,
+            skippedItems: 1,
+          }),
+        }),
+      );
     });
 
-    await service.confirm(receiptId, user);
+    it('omite líneas de gasto directo y audita skippedItems', async () => {
+      const receipt = buildReceipt({ quantityConfirmed: 0 });
+      receipt.items[0].orderItem.inventoryItem = { isInventory: false };
 
-    expect(tx.itemStock.upsert).not.toHaveBeenCalled();
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        newValue: expect.objectContaining({
-          directExpenseItems: 1,
-          skippedItems: 1,
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValueOnce(receipt as never)
+        .mockResolvedValueOnce({ ...receipt, status: 'PARTIAL' } as never);
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+        tx.receiptItem.groupBy.mockResolvedValue([] as never);
+        tx.receiptItem.update.mockResolvedValue({} as never);
+        tx.warehouseReceipt.update.mockResolvedValue({} as never);
+        tx.purchaseOrder.update.mockResolvedValue({} as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await service.confirm(receiptId, user);
+
+      expect(tx.itemStock.upsert).not.toHaveBeenCalled();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          newValue: expect.objectContaining({
+            directExpenseItems: 1,
+            skippedItems: 1,
+          }),
         }),
-      }),
-    );
-  });
+      );
+    });
   });
 
   describe('updateItems', () => {
@@ -455,7 +471,9 @@ describe('WarehouseReceiptsService', () => {
     });
 
     it('rechaza sobre-recepción respecto al pendiente de la OC', async () => {
-      jest.spyOn(service, 'findById').mockResolvedValue(buildReceipt() as never);
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(buildReceipt() as never);
 
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.receiptItem.findMany.mockResolvedValue([
@@ -482,7 +500,9 @@ describe('WarehouseReceiptsService', () => {
     });
 
     it('persiste cantidades y audita receipt_progress_saved', async () => {
-      jest.spyOn(service, 'findById').mockResolvedValue(buildReceipt() as never);
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(buildReceipt() as never);
 
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.receiptItem.findMany.mockResolvedValue([
@@ -510,7 +530,9 @@ describe('WarehouseReceiptsService', () => {
       });
       expect(auditLog).toHaveBeenCalledWith(
         expect.objectContaining({
-          newValue: expect.objectContaining({ event: 'receipt_progress_saved' }),
+          newValue: expect.objectContaining({
+            event: 'receipt_progress_saved',
+          }),
         }),
       );
     });

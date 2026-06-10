@@ -7,6 +7,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { userHasPermission } from '../auth/permissions.util';
 
 /** Motivos contables obligatorios para ajuste de inventario físico. */
 export const ADJUSTMENT_REASON_CODES = [
@@ -54,9 +56,8 @@ export class InventoryAdjustmentService {
     private readonly inventoryStockService: InventoryStockService,
   ) {}
 
-  private assertPrivilegedRole(user: any) {
-    const role = String(user?.role ?? '').toUpperCase();
-    if (!['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'].includes(role)) {
+  private assertCanAdjust(user: { role?: string; permissions?: string[] }) {
+    if (!userHasPermission(user, SystemPermissions.INVENTORY_STOCK_ADJUST)) {
       throw new ForbiddenException(
         'No tiene permisos para ejecutar ajustes de inventario.',
       );
@@ -117,10 +118,7 @@ export class InventoryAdjustmentService {
     let anyReceived = false;
     for (const it of docItems) {
       if (Number(it.quantityReceived) > 1e-9) anyReceived = true;
-      if (
-        Number(it.quantityReceived) + 1e-9 <
-        Number(it.quantityExpected)
-      ) {
+      if (Number(it.quantityReceived) + 1e-9 < Number(it.quantityExpected)) {
         allDocComplete = false;
       }
     }
@@ -184,7 +182,7 @@ export class InventoryAdjustmentService {
   }
 
   async create(dto: CreateInventoryAdjustmentDto, user: any) {
-    this.assertPrivilegedRole(user);
+    this.assertCanAdjust(user);
     const tenantId = user.tenantId as string;
     const comment = dto.comment?.trim();
     if (!comment?.length) {
@@ -301,7 +299,7 @@ export class InventoryAdjustmentService {
           receiptId: receiptId!,
           orderItem: {
             inventoryItemId: dto.itemId,
-            purchaseOrderId: poId!,
+            purchaseOrderId: poId,
           },
         },
         select: { id: true, quantityExpected: true, quantityReceived: true },
@@ -325,7 +323,7 @@ export class InventoryAdjustmentService {
       }
 
       const po = await this.prisma.purchaseOrder.findFirst({
-        where: { id: poId!, tenantId },
+        where: { id: poId, tenantId },
         select: { id: true, correlative: true },
       });
       if (!po) {
@@ -342,7 +340,7 @@ export class InventoryAdjustmentService {
       referenceType = 'INVENTORY_ADJUSTMENT';
     }
 
-    this.assertPrivilegedRole(user);
+    this.assertCanAdjust(user);
 
     if (dto.reason === 'SALDO_PENDIENTE') {
       return this.prisma.$transaction(

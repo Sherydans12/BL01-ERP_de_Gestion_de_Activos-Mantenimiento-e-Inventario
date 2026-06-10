@@ -267,7 +267,9 @@ export class RequisitionFormComponent implements OnInit {
             return;
           }
         } else {
-          const ok = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR'].includes(u.role);
+          const ok = this.authService.hasPermission(
+            P.REQUISITION_UPDATE_PURCHASING,
+          );
           if (!ok) {
             this.notify.error(
               'Solo compras puede editar en cotización o antes de generar la orden de compra',

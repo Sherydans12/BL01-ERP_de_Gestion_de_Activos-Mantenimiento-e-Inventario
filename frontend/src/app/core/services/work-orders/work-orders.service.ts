@@ -184,16 +184,30 @@ export class WorkOrdersService {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
   }
 
+  getWorkOrderPdf(id: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/${id}/pdf`, {
+      responseType: 'blob',
+    });
+  }
+
   updateStatus(
     id: string,
     status: string,
     warehouseId?: string,
     closureEquipmentOperational?: boolean,
+    confirmedLargeJump?: boolean,
+    confirmedLargeFluidDispatch?: boolean,
   ) {
     const payload: Record<string, string | boolean> = { status };
     if (warehouseId) payload['warehouseId'] = warehouseId;
     if (closureEquipmentOperational !== undefined) {
       payload['closureEquipmentOperational'] = closureEquipmentOperational;
+    }
+    if (confirmedLargeJump === true) {
+      payload['confirmedLargeJump'] = true;
+    }
+    if (confirmedLargeFluidDispatch === true) {
+      payload['confirmedLargeFluidDispatch'] = true;
     }
     return this.http.patch(`${this.apiUrl}/${id}/status`, payload);
   }

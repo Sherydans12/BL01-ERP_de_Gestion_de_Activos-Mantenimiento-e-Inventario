@@ -17,6 +17,7 @@ Documento **maestro** de todo lo que el backend puede enviar vía `EmailService.
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | `Nuevo borrador de requerimiento: {correlativo}` | SRC guardado en estado DRAFT | ADMINs activos con opt-in + ccEmails del tenant | `purchase-requisitions.service` → `create` | `buildMailRequisitionDraftCreated` | — | **Dispatcher** |
 | `PURCHASE_REQUISITION_SUBMITTED` | `Requerimiento emitido: {correlativo}` | SRC pasa a SUBMITTED | ADMINs activos con opt-in + ccEmails del tenant | `purchase-requisitions.service` → `submit` | `buildMailRequisitionSubmitted` | — | **Dispatcher** |
 | `INVENTORY_ITEM_CREATED` | `Nuevo artículo en catálogo: {código} — {nombre}` | Alta en catálogo maestro: `POST /api/inventory-items` **o** `POST /api/inventory-items/quick-create` (modal rápido solo donde `GlobalItemPicker` expone quick-add: SRC, OC, OT, y en stock movimientos `PURCHASE_IN` / `TRANSFER`; **no** en transferencia W2W dedicada ni en picker de salida a terreno / reingreso / devolución OT) | Usuarios con opt-in **EMAIL** en gobernanza + `ccEmails` del tenant (dispatcher) | `inventory-items.service` → `create`, `quickCreate` | `buildMailInventoryItemCreated` | `docs/email-previews/06-nuevo-articulo-catalogo.html` | **Dispatcher** |
+| `EQUIPMENT_DOWN` | `Equipo fuera de servicio: {equipo} ({correlativo falla})` | Falla ALTA registrada (`POST /api/fault-reports`) | ADMINs activos + usuarios con `UserContract` al contrato, opt-in | `fault-reports.service` → `create` (solo HIGH) | `buildMailEquipmentDown` | `docs/email-previews/07-equipo-fuera-de-servicio.html` | **Dispatcher** |
 
 **Enlaces en plantillas (CTA):** Las rutas de la SPA que reciben **id de registro Prisma** (p. ej. `/app/articulos/:id`) deben usar el **UUID** del ítem, no códigos de negocio (`IN####`). El CTA «Ver artículo» de `INVENTORY_ITEM_CREATED` sigue esa regla (antes enlazaba por código y rompía la ficha / el API).
 
@@ -55,6 +56,7 @@ El campo `TenantNotificationSetting.ccEmails` (`String[]`) permite agregar corre
 | `PURCHASE_REQUISITION_DRAFT_CREATED` | ADMINs activos del tenant (`role='ADMIN', isActive=true`) | `UserNotificationSetting` opt-in (canal EMAIL / WEB_PUSH) |
 | `PURCHASE_REQUISITION_SUBMITTED` | ADMINs activos del tenant | `UserNotificationSetting` opt-in + WEB_PUSH si hay `pushPayload` |
 | `INVENTORY_ITEM_CREATED` | IDs resueltos en `inventory-items.service` desde `UserNotificationSetting` (canal **EMAIL**, `enabled`, usuario activo) | Opt-in EMAIL + `ccEmails` del tenant (si no hay usuarios con EMAIL pero sí CC, envío solo a CC) |
+| `EQUIPMENT_DOWN` | ADMINs activos del tenant + usuarios con `UserContract` al contrato del equipo | `UserNotificationSetting` opt-in (EMAIL + WEB_PUSH) |
 
 ### API de gobernanza (ADMIN / SUPER_ADMIN)
 

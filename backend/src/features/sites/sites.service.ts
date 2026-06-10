@@ -17,7 +17,7 @@ export class SitesService {
           tenantId,
         },
       });
-    } catch (error) {
+    } catch (_error) {
       throw new InternalServerErrorException('Error al crear el contrato');
     }
   }
@@ -52,7 +52,7 @@ export class SitesService {
         where: { id },
         data,
       });
-    } catch (error) {
+    } catch (_error) {
       throw new InternalServerErrorException('Error al actualizar el contrato');
     }
   }
@@ -67,7 +67,7 @@ export class SitesService {
       return await this.prisma.contract.delete({
         where: { id },
       });
-    } catch (error) {
+    } catch (_error) {
       throw new InternalServerErrorException(
         'Error al eliminar el contrato. Puede que tenga registros asociados.',
       );

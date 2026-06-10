@@ -18,6 +18,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { UpdateTenantConfigDto } from './dto/update-tenant-config.dto';
+import { UpdateTenantOperationalConfigDto } from './dto/update-tenant-operational-config.dto';
 import {
   tenantLogoUploadPolicy,
   FileValidationInterceptor,
@@ -65,7 +66,10 @@ export class TenantConfigController {
     @UploadedFile()
     file: { buffer: Buffer; originalname: string; mimetype: string },
   ) {
-    return this.tenantConfigService.uploadTenantLogoLight(req.user.tenantId, file);
+    return this.tenantConfigService.uploadTenantLogoLight(
+      req.user.tenantId,
+      file,
+    );
   }
 
   @Post('pdf-logo')
@@ -80,7 +84,10 @@ export class TenantConfigController {
     @UploadedFile()
     file: { buffer: Buffer; originalname: string; mimetype: string },
   ) {
-    return this.tenantConfigService.uploadTenantPdfLogo(req.user.tenantId, file);
+    return this.tenantConfigService.uploadTenantPdfLogo(
+      req.user.tenantId,
+      file,
+    );
   }
 
   @Patch()
@@ -100,6 +107,27 @@ export class TenantConfigController {
     return this.tenantConfigService.updateTenantConfig(
       req.user.tenantId,
       updateTenantConfigDto,
+    );
+  }
+
+  /** Actualiza la configuración de turnos del tenant (ADMIN). */
+  @Patch('operational')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(SystemPermissions.ADMIN_TENANT_CONFIG_UPDATE)
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true,
+    }),
+  )
+  updateOperationalConfig(
+    @Req() req: any,
+    @Body() dto: UpdateTenantOperationalConfigDto,
+  ) {
+    return this.tenantConfigService.upsertOperationalConfig(
+      req.user.tenantId,
+      dto,
     );
   }
 }

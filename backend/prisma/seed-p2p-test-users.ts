@@ -40,7 +40,7 @@ const TEST_USERS: Array<{
   {
     email: 'mecanico@test.com',
     name: 'Juan Mecánico',
-    role: UserRole.MECHANIC,
+    role: UserRole.USER,
   },
   {
     email: 'admin@test.com',
@@ -50,7 +50,7 @@ const TEST_USERS: Array<{
   {
     email: 'supervisor@test.com',
     name: 'Supervisor Operativo',
-    role: UserRole.SUPERVISOR,
+    role: UserRole.USER,
   },
   {
     email: 'gerente@test.com',

@@ -5,7 +5,10 @@ import { Router } from '@angular/router';
 import { environment } from '../../../../environments/environment';
 import { tap, finalize } from 'rxjs/operators';
 import { NotificationService } from '../notification/notification.service';
-import { TenantService } from '../tenant/tenant.service';
+import {
+  TenantService,
+  type TenantOperationalConfig,
+} from '../tenant/tenant.service';
 
 /** Respuesta de POST /auth/login: JWT o requisito de segundo factor (Super Admin). */
 export type LoginApiResult =
@@ -39,7 +42,7 @@ export interface UserPayload {
   lastName?: string | null;
   phone?: string | null;
   avatarUrl?: string | null;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'SUPERVISOR' | 'MECHANIC';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
   allowedContracts: string[];
   /** ID del rol custom asignado al usuario (si tiene uno). */
   customRoleId?: string | null;
@@ -55,6 +58,7 @@ export interface UserPayload {
     code?: string;
     name: string;
     logoUrl?: string | null;
+    operationalConfig?: TenantOperationalConfig;
   };
 }
 
@@ -63,6 +67,7 @@ interface JwtPayload {
   exp?: number;
   iat?: number;
   permissions?: unknown;
+  operationalConfig?: unknown;
 }
 
 function decodeJwtPayload(token: string): JwtPayload | null {
@@ -86,6 +91,36 @@ function parsePermissionsFromJwt(token: string): string[] {
   return payload.permissions.filter((p): p is string => typeof p === 'string');
 }
 
+const OPERATIONAL_CONFIG_BC = 'tpm-operational-config-v1';
+const OPERATIONAL_CONFIG_STORAGE_KEY = 'tpm_operational_config';
+const OPERATIONAL_CONFIG_STORAGE_REV = 'tpm_operational_config_rev';
+
+function isTenantOperationalConfig(v: unknown): v is TenantOperationalConfig {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o['hasNightShift'] === 'boolean' &&
+    typeof o['dayShiftStartTime'] === 'string' &&
+    typeof o['nightShiftStartTime'] === 'string'
+  );
+}
+
+function parseOperationalConfigFromJwt(
+  token: string,
+): TenantOperationalConfig | undefined {
+  const payload = decodeJwtPayload(token);
+  const raw = payload?.operationalConfig;
+  if (!isTenantOperationalConfig(raw)) return undefined;
+  return {
+    hasNightShift: raw.hasNightShift,
+    dayShiftStartTime: raw.dayShiftStartTime,
+    nightShiftStartTime: raw.nightShiftStartTime,
+    ...(typeof raw.blockNegativeStock === 'boolean'
+      ? { blockNegativeStock: raw.blockNegativeStock }
+      : {}),
+  };
+}
+
 function mergeUserWithJwtPermissions(
   user: UserPayload,
   token: string,
@@ -95,7 +130,18 @@ function mergeUserWithJwtPermissions(
     ? user.permissions.filter((p): p is string => typeof p === 'string')
     : [];
   const permissions = fromJwt.length > 0 ? fromJwt : fromUser;
-  return { ...user, permissions };
+  const operationalConfig =
+    parseOperationalConfigFromJwt(token) ?? user.tenant?.operationalConfig;
+  return {
+    ...user,
+    permissions,
+    tenant: user.tenant
+      ? {
+          ...user.tenant,
+          ...(operationalConfig ? { operationalConfig } : {}),
+        }
+      : user.tenant,
+  };
 }
 
 /** Margen ante desfase de reloj (segundos). */
@@ -146,7 +192,71 @@ export class AuthService {
   ) {
     if (isPlatformBrowser(this.platformId)) {
       this.checkToken();
+      this.initOperationalConfigSync();
     }
+  }
+
+  /** Hidrata turnos desde GET /tenant-config (p. ej. SUPER_ADMIN tras x-tenant-id). */
+  ingestTenantOperationalConfig(cfg: TenantOperationalConfig): void {
+    this.applyOperationalConfigLocal(cfg, { broadcast: false });
+  }
+
+  private initOperationalConfigSync(): void {
+    try {
+      const bc = new BroadcastChannel(OPERATIONAL_CONFIG_BC);
+      bc.onmessage = (ev: MessageEvent) => {
+        if (isTenantOperationalConfig(ev.data)) {
+          this.applyOperationalConfigLocal(ev.data, { broadcast: false });
+        }
+      };
+    } catch {
+      /* BroadcastChannel no disponible */
+    }
+
+    window.addEventListener('storage', (ev) => {
+      if (ev.key !== OPERATIONAL_CONFIG_STORAGE_REV) return;
+      const raw = localStorage.getItem(OPERATIONAL_CONFIG_STORAGE_KEY);
+      if (!raw) return;
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (isTenantOperationalConfig(parsed)) {
+          this.applyOperationalConfigLocal(parsed, { broadcast: false });
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  private applyOperationalConfigLocal(
+    cfg: TenantOperationalConfig,
+    opts: { broadcast: boolean },
+  ): void {
+    const user = this.currentUser();
+    if (user?.tenant) {
+      const updated: UserPayload = {
+        ...user,
+        tenant: { ...user.tenant, operationalConfig: cfg },
+      };
+      this.currentUser.set(updated);
+      localStorage.setItem('tpm_user', JSON.stringify(updated));
+      this.syncTenantContextFromUser(updated);
+    } else if (user?.role === 'SUPER_ADMIN') {
+      const current = this.tenantService.currentTenant();
+      if (current) {
+        this.tenantService.setTenant({ ...current, operationalConfig: cfg });
+      }
+    }
+
+    if (!opts.broadcast) return;
+
+    try {
+      new BroadcastChannel(OPERATIONAL_CONFIG_BC).postMessage(cfg);
+    } catch {
+      /* ignore */
+    }
+    localStorage.setItem(OPERATIONAL_CONFIG_STORAGE_KEY, JSON.stringify(cfg));
+    localStorage.setItem(OPERATIONAL_CONFIG_STORAGE_REV, String(Date.now()));
   }
 
   getCaptchaChallenge() {
@@ -453,11 +563,17 @@ export class AuthService {
       this.tenantService.currentTenant.set(null);
       return;
     }
+    const operationalConfig =
+      user.role === 'SUPER_ADMIN'
+        ? t.operationalConfig
+        : (t.operationalConfig ??
+            this.tenantService.currentTenant()?.operationalConfig);
     this.tenantService.setTenant({
       id: t.id,
       code: (t.code && t.code.trim()) || '—',
       name: t.name,
       logoUrl: t.logoUrl ?? null,
+      ...(operationalConfig ? { operationalConfig } : {}),
     });
   }
 
@@ -600,17 +716,25 @@ export class AuthService {
   }
 
   /**
-   * Compras / supervisión: montos completos en facturas y OC.
-   * Mecánicos y perfiles operativos ven ítems pero no precios ni totales.
+   * Compras: montos completos en facturas y OC (compras, aprobación o datos sensibles).
    */
   canSeePurchaseFinancials(): boolean {
-    const user = this.currentUser();
-    if (!user) return false;
-    return (
-      user.role === 'SUPER_ADMIN' ||
-      user.role === 'ADMIN' ||
-      user.role === 'SUPERVISOR'
-    );
+    return this.hasPermissionAny([
+      'purchases:requisition:update-purchasing',
+      'purchases:order:approve',
+      'purchases:order:update-sensitive',
+      'purchases:invoice:read',
+    ]);
+  }
+
+  /** Inventario: costos unitarios, CPP y valorización. */
+  canViewInventoryCost(): boolean {
+    return this.hasPermission('inventory:stock:view_cost');
+  }
+
+  /** Tras PATCH /tenant-config/operational — alinea sesión local y otras pestañas. */
+  patchSessionOperationalConfig(cfg: TenantOperationalConfig): void {
+    this.applyOperationalConfigLocal(cfg, { broadcast: true });
   }
 
   forceLogout() {

@@ -109,7 +109,7 @@ export class RequisitionDetailComponent implements OnInit {
 
   /** Misma política que addQuotation / selectQuotation en el backend. */
   canManagePurchases = computed(() =>
-    this.auth.hasRole(['ADMIN', 'SUPERVISOR']),
+    this.auth.hasPermission(P.REQUISITION_UPDATE_PURCHASING),
   );
 
   statusLabels: Record<string, string> = {
@@ -192,9 +192,10 @@ export class RequisitionDetailComponent implements OnInit {
       this.canManagePurchases()
     );
   });
-  requireExtraCancelConfirmation = computed(
-    () => !this.auth.hasRole(['ADMIN', 'SUPER_ADMIN']),
-  );
+  requireExtraCancelConfirmation = computed(() => {
+    const role = this.auth.currentUser()?.role;
+    return role !== 'ADMIN' && role !== 'SUPER_ADMIN';
+  });
   cancelRiskSummary = computed(() => {
     const req = this.requisition();
     if (!req) return '';

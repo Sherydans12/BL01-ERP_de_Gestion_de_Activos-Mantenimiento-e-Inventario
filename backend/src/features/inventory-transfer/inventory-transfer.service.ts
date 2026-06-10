@@ -6,12 +6,19 @@ import {
 } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import Decimal from 'decimal.js';
+import {
+  subtractStockQty,
+  wouldStockGoNegative,
+  insufficientStockMessage,
+} from '../../common/inventory/stock-quantity.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryStockService } from '../inventory-stock/inventory-stock.service';
 import {
   getPolicyThresholdsForNewItemStockRow,
   clearItemStockPolicyIfMatchesWarehouse,
 } from '../inventory-items/inventory-item-stock-policy.helper';
+import { SystemPermissions } from '../auth/constants/permissions.enum';
+import { userHasPermission } from '../auth/permissions.util';
 
 export interface ListInventoryTransfersQuery {
   page?: string;
@@ -40,9 +47,11 @@ export class InventoryTransferService {
     private readonly inventoryStockService: InventoryStockService,
   ) {}
 
-  private assertPrivilegedRole(user: any) {
-    const role = String(user?.role ?? '').toUpperCase();
-    if (!['ADMIN', 'SUPERVISOR', 'SUPER_ADMIN'].includes(role)) {
+  private assertCanCreateTransfer(user: {
+    role?: string;
+    permissions?: string[];
+  }) {
+    if (!userHasPermission(user, SystemPermissions.INVENTORY_TRANSFER_CREATE)) {
       throw new ForbiddenException(
         'No tiene permisos para ejecutar transferencias entre bodegas.',
       );
@@ -126,7 +135,9 @@ export class InventoryTransferService {
     } as const;
   }
 
-  private buildTransferListWhere(user: any): Prisma.InventoryTransferWhereInput {
+  private buildTransferListWhere(
+    user: any,
+  ): Prisma.InventoryTransferWhereInput {
     const tenantId = user.tenantId as string;
     const role = String(user?.role ?? '').toUpperCase();
     const isAdminLike = role === 'ADMIN' || role === 'SUPER_ADMIN';
@@ -208,8 +219,10 @@ export class InventoryTransferService {
       throw new NotFoundException('Transferencia no encontrada.');
     }
 
-    let reception: { at: string; user: { id: string; name: string; email: string } } | null =
-      null;
+    let reception: {
+      at: string;
+      user: { id: string; name: string; email: string };
+    } | null = null;
     if (transfer.status === 'COMPLETED') {
       const lastIn = await this.prisma.inventoryTransaction.findFirst({
         where: {
@@ -233,7 +246,7 @@ export class InventoryTransferService {
   }
 
   async executeTransfer(dto: CreateInventoryTransferDto, user: any) {
-    this.assertPrivilegedRole(user);
+    this.assertCanCreateTransfer(user);
     const tenantId = user.tenantId as string;
     const userId = (user.id || user.sub) as string;
     if (!userId) {
@@ -262,7 +275,7 @@ export class InventoryTransferService {
     return this.prisma.$transaction(
       async (tx) => {
         // Defensa en profundidad: revalidamos permisos al entrar en la transacción.
-        this.assertPrivilegedRole(user);
+        this.assertCanCreateTransfer(user);
         const [origin, dest] = await Promise.all([
           tx.warehouse.findFirst({
             where: { id: dto.originWarehouseId, tenantId },
@@ -274,6 +287,11 @@ export class InventoryTransferService {
         if (!origin || !dest) {
           throw new NotFoundException(
             'Bodega de origen o destino no encontrada.',
+          );
+        }
+        if (!this.canAccessContract(user, origin.contractId)) {
+          throw new ForbiddenException(
+            'No tiene permisos para despachar desde esta bodega de origen.',
           );
         }
 
@@ -295,7 +313,9 @@ export class InventoryTransferService {
             select: {
               id: true,
               partNumber: true,
-              unitOfMeasure: { select: { abbreviation: true, allowsDecimals: true } },
+              unitOfMeasure: {
+                select: { abbreviation: true, allowsDecimals: true },
+              },
             },
           });
           if (!item) {
@@ -304,7 +324,10 @@ export class InventoryTransferService {
             );
           }
 
-          if (!item.unitOfMeasure?.allowsDecimals && !Number.isInteger(line.quantity)) {
+          if (
+            !item.unitOfMeasure?.allowsDecimals &&
+            !Number.isInteger(line.quantity)
+          ) {
             throw new BadRequestException(
               `El artículo "${item.partNumber ?? item.id}" usa unidad "${item.unitOfMeasure?.abbreviation ?? 'UN'}" que no admite fracciones. La cantidad debe ser un número entero.`,
             );
@@ -320,14 +343,18 @@ export class InventoryTransferService {
           });
 
           const prevO = originStock?.quantity ?? 0;
-          if (prevO + 1e-9 < line.quantity) {
+          if (wouldStockGoNegative(prevO, line.quantity)) {
             throw new BadRequestException(
-              `Stock insuficiente en origen para ${item.partNumber}. Disponible: ${prevO}, solicitado: ${line.quantity}.`,
+              insufficientStockMessage(
+                item.partNumber ?? item.id,
+                prevO,
+                line.quantity,
+              ),
             );
           }
 
           const cppOrigin = Number(originStock?.unitCost ?? 0);
-          const newOriginQty = prevO - line.quantity;
+          const newOriginQty = subtractStockQty(prevO, line.quantity);
 
           await tx.itemStock.update({
             where: {

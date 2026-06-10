@@ -2,7 +2,10 @@ import { Controller, Get, Put, Body, Req, UseGuards } from '@nestjs/common';
 import { PurchaseSettingsService } from './purchase-settings.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 
 @Controller('purchase-settings')
@@ -31,7 +34,10 @@ export class PurchaseSettingsController {
   }
 
   @Get('policies')
-  @RequirePermissions(SystemPermissions.PURCHASES_SETTING_READ)
+  @RequireAnyPermissions(
+    SystemPermissions.PURCHASES_SETTING_READ,
+    SystemPermissions.PURCHASES_ORDER_APPROVE,
+  )
   getPolicies(@Req() req: any) {
     return this.settingsService.getPolicies(req.user.tenantId);
   }
@@ -50,6 +56,9 @@ export class PurchaseSettingsController {
     },
     @Req() req: any,
   ) {
-    return this.settingsService.upsertPolicies(req.user.tenantId, body.policies);
+    return this.settingsService.upsertPolicies(
+      req.user.tenantId,
+      body.policies,
+    );
   }
 }

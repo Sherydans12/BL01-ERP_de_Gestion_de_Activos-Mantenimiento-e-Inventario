@@ -1,12 +1,14 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal, computed, Signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { FleetStateService } from '../fleet-state/fleet-state.service';
 import {
   Equipment,
   EquipmentAnalytics,
   EquipmentMeterSnapshot,
   MeterCaptureBoardResponse,
+  MeterBulkSyncItem,
   MeterBulkSyncResponse,
 } from '../../models/types';
 
@@ -17,16 +19,118 @@ export interface PaginatedEquipments {
   limit: number;
 }
 
+export interface MasterImportRequirement {
+  kind: string;
+  code: string;
+  name?: string | null;
+  parentCode?: string | null;
+  rows: number[];
+  severity: 'blocking' | 'warning';
+  message: string;
+}
+
+export interface FleetImportValidationResult {
+  domain: 'fleet';
+  version: string;
+  summary: {
+    rows: number;
+    creates: number;
+    updates: number;
+    unchanged: number;
+    errors: number;
+    deleteCandidates: number;
+  };
+  requirements: MasterImportRequirement[];
+  previewRows: Array<{
+    rowNumber: number;
+    action: string;
+    equipmentId: string | null;
+    internalId: string;
+    label: string;
+    errors: string[];
+    warnings: string[];
+    changes: Array<{ field: string; before: unknown; after: unknown }>;
+  }>;
+  deleteCandidates: Array<{
+    equipmentId: string;
+    internalId: string;
+    label: string;
+    impact: Record<string, number>;
+    warnings: string[];
+  }>;
+  configuration: {
+    requiredBeforeCommit: string[];
+    options: Record<string, boolean>;
+  };
+}
+
+export interface MasterImportCommitResult {
+  created: number;
+  updated: number;
+  unchanged?: number;
+  deleted: number;
+  skippedDeleteCandidates: number;
+  warnings: string[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class FleetService {
   private http = inject(HttpClient);
+  private fleetState = inject(FleetStateService);
   private apiUrl = `${environment.apiUrl}/equipments`;
+
+  /**
+   * Versión incremental de la caché de listados de flota.
+   * Otros módulos (p. ej. Registro de Fallas) llaman `invalidateCache()` para que las
+   * vistas abiertas que la observan vía `effect()` vuelvan a pedir datos al backend.
+   * Ver §2.4 «Ecosistema de Operaciones y Flota» en docs/MASTER-CONTEXT.md.
+   */
+  private readonly _listVersion = signal(0);
+  readonly listVersion = this._listVersion.asReadonly();
+
+  /** Revisión por equipo — modales abiertos observan esto para refetch. */
+  private readonly _equipmentRevision = signal<Record<string, number>>({});
+
+  /**
+   * Señal de revisión para un equipo concreto (p. ej. modal de detalle).
+   */
+  equipmentRevision(equipmentId: string): Signal<number> {
+    return computed(() => this._equipmentRevision()[equipmentId] ?? 0);
+  }
+
+  /**
+   * Marca la lista de equipos como obsoleta. La señal `listVersion` cambia y cualquier
+   * componente que la lea dentro de un `effect()` (p. ej. `FleetMasterComponent`) recargará.
+   */
+  invalidateCache(): void {
+    this._listVersion.update((v) => v + 1);
+  }
+
+  /**
+   * Invalida la lista y bump de revisión para un equipo (M2 detención, M3, OT).
+   */
+  notifyEquipmentChanged(equipmentId: string): void {
+    this.invalidateCache();
+    this.fleetState.notify(equipmentId);
+    this._equipmentRevision.update((m) => ({
+      ...m,
+      [equipmentId]: (m[equipmentId] ?? 0) + 1,
+    }));
+  }
+
+  /** Alias semántico de `notifyEquipmentChanged`. */
+  bumpEquipmentRevision(equipmentId: string): void {
+    this.notifyEquipmentChanged(equipmentId);
+  }
 
   /**
    * Lista equipos. Si se pasa `contractId`, se envía `x-contract-id` para filtrar por ese contrato
    * (el interceptor no lo sobrescribe si ya viene fijado).
+   *
+   * `noCache` agrega un sello temporal (`_ts`) para defender la frescura ante cualquier
+   * caché HTTP/proxy/SW intermedio (estado `isOperational` recién mutado por una falla).
    */
   getEquipments(
     params?: {
@@ -37,6 +141,8 @@ export class FleetService {
       brand?: string;
       /** Alcance por contrato (header `x-contract-id`; no se envía como query). */
       contractId?: string;
+      /** Cache-bust: agrega `_ts` para evitar respuestas cacheadas. */
+      noCache?: boolean;
     },
     options?: { contractId?: string },
   ): Observable<PaginatedEquipments> {
@@ -49,6 +155,8 @@ export class FleetService {
       if (params.search) httpParams = httpParams.set('search', params.search);
       if (params.type) httpParams = httpParams.set('type', params.type);
       if (params.brand) httpParams = httpParams.set('brand', params.brand);
+      if (params.noCache)
+        httpParams = httpParams.set('_ts', String(Date.now()));
     }
 
     const contractHeader = options?.contractId ?? params?.contractId;
@@ -63,8 +171,75 @@ export class FleetService {
     });
   }
 
+  /**
+   * Refetch explícito de la lista, forzando cache-bust HTTP. Alias semántico de
+   * `getEquipments({ ...params, noCache: true })` para usar al re-entrar a `/flota`.
+   */
+  refetch(
+    params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      type?: string;
+      brand?: string;
+      contractId?: string;
+    },
+    options?: { contractId?: string },
+  ): Observable<PaginatedEquipments> {
+    return this.getEquipments({ ...(params ?? {}), noCache: true }, options);
+  }
+
   getEquipmentById(id: string): Observable<Equipment> {
     return this.http.get<Equipment>(`${this.apiUrl}/${id}`);
+  }
+
+  getEquipmentResumePdf(id: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/${id}/resume-pdf`, {
+      responseType: 'blob',
+    });
+  }
+
+  downloadFleetMasterExcel(options?: { contractId?: string | null }): Observable<Blob> {
+    let headers = new HttpHeaders();
+    if (options?.contractId) {
+      headers = headers.set('x-contract-id', options.contractId);
+    }
+    return this.http.get(`${this.apiUrl}/export/master`, {
+      headers,
+      responseType: 'blob',
+    });
+  }
+
+  validateFleetMasterImport(
+    file: File,
+    options?: { contractId?: string | null },
+  ): Observable<FleetImportValidationResult> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    let headers = new HttpHeaders();
+    if (options?.contractId) headers = headers.set('x-contract-id', options.contractId);
+    return this.http.post<FleetImportValidationResult>(
+      `${this.apiUrl}/import/validate`,
+      form,
+      { headers },
+    );
+  }
+
+  commitFleetMasterImport(
+    file: File,
+    importOptions: Record<string, boolean>,
+    options?: { contractId?: string | null },
+  ): Observable<MasterImportCommitResult> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('options', JSON.stringify(importOptions));
+    let headers = new HttpHeaders();
+    if (options?.contractId) headers = headers.set('x-contract-id', options.contractId);
+    return this.http.post<MasterImportCommitResult>(
+      `${this.apiUrl}/import/commit`,
+      form,
+      { headers },
+    );
   }
 
   getEquipmentAnalytics(id: string): Observable<EquipmentAnalytics> {
@@ -102,7 +277,7 @@ export class FleetService {
   }
 
   bulkSyncMeterReadings(
-    body: { items: { equipmentId: string; newReading: number }[] },
+    body: { items: MeterBulkSyncItem[] },
     options?: { contractId?: string | null },
   ): Observable<MeterBulkSyncResponse> {
     let headers = new HttpHeaders();

@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ActivityAction, Prisma } from '@prisma/client';
+import { ActivityAction, Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PurchaseInvoicesService } from './purchase-invoices.service';
@@ -52,7 +52,12 @@ export class PurchaseCreditNotesService {
   /** Crea una nota de crédito y re-dispara la validación 3-way de todas las facturas de la OC. */
   async create(
     dto: CreateCreditNoteDto,
-    user: { id: string; tenantId: string; role?: string; allowedContracts?: string[] },
+    user: {
+      id: string;
+      tenantId: string;
+      role?: string;
+      allowedContracts?: string[];
+    },
   ) {
     const tenantId = user.tenantId;
 
@@ -90,7 +95,9 @@ export class PurchaseCreditNotesService {
       }
     }
 
-    let creditNote: Awaited<ReturnType<typeof this.prisma.purchaseCreditNote.create>>;
+    let creditNote: Awaited<
+      ReturnType<typeof this.prisma.purchaseCreditNote.create>
+    >;
     try {
       creditNote = await this.prisma.purchaseCreditNote.create({
         data: {
@@ -139,7 +146,11 @@ export class PurchaseCreditNotesService {
     });
 
     // Re-disparar validación 3-way en todas las facturas activas de la OC.
-    await this.revalidateAllInvoicesForOrder(dto.purchaseOrderId, tenantId, user.id);
+    await this.revalidateAllInvoicesForOrder(
+      dto.purchaseOrderId,
+      tenantId,
+      user.id,
+    );
 
     return creditNote;
   }
@@ -147,18 +158,32 @@ export class PurchaseCreditNotesService {
   /** Elimina una nota de crédito y re-valida el 3-way. */
   async remove(
     id: string,
-    user: { id: string; tenantId: string; role?: string; allowedContracts?: string[] },
+    user: {
+      id: string;
+      tenantId: string;
+      role?: string;
+      allowedContracts?: string[];
+    },
   ) {
     const creditNote = await this.prisma.purchaseCreditNote.findFirst({
       where: { id, tenantId: user.tenantId },
     });
-    if (!creditNote) throw new NotFoundException('Nota de crédito no encontrada');
+    if (!creditNote)
+      throw new NotFoundException('Nota de crédito no encontrada');
 
     const order = await this.prisma.purchaseOrder.findFirst({
       where: { id: creditNote.purchaseOrderId, tenantId: user.tenantId },
-      select: { contractId: true },
+      select: { contractId: true, status: true },
     });
-    if (order) assertUserHasContractAccess(user, order.contractId);
+    if (!order) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+    assertUserHasContractAccess(user, order.contractId);
+    if (order.status === PurchaseOrderStatus.CLOSED) {
+      throw new BadRequestException(
+        'No se puede modificar una Nota de Crédito de una Orden de Compra cerrada técnico-financieramente',
+      );
+    }
 
     await this.audit.log({
       userId: user.id,

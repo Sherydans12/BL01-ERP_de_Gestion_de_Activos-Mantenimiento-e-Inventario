@@ -630,4 +630,150 @@
       }
     </form>
   </div>
+
+  <!-- Tarjeta independiente: Turnos operativos (endpoint propio) -->
+  <div class="bg-surface border border-border rounded-xl p-6 shadow-xl backdrop-blur-md">
+    <form [formGroup]="operationalForm" (ngSubmit)="saveOperationalConfig()" class="space-y-6">
+      <fieldset [disabled]="isFormReadOnly()" class="space-y-6 border-0 p-0 m-0 min-w-0">
+
+        <h3 class="text-lg font-semibold text-main border-b border-border pb-2 flex items-center gap-2">
+          <svg class="w-5 h-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v1m0 16v1m8.485-8.485-.707.707M4.222 4.222l-.707.707M21 12h-1M4 12H3m16.485 4.485-.707-.707M4.929 19.071l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          Operaciones — Gestión de turnos
+        </h3>
+
+        <p class="text-xs text-muted/80 leading-relaxed">
+          Define si la organización opera con turno noche y configura los horarios de inicio.
+          El widget de turno en la barra superior y los formularios de disponibilidad (M2) reaccionan automáticamente a esta configuración.
+        </p>
+
+        <!-- Toggle turno noche -->
+        <div class="flex items-start gap-4 rounded-xl border border-border bg-dark/25 px-5 py-4">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-main">Turno Noche habilitado</p>
+            <p class="text-xs text-muted mt-0.5 leading-relaxed">
+              Si está desactivado, el sistema asume siempre <strong class="text-main/90">Turno Día</strong> y oculta los selectores de turno en los formularios de disponibilidad y carga masiva Excel.
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5" title="Activar / desactivar turno noche">
+            <input
+              type="checkbox"
+              formControlName="hasNightShift"
+              class="sr-only peer"
+              (change)="onNightShiftToggle($event)"
+            />
+            <div class="w-11 h-6 bg-border peer-focus:ring-2 peer-focus:ring-primary/40 rounded-full peer
+                        peer-checked:after:translate-x-full peer-checked:after:border-white
+                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                        after:bg-white after:border-gray-300 after:border after:rounded-full
+                        after:h-5 after:w-5 after:transition-all
+                        peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
+        <div class="flex items-start gap-4 rounded-xl border border-border bg-dark/25 px-5 py-4">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-main">Bloquear stock negativo</p>
+            <p class="text-xs text-muted mt-0.5 leading-relaxed">
+              Si está activo, despachos M1, cierres de OT y salidas de kardex
+              <strong class="text-main/90"> rechazan</strong> cantidades que superen el saldo disponible.
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5" title="Bloquear stock negativo">
+            <input type="checkbox" formControlName="blockNegativeStock" class="sr-only peer" />
+            <div class="w-11 h-6 bg-border peer-focus:ring-2 peer-focus:ring-primary/40 rounded-full peer
+                        peer-checked:after:translate-x-full peer-checked:after:border-white
+                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                        after:bg-white after:border-gray-300 after:border after:rounded-full
+                        after:h-5 after:w-5 after:transition-all
+                        peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
+        <!-- Horarios de inicio (solo visibles con turno noche activo) -->
+        @if (hasNightShiftValue()) {
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-muted">
+                <span class="inline-flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12z" clip-rule="evenodd"/>
+                  </svg>
+                  Inicio Turno Día (HH:MM)
+                </span>
+              </label>
+              <input
+                type="time"
+                formControlName="dayShiftStartTime"
+                class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors font-mono"
+              />
+              @if (operationalForm.get('dayShiftStartTime')?.invalid && operationalForm.get('dayShiftStartTime')?.touched) {
+                <p class="text-xs text-red-400">Formato requerido: HH:MM (24h)</p>
+              }
+            </div>
+
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-muted">
+                <span class="inline-flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+                  </svg>
+                  Inicio Turno Noche (HH:MM)
+                </span>
+              </label>
+              <input
+                type="time"
+                formControlName="nightShiftStartTime"
+                class="w-full bg-dark border border-border rounded-lg px-4 py-2.5 text-main focus:border-primary focus:ring-1 focus:ring-primary transition-colors font-mono"
+              />
+              @if (operationalForm.get('nightShiftStartTime')?.invalid && operationalForm.get('nightShiftStartTime')?.touched) {
+                <p class="text-xs text-red-400">Formato requerido: HH:MM (24h)</p>
+              }
+            </div>
+          </div>
+
+          <div class="flex items-start gap-2 rounded-lg border border-border bg-dark/20 px-3 py-2.5 text-xs text-muted">
+            <svg class="w-4 h-4 shrink-0 mt-0.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            El widget del navbar muestra el turno activo en tiempo real según el reloj del equipo, comparado con estos horarios.
+          </div>
+        }
+
+        @if (!hasNightShiftValue()) {
+          <div class="flex items-center gap-3 rounded-xl border border-border bg-dark/20 px-4 py-3 text-sm text-muted">
+            <svg class="w-5 h-5 shrink-0 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12z" clip-rule="evenodd"/>
+            </svg>
+            Solo Turno Día activo — no se requiere configurar horario de inicio de turno noche.
+          </div>
+        }
+
+      </fieldset>
+
+      @if (!isFormReadOnly()) {
+        <div class="flex justify-end pt-4 border-t border-border">
+          <button
+            type="submit"
+            [disabled]="operationalForm.invalid || isSavingOperational()"
+            class="bg-primary text-zinc-950 font-bold px-8 py-2.5 rounded-lg transition-all duration-200
+                   hover:bg-opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+                   shadow-primary/20 shadow-lg flex items-center justify-center min-w-[180px]"
+          >
+            @if (isSavingOperational()) {
+              <svg class="animate-spin h-5 w-5 text-zinc-950" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            } @else {
+              GUARDAR TURNOS
+            }
+          </button>
+        </div>
+      }
+    </form>
+  </div>
 </div>

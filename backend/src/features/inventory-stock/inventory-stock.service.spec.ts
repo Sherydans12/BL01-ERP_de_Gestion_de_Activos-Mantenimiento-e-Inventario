@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../../common/storage/storage.service';
 import {
   InventoryStockService,
   PerformReturnDto,
@@ -50,16 +51,20 @@ describe('InventoryStockService', () => {
   const userId = '44444444-4444-4444-4444-444444444444';
   const workOrderId = '55555555-5555-5555-5555-555555555555';
 
+  const contractId = '66666666-6666-6666-6666-666666666666';
+
   const adminUser = {
     id: userId,
     tenantId,
     role: 'ADMIN',
   };
 
-  const mechanicUser = {
+  const userWithoutCostView = {
     id: userId,
     tenantId,
-    role: 'MECHANIC',
+    role: 'USER',
+    permissions: ['inventory:stock:read'],
+    allowedContracts: [contractId],
   };
 
   beforeEach(async () => {
@@ -74,6 +79,10 @@ describe('InventoryStockService', () => {
       providers: [
         InventoryStockService,
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: StorageService,
+          useValue: { getReadOnlyUrl: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -88,6 +97,7 @@ describe('InventoryStockService', () => {
     tx.warehouse.findFirst.mockResolvedValue({
       id: warehouseId,
       tenantId,
+      contractId,
     } as never);
   }
 
@@ -107,10 +117,7 @@ describe('InventoryStockService', () => {
     } as never);
   }
 
-  function setupUpsertResult(
-    quantity: number,
-    unitCost: number,
-  ): void {
+  function setupUpsertResult(quantity: number, unitCost: number): void {
     tx.itemStock.upsert.mockResolvedValue({
       warehouseId,
       itemId,
@@ -146,12 +153,7 @@ describe('InventoryStockService', () => {
     });
 
     it('limpia marcas de regularización pendiente cuando el saldo es ≥ 0', async () => {
-      await service.clearPendingRegularizationFlags(
-        tx,
-        warehouseId,
-        itemId,
-        0,
-      );
+      await service.clearPendingRegularizationFlags(tx, warehouseId, itemId, 0);
 
       expect(tx.inventoryTransaction.updateMany).toHaveBeenCalledWith({
         where: {
@@ -259,6 +261,28 @@ describe('InventoryStockService', () => {
           }),
         }),
       );
+    });
+
+    it('OUT rechaza stock insuficiente cuando blockNegativeStock está activo', async () => {
+      setupWarehouseFound();
+      setupExistingStock(3, 8);
+      tx.tenantOperationalConfig.findUnique.mockResolvedValue({
+        blockNegativeStock: true,
+      } as never);
+      tx.inventoryItem.findFirst.mockResolvedValue({
+        partNumber: 'FLUID-1',
+        inventoryCode: 'IN001',
+      } as never);
+
+      await expect(
+        service.performTransactionCore(
+          tx,
+          { ...baseDto, type: 'OUT', quantity: 5 },
+          adminUser,
+        ),
+      ).rejects.toThrow(/Stock insuficiente/);
+
+      expect(tx.itemStock.upsert).not.toHaveBeenCalled();
     });
 
     it('ADJUST permite cantidad negativa y marca regularización si el saldo queda < 0', async () => {
@@ -422,9 +446,9 @@ describe('InventoryStockService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      await expect(
-        service.performReturn(returnDto, adminUser),
-      ).rejects.toThrow(/No se encontraron salidas/);
+      await expect(service.performReturn(returnDto, adminUser)).rejects.toThrow(
+        /No se encontraron salidas/,
+      );
     });
 
     it('rechaza devolución que excede el consumo neto de la OT', async () => {
@@ -447,9 +471,7 @@ describe('InventoryStockService', () => {
     it('incrementa stock y registra WORK_ORDER_RETURN sin recalcular CPP', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransaction.findMany
-          .mockResolvedValueOnce([
-            { quantity: 10, type: 'OUT' },
-          ] as never)
+          .mockResolvedValueOnce([{ quantity: 10, type: 'OUT' }] as never)
           .mockResolvedValueOnce([] as never);
         setupExistingStock(4, 25);
         setupUpsertResult(6, 25);
@@ -482,7 +504,7 @@ describe('InventoryStockService', () => {
       );
     });
 
-    it('enmascara unitCost para rol MECHANIC', async () => {
+    it('enmascara unitCost sin permiso inventory:stock:view_cost', async () => {
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransaction.findMany
           .mockResolvedValueOnce([{ quantity: 5, type: 'OUT' }] as never)
@@ -493,7 +515,10 @@ describe('InventoryStockService', () => {
         return (fn as (client: typeof tx) => Promise<unknown>)(tx);
       });
 
-      const result = await service.performReturn(returnDto, mechanicUser);
+      const result = await service.performReturn(
+        returnDto,
+        userWithoutCostView,
+      );
       expect(result.unitCost).toBe(0);
     });
 
@@ -501,7 +526,9 @@ describe('InventoryStockService', () => {
       mockGetPolicyThresholds.mockResolvedValue({ minStock: 3, maxStock: 30 });
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.inventoryTransaction.findMany
-          .mockResolvedValueOnce([{ quantity: 4, type: 'WORK_ORDER_ISSUE' }] as never)
+          .mockResolvedValueOnce([
+            { quantity: 4, type: 'WORK_ORDER_ISSUE' },
+          ] as never)
           .mockResolvedValueOnce([] as never);
         tx.itemStock.findUnique.mockResolvedValue(null);
         setupUpsertResult(2, 0);
@@ -548,7 +575,11 @@ describe('InventoryStockService', () => {
     });
 
     it('rechaza payload vacío', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
 
       await expect(
@@ -557,7 +588,11 @@ describe('InventoryStockService', () => {
     });
 
     it('rechaza máximo menor que mínimo', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.$transaction.mockImplementation(async (fn) => {
         tx.itemStock.findUnique.mockResolvedValue({
@@ -585,7 +620,11 @@ describe('InventoryStockService', () => {
     const trId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
     it('añade trace de recepción/OC y transferencia en kardex paginado', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([
         {
           type: 'IN',
@@ -652,7 +691,11 @@ describe('InventoryStockService', () => {
     });
 
     it('marca saldoPendienteAdjust en ADJUST vinculado a recepción', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([
         {
           type: 'ADJUST',
@@ -686,7 +729,9 @@ describe('InventoryStockService', () => {
       );
 
       expect(result.data[0].trace?.saldoPendienteAdjust).toBe(true);
-      expect(result.data[0].trace?.warehouseReceipt?.correlative).toBe('GR-ADJ');
+      expect(result.data[0].trace?.warehouseReceipt?.correlative).toBe(
+        'GR-ADJ',
+      );
     });
   });
 
@@ -829,6 +874,11 @@ describe('InventoryStockService', () => {
     });
 
     it('aplica filtro warehouseId en ajustes y agregado', async () => {
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.findMany.mockResolvedValue([] as never);
       prisma.itemStock.aggregate.mockResolvedValue({
         _sum: { quantity: 50 },
@@ -875,7 +925,11 @@ describe('InventoryStockService', () => {
     };
 
     function setupWarehouseAndStock(): void {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryTransaction.groupBy
         .mockResolvedValueOnce([
           { itemId: stockItemId, _sum: { quantity: 10 } },
@@ -910,12 +964,12 @@ describe('InventoryStockService', () => {
       expect(rows[0].unitCost).toBe(500);
     });
 
-    it('enmascara unitCost para MECHANIC', async () => {
+    it('enmascara unitCost sin permiso inventory:stock:view_cost', async () => {
       setupWarehouseAndStock();
 
       const rows = await service.getStockByWarehouse(
         warehouseId,
-        mechanicUser,
+        userWithoutCostView,
       );
 
       expect(rows[0].unitCost).toBe(0);
@@ -975,9 +1029,11 @@ describe('InventoryStockService', () => {
       expect(count).toBe(7);
     });
 
-    it('getPendingRegularizationPage pagina deuda y enmascara valor para MECHANIC', async () => {
+    it('getPendingRegularizationPage pagina deuda y enmascara valor sin view_cost', async () => {
       prisma.warehouse.findFirst.mockResolvedValue({
         id: warehouseId,
+        tenantId,
+        contractId,
         code: 'B1',
         name: 'Central',
       } as never);
@@ -1006,7 +1062,7 @@ describe('InventoryStockService', () => {
 
       const result = await service.getPendingRegularizationPage(
         warehouseId,
-        mechanicUser,
+        userWithoutCostView,
         { page: 1, pageSize: 10 },
       );
 
@@ -1029,6 +1085,9 @@ describe('InventoryStockService', () => {
 
     it('genera PDF con nombre derivado del código de bodega', async () => {
       prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
         code: 'B-CENTRAL',
         name: 'Bodega Central',
       } as never);
@@ -1053,9 +1112,14 @@ describe('InventoryStockService', () => {
         expect.objectContaining({
           warehouseCode: 'B-CENTRAL',
           rows: expect.arrayContaining([
-            expect.objectContaining({ inventoryCode: 'IN0001' }),
+            expect.objectContaining({
+              inventoryCode: 'IN0001',
+              itemName: 'Filtro',
+              description: 'Filtro aceite',
+            }),
           ]),
         }),
+        expect.any(Object),
       );
       expect(result.filename).toBe('B-CENTRAL-conteo-fisico.pdf');
       expect(result.buffer).toBeInstanceOf(Buffer);
@@ -1064,7 +1128,11 @@ describe('InventoryStockService', () => {
 
   describe('getStockPosition', () => {
     it('devuelve ubicación y cantidad cuando existe posición', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.itemStock.findUnique.mockResolvedValue({
         location: '  A-01  ',
@@ -1081,7 +1149,11 @@ describe('InventoryStockService', () => {
     });
 
     it('devuelve quantityOnHand 0 si no hay fila item_stock', async () => {
-      prisma.warehouse.findFirst.mockResolvedValue({ id: warehouseId } as never);
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
       prisma.inventoryItem.findFirst.mockResolvedValue({ id: itemId } as never);
       prisma.itemStock.findUnique.mockResolvedValue(null);
 
