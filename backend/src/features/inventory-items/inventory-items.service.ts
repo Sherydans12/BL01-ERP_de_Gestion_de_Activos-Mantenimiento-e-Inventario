@@ -709,6 +709,47 @@ export class InventoryItemsService {
       .slice(0, 50);
   }
 
+  private inventoryImportNumberKey(value: unknown): string {
+    const parsed = parseImportNumber(value);
+    return parsed == null ? '' : String(parsed);
+  }
+
+  private inventoryImportNaturalKey(parts: {
+    name: unknown;
+    family: unknown;
+    subcategory: unknown;
+    unit: unknown;
+    brand: unknown;
+    description: unknown;
+    compatibility: unknown;
+    supplier: unknown;
+    warehouse: unknown;
+    bin: unknown;
+    location: unknown;
+    stock: unknown;
+    minStock: unknown;
+    maxStock: unknown;
+  }): string {
+    return [
+      parts.name,
+      parts.family,
+      parts.subcategory,
+      parts.unit,
+      parts.brand,
+      parts.description,
+      parts.compatibility,
+      parts.supplier,
+      parts.warehouse,
+      parts.bin,
+      parts.location,
+      this.inventoryImportNumberKey(parts.stock),
+      this.inventoryImportNumberKey(parts.minStock),
+      this.inventoryImportNumberKey(parts.maxStock),
+    ]
+      .map(normalizeImportKey)
+      .join('|');
+  }
+
   async validateInventoryMasterImport(buffer: Buffer, user: any) {
     const tenantId = user.tenantId as string;
     const workbook = await parseBaseLogicMasterImportWorkbook(
@@ -773,6 +814,7 @@ export class InventoryItemsService {
         .filter((item) => item.partNumber)
         .map((item) => [normalizeImportKey(item.partNumber), item]),
     );
+    const itemByNaturalImportKey = new Map<string, (typeof items)[number]>();
     const categoryByFamilySub = new Map<string, (typeof categories)[number]>();
     for (const category of categories) {
       if (!category.parentCategory) continue;
@@ -796,6 +838,49 @@ export class InventoryItemsService {
         supplier,
       ]),
     );
+    for (const item of items) {
+      const family =
+        item.itemCategory.parentCategory?.name ?? item.itemCategory.name;
+      const subcategory = item.itemCategory.parentCategory
+        ? item.itemCategory.name
+        : '';
+      const base = {
+        name: item.name,
+        family,
+        subcategory,
+        unit: item.unitOfMeasure.abbreviation,
+        brand: item.brand,
+        description: item.description,
+        compatibility: item.compatibilityInfo,
+        supplier: item.inventorySupplier?.name ?? null,
+      };
+      const stocks = item.stocks.length
+        ? item.stocks
+        : [
+            {
+              warehouse: { code: null },
+              bin: null,
+              location: null,
+              quantity: 0,
+              minStock: null,
+              maxStock: null,
+            },
+          ];
+      for (const stock of stocks) {
+        const key = this.inventoryImportNaturalKey({
+          ...base,
+          warehouse: stock.warehouse.code,
+          bin: stock.bin?.code ?? null,
+          location: stock.location,
+          stock: stock.quantity,
+          minStock: stock.minStock,
+          maxStock: stock.maxStock,
+        });
+        if (key && !itemByNaturalImportKey.has(key)) {
+          itemByNaturalImportKey.set(key, item);
+        }
+      }
+    }
 
     const requirements = new Map<string, InventoryImportRequirement>();
     const previewRows: InventoryImportPreviewRow[] = [];
@@ -914,8 +999,30 @@ export class InventoryItemsService {
       const existingByPartNumber = partNumber
         ? itemByPartNumber.get(normalizeImportKey(partNumber))
         : null;
+      const naturalKey = this.inventoryImportNaturalKey({
+        name,
+        family,
+        subcategory,
+        unit: unitCode,
+        brand: getImportNullableString(v, 'Marca'),
+        description: getImportNullableString(v, 'Descripcion'),
+        compatibility: getImportNullableString(v, 'Compatibilidad'),
+        supplier: supplierName,
+        warehouse: warehouseCode,
+        bin: binCode,
+        location: getImportNullableString(v, 'Ubicacion stock'),
+        stock: v['Stock'],
+        minStock: v['Stock minimo'],
+        maxStock: v['Stock maximo'],
+      });
+      const existingByNaturalKey =
+        !id && !partNumber ? itemByNaturalImportKey.get(naturalKey) : null;
       const existing =
-        existingById ?? existingByInventoryCode ?? existingByPartNumber ?? null;
+        existingById ??
+        existingByInventoryCode ??
+        existingByPartNumber ??
+        existingByNaturalKey ??
+        null;
       if (existing) includedItemIds.add(existing.id);
       if (id) includedItemKeys.add(id);
       if (inventoryCode)
@@ -944,6 +1051,11 @@ export class InventoryItemsService {
       if (!existing && inventoryCode) {
         warnings.push(
           'Codigo inventario informado en una fila nueva sera ignorado; el sistema asignara el siguiente SKU interno.',
+        );
+      }
+      if (existingByNaturalKey) {
+        warnings.push(
+          'Fila nueva sin ID ni numero de parte coincide con un articulo/stock existente; se tratara como actualizacion para evitar duplicados.',
         );
       }
       const qrPayload = getImportNullableString(v, 'QR payload');
