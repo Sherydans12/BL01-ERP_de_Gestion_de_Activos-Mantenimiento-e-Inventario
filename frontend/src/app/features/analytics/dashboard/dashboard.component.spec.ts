@@ -99,7 +99,7 @@ describe('OperationsKpiDashboardComponent', () => {
 
   it('recarga al cambiar el rango de fechas', () => {
     analyticsSpy.getKpiDashboard.calls.reset();
-    component.onDateToChange('2026-06-15');
+    component.onDateToChange('2026-06-16');
     fixture.detectChanges();
     expect(analyticsSpy.getKpiDashboard).toHaveBeenCalled();
   });
