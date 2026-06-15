@@ -6,6 +6,7 @@ export type MasterExportColumn = {
   width?: number;
   note?: string;
   numFmt?: string;
+  locked?: boolean;
 };
 
 export type MasterExportCatalogSheet = {
@@ -38,7 +39,10 @@ const COLORS = {
   header: 'FF0B1220',
   headerText: 'FFFFFFFF',
   warning: 'FFFFF7ED',
+  locked: 'FFF1F5F9',
 };
+
+const SHEET_PROTECTION_PASSWORD = 'BaseLogic';
 
 function asExcelValue(value: unknown): ExcelJS.CellValue {
   if (value == null) return null;
@@ -81,11 +85,11 @@ function styleHeaderRow(row: ExcelJS.Row): void {
   });
 }
 
-function styleDataSheet(
+async function styleDataSheet(
   ws: ExcelJS.Worksheet,
   columns: MasterExportColumn[],
   rows: Record<string, unknown>[],
-): void {
+): Promise<void> {
   ws.views = [{ state: 'frozen', ySplit: 5 }];
   ws.properties.defaultRowHeight = 18;
 
@@ -143,14 +147,42 @@ function styleDataSheet(
       cell.border = {
         bottom: { style: 'hair', color: { argb: COLORS.border } },
       };
+      cell.protection = { locked: col?.locked === true };
+      if (col?.locked) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: COLORS.locked },
+        };
+      }
       if (col?.numFmt) cell.numFmt = col.numFmt;
     });
+  }
+
+  const editableBufferRows = Math.max(rows.length + 250, 1000);
+  for (let rowNumber = 6; rowNumber <= editableBufferRows + 5; rowNumber += 1) {
+    const row = ws.getRow(rowNumber);
+    for (let colNumber = 1; colNumber <= columns.length; colNumber += 1) {
+      const col = columns[colNumber - 1];
+      const cell = row.getCell(colNumber);
+      cell.protection = { locked: col?.locked === true };
+    }
   }
 
   ws.autoFilter = {
     from: { row: 5, column: 1 },
     to: { row: Math.max(5, rows.length + 5), column: columns.length },
   };
+
+  await ws.protect(SHEET_PROTECTION_PASSWORD, {
+    selectLockedCells: true,
+    selectUnlockedCells: true,
+    formatColumns: true,
+    formatRows: true,
+    insertRows: true,
+    sort: true,
+    autoFilter: true,
+  });
 }
 
 function addSummarySheet(
@@ -278,7 +310,7 @@ export async function buildBaseLogicMasterWorkbook(
   const dataSheet = wb.addWorksheet(
     options.domain === 'fleet' ? 'Flota' : 'Inventario',
   );
-  styleDataSheet(dataSheet, options.columns, options.rows);
+  await styleDataSheet(dataSheet, options.columns, options.rows);
 
   for (const catalog of options.catalogs ?? []) {
     addCatalogSheet(wb, catalog);
