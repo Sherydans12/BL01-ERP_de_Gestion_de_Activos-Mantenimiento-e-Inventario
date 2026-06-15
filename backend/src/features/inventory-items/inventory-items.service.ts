@@ -714,6 +714,13 @@ export class InventoryItemsService {
     return parsed == null ? '' : String(parsed);
   }
 
+  private inventoryImportPartNumberKey(value: unknown): string {
+    return normalizeImportText(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase();
+  }
+
   private inventoryImportNaturalKey(parts: {
     name: unknown;
     family: unknown;
@@ -812,7 +819,10 @@ export class InventoryItemsService {
     const itemByPartNumber = new Map(
       items
         .filter((item) => item.partNumber)
-        .map((item) => [normalizeImportKey(item.partNumber), item]),
+        .map((item) => [
+          this.inventoryImportPartNumberKey(item.partNumber),
+          item,
+        ]),
     );
     const itemByNaturalImportKey = new Map<string, (typeof items)[number]>();
     const categoryByFamilySub = new Map<string, (typeof categories)[number]>();
@@ -997,7 +1007,7 @@ export class InventoryItemsService {
           ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
           : null;
       const existingByPartNumber = partNumber
-        ? itemByPartNumber.get(normalizeImportKey(partNumber))
+        ? itemByPartNumber.get(this.inventoryImportPartNumberKey(partNumber))
         : null;
       const naturalKey = this.inventoryImportNaturalKey({
         name,
@@ -1363,7 +1373,10 @@ export class InventoryItemsService {
     const itemByPartNumber = new Map(
       existingItems
         .filter((item) => item.partNumber)
-        .map((item) => [normalizeImportKey(item.partNumber), item]),
+        .map((item) => [
+          this.inventoryImportPartNumberKey(item.partNumber),
+          item,
+        ]),
     );
     const previewByRowNumber = new Map(
       validation.previewRows.map((preview) => [preview.rowNumber, preview]),
@@ -1419,7 +1432,7 @@ export class InventoryItemsService {
           supplierByName.set(normalizeImportKey(supplier.name), supplier);
         }
         const importIdentityKey = partNumber
-          ? `PN:${normalizeImportKey(partNumber)}`
+          ? `PN:${this.inventoryImportPartNumberKey(partNumber)}`
           : inventoryCode
             ? `IMPORT_SKU:${normalizeImportKey(inventoryCode)}`
             : `ROW:${row.rowNumber}`;
@@ -1431,7 +1444,9 @@ export class InventoryItemsService {
             ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
             : null) ??
           (partNumber
-            ? itemByPartNumber.get(normalizeImportKey(partNumber))
+            ? itemByPartNumber.get(
+                this.inventoryImportPartNumberKey(partNumber),
+              )
             : null) ??
           existingFromThisImport ??
           null;
@@ -1497,7 +1512,10 @@ export class InventoryItemsService {
             createdItem,
           );
           if (partNumber) {
-            itemByPartNumber.set(normalizeImportKey(partNumber), createdItem);
+            itemByPartNumber.set(
+              this.inventoryImportPartNumberKey(partNumber),
+              createdItem,
+            );
           }
           createdItemByImportKey.set(importIdentityKey, createdItem);
           created++;
