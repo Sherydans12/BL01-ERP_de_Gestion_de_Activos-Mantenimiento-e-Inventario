@@ -99,6 +99,7 @@ Altas desde exportacion:
 - El commit asigna automaticamente el siguiente `IN####` y `INV:<uuid>`; si el usuario informa manualmente `Codigo inventario` en una fila nueva, se usa solo como clave temporal del Excel y el SKU final lo asigna el sistema.
 - Si `ID articulo` esta vacio, `Codigo inventario` no se usa para buscar articulos existentes en BD; esto evita colisiones con SKUs reales ya asignados por importaciones previas.
 - Si un articulo nuevo se informa en varias bodegas dentro del mismo Excel, debe compartir `Numero parte` o el mismo `Codigo inventario` temporal para que se cree una sola ficha de articulo y se apliquen las filas de stock por bodega.
+- Para reintentos del mismo Excel, una fila sin `ID articulo` ni `Numero parte` que coincida por huella de articulo/stock con algo ya creado se trata como existente y no genera otro SKU.
 - La vista previa del importador prioriza errores, altas y cambios para que las filas nuevas agregadas al final del Excel sean visibles aunque el maestro tenga cientos de filas.
 
 ## Contrato Excel
