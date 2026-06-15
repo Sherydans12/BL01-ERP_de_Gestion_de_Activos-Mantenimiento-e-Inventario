@@ -53,13 +53,16 @@ export class RoleGovernanceComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly creating = signal(false);
+  readonly deleting = signal(false);
   readonly showCreateModal = signal(false);
+  readonly showDeleteModal = signal(false);
 
   readonly roles = signal<TenantRole[]>([]);
   readonly catalog = signal<PermissionCatalogModule[]>([]);
   readonly selectedRole = signal<TenantRole | null>(null);
   readonly draftPermissions = signal<Set<string>>(new Set());
   readonly expandedModules = signal<Set<string>>(new Set());
+  readonly replacementRoleId = signal('');
 
   readonly customRoles = computed(() =>
     this.roles().filter((r) => !r.name.startsWith(SYSTEM_MIRROR_PREFIX)),
@@ -84,6 +87,27 @@ export class RoleGovernanceComponent implements OnInit {
       }
     }
     return n;
+  });
+
+  readonly selectedRoleAssignedUsersCount = computed(
+    () => this.selectedRole()?._count?.users ?? 0,
+  );
+
+  readonly replacementCandidates = computed(() => {
+    const role = this.selectedRole();
+    if (!role) return [] as TenantRole[];
+
+    return this.roles()
+      .filter((candidate) => {
+        if (candidate.id === role.id) return false;
+        return candidate.baseRole === role.baseRole;
+      })
+      .sort((a, b) => {
+        const aMirror = a.name.startsWith(SYSTEM_MIRROR_PREFIX) ? 0 : 1;
+        const bMirror = b.name.startsWith(SYSTEM_MIRROR_PREFIX) ? 0 : 1;
+        if (aMirror !== bMirror) return aMirror - bMirror;
+        return a.name.localeCompare(b.name);
+      });
   });
 
   createForm = {
@@ -252,6 +276,57 @@ export class RoleGovernanceComponent implements OnInit {
 
   closeCreateModal(): void {
     this.showCreateModal.set(false);
+  }
+
+  openDeleteModal(): void {
+    const role = this.selectedRole();
+    if (!role || this.deleting()) return;
+
+    const firstCandidate = this.replacementCandidates()[0];
+    this.replacementRoleId.set(firstCandidate?.id ?? '');
+    this.showDeleteModal.set(true);
+  }
+
+  closeDeleteModal(): void {
+    this.showDeleteModal.set(false);
+    this.replacementRoleId.set('');
+  }
+
+  confirmDeleteRole(): void {
+    const role = this.selectedRole();
+    if (!role || this.deleting()) return;
+
+    const assignedUsers = this.selectedRoleAssignedUsersCount();
+    const replacementRoleId = this.replacementRoleId().trim();
+    if (assignedUsers > 0 && !replacementRoleId) {
+      this.notif.error(
+        'Seleccione un rol de reemplazo del mismo nivel antes de eliminar.',
+      );
+      return;
+    }
+
+    const payload =
+      assignedUsers > 0 ? { replacementRoleId: replacementRoleId } : undefined;
+
+    this.deleting.set(true);
+    this.tenantRoles
+      .remove(role.id, payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          this.deleting.set(false);
+          this.closeDeleteModal();
+          this.selectedRole.set(null);
+          this.draftPermissions.set(new Set());
+          this.notif.success(res.message || 'Rol eliminado correctamente.');
+          this.load();
+        },
+        error: (err) => {
+          this.deleting.set(false);
+          const msg = err?.error?.message ?? 'No se pudo eliminar el rol.';
+          this.notif.error(Array.isArray(msg) ? msg.join(', ') : msg);
+        },
+      });
   }
 
   submitCreateRole(): void {

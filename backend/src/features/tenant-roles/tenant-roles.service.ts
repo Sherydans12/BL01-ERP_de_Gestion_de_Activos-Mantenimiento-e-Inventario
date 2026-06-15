@@ -107,7 +107,11 @@ export class TenantRolesService {
     });
   }
 
-  async remove(tenantId: string, id: string) {
+  async remove(
+    tenantId: string,
+    id: string,
+    replacementRoleId?: string,
+  ) {
     const role = await this.prisma.tenantRole.findFirst({
       where: { id, tenantId },
     });
@@ -120,13 +124,57 @@ export class TenantRolesService {
       );
     }
 
-    // Desasignar usuarios que tenían este rol custom antes de eliminarlo.
-    await this.prisma.user.updateMany({
-      where: { customRoleId: id },
-      data: { customRoleId: null },
+    const assignedUsersCount = await this.prisma.user.count({
+      where: { tenantId, customRoleId: id },
     });
 
-    await this.prisma.tenantRole.delete({ where: { id } });
+    let reassignmentRoleId: string | undefined;
+    if (assignedUsersCount > 0) {
+      if (!replacementRoleId) {
+        throw new BadRequestException(
+          `El rol tiene ${assignedUsersCount} usuario(s) asignado(s). Debe reasignarlos a otro rol del mismo nivel antes de eliminarlo.`,
+        );
+      }
+
+      const replacement = await this.prisma.tenantRole.findFirst({
+        where: { id: replacementRoleId, tenantId },
+      });
+      if (!replacement) {
+        throw new NotFoundException(
+          'El rol de reemplazo no existe o no pertenece al tenant.',
+        );
+      }
+      if (replacement.id === role.id) {
+        throw new BadRequestException(
+          'Debe seleccionar un rol de reemplazo distinto al que desea eliminar.',
+        );
+      }
+      if (replacement.baseRole !== role.baseRole) {
+        throw new BadRequestException(
+          'El rol de reemplazo debe tener el mismo rol base para preservar el nivel de acceso de los usuarios.',
+        );
+      }
+
+      reassignmentRoleId = replacement.id;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (assignedUsersCount > 0 && reassignmentRoleId) {
+        await tx.user.updateMany({
+          where: { tenantId, customRoleId: id },
+          data: { customRoleId: reassignmentRoleId },
+        });
+      }
+
+      await tx.tenantRole.delete({ where: { id } });
+    });
+
+    if (assignedUsersCount > 0) {
+      return {
+        message: `Rol eliminado correctamente. ${assignedUsersCount} usuario(s) fueron reasignados al nuevo rol.`,
+      };
+    }
+
     return { message: 'Rol eliminado correctamente.' };
   }
 }

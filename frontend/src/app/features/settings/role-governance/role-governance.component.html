@@ -98,12 +98,23 @@
                   Rol base: <span class="font-mono text-primary">{{ selectedRole()!.baseRole }}</span>
                 </p>
               </div>
-              @if (!isAdminBaseBypass()) {
-                <button type="button" (click)="savePermissions()" [disabled]="saving()"
-                  class="text-xs font-mono font-bold px-5 py-2.5 rounded-lg bg-primary text-dark hover:bg-primary/90 disabled:opacity-50 shrink-0">
-                  {{ saving() ? 'Guardando…' : 'Guardar permisos' }}
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  *appHasPermission="a.USER_MANAGE_ROLES"
+                  (click)="openDeleteModal()"
+                  [disabled]="deleting()"
+                  class="text-xs font-mono font-bold px-4 py-2.5 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50 shrink-0"
+                >
+                  Eliminar rol
                 </button>
-              }
+                @if (!isAdminBaseBypass()) {
+                  <button type="button" (click)="savePermissions()" [disabled]="saving()"
+                    class="text-xs font-mono font-bold px-5 py-2.5 rounded-lg bg-primary text-dark hover:bg-primary/90 disabled:opacity-50 shrink-0">
+                    {{ saving() ? 'Guardando…' : 'Guardar permisos' }}
+                  </button>
+                }
+              </div>
             </div>
           </div>
 
@@ -220,6 +231,70 @@
           <button type="button" (click)="submitCreateRole()" [disabled]="creating() || !createForm.name.trim()"
             class="text-xs font-mono font-bold px-4 py-2 rounded-lg bg-primary text-dark disabled:opacity-50">
             {{ creating() ? 'Creando…' : 'Crear rol' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showDeleteModal() && selectedRole(); as role) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      (click)="closeDeleteModal()" role="presentation">
+      <div class="w-full max-w-lg bg-surface border border-border rounded-2xl shadow-2xl p-6"
+        (click)="$event.stopPropagation()" role="dialog" aria-labelledby="delete-role-title">
+        <h2 id="delete-role-title" class="text-lg font-bold text-main">Eliminar rol</h2>
+        <p class="text-sm text-muted mt-2 leading-relaxed">
+          Vas a eliminar <span class="font-semibold text-main">{{ role.name }}</span>.
+          @if (selectedRoleAssignedUsersCount() === 0) {
+            Esta acción no afecta a usuarios asignados.
+          } @else {
+            Tiene <span class="font-semibold text-main">{{ selectedRoleAssignedUsersCount() }}</span> usuario(s) asignado(s), por lo que debes moverlos antes a otro rol del mismo nivel.
+          }
+        </p>
+
+        @if (selectedRoleAssignedUsersCount() > 0) {
+          <div class="mt-5 space-y-3">
+            <div class="rounded-xl border border-border bg-dark/30 px-4 py-3 text-xs text-muted leading-relaxed">
+              Buena práctica aplicada: la reasignación solo permite roles con el mismo <span class="font-mono text-primary">baseRole</span> para no escalar ni degradar accesos por accidente.
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-muted uppercase mb-1.5">
+                Rol de reemplazo
+              </label>
+              @if (replacementCandidates().length === 0) {
+                <p class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                  No existe otro rol del mismo nivel disponible para reasignar usuarios. Crea uno nuevo o usa un rol espejo del sistema antes de eliminar.
+                </p>
+              } @else {
+                <select
+                  [ngModel]="replacementRoleId()"
+                  (ngModelChange)="replacementRoleId.set($event)"
+                  class="w-full bg-dark border border-border rounded-lg px-3 py-2 text-sm text-main focus:outline-none focus:border-primary"
+                >
+                  <option value="">Seleccione un rol</option>
+                  @for (candidate of replacementCandidates(); track candidate.id) {
+                    <option [value]="candidate.id">
+                      {{ candidate.name }} · {{ candidate._count?.users ?? 0 }} usr
+                    </option>
+                  }
+                </select>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="flex justify-end gap-2 mt-6">
+          <button type="button" (click)="closeDeleteModal()"
+            class="text-xs font-mono px-4 py-2 rounded-lg border border-border text-muted">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="confirmDeleteRole()"
+            [disabled]="deleting() || (selectedRoleAssignedUsersCount() > 0 && !replacementRoleId())"
+            class="text-xs font-mono font-bold px-4 py-2 rounded-lg bg-red-500 text-white disabled:opacity-50"
+          >
+            {{ deleting() ? 'Eliminando…' : 'Eliminar rol' }}
           </button>
         </div>
       </div>
