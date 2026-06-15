@@ -8,10 +8,13 @@ import {
   Param,
   Req,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { TenantRolesService } from './tenant-roles.service';
 import { CreateTenantRoleDto } from './dto/create-tenant-role.dto';
 import { UpdateTenantRoleDto } from './dto/update-tenant-role.dto';
+import { DeleteTenantRoleDto } from './dto/delete-tenant-role.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -59,7 +62,22 @@ export class TenantRolesController {
 
   @Delete(':id')
   @RequirePermissions(SystemPermissions.ADMIN_USER_MANAGE_ROLES)
-  remove(@Req() req: any, @Param('id') id: string) {
-    return this.tenantRolesService.remove(req.user.tenantId, id);
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  remove(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: DeleteTenantRoleDto,
+  ) {
+    return this.tenantRolesService.remove(
+      req.user.tenantId,
+      id,
+      dto.replacementRoleId,
+    );
   }
 }

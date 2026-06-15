@@ -26,6 +26,10 @@ export interface CreateTenantRolePayload {
 
 export type UpdateTenantRolePayload = Partial<CreateTenantRolePayload>;
 
+export interface DeleteTenantRolePayload {
+  replacementRoleId?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TenantRolesService {
   private readonly url = `${environment.apiUrl}/tenant-roles`;
@@ -55,7 +59,12 @@ export class TenantRolesService {
     return this.http.patch<TenantRole>(`${this.url}/${id}`, payload);
   }
 
-  remove(id: string): Observable<{ message: string }> {
-    return this.http.delete<{ message: string }>(`${this.url}/${id}`);
+  remove(
+    id: string,
+    payload?: DeleteTenantRolePayload,
+  ): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.url}/${id}`, {
+      body: payload,
+    });
   }
 }
