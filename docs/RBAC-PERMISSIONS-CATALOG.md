@@ -419,7 +419,13 @@ Constantes espejo: [`frontend/src/app/core/constants/inventory-permissions.ts`](
 | ✅ | `admin:user:create` | `POST /api/users` | Invitar / crear usuarios. |
 | ✅ | `admin:user:update` | `PATCH /api/users/:id`<br>`POST /api/users/:id/resend-activation`<br>`POST /api/users/:id/set-password` | Editar datos, reenviar invitación y restablecer contraseña. |
 | ✅ | `admin:user:delete` | `DELETE /api/users/:id` | Eliminar usuarios del tenant. |
-| ✅ | `admin:user:manage-roles` | `GET/POST/PATCH/DELETE /api/tenant-roles/*`<br>`GET /api/tenant-roles/permissions-catalog` | Gobernanza de roles PBAC y asignación de roles personalizados. |
+| ✅ | `admin:user:manage-roles` | `GET/POST/PATCH/DELETE /api/tenant-roles/*`<br>`GET /api/tenant-roles/permissions-catalog` | Gobernanza de roles PBAC y asignación de roles personalizados. El `DELETE /api/tenant-roles/:id` ahora exige reasignación previa cuando el rol tiene usuarios activos/asignados. |
+
+> **Borrado seguro de roles custom (2026-06-15):**
+> - Los roles espejo `Sistema · ADMIN` / `Sistema · USER` (y `SUPER_ADMIN` seeded) no se eliminan.
+> - Si el rol custom tiene usuarios asignados, el cliente debe enviar `replacementRoleId`.
+> - El rol de reemplazo debe pertenecer al mismo tenant y conservar el mismo `baseRole` para no escalar ni degradar privilegios por accidente.
+> - La API reasigna usuarios y elimina el rol en una sola transacción.
 
 > **Autogestión:** rutas `GET/PUT /api/users/me`, `profile`, `change-password`, TOTP y avatar no exigen permisos `admin:*` (solo JWT).
 
