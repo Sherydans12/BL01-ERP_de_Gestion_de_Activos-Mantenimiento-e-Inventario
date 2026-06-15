@@ -661,8 +661,8 @@ import { A } from '../../../core/constants/admin-permissions';
                         !!selectedUser() && isSessionUser(selectedUser()!)
                       "
                     >
-                      <option [value]="true">Activo</option>
-                      <option [value]="false">Inactivo</option>
+                      <option [ngValue]="true">Activo</option>
+                      <option [ngValue]="false">Inactivo</option>
                     </select>
                     @if (selectedUser() && isSessionUser(selectedUser()!)) {
                       <p class="text-xs text-muted mt-1">
