@@ -95,9 +95,9 @@ Stock:
 
 Altas desde exportacion:
 
-- Para crear articulos nuevos desde el Excel exportado, agregar filas en `Inventario` dejando vacios `ID articulo`, `Codigo inventario` y `QR payload`.
-- El commit asigna automaticamente el siguiente `IN####` y `INV:<uuid>`; si el usuario informa manualmente SKU/QR en una fila nueva, se ignoran y se muestra advertencia.
-- Si un articulo nuevo se informa en varias bodegas dentro del mismo Excel, se crea una sola ficha de articulo y se aplican las filas de stock por bodega.
+- Para crear articulos nuevos desde el Excel exportado, agregar filas en `Inventario` dejando vacios `ID articulo` y `QR payload`.
+- El commit asigna automaticamente el siguiente `IN####` y `INV:<uuid>`; si el usuario informa manualmente `Codigo inventario` en una fila nueva, se usa solo como clave temporal del Excel y el SKU final lo asigna el sistema.
+- Si un articulo nuevo se informa en varias bodegas dentro del mismo Excel, debe compartir `Numero parte` o el mismo `Codigo inventario` temporal para que se cree una sola ficha de articulo y se apliquen las filas de stock por bodega.
 - La vista previa del importador prioriza errores, altas y cambios para que las filas nuevas agregadas al final del Excel sean visibles aunque el maestro tenga cientos de filas.
 
 ## Contrato Excel
