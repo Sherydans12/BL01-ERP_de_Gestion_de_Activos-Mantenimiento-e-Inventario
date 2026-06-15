@@ -29,6 +29,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { AdminSetPasswordDto } from './dto/admin-set-password.dto';
 import { TotpActivateDto } from './dto/totp-activate.dto';
 import { TotpDisableDto } from './dto/totp-disable.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { MAX_USER_AVATAR_BYTES } from './user-avatar.constants';
 import {
   avatarUploadPolicy,
@@ -183,7 +184,14 @@ export class UsersController {
   @Patch(':id')
   @UseGuards(PermissionsGuard)
   @RequirePermissions(SystemPermissions.ADMIN_USER_UPDATE)
-  update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  update(@Param('id') id: string, @Body() body: UpdateUserDto, @Req() req: any) {
     const requesterTenantId = req.user.tenantId;
     const requesterRole = req.user.role;
     return this.usersService.update(

@@ -39,6 +39,7 @@ import {
 import { StepUpPolicyService } from '../auth/step-up-policy.service';
 import { TotpService } from '../auth/totp.service';
 import { userRoleCanEnrollTotp } from '../auth/totp-policy';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 const meSelect = {
   id: true,
@@ -655,7 +656,7 @@ export class UsersService {
 
   async update(
     id: string,
-    data: any,
+    data: UpdateUserDto,
     requesterTenantId?: string,
     requesterRole?: string,
     requesterId?: string,
@@ -689,7 +690,12 @@ export class UsersService {
             role: data.role,
             rut: data.rut,
             phone: data.phone,
-            birthDate: data.birthDate ? new Date(data.birthDate) : null,
+            birthDate:
+              data.birthDate !== undefined
+                ? data.birthDate
+                  ? new Date(data.birthDate)
+                  : null
+                : undefined,
             position: data.position,
             isActive: data.isActive,
             customRoleId:

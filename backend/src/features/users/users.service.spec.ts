@@ -69,6 +69,74 @@ describe('UsersService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('update', () => {
+    const userId = '22222222-2222-4222-8222-222222222222';
+
+    beforeEach(() => {
+      prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma));
+    });
+
+    it('desactiva correctamente cuando isActive llega como boolean false', async () => {
+      prisma.user.findUnique
+        .mockResolvedValueOnce({
+          id: userId,
+          tenantId,
+          isActive: true,
+        } as never)
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'user@test.com',
+          name: 'Usuario Prueba',
+          role: 'USER',
+          isActive: false,
+          createdAt: new Date(),
+          tenantId,
+          rut: null,
+          phone: null,
+          birthDate: new Date('1990-01-01T00:00:00.000Z'),
+          position: null,
+          customRoleId: null,
+          customRole: null,
+          contractAccess: [],
+          tenant: null,
+          canOverruleThreeWayMatch: false,
+        } as never);
+
+      prisma.user.update.mockResolvedValue({
+        id: userId,
+      } as never);
+
+      const result = await service.update(
+        userId,
+        { isActive: false },
+        tenantId,
+        'ADMIN',
+        '33333333-3333-4333-8333-333333333333',
+      );
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: expect.objectContaining({
+          isActive: false,
+          birthDate: undefined,
+        }),
+      });
+      expect(result?.isActive).toBe(false);
+    });
+
+    it('rechaza auto-desactivarse', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: userId,
+        tenantId,
+        isActive: true,
+      } as never);
+
+      await expect(
+        service.update(userId, { isActive: false }, tenantId, 'ADMIN', userId),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('findAssignableForOt', () => {
     const mechanicId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     const plannerId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
