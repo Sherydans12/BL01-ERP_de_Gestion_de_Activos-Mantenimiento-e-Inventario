@@ -1307,7 +1307,9 @@ export class InventoryItemsService {
         }
         const importIdentityKey = partNumber
           ? `PN:${normalizeImportKey(partNumber)}`
-          : `NAME:${normalizeImportKey(getImportString(v, 'Nombre'))}`;
+          : inventoryCode
+            ? `IMPORT_SKU:${normalizeImportKey(inventoryCode)}`
+            : `ROW:${row.rowNumber}`;
         const existingFromThisImport =
           createdItemByImportKey.get(importIdentityKey) ?? null;
         const existing =
