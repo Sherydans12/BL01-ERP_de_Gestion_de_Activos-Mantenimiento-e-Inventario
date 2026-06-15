@@ -907,9 +907,10 @@ export class InventoryItemsService {
       }
 
       const existingById = id ? itemById.get(id) : null;
-      const existingByInventoryCode = inventoryCode
-        ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
-        : null;
+      const existingByInventoryCode =
+        id && inventoryCode
+          ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
+          : null;
       const existingByPartNumber = partNumber
         ? itemByPartNumber.get(normalizeImportKey(partNumber))
         : null;
@@ -1314,7 +1315,7 @@ export class InventoryItemsService {
           createdItemByImportKey.get(importIdentityKey) ?? null;
         const existing =
           (id ? itemById.get(id) : null) ??
-          (inventoryCode
+          (id && inventoryCode
             ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
             : null) ??
           (partNumber
