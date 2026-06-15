@@ -108,7 +108,12 @@ const BASE_COLUMNS: MasterExportColumn[] = [
   { header: 'Stock', key: 'quantity', width: 12, numFmt: '#,##0.00' },
   { header: 'Stock minimo', key: 'minStock', width: 14, numFmt: '#,##0.00' },
   { header: 'Stock maximo', key: 'maxStock', width: 14, numFmt: '#,##0.00' },
-  { header: 'Bodega politica', key: 'policyWarehouse', width: 20, locked: true },
+  {
+    header: 'Bodega politica',
+    key: 'policyWarehouse',
+    width: 20,
+    locked: true,
+  },
   {
     header: 'Politica minimo',
     key: 'policyMinStock',

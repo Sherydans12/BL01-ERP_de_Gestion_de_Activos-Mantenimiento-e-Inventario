@@ -191,7 +191,11 @@ export class UsersController {
       transform: true,
     }),
   )
-  update(@Param('id') id: string, @Body() body: UpdateUserDto, @Req() req: any) {
+  update(
+    @Param('id') id: string,
+    @Body() body: UpdateUserDto,
+    @Req() req: any,
+  ) {
     const requesterTenantId = req.user.tenantId;
     const requesterRole = req.user.role;
     return this.usersService.update(

@@ -107,11 +107,7 @@ export class TenantRolesService {
     });
   }
 
-  async remove(
-    tenantId: string,
-    id: string,
-    replacementRoleId?: string,
-  ) {
+  async remove(tenantId: string, id: string, replacementRoleId?: string) {
     const role = await this.prisma.tenantRole.findFirst({
       where: { id, tenantId },
     });
