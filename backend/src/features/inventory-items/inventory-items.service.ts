@@ -23,6 +23,7 @@ import {
   getImportNullableString,
   getImportString,
   normalizeImportKey,
+  normalizeImportText,
   parseBaseLogicMasterImportWorkbook,
   parseImportBoolean,
   parseImportNumber,
@@ -905,19 +906,55 @@ export class InventoryItemsService {
         );
       }
 
+      const existingById = id ? itemById.get(id) : null;
+      const existingByInventoryCode = inventoryCode
+        ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
+        : null;
+      const existingByPartNumber = partNumber
+        ? itemByPartNumber.get(normalizeImportKey(partNumber))
+        : null;
       const existing =
-        (id ? itemById.get(id) : null) ??
-        (inventoryCode
-          ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
-          : null) ??
-        (partNumber
-          ? itemByPartNumber.get(normalizeImportKey(partNumber))
-          : null) ??
-        null;
+        existingById ?? existingByInventoryCode ?? existingByPartNumber ?? null;
       if (existing) includedItemIds.add(existing.id);
       if (id) includedItemKeys.add(id);
       if (inventoryCode)
         includedItemKeys.add(normalizeImportKey(inventoryCode));
+
+      if (id && !existingById) {
+        warnings.push(
+          'ID articulo no existe en este tenant; se ignorara para resolver la fila.',
+        );
+      }
+      if (existing && id && existing.id !== id) {
+        warnings.push(
+          'ID articulo no coincide con el articulo resuelto por SKU/numero de parte; se conservara el ID real del sistema.',
+        );
+      }
+      if (
+        existing &&
+        inventoryCode &&
+        normalizeImportKey(existing.inventoryCode) !==
+          normalizeImportKey(inventoryCode)
+      ) {
+        warnings.push(
+          'Codigo inventario es de solo lectura; se conservara el SKU interno existente.',
+        );
+      }
+      if (!existing && inventoryCode) {
+        warnings.push(
+          'Codigo inventario informado en una fila nueva sera ignorado; el sistema asignara el siguiente SKU interno.',
+        );
+      }
+      const qrPayload = getImportNullableString(v, 'QR payload');
+      if (
+        existing &&
+        qrPayload &&
+        normalizeImportText(existing.qrCode) !== normalizeImportText(qrPayload)
+      ) {
+        warnings.push(
+          'QR payload es de solo lectura; se conservara el valor interno existente.',
+        );
+      }
 
       const duplicateKey = `${id || inventoryCode || partNumber || name}:${warehouseCode || 'NO_WAREHOUSE'}`;
       itemWarehouseKeys.set(duplicateKey, [
@@ -1218,12 +1255,17 @@ export class InventoryItemsService {
     const previewByRowNumber = new Map(
       validation.previewRows.map((preview) => [preview.rowNumber, preview]),
     );
+    const createdItemByImportKey = new Map<
+      string,
+      (typeof existingItems)[number]
+    >();
 
     let created = 0;
     let updated = 0;
     let unchanged = 0;
     let stockAdjusted = 0;
     let deleted = 0;
+    let inventorySkuCounterSynced = false;
 
     await this.prisma.$transaction(async (tx) => {
       for (const row of workbook.rows) {
@@ -1263,6 +1305,11 @@ export class InventoryItemsService {
           });
           supplierByName.set(normalizeImportKey(supplier.name), supplier);
         }
+        const importIdentityKey = partNumber
+          ? `PN:${normalizeImportKey(partNumber)}`
+          : `NAME:${normalizeImportKey(getImportString(v, 'Nombre'))}`;
+        const existingFromThisImport =
+          createdItemByImportKey.get(importIdentityKey) ?? null;
         const existing =
           (id ? itemById.get(id) : null) ??
           (inventoryCode
@@ -1271,15 +1318,14 @@ export class InventoryItemsService {
           (partNumber
             ? itemByPartNumber.get(normalizeImportKey(partNumber))
             : null) ??
+          existingFromThisImport ??
           null;
 
         if (!category || !unit) continue;
 
-        const itemId = existing?.id ?? id ?? randomUUID();
+        let itemId = existing?.id ?? randomUUID();
         const itemData = {
           tenantId,
-          inventoryCode,
-          qrCode: getImportNullableString(v, 'QR payload') || `INV:${itemId}`,
           partNumber,
           name: getImportString(v, 'Nombre'),
           description: getImportNullableString(v, 'Descripcion'),
@@ -1299,19 +1345,56 @@ export class InventoryItemsService {
         if (!existing) {
           if (preview.action !== 'CREATE') continue;
           if (!allowCreates) continue;
+          if (!inventorySkuCounterSynced) {
+            await this.ensureInventorySkuCounterFloor(tenantId, tx);
+            inventorySkuCounterSynced = true;
+          }
+          const nextInventoryCode =
+            await this.sequenceService.getNextCorrelative(
+              tenantId,
+              INV_SKU_DOC_TYPE,
+              INV_SKU_PREFIX,
+              {
+                tx,
+                padWidth: 4,
+                separator: '',
+              },
+            );
           await tx.inventoryItem.create({
             data: {
               id: itemId,
               ...itemData,
+              inventoryCode: nextInventoryCode,
+              qrCode: `INV:${itemId}`,
             },
           });
+          const createdItem = {
+            id: itemId,
+            tenantId,
+            inventoryCode: nextInventoryCode,
+            qrCode: `INV:${itemId}`,
+            partNumber,
+            name: itemData.name,
+          } as (typeof existingItems)[number];
+          itemById.set(itemId, createdItem);
+          itemByInventoryCode.set(
+            normalizeImportKey(nextInventoryCode),
+            createdItem,
+          );
+          if (partNumber) {
+            itemByPartNumber.set(normalizeImportKey(partNumber), createdItem);
+          }
+          createdItemByImportKey.set(importIdentityKey, createdItem);
           created++;
         } else if (preview.action === 'UPDATE' && allowUpdates) {
+          itemId = existing.id;
           await tx.inventoryItem.update({
             where: { id: existing.id },
             data: itemData,
           });
           updated++;
+        } else if (existingFromThisImport && preview.action === 'CREATE') {
+          itemId = existing.id;
         } else {
           unchanged++;
           continue;

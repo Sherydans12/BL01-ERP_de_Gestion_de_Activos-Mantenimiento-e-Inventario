@@ -93,6 +93,13 @@ Stock:
 - El ajuste conserva `previousStock`, `newStock`, usuario y nota de auditoria.
 - Cambios de stock son configurables con `allowStockAdjustments`.
 
+Altas desde exportacion:
+
+- Para crear articulos nuevos desde el Excel exportado, agregar filas en `Inventario` dejando vacios `ID articulo`, `Codigo inventario` y `QR payload`.
+- El commit asigna automaticamente el siguiente `IN####` y `INV:<uuid>`; si el usuario informa manualmente SKU/QR en una fila nueva, se ignoran y se muestra advertencia.
+- Si un articulo nuevo se informa en varias bodegas dentro del mismo Excel, se crea una sola ficha de articulo y se aplican las filas de stock por bodega.
+- La vista previa del importador prioriza errores, altas y cambios para que las filas nuevas agregadas al final del Excel sean visibles aunque el maestro tenga cientos de filas.
+
 ## Contrato Excel
 
 Cada workbook BaseLogic exportado incluye:
@@ -101,6 +108,7 @@ Cada workbook BaseLogic exportado incluye:
 - Encabezados en fila 5.
 - Datos desde fila 6.
 - Comentarios/descriptores en encabezados.
+- Columnas de sistema protegidas contra edicion accidental en la hoja principal.
 - Hoja muy oculta `_bl_import_contract` con:
   - `domain`
   - `version`

@@ -112,7 +112,12 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
 
         <section class="rounded-xl border border-border bg-surface overflow-hidden">
           <div class="flex items-center justify-between border-b border-border p-4">
-            <h2 class="text-sm font-bold text-main">Vista previa artículo/bodega</h2>
+            <div>
+              <h2 class="text-sm font-bold text-main">Vista previa artículo/bodega</h2>
+              <p class="mt-1 text-xs text-muted">
+                Se priorizan errores, altas y cambios; las filas sin cambios quedan al final.
+              </p>
+            </div>
             <button type="button" (click)="commit()" [disabled]="!canCommit()" class="rounded-lg bg-primary px-5 py-2 text-sm font-bold font-mono text-dark disabled:opacity-50">
               @if (state() === 'committing') { IMPORTANDO... } @else { CONFIRMAR IMPORTACIÓN }
             </button>
@@ -121,7 +126,7 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
             <table class="w-full text-left text-sm">
               <thead class="bg-dark text-xs uppercase text-muted"><tr><th class="px-4 py-3">Fila</th><th>Acción</th><th>Artículo</th><th>Bodega</th><th>Cambios</th><th>Errores / advertencias</th></tr></thead>
               <tbody class="divide-y divide-border/50">
-                @for (row of p.previewRows.slice(0, 160); track row.rowNumber) {
+                @for (row of visiblePreviewRows(p); track row.rowNumber) {
                   <tr>
                     <td class="px-4 py-3 font-mono">{{ row.rowNumber }}</td>
                     <td><span [class]="actionClass(row.action)">{{ row.action }}</span></td>
@@ -137,6 +142,11 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
               </tbody>
             </table>
           </div>
+          @if (p.previewRows.length > visiblePreviewRows(p).length) {
+            <p class="border-t border-border px-4 py-3 text-xs text-muted">
+              Mostrando {{ visiblePreviewRows(p).length }} de {{ p.previewRows.length }} filas, con prioridad en acciones que requieren revisión.
+            </p>
+          }
         </section>
       }
 
@@ -216,6 +226,22 @@ export class InventoryMasterImportComponent {
     if (action === 'CREATE') return `${base} bg-emerald-500/15 text-emerald-300`;
     if (action === 'UPDATE') return `${base} bg-amber-500/15 text-amber-200`;
     return `${base} bg-slate-500/15 text-muted`;
+  }
+
+  visiblePreviewRows(preview: InventoryImportValidationResult) {
+    const priority: Record<string, number> = {
+      ERROR: 0,
+      CREATE: 1,
+      UPDATE: 2,
+      NO_CHANGE: 3,
+    };
+    return [...preview.previewRows]
+      .sort(
+        (a, b) =>
+          (priority[a.action] ?? 9) - (priority[b.action] ?? 9) ||
+          a.rowNumber - b.rowNumber,
+      )
+      .slice(0, 160);
   }
 
   impactText(impact: Record<string, number>): string {
