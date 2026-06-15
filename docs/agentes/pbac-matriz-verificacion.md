@@ -64,6 +64,7 @@
 | `purchase-requisitions.service.ts` | `purchases:requisition:update-purchasing` |
 | `users.service.ts` | `findAssignableForOt` solo JSON `permissions` (OT execute/assign/update) |
 | `tenant-role-defaults.ts` | Espejos `Sistema · ADMIN` / `Sistema · USER`; `ensureSuperAdminMirrorRole` en seed |
+| `tenant-roles.service.ts` | Borrado seguro de roles custom: exige `replacementRoleId` si hay usuarios asignados; mismo `baseRole`; transacción de reasignación + delete |
 
 ### Controladores — estado post Fase 1
 

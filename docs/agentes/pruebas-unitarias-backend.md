@@ -127,7 +127,8 @@ npm run test:domain:watch
 - **`WorkOrdersService`** (+9): `create` (tenant, equipo/contrato, horómetro); `update` (reservas repuestos, PBAC `IN_PROGRESS`, OT cerrada).
 - **`UsersService.findAssignableForOt`** (+4): query `tenantRole.permissions` con `array_contains` (`execute` / `assign` / `update`); flags `canExecuteOt` / `canSuperviseOt`; sin filtro legacy `MECHANIC`/`SUPERVISOR`.
 - **`purchase-credit-notes`** (+5): conciliación 3-way vía `PurchaseInvoicesService` real (neto factura − NC); `remove` con OC `CLOSED` (comportamiento actual documentado).
-- **`test:domain`**: incluye `users.service.spec` (14 suites, **300** tests).
+- **`TenantRolesService.remove`** (+4): impide borrar roles con usuarios sin reemplazo, valida `baseRole` compatible y reasigna + elimina en una sola transacción.
+- **`test:domain`**: incluye `users.service.spec` y `tenant-roles.service.spec`.
 
 ### Iteración N+20 / N+21 (2026-05-24) — hecho
 
@@ -202,6 +203,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
 | `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **17** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | `features/tenant-roles/tenant-role-defaults.spec.ts` | **Compras — `resolveApprovalPolicyForUser`** | **5** | Función pura ACL (ver §4) |
+| `features/tenant-roles/tenant-roles.service.spec.ts` | **Roles PBAC — eliminación segura** | **4** | Reemplazo obligatorio, compatibilidad de `baseRole`, reasignación transaccional |
 | `features/purchases/purchase-settings.service.spec.ts` | **Compras — matriz ACL** | **8** | `getSettings`, `updateSettings`, `upsertPolicies` (§4) |
 | `features/purchases/purchase-orders.service.spec.ts` | **Compras — OC** | **52** | Firmas, ciclo OC, edición sensible (§4.4) |
 | `features/purchases/purchase-invoices.service.spec.ts` | **Compras — 3-way match** | **17** | `validateInvoiceMatch`, `overruleThreeWayMatch` (§4) |

@@ -2,7 +2,7 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-06-08 |
+| **Última modificación** | 2026-06-15 |
 | **Versión documento** | 1.1 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
@@ -335,7 +335,7 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
 | `CreateWarehouseDto` / `UpdateWarehouseDto` | warehouses | [`dto/`](../backend/src/features/warehouses/dto/) |
 | `LineAwardsDto` | purchases | [`line-awards.dto.ts`](../backend/src/features/purchases/dto/line-awards.dto.ts) |
 | Payloads SRC (mirror frontend) | purchases | [`purchases.interface.ts`](../frontend/src/app/core/models/purchases.interface.ts) |
-| `CreateTenantRoleDto` / `UpdateTenantRoleDto` | tenant-roles | [`dto/`](../backend/src/features/tenant-roles/dto/) |
+| `CreateTenantRoleDto` / `UpdateTenantRoleDto` / `DeleteTenantRoleDto` | tenant-roles | [`dto/`](../backend/src/features/tenant-roles/dto/) |
 | Notificaciones | notification-settings | [`dto/`](../backend/src/features/notification-settings/dto/) |
 
 ### 2.4 Ecosistema de Operaciones y Flota (M1 · M2 · M3 ↔ `Equipment`)
@@ -524,6 +524,17 @@ Reglas agente: [`.cursor/rules/tpm-arquitectura.mdc`](../.cursor/rules/tpm-arqui
 - **16 llaves** `operations:*` (equipo, OT, horómetro, pautas PM, backlog) en [`permissions.enum.ts`](../backend/src/features/auth/constants/permissions.enum.ts).
 - Backend migrado: `equipments`, `work-orders`, `maintenance-kits`, `meter-adjustments`, `work-order-analytics` — `PermissionsGuard` + `@RequirePermissions` / `@RequireAnyPermissions`; ABAC en servicios sin cambios.
 - Frontend: pendiente (siguiente sprint).
+
+#### Gobernanza de roles PBAC (2026-06-15)
+
+- Pantalla FE: `/app/configuracion/gobernanza-roles` mediante [`TenantRolesService`](../frontend/src/app/core/services/tenant-roles/tenant-roles.service.ts) y componente [`role-governance.component`](../frontend/src/app/features/settings/role-governance/role-governance.component.ts).
+- API: `GET/POST/PATCH/DELETE /api/tenant-roles/*` + `GET /api/tenant-roles/permissions-catalog`.
+- Eliminacion segura de roles custom:
+  - Los roles espejo `Sistema · ...` no se pueden eliminar.
+  - Si el rol custom no tiene usuarios asignados, se elimina directo.
+  - Si tiene usuarios asignados, el borrado exige `replacementRoleId` y el reemplazo debe pertenecer al mismo tenant, ser distinto del rol a eliminar y conservar el mismo `baseRole`.
+  - La reasignacion y el borrado ocurren en una sola transaccion Prisma para evitar dejar usuarios sin perfil PBAC.
+- Motivo de negocio: un usuario `USER` con `customRoleId = null` puede quedar sin permisos efectivos ni menu; por eso ya no se desasignan usuarios al vacio al borrar un rol.
 
 #### Flags ABAC adicionales
 
