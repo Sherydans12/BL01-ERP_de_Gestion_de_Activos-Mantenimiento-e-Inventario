@@ -9,6 +9,19 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-16 — Auditoría de Control de Stock: Hardening técnico, ABAC y regularizaciones
+- **Contexto:** Se realizó una auditoría funcional y técnica del módulo de Control de Stock (`/app/inventario/stock`). Durante este proceso, se identificaron áreas que requieren definición o hardening técnico en la validación de decimales de unidades de medida (UoM), el filtro contractual en las alertas de abastecimiento globales, y el comportamiento transaccional del stock negativo al cerrar e imputar repuestos de Órdenes de Trabajo (OT).
+- **Decisión:**
+  - **Validación de UoM en backend (Hardening técnico):** Se determinó como regla estricta que cuando `UnitOfMeasure.allowsDecimals === false`, la cantidad debe ser un número entero en todas las escrituras. Se reutilizará en el futuro la utilidad `assertQuantityAllowedForUom` en todos los flujos de escritura (transacción manual, ajuste físico, transferencias, despacho/retorno de terreno, consumos/devoluciones de OT, recepciones de compra y lubricantes).
+  - **Segregación contractual en alertas (Corrección ABAC):** El endpoint `/api/inventory-stock/supply-alerts` debe filtrar bodegas según `allowedContracts` para usuarios con rol base `USER` u otros no administrativos, reutilizando el patrón `buildPurchaseContractScopeFilter(user)` definido en `contract-scope.util.ts`.
+  - **Stock negativo en cierre de OT (Política de negocio):** Se confirma el comportamiento parametrizable por tenant (`blockNegativeStock`):
+    - Con `blockNegativeStock = true`, los consumos que generen stock negativo se rechazan, abortando la transacción y bloqueando el cierre de la OT.
+    - Con `blockNegativeStock = false`, se permite registrar `WORK_ORDER_ISSUE` resultando en stock negativo, marcando la transacción en Kardex con `isPendingRegularization = true` y congelando el costo al CPP vigente. Las OTs cerradas no se reabren ni modifican de forma retroactiva por regularizaciones posteriores.
+  - **Secuencia histórica en Kardex:** La regularización posterior se registra como una transacción independiente sin modificar los registros originales ni la OT cerrada.
+- **Consecuencias:**
+  - Se actualizó el documento de auditoría [auditoria-contexto-control-stock.md](auditoria-contexto-control-stock.md).
+  - No se modifica código productivo, base de datos ni tests existentes en esta etapa de auditoría estática.
+
 ## 2026-06-09 — P1B1: Hardening cronológico del Ledger AvailabilityEvent
 
 - **Contexto:** Al habilitar la integración del Ledger con orígenes asíncronos (como el registro diferido de fallas desde M3), se podían generar registros desordenados, resultando en cálculos incorrectos de `elapsedMinutes` y `previousStatus` para los eventos afectados.
