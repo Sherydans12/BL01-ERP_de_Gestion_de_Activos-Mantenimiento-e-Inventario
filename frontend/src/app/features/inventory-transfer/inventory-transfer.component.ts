@@ -157,7 +157,7 @@ export class InventoryTransferComponent implements OnInit {
 
   loadWarehouses() {
     this.warehousesLoading.set(true);
-    this.warehousesService.getWarehouses().subscribe({
+    this.warehousesService.getWarehousesForTransfer().subscribe({
       next: (rows) => {
         this.warehouses.set(rows);
         this.warehousesLoading.set(false);
@@ -173,6 +173,18 @@ export class InventoryTransferComponent implements OnInit {
         this.notificationService.error('No se pudieron cargar las bodegas.');
       },
     });
+  }
+
+  warehouseOptionLabel(warehouse: any): string {
+    const code = String(warehouse?.code ?? '').trim() || 'Sin código';
+    const name = String(warehouse?.name ?? '').trim() || 'Sin nombre';
+    const contract = warehouse?.contract
+      ? `${warehouse.contract.code ?? 'Contrato'} · ${warehouse.contract.name ?? ''}`.trim()
+      : 'Contrato sin detalle';
+    const subcontract = warehouse?.subcontract
+      ? ` · Subcontrato ${warehouse.subcontract.code ?? ''} ${warehouse.subcontract.name ?? ''}`.trimEnd()
+      : '';
+    return `${code} — ${name} · ${contract}${subcontract}`;
   }
 
   loadTransfers() {

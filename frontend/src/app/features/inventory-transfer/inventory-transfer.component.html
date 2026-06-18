@@ -27,7 +27,7 @@
             {{ warehousesLoading() ? "Cargando..." : "-- Seleccione origen --" }}
           </option>
           @for (w of warehouses(); track w.id) {
-            <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
+            <option [value]="w.id">{{ warehouseOptionLabel(w) }}</option>
           }
         </select>
       </div>
@@ -42,7 +42,7 @@
         >
           <option value="">-- Seleccione destino --</option>
           @for (w of warehouses(); track w.id) {
-            <option [value]="w.id">{{ w.code }} — {{ w.name }}</option>
+            <option [value]="w.id">{{ warehouseOptionLabel(w) }}</option>
           }
         </select>
       </div>

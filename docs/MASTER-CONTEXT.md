@@ -2,7 +2,7 @@
 
 | Metadato | Valor |
 |----------|--------|
-| **Última modificación** | 2026-06-15 |
+| **Última modificación** | 2026-06-18 |
 | **Versión documento** | 1.1 |
 | **Mantenido por** | Equipo TPM / agentes Cursor |
 
@@ -301,7 +301,8 @@ Registro módulos app: [`app.module.ts`](../backend/src/app.module.ts).
 
 **W2W (`InventoryTransferService`):**
 - PBAC: `inventory:transfer:read` / `create` / `approve`; alcance contrato en `USER`.
-- `create`: `TRANSFER_OUT`, estado `SHIPPED`.
+- `GET /warehouses?scope=transfer`: contrato API para selector W2W; ignora `x-contract-id` global y devuelve todas las bodegas operables (`ADMIN` / `SUPER_ADMIN` tenant-wide; otros roles por `allowedContracts`).
+- `create`: valida contrato de bodega origen y destino; `TRANSFER_OUT`, estado `SHIPPED`.
 - `confirmReception`: `TRANSFER_IN`; CPP destino = promedio ponderado.
 
 **Cierre OT / devoluciones:** consumos no recalculan CPP; `WORK_ORDER_RETURN` incrementa qty sin alterar CPP.

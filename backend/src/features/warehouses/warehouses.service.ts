@@ -5,7 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { userCanAccessContractId } from '../../common/contract-scope.util';
+import {
+  normalizedAllowedContractIds,
+  userCanAccessContractId,
+} from '../../common/contract-scope.util';
 
 export interface CreateWarehouseDto {
   code: string;
@@ -20,9 +23,14 @@ export interface CreateWarehouseDto {
 export class WarehousesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(user: any, activeContract?: string) {
+  async findAll(
+    user: any,
+    activeContract?: string,
+    options?: { scope?: string },
+  ) {
     const tenantId = user.tenantId;
     const where: any = { tenantId };
+    const scope = String(options?.scope ?? '').trim().toLowerCase();
     const contractFilter =
       activeContract && activeContract !== 'ALL' ? activeContract : undefined;
     const allowed: string[] = Array.isArray(user.allowedContracts)
@@ -30,20 +38,28 @@ export class WarehousesService {
       : [];
     const tenantWide = allowed.includes('ALL');
     const emptySentinel = '00000000-0000-0000-0000-000000000000';
+    const role = String(user.role ?? '').toUpperCase();
 
     // Lógica de seguridad por Contrato
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-      if (contractFilter) {
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      if (scope !== 'transfer' && contractFilter) {
         where.contractId = contractFilter;
       }
-    } else if (contractFilter) {
-      const canAccess =
-        tenantWide || allowed.length === 0 || allowed.includes(contractFilter);
-      where.contractId = canAccess ? contractFilter : emptySentinel;
-    } else {
+    } else if (scope === 'transfer') {
+      const scopedAllowed = normalizedAllowedContractIds(user);
       where.contractId = tenantWide
         ? undefined
-        : { in: allowed.length ? allowed : [emptySentinel] };
+        : { in: scopedAllowed.length ? scopedAllowed : [emptySentinel] };
+    } else if (contractFilter) {
+      const canAccess = userCanAccessContractId(user, contractFilter);
+      where.contractId = canAccess ? contractFilter : emptySentinel;
+    } else {
+      const scopedAllowed = normalizedAllowedContractIds(user);
+      where.contractId = tenantWide
+        ? undefined
+        : {
+            in: scopedAllowed.length ? scopedAllowed : [emptySentinel],
+          };
     }
 
     if (where.contractId === undefined) {

@@ -35,10 +35,12 @@ export class WarehousesController {
     @Req() req: any,
     @Headers('x-contract-id') activeContract?: string,
     @Query('contractId') contractId?: string,
+    @Query('scope') scope?: string,
   ) {
     return this.warehousesService.findAll(
       req.user,
       contractId || activeContract,
+      { scope },
     );
   }
 

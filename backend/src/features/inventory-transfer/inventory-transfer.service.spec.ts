@@ -34,6 +34,7 @@ describe('InventoryTransferService', () => {
   const itemId = '44444444-4444-4444-4444-444444444444';
   const userId = '55555555-5555-5555-5555-555555555555';
   const transferId = '66666666-6666-6666-6666-666666666666';
+  const originContractId = '99999999-9999-9999-9999-999999999999';
   const destContractId = '77777777-7777-7777-7777-777777777777';
   const foreignContractId = '88888888-8888-8888-8888-888888888888';
 
@@ -48,6 +49,18 @@ describe('InventoryTransferService', () => {
     tenantId,
     role: 'USER',
     allowedContracts: [destContractId],
+  };
+  const userWithCrossContractAccess = {
+    id: userId,
+    tenantId,
+    role: 'USER',
+    allowedContracts: [originContractId, destContractId],
+    permissions: ['inventory:transfer:create'],
+  };
+  const superAdminUser = {
+    id: userId,
+    tenantId,
+    role: 'SUPER_ADMIN',
   };
 
   /** USER sin permiso de creación ni lectura de transferencias (PBAC). */
@@ -215,6 +228,81 @@ describe('InventoryTransferService', () => {
       );
     });
 
+    it('rechaza USER con acceso a origen pero no a destino', async () => {
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst
+          .mockResolvedValueOnce({
+            id: originId,
+            code: 'ORI',
+            contractId: originContractId,
+          } as never)
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'DST',
+            contractId: destContractId,
+          } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      await expect(
+        service.executeTransfer(baseDto, {
+          ...userWithCrossContractAccess,
+          allowedContracts: [originContractId],
+        }),
+      ).rejects.toThrow(/bodega destino/);
+      expect(tx.inventoryTransfer.create).not.toHaveBeenCalled();
+    });
+
+    it('permite USER con acceso a origen y destino en contratos distintos', async () => {
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst
+          .mockResolvedValueOnce({
+            id: originId,
+            code: 'B-ORI',
+            contractId: originContractId,
+          } as never)
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'B-DST',
+            contractId: destContractId,
+          } as never);
+        tx.inventoryTransfer.create.mockResolvedValue({
+          id: transferId,
+          status: 'SHIPPED',
+        } as never);
+        tx.inventoryItem.findFirst.mockResolvedValue({
+          id: itemId,
+          partNumber: 'PN-1',
+          unitOfMeasure: { abbreviation: 'UN', allowsDecimals: true },
+        } as never);
+        tx.itemStock.findUnique.mockResolvedValue({
+          quantity: 10,
+          unitCost: 5,
+        } as never);
+        tx.itemStock.update.mockResolvedValue({} as never);
+        tx.inventoryTransferLine.create.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.inventoryTransfer.findUnique.mockResolvedValue({
+          id: transferId,
+          status: 'SHIPPED',
+        } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      const result = await service.executeTransfer(
+        baseDto,
+        userWithCrossContractAccess,
+      );
+
+      expect(result?.status).toBe('SHIPPED');
+      expect(tx.inventoryTransfer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          originWarehouseId: originId,
+          destinationWarehouseId: destId,
+        }),
+      });
+    });
+
     it('crea transferencia SHIPPED, descuenta origen y registra TRANSFER_OUT', async () => {
       prisma.$transaction.mockImplementation(async (fn, opts) => {
         expect(opts).toEqual(
@@ -275,6 +363,48 @@ describe('InventoryTransferService', () => {
           unitCost: 5,
         }),
       });
+    });
+
+    it('permite SUPER_ADMIN en transferencia cross-contract', async () => {
+      prisma.$transaction.mockImplementation(async (fn) => {
+        tx.warehouse.findFirst
+          .mockResolvedValueOnce({
+            id: originId,
+            code: 'B-ORI',
+            contractId: originContractId,
+          } as never)
+          .mockResolvedValueOnce({
+            id: destId,
+            code: 'B-DST',
+            contractId: destContractId,
+          } as never);
+        tx.inventoryTransfer.create.mockResolvedValue({
+          id: transferId,
+          status: 'SHIPPED',
+        } as never);
+        tx.inventoryItem.findFirst.mockResolvedValue({
+          id: itemId,
+          partNumber: 'PN-1',
+          unitOfMeasure: { abbreviation: 'UN', allowsDecimals: true },
+        } as never);
+        tx.itemStock.findUnique.mockResolvedValue({
+          quantity: 10,
+          unitCost: 5,
+        } as never);
+        tx.itemStock.update.mockResolvedValue({} as never);
+        tx.inventoryTransferLine.create.mockResolvedValue({} as never);
+        tx.inventoryTransaction.create.mockResolvedValue({} as never);
+        tx.inventoryTransfer.findUnique.mockResolvedValue({
+          id: transferId,
+          status: 'SHIPPED',
+        } as never);
+        return (fn as (client: typeof tx) => Promise<unknown>)(tx);
+      });
+
+      const result = await service.executeTransfer(baseDto, superAdminUser);
+
+      expect(result?.status).toBe('SHIPPED');
+      expect(tx.inventoryTransfer.create).toHaveBeenCalled();
     });
   });
 

@@ -294,6 +294,11 @@ export class InventoryTransferService {
             'No tiene permisos para despachar desde esta bodega de origen.',
           );
         }
+        if (!this.canAccessContract(user, dest.contractId)) {
+          throw new ForbiddenException(
+            'No tiene permisos para transferir hacia esta bodega destino.',
+          );
+        }
 
         const transfer = await tx.inventoryTransfer.create({
           data: {

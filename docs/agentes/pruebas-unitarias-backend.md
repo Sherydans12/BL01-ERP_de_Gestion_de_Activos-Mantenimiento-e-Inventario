@@ -4,7 +4,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-06-08 (M2 Snapshot + Event Ledger)
+**Última actualización:** 2026-06-18 (W2W multi-contrato + scope de bodegas)
 
 ---
 
@@ -22,7 +22,8 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Compras — SRC** | ~92 % flujo completo | 38 | Ciclo + `update` post-adjudicación (§4.9) |
 | **Inventario — catálogo** | ~55 % CRUD búsqueda | 23 | `search`, `create`, `update`, `quickCreate`, `remove` + ledger (§3.5) |
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
-| **Inventario — transferencias W2W** | ~90 % mutación/recepción | 22 | W2W + alcance contrato en `getTransferById` (§3.3) |
+| **Inventario — transferencias W2W** | ~95 % mutación/recepción | 25 | W2W + alcance contrato en origen/destino y `getTransferById` (§3.3) |
+| **Inventario — bodegas** | ~45 % alcance contractual | 3 | `scope=transfer` y hardening de `contractFilter` (§3.3.1) |
 | **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
@@ -199,7 +200,8 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `common/inventory/stock-quantity.util.spec.ts` | **Util — precisión decimal stock** | **3** | Resta, epsilon, `wouldStockGoNegative` |
 | `features/purchases/purchase-requisitions.service.spec.ts` | **Compras — SRC** | **38** | Ciclo SRC + `update` (§4.9) |
 | `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
-| `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **20** | Mutación, recepción, listado (§3.3) |
+| `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **25** | Mutación, recepción, listado, ABAC origen/destino (§3.3) |
+| `features/warehouses/warehouses.service.spec.ts` | **Inventario — bodegas** | **3** | `scope=transfer`, admin tenant-wide, usuario sin contratos |
 | `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
 | `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **17** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | `features/tenant-roles/tenant-role-defaults.spec.ts` | **Compras — `resolveApprovalPolicyForUser`** | **5** | Función pura ACL (ver §4) |
@@ -268,16 +270,24 @@ Documentación de dominio: [inventario-stock-transferencias-kardex.md](inventari
 
 ### 3.3 Spec: `inventory-transfer.service.spec.ts`
 
-**Última ejecución:** 22 passed (2026-05-24).
+**Última ejecución:** 25 passed (2026-06-18).
 
 | Bloque | Casos |
 |--------|-------|
-| `executeTransfer` | Sin `inventory:transfer:create`; origen=destino; sin líneas; cantidad inválida; UoM sin decimales; stock insuficiente; happy path `SHIPPED` + `TRANSFER_OUT` + línea con `unitCost` origen |
+| `executeTransfer` | Sin `inventory:transfer:create`; origen=destino; sin líneas; cantidad inválida; UoM sin decimales; stock insuficiente; rechaza destino fuera de `allowedContracts`; permite cross-contract con origen/destino permitidos; bypass `SUPER_ADMIN`; happy path `SHIPPED` + `TRANSFER_OUT` + línea con `unitCost` origen |
 | `confirmReception` | Not found; estado ≠ `SHIPPED`; contrato destino; **CPP ponderado** en destino (6×10 + 4×5 → 8); stock nuevo en destino con política; `TRANSFER_IN` + `clearPendingRegularizationFlags` |
 | `listTransfers` | Paginación + `lineCount`; filtro `allowedContracts` (USER) |
 | `getTransferById` | Not found (sin registro / sin alcance contrato); `reception` en `COMPLETED` vía último `TRANSFER_IN` |
 
 Mocks: `InventoryStockService.clearPendingRegularizationFlags`; `inventory-item-stock-policy.helper`.
+
+### 3.3.1 Spec: `warehouses.service.spec.ts`
+
+**Última ejecución:** 3 passed (2026-06-18).
+
+| Bloque | Casos |
+|--------|-------|
+| `findAll` | `scope=transfer` devuelve todos los contratos permitidos para `USER`; `ADMIN` recibe tenant-wide aunque exista header de contrato; usuario no admin sin contratos no obtiene bodegas con `contractFilter` explícito |
 
 ### 3.4 Spec: `inventory-adjustment.service.spec.ts`
 

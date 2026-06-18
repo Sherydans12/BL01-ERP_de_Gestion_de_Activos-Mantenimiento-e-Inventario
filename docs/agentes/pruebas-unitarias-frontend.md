@@ -2,7 +2,7 @@
 
 Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El **foco actual del proyecto** está en el backend de dominio (212 tests); el frontend tiene sobre todo **smoke** (`should be created`).
 
-**Última actualización:** 2026-06-07 (refresh Flota — estado + horómetro)
+**Última actualización:** 2026-06-18 (W2W multi-contrato)
 
 **Suite ejecutable hoy:** **187 tests** verificados con `npm run test:ci` el 2026-06-07.
 
@@ -28,12 +28,13 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 |---------|------|--------|
 | `app.component.spec.ts` | App | Smoke |
 | `core/services/auth/auth.service.spec.ts` | Servicio | Smoke |
-| `core/services/warehouses/warehouses.service.spec.ts` | Servicio | Smoke |
+| `core/services/warehouses/warehouses.service.spec.ts` | Servicio | Smoke + `getWarehousesForTransfer()` usa `scope=transfer` |
 | `core/services/inventory-stock/inventory-stock.service.spec.ts` | Servicio | Smoke |
 | `core/services/inventory-items/inventory-items.service.spec.ts` | Servicio | Smoke |
 | `features/inventory-items/inventory-item-list.component.spec.ts` | Componente | Smoke |
 | `features/inventory-items/inventory-item-form.component.spec.ts` | Componente | Smoke |
 | `features/inventory-stock/stock-dashboard.component.spec.ts` | Componente | Smoke |
+| `features/inventory-transfer/inventory-transfer.component.spec.ts` | Componente | Carga bodegas W2W por scope, origen A/destino B, usuario solo A, `canConfirmReception` por destino |
 | `features/warehouses/warehouse-form.component.spec.ts` | Componente | Smoke |
 | `features/warehouses/warehouse-list.component.spec.ts` | Componente | Smoke |
 | `features/maintenance-kits/kit-form.component.spec.ts` | Componente | Smoke |
