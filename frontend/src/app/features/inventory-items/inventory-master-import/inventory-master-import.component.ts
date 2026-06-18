@@ -21,9 +21,9 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-[10px] font-mono uppercase tracking-widest text-primary">BaseLogic · Inventario</p>
-          <h1 class="text-2xl font-bold text-main tracking-tight">Importar maestro de inventario</h1>
+          <h1 class="text-2xl font-bold text-main tracking-tight">Importar ajustes de stock</h1>
           <p class="mt-1 text-sm text-muted max-w-3xl">
-            Valida artículos, categorías, unidades, bodegas, ubicaciones y ajustes de stock antes de confirmar.
+            Valida stock físico, ubicación, bins y umbrales por bodega para artículos existentes. El catálogo se crea y edita dentro del sistema.
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -58,25 +58,21 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
       @if (preview(); as p) {
         <section class="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Filas</p><p class="text-xl font-bold text-main">{{ p.summary.rows }}</p></div>
-          <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Altas</p><p class="text-xl font-bold text-main">{{ p.summary.creates }}</p></div>
-          <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Cambios</p><p class="text-xl font-bold text-main">{{ p.summary.updates }}</p></div>
+          <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Nuevos bloqueados</p><p class="text-xl font-bold text-red-300">{{ p.summary.creates }}</p></div>
+          <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Ajustes stock</p><p class="text-xl font-bold text-main">{{ p.summary.updates }}</p></div>
           <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Sin cambios</p><p class="text-xl font-bold text-main">{{ p.summary.unchanged }}</p></div>
           <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Errores</p><p class="text-xl font-bold" [class.text-red-400]="p.summary.errors">{{ p.summary.errors }}</p></div>
-          <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Bajas artículo</p><p class="text-xl font-bold text-amber-300">{{ p.summary.deleteCandidates }}</p></div>
+          <div class="rounded-lg border border-border bg-surface p-3"><p class="text-xs text-muted">Bajas</p><p class="text-xl font-bold text-muted">0</p></div>
         </section>
 
         <section class="rounded-xl border border-border bg-surface p-4">
-          <h2 class="text-sm font-bold text-main mb-3">Configuración de importación</h2>
-          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.allowCreates" /> Permitir altas</label>
-            <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.allowUpdates" /> Permitir actualizaciones</label>
+          <h2 class="text-sm font-bold text-main mb-3">Reglas de importación</h2>
+          <div class="grid gap-3 sm:grid-cols-2">
             <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.allowStockAdjustments" /> Ajustar stock con kardex</label>
             <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.autoCreateBins" /> Crear bins faltantes</label>
-            <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" [(ngModel)]="options.autoCreateSuppliers" /> Crear proveedores faltantes</label>
-            <label class="flex items-center gap-2 text-sm text-amber-200"><input type="checkbox" [(ngModel)]="options.allowItemDeletes" /> Eliminar artículos sin historial</label>
           </div>
           <p class="mt-3 text-xs text-muted">
-            Los bins y proveedores faltantes se crean automáticamente si las opciones están activas. Los artículos con kardex, reservas, OT, compras o adjuntos no se eliminan físicamente desde importación.
+            El Excel no crea, edita ni elimina artículos. Si cambia nombre, categoría, unidad, número de parte, flags, proveedor, SKU o QR, la fila queda bloqueada. CPP es informativo y no se importa.
           </p>
         </section>
 
@@ -96,26 +92,12 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
           </section>
         }
 
-        @if (p.deleteCandidates.length) {
-          <section class="rounded-xl border border-red-500/35 bg-red-500/10 p-4">
-            <h2 class="text-sm font-bold text-red-100 mb-3">Artículos ausentes en el Excel</h2>
-            <div class="max-h-72 overflow-auto">
-              @for (d of p.deleteCandidates; track d.itemId) {
-                <div class="border-b border-red-500/20 py-3">
-                  <p class="font-mono text-sm text-main">{{ d.inventoryCode || 'SIN SKU' }} · {{ d.name }}</p>
-                  <p class="mt-1 text-xs text-red-100">Impacto: {{ impactText(d.impact) }}</p>
-                </div>
-              }
-            </div>
-          </section>
-        }
-
         <section class="rounded-xl border border-border bg-surface overflow-hidden">
           <div class="flex items-center justify-between border-b border-border p-4">
             <div>
               <h2 class="text-sm font-bold text-main">Vista previa artículo/bodega</h2>
               <p class="mt-1 text-xs text-muted">
-                Se priorizan errores, altas y cambios; las filas sin cambios quedan al final.
+                Se priorizan errores y ajustes permitidos. Los cambios estructurales se bloquean antes de confirmar.
               </p>
             </div>
             <button type="button" (click)="commit()" [disabled]="!canCommit()" class="rounded-lg bg-primary px-5 py-2 text-sm font-bold font-mono text-dark disabled:opacity-50">
@@ -130,7 +112,7 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
                   <tr>
                     <td class="px-4 py-3 font-mono">{{ row.rowNumber }}</td>
                     <td><span [class]="actionClass(row.action)">{{ row.action }}</span></td>
-                    <td class="min-w-72"><p class="text-main">{{ row.label }}</p><p class="font-mono text-xs text-muted">{{ row.itemId || 'nuevo' }}</p></td>
+                    <td class="min-w-72"><p class="text-main">{{ row.label }}</p><p class="font-mono text-xs text-muted">{{ row.itemId || 'artículo no resuelto' }}</p></td>
                     <td class="font-mono text-xs">{{ row.warehouseCode || '—' }}</td>
                     <td>{{ row.changes.length }}</td>
                     <td class="min-w-96">
@@ -152,7 +134,7 @@ type ImportState = 'idle' | 'validating' | 'preview' | 'committing' | 'done';
 
       @if (commitResult(); as result) {
         <section class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-          Importación finalizada: {{ result.created }} creados, {{ result.updated }} actualizados, {{ result.unchanged || 0 }} sin cambios, {{ result.stockAdjusted }} ajustes de stock.
+          Importación finalizada: {{ result.stockAdjusted }} ajustes de stock con kardex, {{ result.updated }} filas de stock revisadas, {{ result.unchanged || 0 }} sin cambios.
         </section>
       }
     </div>
@@ -168,12 +150,8 @@ export class InventoryMasterImportComponent {
   commitResult = signal<InventoryImportCommitResult | null>(null);
 
   options = {
-    allowCreates: true,
-    allowUpdates: true,
     allowStockAdjustments: true,
-    allowItemDeletes: false,
     autoCreateBins: true,
-    autoCreateSuppliers: true,
   };
 
   canCommit = computed(() => {
@@ -223,7 +201,7 @@ export class InventoryMasterImportComponent {
   actionClass(action: string): string {
     const base = 'inline-flex rounded-full px-2 py-1 text-[10px] font-bold font-mono';
     if (action === 'ERROR') return `${base} bg-red-500/15 text-red-300`;
-    if (action === 'CREATE') return `${base} bg-emerald-500/15 text-emerald-300`;
+    if (action === 'CREATE') return `${base} bg-red-500/15 text-red-300`;
     if (action === 'UPDATE') return `${base} bg-amber-500/15 text-amber-200`;
     return `${base} bg-slate-500/15 text-muted`;
   }

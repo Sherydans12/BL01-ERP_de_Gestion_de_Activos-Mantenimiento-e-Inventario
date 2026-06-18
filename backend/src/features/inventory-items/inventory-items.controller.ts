@@ -25,7 +25,10 @@ import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequireAnyPermissions,
+  RequirePermissions,
+} from '../auth/decorators/permissions.decorator';
 import { SystemPermissions } from '../auth/constants/permissions.enum';
 import { MAX_UPLOAD_FILE_BYTES } from '../../common/storage/file-upload.constants';
 
@@ -144,7 +147,7 @@ export class InventoryItemsController {
     const stamp = new Date().toISOString().slice(0, 10);
     res.set(
       'Content-Disposition',
-      `attachment; filename="BaseLogic_Maestro_Inventario_${stamp}.xlsx"`,
+      `attachment; filename="BaseLogic_Stock_Inventario_${stamp}.xlsx"`,
     );
     return new StreamableFile(buffer, {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -153,7 +156,10 @@ export class InventoryItemsController {
 
   @Post('import/validate')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions(SystemPermissions.INVENTORY_ITEM_UPDATE)
+  @RequireAnyPermissions(
+    SystemPermissions.INVENTORY_ITEM_UPDATE,
+    SystemPermissions.INVENTORY_STOCK_ADJUST,
+  )
   @UseInterceptors(FileInterceptor('file', masterImportLimits))
   validateMasterImport(@UploadedFile() file: any, @Req() req: any) {
     if (!file?.buffer) {
@@ -181,6 +187,7 @@ export class InventoryItemsController {
       file.buffer,
       req.user,
       parseImportOptions(body),
+      file.originalname,
     );
   }
 

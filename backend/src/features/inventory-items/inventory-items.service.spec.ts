@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Prisma } from '@prisma/client';
+import ExcelJS from 'exceljs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../common/sequence/sequence.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { NotificationDispatcherService } from '../../common/notifications/notification-dispatcher.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { InventoryItemsService } from './inventory-items.service';
+import { generateInventoryMasterExcelBuffer } from './inventory-master-excel.generator';
 
 describe('InventoryItemsService — findItemLedger', () => {
   let service: InventoryItemsService;
@@ -224,6 +226,513 @@ describe('InventoryItemsService — findItemLedger', () => {
     expect(result.total).toBe(11);
     expect(result.data).toHaveLength(1);
     expect(result.data.some((r) => r.type === 'ITEM_GENESIS')).toBe(false);
+  });
+});
+
+describe('InventoryItemsService — inventario Excel stock-only', () => {
+  let service: InventoryItemsService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const itemId = '22222222-2222-2222-2222-222222222222';
+  const warehouseId = '33333333-3333-3333-3333-333333333333';
+  const contractId = '44444444-4444-4444-4444-444444444444';
+  const blockedContractId = '55555555-5555-5555-5555-555555555555';
+  const user = {
+    id: '77777777-7777-7777-7777-777777777777',
+    tenantId,
+    role: 'USER',
+    allowedContracts: [contractId],
+  };
+
+  const headers = [
+    'ID articulo',
+    'Codigo inventario',
+    'Numero parte',
+    'Nombre',
+    'Descripcion',
+    'Familia',
+    'Subcategoria',
+    'Unidad',
+    'Unidad nombre',
+    'Permite decimales',
+    'Marca',
+    'Compatibilidad',
+    'Proveedor habitual',
+    'Inventariable',
+    'Consumible',
+    'Activo',
+    'Serializado',
+    'Bodega codigo',
+    'Bodega nombre',
+    'Contrato',
+    'Subcontrato',
+    'Ubicacion stock',
+    'Bin codigo',
+    'Bin etiqueta',
+    'Stock',
+    'Stock minimo',
+    'Stock maximo',
+    'CPP',
+    'Valor linea',
+    'Bodega politica',
+    'Politica minimo',
+    'Politica maximo',
+    'QR payload',
+  ];
+
+  beforeEach(async () => {
+    prisma = mockDeep<PrismaService>();
+    prisma.$transaction.mockImplementation(async (arg: any) => {
+      if (Array.isArray(arg)) return Promise.all(arg);
+      return arg(prisma);
+    });
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InventoryItemsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SequenceService, useValue: mockDeep<SequenceService>() },
+        { provide: StorageService, useValue: mockDeep<StorageService>() },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        {
+          provide: NotificationDispatcherService,
+          useValue: { dispatch: jest.fn() },
+        },
+        { provide: AuditService, useValue: { log: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(InventoryItemsService);
+  });
+
+  function item(overrides: Record<string, unknown> = {}) {
+    return {
+      id: itemId,
+      tenantId,
+      inventoryCode: 'IN0001',
+      partNumber: 'PN-001',
+      name: 'Filtro aceite',
+      description: 'Filtro aceite',
+      brand: 'ACME',
+      compatibilityInfo: 'Motor X',
+      isInventory: true,
+      isConsumable: true,
+      isAsset: false,
+      isSerialized: false,
+      qrCode: `INV:${itemId}`,
+      policyMinStock: 0,
+      policyMaxStock: 0,
+      itemCategory: {
+        name: 'Filtros',
+        parentCategory: { name: 'Repuestos' },
+      },
+      unitOfMeasure: {
+        abbreviation: 'UN',
+        name: 'Unidad',
+        allowsDecimals: false,
+      },
+      inventorySupplier: { name: 'Proveedor Base' },
+      policyTargetWarehouse: null,
+      stocks: [
+        {
+          warehouseId,
+          quantity: 5,
+          unitCost: new Prisma.Decimal(123),
+          minStock: 1,
+          maxStock: 10,
+          location: 'A-1',
+          warehouse: {
+            code: 'B01',
+            name: 'Bodega 01',
+            location: 'Planta',
+            contract: { code: 'C-01', name: 'Contrato 01' },
+            subcontract: null,
+          },
+          bin: { code: 'BIN-1', label: 'Bin 1' },
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  function warehouse(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      id: warehouseId,
+      tenantId,
+      code: 'B01',
+      name: 'Bodega 01',
+      contractId,
+      bins: [{ id: 'bin-1', code: 'BIN-1', label: 'Bin 1' }],
+      ...overrides,
+    };
+  }
+
+  function baseRow(overrides: Record<string, unknown> = {}) {
+    return {
+      'ID articulo': itemId,
+      'Codigo inventario': 'IN0001',
+      'Numero parte': 'PN-001',
+      Nombre: 'Filtro aceite',
+      Descripcion: 'Filtro aceite',
+      Familia: 'Repuestos',
+      Subcategoria: 'Filtros',
+      Unidad: 'UN',
+      'Unidad nombre': 'Unidad',
+      'Permite decimales': 'NO',
+      Marca: 'ACME',
+      Compatibilidad: 'Motor X',
+      'Proveedor habitual': 'Proveedor Base',
+      Inventariable: 'SI',
+      Consumible: 'SI',
+      Activo: 'NO',
+      Serializado: 'NO',
+      'Bodega codigo': 'B01',
+      'Bodega nombre': 'Bodega 01',
+      Contrato: 'C-01',
+      Subcontrato: '',
+      'Ubicacion stock': 'A-1',
+      'Bin codigo': 'BIN-1',
+      'Bin etiqueta': 'Bin 1',
+      Stock: 5,
+      'Stock minimo': 1,
+      'Stock maximo': 10,
+      CPP: 999,
+      'Valor linea': 4995,
+      'Bodega politica': '',
+      'Politica minimo': 0,
+      'Politica maximo': 0,
+      'QR payload': `INV:${itemId}`,
+      ...overrides,
+    };
+  }
+
+  async function workbookBuffer(rows: Array<Record<string, unknown>>) {
+    const workbook = new ExcelJS.Workbook();
+    const dataSheet = workbook.addWorksheet('Inventario');
+    dataSheet.addRows([[], [], [], []]);
+    dataSheet.addRow(headers);
+    for (const row of rows) {
+      dataSheet.addRow(headers.map((header) => row[header] ?? null));
+    }
+    const info = workbook.addWorksheet('_bl_import_contract');
+    info.state = 'veryHidden';
+    info.addRows([
+      ['domain', 'inventory'],
+      ['version', '1'],
+      ['primarySheet', 'Inventario'],
+      ['headerRow', 5],
+      ['firstDataRow', 6],
+    ]);
+    const raw = await workbook.xlsx.writeBuffer();
+    return Buffer.from(raw);
+  }
+
+  async function validate(rowOverrides: Record<string, unknown> = {}) {
+    prisma.inventoryItem.findMany.mockResolvedValueOnce([item()] as never);
+    prisma.warehouse.findMany
+      .mockResolvedValueOnce([warehouse()] as never)
+      .mockResolvedValueOnce([warehouse()] as never);
+    return service.validateInventoryMasterImport(
+      await workbookBuffer([baseRow(rowOverrides)]),
+      user,
+    );
+  }
+
+  it('exporta columnas esperadas y muestra costos solo con permiso', async () => {
+    const bufferWithCost = await generateInventoryMasterExcelBuffer({
+      tenantName: 'Tenant',
+      generatedAt: new Date('2026-06-18T12:00:00Z'),
+      canViewCost: true,
+      items: [item()] as never,
+      categories: [],
+      units: [],
+      warehouses: [],
+      suppliers: [],
+    });
+    const wbWithCost = new ExcelJS.Workbook();
+    await wbWithCost.xlsx.load(bufferWithCost as never);
+    const headersWithCost = wbWithCost
+      .getWorksheet('Inventario')!
+      .getRow(5)
+      .values as unknown[];
+
+    expect(headersWithCost).toContain('CPP');
+    expect(headersWithCost).toContain('Valor linea');
+
+    const bufferWithoutCost = await generateInventoryMasterExcelBuffer({
+      tenantName: 'Tenant',
+      generatedAt: new Date('2026-06-18T12:00:00Z'),
+      canViewCost: false,
+      items: [item()] as never,
+      categories: [],
+      units: [],
+      warehouses: [],
+      suppliers: [],
+    });
+    const wbWithoutCost = new ExcelJS.Workbook();
+    await wbWithoutCost.xlsx.load(bufferWithoutCost as never);
+    const headersWithoutCost = wbWithoutCost
+      .getWorksheet('Inventario')!
+      .getRow(5)
+      .values as unknown[];
+
+    expect(headersWithoutCost).toContain('ID articulo');
+    expect(headersWithoutCost).toContain('Stock');
+    expect(headersWithoutCost).not.toContain('CPP');
+    expect(headersWithoutCost).not.toContain('Valor linea');
+  });
+
+  it('exporta celdas de datos desbloqueadas bajo la nueva politica operativa', async () => {
+    const buffer = await generateInventoryMasterExcelBuffer({
+      tenantName: 'Tenant',
+      generatedAt: new Date('2026-06-18T12:00:00Z'),
+      canViewCost: true,
+      items: [item()] as never,
+      categories: [],
+      units: [],
+      warehouses: [],
+      suppliers: [],
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as never);
+    const dataSheet = workbook.getWorksheet('Inventario')!;
+    const row = dataSheet.getRow(6);
+
+    for (let col = 1; col <= dataSheet.getRow(5).cellCount; col += 1) {
+      expect(row.getCell(col).protection?.locked).not.toBe(true);
+    }
+  });
+
+  it('exporta stock y bodegas solo dentro de contratos permitidos para USER', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ name: 'Tenant' } as never);
+    prisma.inventoryItem.findMany.mockResolvedValue([] as never);
+    prisma.itemCategory.findMany.mockResolvedValue([] as never);
+    prisma.unitOfMeasure.findMany.mockResolvedValue([] as never);
+    prisma.warehouse.findMany.mockResolvedValue([] as never);
+    prisma.inventorySupplier.findMany.mockResolvedValue([] as never);
+
+    await service.getInventoryMasterExcelBuffer(user);
+
+    expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          stocks: expect.objectContaining({
+            where: {
+              warehouse: {
+                tenantId,
+                contractId: { in: [contractId] },
+              },
+            },
+          }),
+        }),
+      }),
+    );
+    expect(prisma.warehouse.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId,
+          contractId: { in: [contractId] },
+        },
+      }),
+    );
+  });
+
+  it('rechaza articulos nuevos y cambios estructurales', async () => {
+    const result = await validate({
+      'ID articulo': '',
+      'Codigo inventario': 'IN9999',
+      'Numero parte': 'PN-NUEVO',
+      Nombre: 'Nuevo por Excel',
+    });
+
+    expect(result.summary.errors).toBeGreaterThan(0);
+    expect(result.previewRows[0].errors.join(' ')).toMatch(
+      /solo permite ajustar stock de articulos existentes/i,
+    );
+
+    const structural = await validate({ Nombre: 'Nombre editado' });
+    expect(structural.summary.errors).toBeGreaterThan(0);
+    expect(structural.previewRows[0].errors.join(' ')).toMatch(
+      /Cambio estructural no permitido/,
+    );
+  });
+
+  it('valida bodega existente, alcance por contrato y cantidades', async () => {
+    const missingWarehouse = await validate({ 'Bodega codigo': 'NOPE' });
+    expect(missingWarehouse.previewRows[0].errors.join(' ')).toMatch(
+      /Bodega no existe/,
+    );
+
+    prisma.inventoryItem.findMany.mockResolvedValueOnce([item()] as never);
+    prisma.warehouse.findMany
+      .mockResolvedValueOnce([
+        warehouse({ code: 'B02', contractId: blockedContractId }),
+      ] as never)
+      .mockResolvedValueOnce([] as never);
+    const outOfScope = await service.validateInventoryMasterImport(
+      await workbookBuffer([baseRow({ 'Bodega codigo': 'B02' })]),
+      user,
+    );
+    expect(outOfScope.previewRows[0].errors.join(' ')).toMatch(
+      /fuera del alcance/,
+    );
+
+    const negative = await validate({ Stock: -1 });
+    expect(negative.previewRows[0].errors.join(' ')).toMatch(
+      /Stock debe ser mayor o igual a cero/,
+    );
+
+    const inverted = await validate({
+      'Stock minimo': 5,
+      'Stock maximo': 2,
+    });
+    expect(inverted.previewRows[0].errors.join(' ')).toMatch(
+      /Stock maximo no puede ser menor/,
+    );
+
+    const fractional = await validate({ Stock: 1.5 });
+    expect(fractional.previewRows[0].errors.join(' ')).toMatch(
+      /no admite decimales/,
+    );
+  });
+
+  it('confirma ajuste con kardex ADJUST sin tocar estructura ni CPP', async () => {
+    const buffer = await workbookBuffer([
+      baseRow({
+        Stock: 8,
+        'Stock minimo': 2,
+        'Stock maximo': 12,
+        'Ubicacion stock': 'B-2',
+        CPP: 9999,
+      }),
+    ]);
+    jest.spyOn(service, 'validateInventoryMasterImport').mockResolvedValue({
+      domain: 'inventory',
+      version: '1',
+      summary: {
+        rows: 1,
+        creates: 0,
+        updates: 1,
+        unchanged: 0,
+        errors: 0,
+        deleteCandidates: 0,
+      },
+      requirements: [],
+      previewRows: [
+        {
+          rowNumber: 6,
+          action: 'UPDATE',
+          itemId,
+          inventoryCode: 'IN0001',
+          partNumber: 'PN-001',
+          warehouseCode: 'B01',
+          label: 'IN0001 · PN-001 · Filtro aceite',
+          errors: [],
+          warnings: [],
+          changes: [{ field: 'stock.quantity', before: 5, after: 8 }],
+        },
+      ],
+      deleteCandidates: [],
+      configuration: { requiredBeforeCommit: [], options: {} },
+    } as never);
+    prisma.warehouse.findMany.mockResolvedValueOnce([warehouse()] as never);
+    prisma.inventoryItem.findMany.mockResolvedValueOnce([
+      { id: itemId, inventoryCode: 'IN0001', partNumber: 'PN-001' },
+    ] as never);
+    prisma.itemStock.findUnique.mockResolvedValue({
+      id: 'stock-1',
+      quantity: 5,
+      unitCost: new Prisma.Decimal(123),
+    } as never);
+    prisma.itemStock.upsert.mockResolvedValue({ id: 'stock-1' } as never);
+    prisma.inventoryTransaction.create.mockResolvedValue({
+      id: 'tx-1',
+    } as never);
+
+    const result = await service.commitInventoryMasterImport(
+      buffer,
+      user,
+      { allowStockAdjustments: true },
+      'stock-operativo.xlsx',
+    );
+
+    expect(result.stockAdjusted).toBe(1);
+    expect(prisma.inventoryItem.create).not.toHaveBeenCalled();
+    expect(prisma.inventoryItem.update).not.toHaveBeenCalled();
+    expect(prisma.inventoryItem.delete).not.toHaveBeenCalled();
+    expect(prisma.itemStock.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          quantity: 8,
+          unitCost: new Prisma.Decimal(123),
+          minStock: 2,
+          maxStock: 12,
+          location: 'B-2',
+        }),
+      }),
+    );
+    expect(prisma.inventoryTransaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'ADJUST',
+          quantity: 3,
+          previousStock: 5,
+          newStock: 8,
+          notes: expect.stringContaining(
+            'Ajuste desde importacion Excel inventario · fila 6 · archivo stock-operativo.xlsx',
+          ),
+        }),
+      }),
+    );
+  });
+
+  it('no ajusta stock si allowStockAdjustments=false', async () => {
+    const buffer = await workbookBuffer([baseRow({ Stock: 8 })]);
+    jest.spyOn(service, 'validateInventoryMasterImport').mockResolvedValue({
+      domain: 'inventory',
+      version: '1',
+      summary: {
+        rows: 1,
+        creates: 0,
+        updates: 1,
+        unchanged: 0,
+        errors: 0,
+        deleteCandidates: 0,
+      },
+      requirements: [],
+      previewRows: [
+        {
+          rowNumber: 6,
+          action: 'UPDATE',
+          itemId,
+          inventoryCode: 'IN0001',
+          partNumber: 'PN-001',
+          warehouseCode: 'B01',
+          label: 'IN0001',
+          errors: [],
+          warnings: [],
+          changes: [{ field: 'stock.quantity', before: 5, after: 8 }],
+        },
+      ],
+      deleteCandidates: [],
+      configuration: { requiredBeforeCommit: [], options: {} },
+    } as never);
+
+    await expect(
+      service.commitInventoryMasterImport(
+        buffer,
+        user,
+        { allowStockAdjustments: false },
+        'stock.xlsx',
+      ),
+    ).rejects.toThrow(/allowStockAdjustments=false/);
+    expect(prisma.itemStock.upsert).not.toHaveBeenCalled();
   });
 });
 

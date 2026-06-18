@@ -58,20 +58,20 @@
           (click)="exportMasterExcel()"
           [disabled]="isExportingMasterExcel()"
           class="inline-flex items-center justify-center border border-border bg-surface hover:bg-dark/80 text-muted font-mono text-sm py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50"
-          title="Exporta artículos y stock por bodega en formato maestro editable"
+          title="Exporta artículos existentes y stock por bodega para ajustes controlados"
         >
           @if (isExportingMasterExcel()) {
             <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2" aria-hidden="true"></span>
           }
-          Maestro Excel
+          Stock Excel
         </button>
         <a
           *appHasPermission="i.STOCK_ADJUST"
           routerLink="/app/inventario/importar"
           class="inline-flex items-center justify-center border border-border bg-surface hover:bg-dark/80 text-muted font-mono text-sm py-2.5 px-4 rounded-lg transition-colors"
-          title="Valida e importa artículos, bodegas y saldos desde Excel"
+          title="Valida e importa ajustes de stock sobre artículos y bodegas existentes"
         >
-          Importar maestro
+          Importar ajustes
         </a>
         @if (selectedWarehouseId()) {
           <button

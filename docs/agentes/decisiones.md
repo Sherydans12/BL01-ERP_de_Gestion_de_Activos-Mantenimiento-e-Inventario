@@ -9,6 +9,31 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-18 — Excel de inventario solo para stock
+- **Contexto:** La auditoria del flujo Excel de inventario detecto que el importador permitia crear, editar y eliminar articulos, ademas de ajustar stock. Esto mezclaba el maestro estructural de articulos con una herramienta operativa de bodega.
+- **Decision:**
+  - El Excel de inventario queda como herramienta de ajuste controlado de stock por articulo existente y bodega existente.
+  - El CRUD estructural de articulos se realiza solo desde Catalogo Maestro/API oficial.
+  - La importacion no crea articulos, no edita categoria/UoM/flags/proveedor/SKU/identidad y no elimina articulos.
+  - Todo cambio de cantidad genera kardex `ADJUST`; ubicacion/bin/min/max pueden actualizarse sin movimiento si no cambia el saldo fisico.
+  - `CPP` es informativo: se exporta solo con permiso de costos y no se importa.
+  - `USER` queda acotado por `allowedContracts` para bodegas; `ADMIN` / `SUPER_ADMIN` operan tenant-wide.
+- **Consecuencias:**
+  - Usuarios deben crear/editar articulos en la UI antes de exportar.
+  - Desbloquear columnas del Excel no implica permitir cambios estructurales: el backend los bloquea.
+  - La documentacion operativa vive en `docs/agentes/importacion-exportacion-maestros-excel.md`.
+
+## 2026-06-18 — Transferencias W2W desacopladas del contrato activo
+- **Contexto:** La auditoría de transferencias entre bodegas detectó que `/app/inventario/transferencias` cargaba bodegas mediante `GET /warehouses` y quedaba filtrada por el `x-contract-id` global del header. Esto impedía a usuarios `USER` con `allowedContracts = [A, B]` seleccionar origen/destino entre contratos permitidos distintos. Además, la creación W2W validaba el contrato de origen, pero no el destino.
+- **Decisión:**
+  - Se definió `GET /warehouses?scope=transfer` como contrato explícito para W2W. En ese scope, el backend ignora el contrato activo del header: `ADMIN` / `SUPER_ADMIN` reciben todas las bodegas del tenant y roles no admin reciben todas las bodegas de sus `allowedContracts`.
+  - `InventoryTransferService.executeTransfer()` valida acceso contractual tanto a la bodega origen como a la bodega destino antes de crear la transferencia `SHIPPED`.
+  - La UI de transferencias usa `WarehousesService.getWarehousesForTransfer()` y mantiene el picker de artículos filtrado únicamente por la bodega origen seleccionada.
+- **Consecuencias:**
+  - Un `USER` con contratos A y B puede transferir A -> B y B -> A aunque el header esté en A o B.
+  - Un `USER` con solo A no recibe ni puede usar bodegas de B en W2W; si fuerza la API, backend responde `ForbiddenException` por destino/origen fuera de alcance.
+  - Se agregaron tests unitarios backend y frontend para el scope W2W y validaciones ABAC.
+
 ## 2026-06-18 — Paginación real de extremo a extremo en Control de Stock
 - **Contexto:** Al seleccionar una bodega en `/app/inventario/stock`, el sistema cargaba y renderizaba la totalidad de los artículos en una sola respuesta HTTP, provocando bloqueos de interfaz y lentitud en bodegas grandes.
 - **Decisión:**

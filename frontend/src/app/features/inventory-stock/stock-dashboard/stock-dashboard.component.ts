@@ -602,12 +602,12 @@ export class StockDashboardComponent implements OnInit {
           const stamp = new Date().toISOString().slice(0, 10);
           this.triggerBlobDownload(
             blob,
-            `baselogic-maestro-inventario-${stamp}.xlsx`,
+            `baselogic-stock-inventario-${stamp}.xlsx`,
           );
-          this.notificationService.success('Excel maestro de inventario generado.');
+          this.notificationService.success('Excel operativo de stock generado.');
         },
         error: () => {
-          this.notificationService.error('No se pudo generar el Excel maestro.');
+          this.notificationService.error('No se pudo generar el Excel operativo de stock.');
         },
       });
   }

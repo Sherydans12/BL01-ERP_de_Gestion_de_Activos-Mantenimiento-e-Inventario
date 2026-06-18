@@ -73,6 +73,19 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 - Movimientos `type = ADJUST` con referencias según implementación (`INVENTORY_ADJUSTMENT` u otros); detalle en UI con modal de ajuste en `inventory-item-form`. No confundir con transferencias.
 
+## Excel operativo de stock
+
+- **Ruta UI:** `/app/inventario/importar` y accesos desde `/app/articulos` / `/app/inventario/stock`.
+- **Contrato funcional:** el Excel de inventario es una herramienta para ajustar stock por articulo existente y bodega existente. No crea, edita ni elimina articulos del Catalogo Maestro.
+- **Columnas importables:** `Bodega codigo`, `Ubicacion stock`, `Bin codigo`, `Stock`, `Stock minimo`, `Stock maximo`.
+- **Columnas estructurales:** `ID articulo`, `Codigo inventario`, `Numero parte`, nombre, categoria, UoM, flags, proveedor, politicas de articulo, QR y costos son informativos; cualquier cambio estructural se bloquea en validacion.
+- **ABAC:** `ADMIN` / `SUPER_ADMIN` operan tenant-wide; `USER` solo puede exportar/importar stock de bodegas dentro de `allowedContracts`.
+- **Cantidades:** stock y umbrales no negativos; `Stock maximo >= Stock minimo` cuando maximo > 0; si `UnitOfMeasure.allowsDecimals=false`, stock y umbrales deben ser enteros.
+- **Kardex:** todo cambio de cantidad genera `InventoryTransaction` `ADJUST` con delta, saldo anterior/nuevo, usuario y nota trazable con fila y archivo. Cambios de ubicacion/bin/umbrales sin cambio fisico no generan kardex.
+- **CPP:** se exporta solo con permiso de costos, es informativo y no se importa. El ajuste conserva el `ItemStock.unitCost` vigente.
+
+Detalle de usuario/agentes: [importacion-exportacion-maestros-excel.md](importacion-exportacion-maestros-excel.md).
+
 **Pruebas unitarias ajustes:** `backend/src/features/inventory-adjustment/inventory-adjustment.service.spec.ts` — [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) §3.4.
 
 ### Motivo «Saldo pendiente» (compra / recepción incompleta)

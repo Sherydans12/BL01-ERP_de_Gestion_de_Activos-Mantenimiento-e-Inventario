@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -34,6 +35,10 @@ import { NOTIFICATION_EVENTS } from '../../common/notifications/notification-eve
 import { buildMailInventoryItemCreated } from '../../common/email/transactional-mail.builder';
 import { AuditService } from '../../common/audit/audit.service';
 import { userCanViewInventoryCost } from '../auth/permissions.util';
+import {
+  buildPurchaseContractScopeFilter,
+  userCanAccessContractId,
+} from '../../common/contract-scope.util';
 
 type InventoryImportRequirement = {
   kind: 'CATEGORY' | 'UNIT' | 'WAREHOUSE' | 'BIN' | 'SUPPLIER';
@@ -117,6 +122,10 @@ const ITEM_CATALOG_ORDER_BY: Prisma.InventoryItemOrderByWithRelationInput[] = [
   { itemCategory: { name: 'asc' } },
   { name: 'asc' },
 ];
+
+function boolLabel(value: boolean): string {
+  return value ? 'SI' : 'NO';
+}
 
 @Injectable()
 export class InventoryItemsService {
@@ -471,6 +480,7 @@ export class InventoryItemsService {
   async getInventoryMasterExcelBuffer(user: any): Promise<Buffer> {
     const tenantId = user.tenantId as string;
     const canViewCost = userCanViewInventoryCost(user);
+    const warehouseScopeWhere = this.warehouseContractScopeWhere(user);
 
     const [tenant, items, categories, units, warehouses, suppliers] =
       await this.prisma.$transaction([
@@ -498,6 +508,7 @@ export class InventoryItemsService {
             inventorySupplier: { select: { name: true } },
             policyTargetWarehouse: { select: { code: true, name: true } },
             stocks: {
+              where: { warehouse: warehouseScopeWhere },
               orderBy: { warehouse: { code: 'asc' } },
               select: {
                 quantity: true,
@@ -533,7 +544,7 @@ export class InventoryItemsService {
           select: { name: true, abbreviation: true, allowsDecimals: true },
         }),
         this.prisma.warehouse.findMany({
-          where: { tenantId },
+          where: warehouseScopeWhere,
           orderBy: { code: 'asc' },
           select: {
             code: true,
@@ -702,11 +713,75 @@ export class InventoryItemsService {
     return Object.values(impact).some((count) => count > 0);
   }
 
+  private warehouseContractScopeWhere(user: any): Prisma.WarehouseWhereInput {
+    return {
+      tenantId: user.tenantId as string,
+      ...buildPurchaseContractScopeFilter(user),
+    };
+  }
+
+  private canAccessWarehouseContract(user: any, contractId: string): boolean {
+    return userCanAccessContractId(user, contractId);
+  }
+
+  private assertCanAccessWarehouseContract(user: any, contractId: string): void {
+    if (!this.canAccessWarehouseContract(user, contractId)) {
+      throw new ForbiddenException(
+        'No tiene permisos para ajustar stock en esta bodega.',
+      );
+    }
+  }
+
   private normalizeWarehouseBinCode(code: string): string {
     return normalizeImportKey(code)
       .replace(/[^A-Z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 50);
+  }
+
+  private isIntegerQuantityAllowed(value: number): boolean {
+    return Math.abs(value - Math.round(value)) < 1e-9;
+  }
+
+  private importNumberRequired(
+    value: unknown,
+    label: string,
+    errors: string[],
+  ): number | null {
+    const parsed = parseImportNumber(value);
+    if (parsed == null || !Number.isFinite(parsed)) {
+      errors.push(`${label} debe ser un numero valido.`);
+      return null;
+    }
+    return parsed;
+  }
+
+  private importNonNegativeNumber(
+    value: unknown,
+    label: string,
+    errors: string[],
+    defaultValue = 0,
+  ): number | null {
+    const hasText = normalizeImportText(value).length > 0;
+    const parsed = hasText ? parseImportNumber(value) : defaultValue;
+    if (parsed == null || !Number.isFinite(parsed)) {
+      errors.push(`${label} debe ser un numero valido.`);
+      return null;
+    }
+    if (parsed < 0) {
+      errors.push(`${label} debe ser mayor o igual a cero.`);
+      return null;
+    }
+    return parsed;
+  }
+
+  private sanitizeImportFileName(fileName?: string): string {
+    const raw = normalizeImportText(fileName ?? '');
+    return (raw || 'archivo sin nombre')
+      .replace(/[^\w.\- ()[\]]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
   }
 
   private inventoryImportNumberKey(value: unknown): string {
@@ -764,7 +839,8 @@ export class InventoryItemsService {
       'inventory',
     );
 
-    const [items, categories, units, warehouses, suppliers] =
+    const warehouseScopeWhere = this.warehouseContractScopeWhere(user);
+    const [items, allWarehouses, allowedWarehouses] =
       await this.prisma.$transaction([
         this.prisma.inventoryItem.findMany({
           where: { tenantId },
@@ -793,21 +869,14 @@ export class InventoryItemsService {
             },
           },
         }),
-        this.prisma.itemCategory.findMany({
-          where: { tenantId },
-          select: {
-            id: true,
-            name: true,
-            parentCategoryId: true,
-            parentCategory: { select: { name: true } },
-          },
-        }),
-        this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
         this.prisma.warehouse.findMany({
           where: { tenantId },
           include: { bins: true },
         }),
-        this.prisma.inventorySupplier.findMany({ where: { tenantId } }),
+        this.prisma.warehouse.findMany({
+          where: warehouseScopeWhere,
+          include: { bins: true },
+        }),
       ]);
 
     const itemById = new Map(items.map((item) => [item.id, item]));
@@ -824,78 +893,21 @@ export class InventoryItemsService {
           item,
         ]),
     );
-    const itemByNaturalImportKey = new Map<string, (typeof items)[number]>();
-    const categoryByFamilySub = new Map<string, (typeof categories)[number]>();
-    for (const category of categories) {
-      if (!category.parentCategory) continue;
-      categoryByFamilySub.set(
-        `${normalizeImportKey(category.parentCategory.name)}:${normalizeImportKey(category.name)}`,
-        category,
-      );
-    }
-    const unitByAbbreviation = new Map(
-      units.map((unit) => [normalizeImportKey(unit.abbreviation), unit]),
-    );
-    const warehouseByCode = new Map(
-      warehouses.map((warehouse) => [
+    const allWarehouseByCode = new Map(
+      allWarehouses.map((warehouse) => [
         normalizeImportKey(warehouse.code),
         warehouse,
       ]),
     );
-    const supplierByName = new Map(
-      suppliers.map((supplier) => [
-        normalizeImportKey(supplier.name),
-        supplier,
+    const warehouseByCode = new Map(
+      allowedWarehouses.map((warehouse) => [
+        normalizeImportKey(warehouse.code),
+        warehouse,
       ]),
     );
-    for (const item of items) {
-      const family =
-        item.itemCategory.parentCategory?.name ?? item.itemCategory.name;
-      const subcategory = item.itemCategory.parentCategory
-        ? item.itemCategory.name
-        : '';
-      const base = {
-        name: item.name,
-        family,
-        subcategory,
-        unit: item.unitOfMeasure.abbreviation,
-        brand: item.brand,
-        description: item.description,
-        compatibility: item.compatibilityInfo,
-        supplier: item.inventorySupplier?.name ?? null,
-      };
-      const stocks = item.stocks.length
-        ? item.stocks
-        : [
-            {
-              warehouse: { code: null },
-              bin: null,
-              location: null,
-              quantity: 0,
-              minStock: null,
-              maxStock: null,
-            },
-          ];
-      for (const stock of stocks) {
-        const key = this.inventoryImportNaturalKey({
-          ...base,
-          warehouse: stock.warehouse.code,
-          bin: stock.bin?.code ?? null,
-          location: stock.location,
-          stock: stock.quantity,
-          minStock: stock.minStock,
-          maxStock: stock.maxStock,
-        });
-        if (key && !itemByNaturalImportKey.has(key)) {
-          itemByNaturalImportKey.set(key, item);
-        }
-      }
-    }
 
     const requirements = new Map<string, InventoryImportRequirement>();
     const previewRows: InventoryImportPreviewRow[] = [];
-    const includedItemIds = new Set<string>();
-    const includedItemKeys = new Set<string>();
     const itemWarehouseKeys = new Map<string, number[]>();
 
     for (const row of workbook.rows) {
@@ -909,51 +921,20 @@ export class InventoryItemsService {
       const unitCode = getImportString(v, 'Unidad');
       const warehouseCode = getImportNullableString(v, 'Bodega codigo');
       const binCode = getImportNullableString(v, 'Bin codigo');
-      const supplierName = getImportNullableString(v, 'Proveedor habitual');
       const errors: string[] = [];
       const warnings: string[] = [];
-
-      if (!name) errors.push('Nombre requerido.');
-      if (!family || !subcategory)
-        errors.push('Familia y subcategoria requeridas.');
-      if (!unitCode) errors.push('Unidad requerida.');
-
-      const category =
-        family && subcategory
-          ? categoryByFamilySub.get(
-              `${normalizeImportKey(family)}:${normalizeImportKey(subcategory)}`,
-            )
-          : null;
-      if (!category && family && subcategory) {
-        this.registerInventoryRequirement(requirements, {
-          kind: 'CATEGORY',
-          code: subcategory,
-          parentCode: family,
-          rows: [row.rowNumber],
-          severity: 'blocking',
-          message: 'Debe existir la subcategoria bajo la familia indicada.',
-        });
-        errors.push(`Subcategoria no existe: ${family} / ${subcategory}.`);
-      }
-
-      const unit = unitCode
-        ? unitByAbbreviation.get(normalizeImportKey(unitCode))
-        : null;
-      if (!unit && unitCode) {
-        this.registerInventoryRequirement(requirements, {
-          kind: 'UNIT',
-          code: unitCode,
-          rows: [row.rowNumber],
-          severity: 'blocking',
-          message: 'Debe existir la unidad de medida antes de importar.',
-        });
-        errors.push(`Unidad no existe: ${unitCode}.`);
-      }
 
       const warehouse = warehouseCode
         ? warehouseByCode.get(normalizeImportKey(warehouseCode))
         : null;
-      if (warehouseCode && !warehouse) {
+      const warehouseInTenant = warehouseCode
+        ? allWarehouseByCode.get(normalizeImportKey(warehouseCode))
+        : null;
+      if (warehouseCode && warehouseInTenant && !warehouse) {
+        errors.push(
+          `Bodega fuera del alcance de sus contratos permitidos: ${warehouseCode}.`,
+        );
+      } else if (warehouseCode && !warehouse) {
         this.registerInventoryRequirement(requirements, {
           kind: 'WAREHOUSE',
           code: warehouseCode,
@@ -984,102 +965,30 @@ export class InventoryItemsService {
         }
       }
 
-      if (
-        supplierName &&
-        !supplierByName.get(normalizeImportKey(supplierName))
-      ) {
-        this.registerInventoryRequirement(requirements, {
-          kind: 'SUPPLIER',
-          code: supplierName,
-          rows: [row.rowNumber],
-          severity: 'warning',
-          message:
-            'El proveedor habitual no existe; se creara automaticamente al confirmar la importacion.',
-        });
-        warnings.push(
-          `Proveedor habitual no existe: ${supplierName}. Se creara automaticamente.`,
-        );
-      }
-
       const existingById = id ? itemById.get(id) : null;
-      const existingByInventoryCode =
-        id && inventoryCode
-          ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
-          : null;
+      const existingByInventoryCode = inventoryCode
+        ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
+        : null;
       const existingByPartNumber = partNumber
         ? itemByPartNumber.get(this.inventoryImportPartNumberKey(partNumber))
         : null;
-      const naturalKey = this.inventoryImportNaturalKey({
-        name,
-        family,
-        subcategory,
-        unit: unitCode,
-        brand: getImportNullableString(v, 'Marca'),
-        description: getImportNullableString(v, 'Descripcion'),
-        compatibility: getImportNullableString(v, 'Compatibilidad'),
-        supplier: supplierName,
-        warehouse: warehouseCode,
-        bin: binCode,
-        location: getImportNullableString(v, 'Ubicacion stock'),
-        stock: v['Stock'],
-        minStock: v['Stock minimo'],
-        maxStock: v['Stock maximo'],
-      });
-      const existingByNaturalKey =
-        !id && !partNumber ? itemByNaturalImportKey.get(naturalKey) : null;
       const existing =
         existingById ??
         existingByInventoryCode ??
         existingByPartNumber ??
-        existingByNaturalKey ??
         null;
-      if (existing) includedItemIds.add(existing.id);
-      if (id) includedItemKeys.add(id);
-      if (inventoryCode)
-        includedItemKeys.add(normalizeImportKey(inventoryCode));
 
-      if (id && !existingById) {
-        warnings.push(
-          'ID articulo no existe en este tenant; se ignorara para resolver la fila.',
+      if (!existing) {
+        errors.push(
+          'El Excel solo permite ajustar stock de articulos existentes. Cree el articulo en BaseLogic y vuelva a exportar.',
         );
-      }
-      if (existing && id && existing.id !== id) {
-        warnings.push(
-          'ID articulo no coincide con el articulo resuelto por SKU/numero de parte; se conservara el ID real del sistema.',
-        );
-      }
-      if (
-        existing &&
-        inventoryCode &&
-        normalizeImportKey(existing.inventoryCode) !==
-          normalizeImportKey(inventoryCode)
-      ) {
-        warnings.push(
-          'Codigo inventario es de solo lectura; se conservara el SKU interno existente.',
-        );
-      }
-      if (!existing && inventoryCode) {
-        warnings.push(
-          'Codigo inventario informado en una fila nueva sera ignorado; el sistema asignara el siguiente SKU interno.',
-        );
-      }
-      if (existingByNaturalKey) {
-        warnings.push(
-          'Fila nueva sin ID ni numero de parte coincide con un articulo/stock existente; se tratara como actualizacion para evitar duplicados.',
-        );
-      }
-      const qrPayload = getImportNullableString(v, 'QR payload');
-      if (
-        existing &&
-        qrPayload &&
-        normalizeImportText(existing.qrCode) !== normalizeImportText(qrPayload)
-      ) {
-        warnings.push(
-          'QR payload es de solo lectura; se conservara el valor interno existente.',
+      } else if (id && existing.id !== id) {
+        errors.push(
+          'ID articulo no coincide con el SKU/numero de parte informado. No se permite alterar la identidad del articulo desde Excel.',
         );
       }
 
-      const duplicateKey = `${id || inventoryCode || partNumber || name}:${warehouseCode || 'NO_WAREHOUSE'}`;
+      const duplicateKey = `${existing?.id || id || inventoryCode || partNumber || name}:${warehouseCode || 'NO_WAREHOUSE'}`;
       itemWarehouseKeys.set(duplicateKey, [
         ...(itemWarehouseKeys.get(duplicateKey) ?? []),
         row.rowNumber,
@@ -1099,34 +1008,150 @@ export class InventoryItemsService {
           changes.push({ field, before: left, after: right });
         }
       };
+      const structuralCompare = (
+        field: string,
+        before: unknown,
+        after: unknown,
+      ) => {
+        if (!existing) return;
+        if (normalizeImportText(before) !== normalizeImportText(after)) {
+          errors.push(
+            `Cambio estructural no permitido en "${field}". Edite este dato desde Catalogo Maestro.`,
+          );
+        }
+      };
+      const structuralBooleanCompare = (
+        field: string,
+        before: boolean,
+        after: unknown,
+      ) => {
+        const raw = normalizeImportText(after);
+        const parsed = parseImportBoolean(after);
+        if (raw && parsed == null) {
+          errors.push(`Valor invalido para "${field}". Use SI o NO.`);
+          return;
+        }
+        structuralCompare(field, boolLabel(before), raw ? boolLabel(parsed ?? before) : '');
+      };
 
       if (existing) {
-        compare('name', existing.name, name);
-        compare('partNumber', existing.partNumber, partNumber);
-        compare('category', existing.itemCategory.name, subcategory);
-        compare('unit', existing.unitOfMeasure.abbreviation, unitCode);
-        compare('brand', existing.brand, getImportNullableString(v, 'Marca'));
-        compare(
-          'supplier',
-          existing.inventorySupplier?.name ?? null,
-          supplierName,
+        const familyCurrent =
+          existing.itemCategory.parentCategory?.name ?? existing.itemCategory.name;
+        const subcategoryCurrent = existing.itemCategory.parentCategory
+          ? existing.itemCategory.name
+          : '';
+        if (id) structuralCompare('ID articulo', existing.id, id);
+        if (inventoryCode) {
+          structuralCompare(
+            'Codigo inventario',
+            existing.inventoryCode,
+            inventoryCode,
+          );
+        }
+        if (partNumber || existing.partNumber) {
+          structuralCompare('Numero parte', existing.partNumber, partNumber);
+        }
+        structuralCompare('Nombre', existing.name, name);
+        structuralCompare(
+          'Descripcion',
+          existing.description,
+          getImportNullableString(v, 'Descripcion'),
         );
-        if (existingStock) {
-          compare(
-            'stock.quantity',
-            existingStock.quantity,
+        structuralCompare('Familia', familyCurrent, family);
+        structuralCompare('Subcategoria', subcategoryCurrent, subcategory);
+        structuralCompare('Unidad', existing.unitOfMeasure.abbreviation, unitCode);
+        structuralCompare(
+          'Unidad nombre',
+          existing.unitOfMeasure.name,
+          getImportNullableString(v, 'Unidad nombre'),
+        );
+        structuralCompare(
+          'Permite decimales',
+          boolLabel(existing.unitOfMeasure.allowsDecimals),
+          getImportNullableString(v, 'Permite decimales'),
+        );
+        structuralCompare('Marca', existing.brand, getImportNullableString(v, 'Marca'));
+        structuralCompare(
+          'Compatibilidad',
+          existing.compatibilityInfo,
+          getImportNullableString(v, 'Compatibilidad'),
+        );
+        structuralCompare(
+          'Proveedor habitual',
+          existing.inventorySupplier?.name ?? null,
+          getImportNullableString(v, 'Proveedor habitual'),
+        );
+        structuralBooleanCompare('Inventariable', existing.isInventory, v['Inventariable']);
+        structuralBooleanCompare('Consumible', existing.isConsumable, v['Consumible']);
+        structuralBooleanCompare('Activo', existing.isAsset, v['Activo']);
+        structuralBooleanCompare('Serializado', existing.isSerialized, v['Serializado']);
+        structuralCompare(
+          'QR payload',
+          existing.qrCode,
+          getImportNullableString(v, 'QR payload'),
+        );
+        structuralCompare(
+          'Politica minimo',
+          existing.policyMinStock,
+          parseImportNumber(v['Politica minimo']),
+        );
+        structuralCompare(
+          'Politica maximo',
+          existing.policyMaxStock,
+          parseImportNumber(v['Politica maximo']),
+        );
+
+        if (normalizeImportText(v['CPP'])) {
+          warnings.push('CPP es informativo y sera ignorado al importar.');
+        }
+
+        const quantity = warehouse
+          ? this.importNumberRequired(v['Stock'], 'Stock', errors)
+          : parseImportNumber(v['Stock']);
+        const minStock = warehouse
+          ? this.importNonNegativeNumber(v['Stock minimo'], 'Stock minimo', errors)
+          : parseImportNumber(v['Stock minimo']);
+        const maxStock = warehouse
+          ? this.importNonNegativeNumber(v['Stock maximo'], 'Stock maximo', errors)
+          : parseImportNumber(v['Stock maximo']);
+        if (warehouse && quantity != null && quantity < 0) {
+          errors.push('Stock debe ser mayor o igual a cero.');
+        }
+        if (
+          warehouse &&
+          maxStock != null &&
+          minStock != null &&
+          maxStock > 0 &&
+          maxStock < minStock
+        ) {
+          errors.push('Stock maximo no puede ser menor que Stock minimo.');
+        }
+        if (
+          warehouse &&
+          !existing.unitOfMeasure.allowsDecimals &&
+          [quantity, minStock, maxStock].some(
+            (n) => n != null && !this.isIntegerQuantityAllowed(n),
+          )
+        ) {
+          errors.push(
+            `La unidad ${existing.unitOfMeasure.abbreviation} no admite decimales; stock y umbrales deben ser enteros.`,
+          );
+        }
+        const rowHasStockWithoutWarehouse =
+          !warehouseCode &&
+          [
             parseImportNumber(v['Stock']) ?? 0,
-          );
-          compare(
-            'stock.minStock',
-            existingStock.minStock,
-            parseImportNumber(v['Stock minimo']),
-          );
-          compare(
-            'stock.maxStock',
-            existingStock.maxStock,
-            parseImportNumber(v['Stock maximo']),
-          );
+            parseImportNumber(v['Stock minimo']) ?? 0,
+            parseImportNumber(v['Stock maximo']) ?? 0,
+          ].some((n) => Math.abs(n) > 1e-9);
+        if (rowHasStockWithoutWarehouse) {
+          errors.push('Debe informar Bodega codigo para ajustar stock.');
+        }
+
+        if (existingStock) {
+          compare('stock.quantity', existingStock.quantity, quantity ?? 0);
+          compare('stock.minStock', existingStock.minStock, minStock ?? 0);
+          compare('stock.maxStock', existingStock.maxStock, maxStock ?? 0);
           compare(
             'stock.location',
             existingStock.location,
@@ -1170,38 +1195,7 @@ export class InventoryItemsService {
       }
     }
 
-    const deleteSource = items.filter((item) => !includedItemIds.has(item.id));
-    const impactById = await this.buildInventoryDeleteImpact(
-      tenantId,
-      deleteSource.map((item) => item.id),
-    );
-    const deleteCandidates: InventoryDeleteCandidate[] = deleteSource.map(
-      (item) => {
-        const impact = impactById.get(item.id) ?? {
-          stocks: 0,
-          transactions: 0,
-          reservations: 0,
-          workOrderParts: 0,
-          lubeReportLines: 0,
-          transferLines: 0,
-          requisitionItems: 0,
-          purchaseOrderItems: 0,
-          attachments: 0,
-        };
-        return {
-          itemId: item.id,
-          inventoryCode: item.inventoryCode,
-          partNumber: item.partNumber,
-          name: item.name,
-          impact,
-          warnings: this.hasInventoryDeleteImpact(impact)
-            ? [
-                'Tiene historial o asociaciones. La eliminacion fisica no debe usarse salvo migracion destructiva aprobada.',
-              ]
-            : [],
-        };
-      },
-    );
+    const deleteCandidates: InventoryDeleteCandidate[] = [];
 
     return {
       domain: 'inventory' as const,
@@ -1216,26 +1210,26 @@ export class InventoryItemsService {
           (count, row) => count + row.errors.length,
           0,
         ),
-        deleteCandidates: deleteCandidates.length,
+        deleteCandidates: 0,
       },
       requirements: [...requirements.values()],
       previewRows,
       deleteCandidates,
       configuration: {
         requiredBeforeCommit: [
-          'Familias y subcategorias existentes',
-          'Unidades de medida existentes',
+          'Articulos existentes en Catalogo Maestro',
           'Bodegas existentes',
           'Bins existentes si se informan en el Excel',
-          'Proveedores habituales existentes si se informan en el Excel',
+          'Acceso por contrato a cada bodega ajustada',
+          'Cantidades validas segun unidad de medida',
         ],
         options: {
-          allowCreates: true,
-          allowUpdates: true,
+          allowCreates: false,
+          allowUpdates: false,
           allowStockAdjustments: true,
           allowItemDeletes: false,
           autoCreateBins: true,
-          autoCreateSuppliers: true,
+          autoCreateSuppliers: false,
         },
       },
     };
@@ -1245,6 +1239,7 @@ export class InventoryItemsService {
     buffer: Buffer,
     user: any,
     options: InventoryImportOptions = {},
+    fileName?: string,
   ) {
     const tenantId = user.tenantId as string;
     const userId = user.id || user.sub;
@@ -1270,12 +1265,12 @@ export class InventoryItemsService {
       });
     }
 
-    const allowCreates = options.allowCreates !== false;
-    const allowUpdates = options.allowUpdates !== false;
+    const allowCreates = false;
+    const allowUpdates = false;
     const allowStockAdjustments = options.allowStockAdjustments !== false;
-    const allowItemDeletes = options.allowItemDeletes === true;
+    const allowItemDeletes = false;
     const autoCreateBins = options.autoCreateBins !== false;
-    const autoCreateSuppliers = options.autoCreateSuppliers !== false;
+    const autoCreateSuppliers = false;
     const disabledAutoCreateRequirements = validation.requirements.filter(
       (req) =>
         (req.kind === 'BIN' && !autoCreateBins) ||
@@ -1299,69 +1294,39 @@ export class InventoryItemsService {
     }
     if (
       !allowUpdates &&
+      validation.previewRows.some((row) => row.action === 'CREATE')
+    ) {
+      throw new BadRequestException(
+        'La importacion contiene cambios estructurales de articulos, pero el Excel solo permite ajustes de stock.',
+      );
+    }
+    if (
+      !allowStockAdjustments &&
       validation.previewRows.some((row) => row.action === 'UPDATE')
     ) {
       throw new BadRequestException(
-        'La importacion contiene actualizaciones, pero allowUpdates=false.',
+        'La importacion contiene ajustes de stock, pero allowStockAdjustments=false.',
       );
-    }
-    if (allowItemDeletes) {
-      const blockedDeletes = validation.deleteCandidates.filter((candidate) =>
-        this.hasInventoryDeleteImpact(candidate.impact),
-      );
-      if (blockedDeletes.length > 0) {
-        throw new BadRequestException({
-          message:
-            'Hay articulos ausentes con historial/asociaciones. Inventario no permite eliminacion fisica destructiva desde importacion.',
-          deleteCandidates: blockedDeletes,
-        });
-      }
     }
 
     const workbook = await parseBaseLogicMasterImportWorkbook(
       buffer,
       'inventory',
     );
-    const [categories, units, warehouses, suppliers, existingItems] =
+    const warehouseScopeWhere = this.warehouseContractScopeWhere(user);
+    const [warehouses, existingItems] =
       await this.prisma.$transaction([
-        this.prisma.itemCategory.findMany({
-          where: { tenantId },
-          select: {
-            id: true,
-            name: true,
-            parentCategory: { select: { name: true } },
-          },
-        }),
-        this.prisma.unitOfMeasure.findMany({ where: { tenantId } }),
         this.prisma.warehouse.findMany({
-          where: { tenantId },
+          where: warehouseScopeWhere,
           include: { bins: true },
         }),
-        this.prisma.inventorySupplier.findMany({ where: { tenantId } }),
         this.prisma.inventoryItem.findMany({ where: { tenantId } }),
       ]);
 
-    const categoryByFamilySub = new Map<string, (typeof categories)[number]>();
-    for (const category of categories) {
-      if (!category.parentCategory) continue;
-      categoryByFamilySub.set(
-        `${normalizeImportKey(category.parentCategory.name)}:${normalizeImportKey(category.name)}`,
-        category,
-      );
-    }
-    const unitByAbbreviation = new Map(
-      units.map((unit) => [normalizeImportKey(unit.abbreviation), unit]),
-    );
     const warehouseByCode = new Map(
       warehouses.map((warehouse) => [
         normalizeImportKey(warehouse.code),
         warehouse,
-      ]),
-    );
-    const supplierByName = new Map(
-      suppliers.map((supplier) => [
-        normalizeImportKey(supplier.name),
-        supplier,
       ]),
     );
     const itemById = new Map(existingItems.map((item) => [item.id, item]));
@@ -1381,17 +1346,13 @@ export class InventoryItemsService {
     const previewByRowNumber = new Map(
       validation.previewRows.map((preview) => [preview.rowNumber, preview]),
     );
-    const createdItemByImportKey = new Map<
-      string,
-      (typeof existingItems)[number]
-    >();
 
     let created = 0;
     let updated = 0;
     let unchanged = 0;
     let stockAdjusted = 0;
     let deleted = 0;
-    let inventorySkuCounterSynced = false;
+    const importFileName = this.sanitizeImportFileName(fileName);
 
     await this.prisma.$transaction(async (tx) => {
       for (const row of workbook.rows) {
@@ -1406,41 +1367,13 @@ export class InventoryItemsService {
         const id = getImportNullableString(v, 'ID articulo');
         const inventoryCode = getImportNullableString(v, 'Codigo inventario');
         const partNumber = getImportNullableString(v, 'Numero parte');
-        const family = getImportString(v, 'Familia');
-        const subcategory = getImportString(v, 'Subcategoria');
-        const unitCode = getImportString(v, 'Unidad');
         const warehouseCode = getImportNullableString(v, 'Bodega codigo');
-        const supplierName = getImportNullableString(v, 'Proveedor habitual');
-
-        const category = categoryByFamilySub.get(
-          `${normalizeImportKey(family)}:${normalizeImportKey(subcategory)}`,
-        );
-        const unit = unitByAbbreviation.get(normalizeImportKey(unitCode));
         const warehouse = warehouseCode
           ? warehouseByCode.get(normalizeImportKey(warehouseCode))
           : null;
-        let supplier = supplierName
-          ? supplierByName.get(normalizeImportKey(supplierName))
-          : null;
-        if (supplierName && !supplier && autoCreateSuppliers) {
-          supplier = await tx.inventorySupplier.create({
-            data: {
-              tenantId,
-              name: supplierName.slice(0, 150),
-            },
-          });
-          supplierByName.set(normalizeImportKey(supplier.name), supplier);
-        }
-        const importIdentityKey = partNumber
-          ? `PN:${this.inventoryImportPartNumberKey(partNumber)}`
-          : inventoryCode
-            ? `IMPORT_SKU:${normalizeImportKey(inventoryCode)}`
-            : `ROW:${row.rowNumber}`;
-        const existingFromThisImport =
-          createdItemByImportKey.get(importIdentityKey) ?? null;
         const existing =
           (id ? itemById.get(id) : null) ??
-          (id && inventoryCode
+          (inventoryCode
             ? itemByInventoryCode.get(normalizeImportKey(inventoryCode))
             : null) ??
           (partNumber
@@ -1448,92 +1381,17 @@ export class InventoryItemsService {
                 this.inventoryImportPartNumberKey(partNumber),
               )
             : null) ??
-          existingFromThisImport ??
           null;
 
-        if (!category || !unit) continue;
-
-        let itemId = existing?.id ?? randomUUID();
-        const itemData = {
-          tenantId,
-          partNumber,
-          name: getImportString(v, 'Nombre'),
-          description: getImportNullableString(v, 'Descripcion'),
-          categoryId: category.id,
-          unitOfMeasureId: unit.id,
-          brand: getImportNullableString(v, 'Marca'),
-          compatibilityInfo: getImportNullableString(v, 'Compatibilidad'),
-          supplierId: supplier?.id ?? null,
-          isInventory: parseImportBoolean(v['Inventariable']) ?? true,
-          isConsumable: parseImportBoolean(v['Consumible']) ?? true,
-          isAsset: parseImportBoolean(v['Activo']) ?? false,
-          isSerialized: parseImportBoolean(v['Serializado']) ?? false,
-          policyMinStock: parseImportNumber(v['Politica minimo']),
-          policyMaxStock: parseImportNumber(v['Politica maximo']),
-        };
-
-        if (!existing) {
-          if (preview.action !== 'CREATE') continue;
-          if (!allowCreates) continue;
-          if (!inventorySkuCounterSynced) {
-            await this.ensureInventorySkuCounterFloor(tenantId, tx);
-            inventorySkuCounterSynced = true;
-          }
-          const nextInventoryCode =
-            await this.sequenceService.getNextCorrelative(
-              tenantId,
-              INV_SKU_DOC_TYPE,
-              INV_SKU_PREFIX,
-              {
-                tx,
-                padWidth: 4,
-                separator: '',
-              },
-            );
-          await tx.inventoryItem.create({
-            data: {
-              id: itemId,
-              ...itemData,
-              inventoryCode: nextInventoryCode,
-              qrCode: `INV:${itemId}`,
-            },
-          });
-          const createdItem = {
-            id: itemId,
-            tenantId,
-            inventoryCode: nextInventoryCode,
-            qrCode: `INV:${itemId}`,
-            partNumber,
-            name: itemData.name,
-          } as (typeof existingItems)[number];
-          itemById.set(itemId, createdItem);
-          itemByInventoryCode.set(
-            normalizeImportKey(nextInventoryCode),
-            createdItem,
-          );
-          if (partNumber) {
-            itemByPartNumber.set(
-              this.inventoryImportPartNumberKey(partNumber),
-              createdItem,
-            );
-          }
-          createdItemByImportKey.set(importIdentityKey, createdItem);
-          created++;
-        } else if (preview.action === 'UPDATE' && allowUpdates) {
-          itemId = existing.id;
-          await tx.inventoryItem.update({
-            where: { id: existing.id },
-            data: itemData,
-          });
-          updated++;
-        } else if (existingFromThisImport && preview.action === 'CREATE') {
-          itemId = existing.id;
-        } else {
+        if (!existing || !warehouse) {
           unchanged++;
           continue;
         }
 
-        if (!warehouse || !allowStockAdjustments) continue;
+        this.assertCanAccessWarehouseContract(user, warehouse.contractId);
+        if (!allowStockAdjustments) continue;
+
+        const itemId = existing.id;
 
         const binCode = getImportNullableString(v, 'Bin codigo');
         let bin = binCode
@@ -1568,7 +1426,6 @@ export class InventoryItemsService {
         const quantity = parseImportNumber(v['Stock']) ?? 0;
         const minStock = parseImportNumber(v['Stock minimo']) ?? 0;
         const maxStock = parseImportNumber(v['Stock maximo']) ?? 0;
-        const unitCost = parseImportNumber(v['CPP']);
         const currentStock = await tx.itemStock.findUnique({
           where: {
             warehouseId_itemId: {
@@ -1579,10 +1436,7 @@ export class InventoryItemsService {
         });
         const previousStock = currentStock?.quantity ?? 0;
         const nextStock = quantity;
-        const nextUnitCost =
-          unitCost != null
-            ? new Prisma.Decimal(unitCost)
-            : (currentStock?.unitCost ?? null);
+        const nextUnitCost = currentStock?.unitCost ?? null;
 
         await tx.itemStock.upsert({
           where: {
@@ -1621,19 +1475,12 @@ export class InventoryItemsService {
               quantity: nextStock - previousStock,
               previousStock,
               newStock: nextStock,
-              notes: 'Ajuste desde importacion maestro BaseLogic.',
+              notes: `Ajuste desde importacion Excel inventario · fila ${row.rowNumber} · archivo ${importFileName}`,
             },
           });
           stockAdjusted++;
         }
-      }
-
-      if (allowItemDeletes) {
-        for (const candidate of validation.deleteCandidates) {
-          if (this.hasInventoryDeleteImpact(candidate.impact)) continue;
-          await tx.inventoryItem.delete({ where: { id: candidate.itemId } });
-          deleted++;
-        }
+        updated++;
       }
     });
 

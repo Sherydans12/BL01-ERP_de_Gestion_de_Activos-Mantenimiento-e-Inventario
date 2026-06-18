@@ -140,6 +140,8 @@ erDiagram
 
 Guía operativa: [inventario-stock-transferencias-kardex.md](agentes/inventario-stock-transferencias-kardex.md).
 
+**Excel de inventario:** contrato operativo stock-only. El export/import de inventario sirve para ajustar `ItemStock` por articulo existente y bodega existente; no es via oficial para crear, editar estructura ni eliminar `InventoryItem`. Todo cambio de cantidad debe generar `InventoryTransaction` `ADJUST`; `CPP` es informativo y no se importa. Ver [importacion-exportacion-maestros-excel.md](agentes/importacion-exportacion-maestros-excel.md).
+
 Código: [`warehouses`](../backend/src/features/warehouses/), [`inventory-stock`](../backend/src/features/inventory-stock/), [`inventory-transfer`](../backend/src/features/inventory-transfer/), [`inventory-adjustment`](../backend/src/features/inventory-adjustment/), [`inventory-analytics`](../backend/src/features/inventory-analytics/).
 
 ### 1.6 Compras P2P (requerimientos → OC → recepción → factura)

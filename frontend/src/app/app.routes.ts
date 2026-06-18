@@ -396,7 +396,7 @@ export const routes: Routes = [
         canActivate: [permissionGuard],
         data: {
           permissionsAny: [I.ITEM_UPDATE, I.STOCK_ADJUST],
-          pageTitle: 'Importar maestro de inventario',
+          pageTitle: 'Importar ajustes de stock',
         },
         loadComponent: () =>
           import('./features/inventory-items/inventory-master-import/inventory-master-import.component').then(

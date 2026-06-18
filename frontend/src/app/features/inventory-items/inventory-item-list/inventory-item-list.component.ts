@@ -230,9 +230,9 @@ export class InventoryItemListComponent implements OnInit, OnDestroy {
           }
           this.downloadBlob(
             blob,
-            `BaseLogic_Maestro_Inventario_${new Date().toISOString().slice(0, 10)}.xlsx`,
+            `BaseLogic_Stock_Inventario_${new Date().toISOString().slice(0, 10)}.xlsx`,
           );
-          this.notificationService.success('Excel maestro de inventario generado.');
+          this.notificationService.success('Excel operativo de stock generado.');
         },
         error: () => {
           this.notificationService.error('No se pudo generar el Excel de inventario.');

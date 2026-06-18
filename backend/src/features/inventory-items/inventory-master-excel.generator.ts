@@ -68,15 +68,13 @@ const BASE_COLUMNS: MasterExportColumn[] = [
     header: 'ID articulo',
     key: 'id',
     width: 38,
-    note: 'Solo lectura. UUID interno del articulo; dejar vacio en filas nuevas.',
-    locked: true,
+    note: 'Identificador interno. No crear articulos desde Excel; use este valor solo para reconocer articulos existentes.',
   },
   {
     header: 'Codigo inventario',
     key: 'inventoryCode',
     width: 16,
-    note: 'Solo lectura. SKU interno ERP; el sistema lo asigna automaticamente en altas.',
-    locked: true,
+    note: 'SKU interno ERP (IN####). Informativo; no se modifica desde importacion Excel.',
   },
   { header: 'Numero parte', key: 'partNumber', width: 18 },
   { header: 'Nombre', key: 'name', width: 32 },
@@ -84,12 +82,12 @@ const BASE_COLUMNS: MasterExportColumn[] = [
   { header: 'Familia', key: 'family', width: 24 },
   { header: 'Subcategoria', key: 'subcategory', width: 24 },
   { header: 'Unidad', key: 'unit', width: 12 },
-  { header: 'Unidad nombre', key: 'unitName', width: 18, locked: true },
+  { header: 'Unidad nombre', key: 'unitName', width: 18 },
   {
     header: 'Permite decimales',
     key: 'allowsDecimals',
     width: 18,
-    locked: true,
+    note: 'Informativo. Si dice NO, Stock/Stock minimo/Stock maximo deben ser enteros.',
   },
   { header: 'Marca', key: 'brand', width: 18 },
   { header: 'Compatibilidad', key: 'compatibilityInfo', width: 34 },
@@ -99,9 +97,9 @@ const BASE_COLUMNS: MasterExportColumn[] = [
   { header: 'Activo', key: 'isAsset', width: 12 },
   { header: 'Serializado', key: 'isSerialized', width: 12 },
   { header: 'Bodega codigo', key: 'warehouseCode', width: 16 },
-  { header: 'Bodega nombre', key: 'warehouseName', width: 24, locked: true },
-  { header: 'Contrato', key: 'contractCode', width: 12, locked: true },
-  { header: 'Subcontrato', key: 'subcontractCode', width: 14, locked: true },
+  { header: 'Bodega nombre', key: 'warehouseName', width: 24 },
+  { header: 'Contrato', key: 'contractCode', width: 12 },
+  { header: 'Subcontrato', key: 'subcontractCode', width: 14 },
   { header: 'Ubicacion stock', key: 'stockLocation', width: 18 },
   { header: 'Bin codigo', key: 'binCode', width: 14 },
   { header: 'Bin etiqueta', key: 'binLabel', width: 18 },
@@ -112,7 +110,7 @@ const BASE_COLUMNS: MasterExportColumn[] = [
     header: 'Bodega politica',
     key: 'policyWarehouse',
     width: 20,
-    locked: true,
+    note: 'Informativo. La politica estructural del articulo se edita dentro del sistema.',
   },
   {
     header: 'Politica minimo',
@@ -130,8 +128,7 @@ const BASE_COLUMNS: MasterExportColumn[] = [
     header: 'QR payload',
     key: 'qrCode',
     width: 24,
-    note: 'Solo lectura. Payload interno para etiquetas y trazabilidad.',
-    locked: true,
+    note: 'Payload interno para etiquetas y trazabilidad. Informativo; no se modifica desde Excel.',
   },
 ];
 
@@ -142,7 +139,7 @@ const COST_COLUMNS: MasterExportColumn[] = [
     key: 'lineValue',
     width: 16,
     numFmt: '$#,##0.00',
-    locked: true,
+    note: 'Informativo. Valor calculado con stock y CPP vigente.',
   },
 ];
 
@@ -325,10 +322,13 @@ export async function generateInventoryMasterExcelBuffer(
         : []),
     ],
     notes: [
+      'Uso oficial: ajustar stock por articulo existente y bodega existente. No crear, editar estructura ni borrar articulos desde Excel.',
+      'Para crear o editar articulos use BaseLogic en Catalogo Maestro de Articulos; luego exporte nuevamente este Excel.',
       'Una fila representa un articulo en una bodega. Un articulo puede aparecer mas de una vez si tiene stock en varias bodegas.',
-      'Los encabezados de Inventario tienen comentarios con descriptores para uso futuro del importador.',
+      'Campos permitidos para importacion: Bodega codigo, Ubicacion stock, Bin codigo, Stock, Stock minimo y Stock maximo.',
+      'Campos estructurales como nombre, categoria, unidad, numero de parte, proveedor, flags, SKU y QR son informativos y cambios en ellos se rechazan al importar.',
       data.canViewCost
-        ? 'El archivo incluye CPP y valor por linea porque el usuario tiene permiso de ver costos.'
+        ? 'El archivo incluye CPP y valor por linea porque el usuario tiene permiso de ver costos. CPP es informativo y no se modifica desde importacion Excel.'
         : 'El archivo no incluye costos porque el usuario no tiene permiso de ver costos.',
       'La hoja Catalogos inventario incluye familias, subcategorias, unidades, bodegas y proveedores habituales.',
     ],
