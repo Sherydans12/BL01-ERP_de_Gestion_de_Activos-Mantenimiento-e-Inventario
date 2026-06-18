@@ -100,7 +100,32 @@ export class InventoryStockController {
     @Param('warehouseId') warehouseId: string,
     @Req() req: any,
     @Query('location') location?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
+    @Query('familyId') familyId?: string,
+    @Query('subcategoryId') subcategoryId?: string,
+    @Query('status') status?: string,
   ) {
+    if (page || pageSize || search || sort || dir || familyId || subcategoryId || status) {
+      return this.inventoryStockService.getStockByWarehousePaginated(
+        warehouseId,
+        req.user,
+        {
+          location: location?.trim() || undefined,
+          page: page ? parseInt(page, 10) : 1,
+          pageSize: pageSize ? parseInt(pageSize, 10) : 25,
+          search: search?.trim() || undefined,
+          sort: sort?.trim() || undefined,
+          dir: dir === 'desc' ? 'desc' : 'asc',
+          familyId: familyId?.trim() || undefined,
+          subcategoryId: subcategoryId?.trim() || undefined,
+          status: status?.trim() || undefined,
+        },
+      );
+    }
     return this.inventoryStockService.getStockByWarehouse(
       warehouseId,
       req.user,

@@ -9,6 +9,19 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-18 — Paginación real de extremo a extremo en Control de Stock
+- **Contexto:** Al seleccionar una bodega en `/app/inventario/stock`, el sistema cargaba y renderizaba la totalidad de los artículos en una sola respuesta HTTP, provocando bloqueos de interfaz y lentitud en bodegas grandes.
+- **Decisión:**
+  - **Paginación en Backend:** Se modificó `GET /inventory-stock/warehouse/:warehouseId` para admitir `page`, `pageSize`, `search` (multi-token), `sort`, `dir`, y filtros de categoría, familia, ubicación y estado (`critical`, `field_pending`). El backend limita `pageSize` a un tope máximo de 100.
+  - **Cálculo de Ordenamientos Derivados:** Los ordenamientos por campos derivados como `availableQuantity`, `reservedQuantity`, `quantity` y `unitCost` se realizan en memoria sobre el total filtrado *antes* de paginar (`slice`), garantizando ordenamiento exacto multicanal.
+  - **Acotación de Alertas:** El campo `lowStockItems` se acotó a los primeros 10 artículos con mayor déficit relativo para optimizar el payload HTTP, manteniendo `lowStockCount` con el total absoluto.
+  - **Frontend Reactivo:** Se refactorizó `StockDashboardComponent` para manejar estados de paginación reactivos (`page`, `pageSize`, `search`, etc.), deshabilitando la paginación local previa y delegando la búsqueda y ordenamiento al servidor de manera fluida con indicadores visuales de carga.
+  - **Compatibilidad Legacy:** Si no se reciben parámetros de paginación, el endpoint devuelve la lista completa tradicional sin rebanar para salvaguardar la compatibilidad con el formulario de OTs.
+- **Consecuencias:**
+  - Se eliminaron las pausas y bloqueos del navegador en bodegas grandes.
+  - Los archivos de documentación técnica fueron integrados con los nuevos contratos y comportamientos.
+  - Cobertura de pruebas unitarias robustecida en backend (`inventory-stock.service.spec.ts`) y frontend.
+
 ## 2026-06-16 — Auditoría de Control de Stock: Hardening técnico, ABAC y regularizaciones
 - **Contexto:** Se realizó una auditoría funcional y técnica del módulo de Control de Stock (`/app/inventario/stock`). Durante este proceso, se identificaron áreas que requieren definición o hardening técnico en la validación de decimales de unidades de medida (UoM), el filtro contractual en las alertas de abastecimiento globales, y el comportamiento transaccional del stock negativo al cerrar e imputar repuestos de Órdenes de Trabajo (OT).
 - **Decisión:**

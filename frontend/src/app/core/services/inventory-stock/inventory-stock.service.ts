@@ -32,6 +32,50 @@ export class InventoryStockService {
     });
   }
 
+  getStockByWarehousePaginated(
+    warehouseId: string,
+    opts: {
+      page: number;
+      pageSize: number;
+      search?: string;
+      sort?: string;
+      dir?: 'asc' | 'desc';
+      location?: string;
+      familyId?: string;
+      subcategoryId?: string;
+      status?: string;
+    },
+  ): Observable<{
+    data: any[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalValue?: number;
+    lowStockCount?: number;
+    lowStockItems?: any[];
+  }> {
+    let params = new HttpParams();
+    params = params.set('page', String(opts.page));
+    params = params.set('pageSize', String(opts.pageSize));
+    if (opts.search?.trim()) params = params.set('search', opts.search.trim());
+    if (opts.sort?.trim()) params = params.set('sort', opts.sort.trim());
+    if (opts.dir) params = params.set('dir', opts.dir);
+    if (opts.location?.trim()) params = params.set('location', opts.location.trim());
+    if (opts.familyId?.trim()) params = params.set('familyId', opts.familyId.trim());
+    if (opts.subcategoryId?.trim()) params = params.set('subcategoryId', opts.subcategoryId.trim());
+    if (opts.status?.trim()) params = params.set('status', opts.status.trim());
+
+    return this.http.get<{
+      data: any[];
+      total: number;
+      page: number;
+      pageSize: number;
+      totalValue?: number;
+      lowStockCount?: number;
+      lowStockItems?: any[];
+    }>(`${this.apiUrl}/warehouse/${warehouseId}`, { params });
+  }
+
   /**
    * Historial de transacciones de la bodega (sin `itemId`): hasta 100 movimientos, sin paginar.
    * Con `itemId`: respuesta paginada (defecto pág. 1, 25 filas) para kardex por artículo en bodega.

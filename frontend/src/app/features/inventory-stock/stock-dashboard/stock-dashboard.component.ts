@@ -183,6 +183,17 @@ export class StockDashboardComponent implements OnInit {
   articleQuickSearch = signal('');
   /** Solo filas en o bajo el umbral mínimo (según stock disponible), o con saldo pendiente en terreno. */
   stockStatusFilter = signal<'all' | 'critical' | 'field_pending'>('all');
+  
+  page = signal(1);
+  pageSize = signal(25);
+  totalItems = signal(0);
+  sort = signal<string>('name');
+  dir = signal<'asc' | 'desc'>('asc');
+  private serverTotalStockValue = signal<number | null>(null);
+  private serverLowStockAlerts = signal<any[]>([]);
+  private stockRequestSeq = 0;
+  private searchFilterReload$ = new Subject<void>();
+
   private locationFilterReload$ = new Subject<void>();
   pendingRegularizationCount = signal<number>(0);
   pendingRegModalOpen = signal(false);
@@ -214,67 +225,23 @@ export class StockDashboardComponent implements OnInit {
   });
 
   /** Familia / subcategoría (sin filtro “solo críticos”). */
-  familyFilteredStockItems = computed(() => {
-    const items = this.stockItems();
-    const sub = this.selectedSubcategoryId();
-    const fam = this.selectedFamilyId();
-    if (sub) {
-      return items.filter((s: any) => s.item?.categoryId === sub);
-    }
-    if (fam) {
-      return items.filter((s: any) => {
-        const ic = s.item?.itemCategory;
-        return (
-          ic?.parentCategory?.id === fam || ic?.parentCategoryId === fam
-        );
-      });
-    }
-    return items;
-  });
+  familyFilteredStockItems = computed(() => this.stockItems());
 
   /** Tras familia/subcategoría y búsqueda de artículo (sin filtro “solo críticos”). */
-  afterFamilyAndArticleFilter = computed(() => {
-    const rows = this.familyFilteredStockItems();
-    const tokens = this.articleQuickSearchTokens();
-    if (!tokens.length) return rows;
-    return rows.filter((s: any) => this.stockRowMatchesArticleTokens(s, tokens));
-  });
+  afterFamilyAndArticleFilter = computed(() => this.stockItems());
 
-  filteredStockItems = computed(() => {
-    let rows = this.afterFamilyAndArticleFilter();
-    if (this.stockStatusFilter() === 'critical') {
-      rows = rows.filter((s: any) => this.isAvailabilityCritical(s));
-    } else if (this.stockStatusFilter() === 'field_pending') {
-      rows = rows.filter(
-        (s: any) => Number(s.fieldDispatchOutstandingQty ?? 0) > 1e-9,
-      );
-    }
-    return rows;
-  });
+  filteredStockItems = computed(() => this.stockItems());
 
   /** Búsqueda de artículo eliminó todas las filas que aún pasaban familia/subcategoría. */
   articleSearchExcludedAll = computed(() => {
-    if (!this.articleQuickSearch().trim()) return false;
-    return (
-      this.familyFilteredStockItems().length > 0 &&
-      this.afterFamilyAndArticleFilter().length === 0
-    );
+    return !!this.articleQuickSearch().trim() && this.totalItems() === 0;
   });
 
-  totalItemCount = computed(() => this.filteredStockItems().length);
+  totalItemCount = computed(() => this.totalItems());
 
-  totalStockValue = computed(() =>
-    this.filteredStockItems().reduce(
-      (sum: number, s: any) => sum + s.quantity * Number(s.unitCost || 0),
-      0,
-    ),
-  );
+  totalStockValue = computed(() => this.serverTotalStockValue());
 
-  lowStockAlerts = computed(() =>
-    this.familyFilteredStockItems().filter((s: any) =>
-      this.isAvailabilityCritical(s),
-    ),
-  );
+  lowStockAlerts = computed(() => this.serverLowStockAlerts());
 
   /** Filas placeholder para skeleton de tabla. */
   readonly tableSkeletonRows = Array.from({ length: 8 }, (_, i) => i);
@@ -477,6 +444,15 @@ export class StockDashboardComponent implements OnInit {
     this.locationFilterReload$
       .pipe(debounceTime(350), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
+        this.page.set(1);
+        const w = this.selectedWarehouseId();
+        if (w) this.loadStock(w);
+      });
+
+    this.searchFilterReload$
+      .pipe(debounceTime(300), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.page.set(1);
         const w = this.selectedWarehouseId();
         if (w) this.loadStock(w);
       });
@@ -500,59 +476,74 @@ export class StockDashboardComponent implements OnInit {
 
   onArticleQuickSearchInput(value: string) {
     this.articleQuickSearch.set(value);
+    if (this.selectedWarehouseId()) {
+      this.searchFilterReload$.next();
+    }
   }
 
   onArticleQuickSearchKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape' && this.articleQuickSearch().trim()) {
       event.preventDefault();
       this.articleQuickSearch.set('');
+      this.page.set(1);
+      const w = this.selectedWarehouseId();
+      if (w) this.loadStock(w);
     }
   }
 
   clearArticleQuickSearch() {
     this.articleQuickSearch.set('');
+    this.page.set(1);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
   }
 
-  private articleQuickSearchTokens(): string[] {
-    return this.articleQuickSearch()
-      .trim()
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(Boolean);
+  goToPage(p: number) {
+    if (p < 1 || p > this.totalPages()) return;
+    this.page.set(p);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
   }
 
-  /**
-   * Cada token debe coincidir con al menos un campo del artículo (insensible a mayúsculas).
-   * UUID: acepta con o sin guiones si el término parece fragmento de UUID.
-   */
-  private stockRowMatchesArticleTokens(s: any, tokens: string[]): boolean {
-    const item = s?.item;
-    if (!item) return false;
-    const idLower = String(item.id ?? '').toLowerCase();
-    const idNoHyphen = idLower.replace(/-/g, '');
-    const fieldBlob = [
-      item.inventoryCode,
-      item.partNumber,
-      item.name,
-      item.description,
-      item.qrCode,
-      item.brand,
-      item.compatibilityInfo,
-      idLower,
-    ]
-      .map((x: unknown) => String(x ?? '').toLowerCase())
-      .join('\u0000');
-
-    return tokens.every((tok) => {
-      const t = tok.replace(/\s+/g, '');
-      if (!t) return true;
-      if (fieldBlob.includes(t)) return true;
-      if (idNoHyphen.length && t.replace(/-/g, '').length >= 6) {
-        if (idNoHyphen.includes(t.replace(/-/g, ''))) return true;
-      }
-      return false;
-    });
+  onPageSizeChange(size: number) {
+    this.pageSize.set(Number(size));
+    this.page.set(1);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
   }
+
+  toggleSort(column: string) {
+    if (this.sort() === column) {
+      this.dir.set(this.dir() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sort.set(column);
+      this.dir.set('asc');
+    }
+    this.page.set(1);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
+  }
+
+  totalPages = computed(() => Math.ceil(this.totalItems() / this.pageSize()) || 1);
+  
+  startRow = computed(() => {
+    if (this.totalItems() === 0) return 0;
+    return (this.page() - 1) * this.pageSize() + 1;
+  });
+
+  endRow = computed(() => {
+    const end = this.page() * this.pageSize();
+    const tot = this.totalItems();
+    return end > tot ? tot : end;
+  });
 
   canSeeValuationReport(): boolean {
     return this.authService.hasPermission(I.ANALYTICS_READ);
@@ -1024,6 +1015,11 @@ export class StockDashboardComponent implements OnInit {
     this.selectedFamilyId.set(id);
     this.selectedSubcategoryId.set('');
     this.subcategories.set([]);
+    this.page.set(1);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
     if (!id) return;
     this.itemsService.getCategoryChildren(id).subscribe({
       next: (rows) => this.subcategories.set(rows),
@@ -1032,9 +1028,23 @@ export class StockDashboardComponent implements OnInit {
   }
 
   onSubcategoryFilterChange(event: Event) {
-    this.selectedSubcategoryId.set(
-      (event.target as HTMLSelectElement).value,
-    );
+    const id = (event.target as HTMLSelectElement).value;
+    this.selectedSubcategoryId.set(id);
+    this.page.set(1);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
+  }
+
+  onStatusFilterChange(event: Event) {
+    const val = (event.target as HTMLSelectElement).value as 'all' | 'critical' | 'field_pending';
+    this.stockStatusFilter.set(val);
+    this.page.set(1);
+    const w = this.selectedWarehouseId();
+    if (w) {
+      this.loadStock(w);
+    }
   }
 
   onWarehouseSelect(event: Event) {
@@ -1046,6 +1056,7 @@ export class StockDashboardComponent implements OnInit {
     this.locationSearch.set('');
     this.articleQuickSearch.set('');
     this.stockStatusFilter.set('all');
+    this.page.set(1);
     if (wId) {
       this.loadStock(wId);
     } else {
@@ -1057,20 +1068,43 @@ export class StockDashboardComponent implements OnInit {
   loadStock(warehouseId: string) {
     this.stockLoading.set(true);
     const loc = this.locationSearch().trim();
+    const search = this.articleQuickSearch().trim();
+    const familyId = this.selectedFamilyId();
+    const subcategoryId = this.selectedSubcategoryId();
+    const status = this.stockStatusFilter();
+
+    this.stockRequestSeq++;
+    const currentSeq = this.stockRequestSeq;
+
     this.stockService
-      .getStockByWarehouse(warehouseId, loc ? { location: loc } : undefined)
+      .getStockByWarehousePaginated(warehouseId, {
+        page: this.page(),
+        pageSize: this.pageSize(),
+        search: search || undefined,
+        location: loc || undefined,
+        familyId: familyId || undefined,
+        subcategoryId: subcategoryId || undefined,
+        status: status !== 'all' ? status : undefined,
+        sort: this.sort() || undefined,
+        dir: this.dir() || undefined,
+      })
       .subscribe({
-      next: (data) => {
-        this.stockItems.set(data);
-        this.stockLoading.set(false);
-        this.refreshPendingCount();
-        this.loadInventoryRecordAccuracy(warehouseId);
-      },
-      error: () => {
-        this.notificationService.error('Error al cargar stock');
-        this.stockLoading.set(false);
-      },
-    });
+        next: (res) => {
+          if (this.stockRequestSeq !== currentSeq) return;
+          this.stockItems.set(res.data);
+          this.totalItems.set(res.total);
+          this.serverTotalStockValue.set(res.totalValue ?? null);
+          this.serverLowStockAlerts.set(res.lowStockItems ?? []);
+          this.stockLoading.set(false);
+          this.refreshPendingCount();
+          this.loadInventoryRecordAccuracy(warehouseId);
+        },
+        error: () => {
+          if (this.stockRequestSeq !== currentSeq) return;
+          this.notificationService.error('Error al cargar stock');
+          this.stockLoading.set(false);
+        },
+      });
   }
 
   loadInventoryRecordAccuracy(warehouseId: string) {

@@ -197,7 +197,7 @@
           <div class="relative group">
             <select
               [value]="stockStatusFilter()"
-              (change)="stockStatusFilter.set($any($event.target).value)"
+              (change)="onStatusFilterChange($event)"
               class="w-full bg-surface border border-border text-main rounded-lg pl-3 pr-10 py-2.5 text-sm outline-none focus:border-primary/50 transition-all cursor-pointer appearance-none shadow-sm"
             >
               <option value="all">Todos</option>
@@ -328,10 +328,10 @@
       <div class="bg-surface border border-border rounded-xl p-4">
         <p class="text-[10px] font-mono text-muted uppercase tracking-wider">Valor Total</p>
         <p class="text-2xl font-bold text-primary font-mono mt-1">
-          @if (canSeeStockCosts()) {
+          @if (totalStockValue() !== null) {
             ${{ totalStockValue() | number:'1.0-0' }}
           } @else {
-            $ ****
+            <span class="text-xs text-muted">Sin permiso para ver valorización</span>
           }
         </p>
       </div>
@@ -471,24 +471,70 @@
           <tr
             class="bg-dark text-muted font-mono text-xs uppercase tracking-wider"
           >
-            <th class="py-3 px-6 border-b border-border">N° Parte / Ítem</th>
+            <th class="py-3 px-6 border-b border-border select-none cursor-pointer hover:text-primary transition-colors" (click)="toggleSort('name')">
+              <div class="flex items-center gap-1">
+                <span>N° Parte / Ítem</span>
+                @if (sort() === 'name') {
+                  <span class="text-primary text-[10px]">{{ dir() === 'asc' ? '▲' : '▼' }}</span>
+                } @else {
+                  <span class="text-muted/30 text-[10px]">↕</span>
+                }
+              </div>
+            </th>
             <th class="py-3 px-6 border-b border-border text-left hidden lg:table-cell">Req. compra</th>
-            <th class="py-3 px-6 border-b border-border text-left hidden md:table-cell">Ubicación</th>
+            <th class="py-3 px-6 border-b border-border text-left hidden md:table-cell select-none cursor-pointer hover:text-primary transition-colors" (click)="toggleSort('location')">
+              <div class="flex items-center gap-1">
+                <span>Ubicación</span>
+                @if (sort() === 'location') {
+                  <span class="text-primary text-[10px]">{{ dir() === 'asc' ? '▲' : '▼' }}</span>
+                } @else {
+                  <span class="text-muted/30 text-[10px]">↕</span>
+                }
+              </div>
+            </th>
             <th class="py-3 px-6 border-b border-border">Categoría</th>
-            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
-              Físico
+            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap select-none cursor-pointer hover:text-primary transition-colors" (click)="toggleSort('quantity')">
+              <div class="flex items-center justify-center gap-1">
+                <span>Físico</span>
+                @if (sort() === 'quantity') {
+                  <span class="text-primary text-[10px]">{{ dir() === 'asc' ? '▲' : '▼' }}</span>
+                } @else {
+                  <span class="text-muted/30 text-[10px]">↕</span>
+                }
+              </div>
             </th>
-            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
-              Reservado
+            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap select-none cursor-pointer hover:text-primary transition-colors" (click)="toggleSort('reservedQuantity')">
+              <div class="flex items-center justify-center gap-1">
+                <span>Reservado</span>
+                @if (sort() === 'reservedQuantity') {
+                  <span class="text-primary text-[10px]">{{ dir() === 'asc' ? '▲' : '▼' }}</span>
+                } @else {
+                  <span class="text-muted/30 text-[10px]">↕</span>
+                }
+              </div>
             </th>
-            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap">
-              Disponible
+            <th class="py-3 px-4 border-b border-border text-center whitespace-nowrap select-none cursor-pointer hover:text-primary transition-colors" (click)="toggleSort('availableQuantity')">
+              <div class="flex items-center justify-center gap-1">
+                <span>Disponible</span>
+                @if (sort() === 'availableQuantity') {
+                  <span class="text-primary text-[10px]">{{ dir() === 'asc' ? '▲' : '▼' }}</span>
+                } @else {
+                  <span class="text-muted/30 text-[10px]">↕</span>
+                }
+              </div>
             </th>
             <th class="py-3 px-3 border-b border-border text-center whitespace-nowrap hidden sm:table-cell" title="Salidas a terreno (FIELD_DISPATCH) menos reingresos (FIELD_RETURN)">
               Pend. terreno
             </th>
-            <th class="py-3 px-6 border-b border-border text-right">
-              Costo Unit. (CPP)
+            <th class="py-3 px-6 border-b border-border text-right select-none cursor-pointer hover:text-primary transition-colors" (click)="toggleSort('unitCost')">
+              <div class="flex items-center justify-end gap-1">
+                <span>Costo Unit. (CPP)</span>
+                @if (sort() === 'unitCost') {
+                  <span class="text-primary text-[10px]">{{ dir() === 'asc' ? '▲' : '▼' }}</span>
+                } @else {
+                  <span class="text-muted/30 text-[10px]">↕</span>
+                }
+              </div>
             </th>
             <th class="py-3 px-6 border-b border-border text-right">
               Valor Total
@@ -673,17 +719,17 @@
                   }
                 </td>
                 <td class="py-4 px-6 text-right font-mono">
-                  @if (canSeeStockCosts()) {
-                    ${{ s.unitCost || 0 | number: "1.0-0" }}
+                  @if (s.unitCost !== null) {
+                    ${{ s.unitCost | number: "1.0-0" }}
                   } @else {
-                    $ ****
+                    <span class="text-muted">—</span>
                   }
                 </td>
                 <td class="py-4 px-6 text-right font-mono text-primary">
-                  @if (canSeeStockCosts()) {
-                    ${{ s.quantity * (s.unitCost || 0) | number: "1.0-0" }}
+                  @if (s.unitCost !== null) {
+                    ${{ s.quantity * s.unitCost | number: "1.0-0" }}
                   } @else {
-                    $ ****
+                    <span class="text-muted">—</span>
                   }
                 </td>
                 <td class="py-4 px-3 text-center align-top">
@@ -718,8 +764,80 @@
               </tr>
             }
           }
-        </tbody>
       </table>
+      
+      <!-- Controles de Paginación -->
+      <div class="px-6 py-4 border-t border-border bg-dark/20 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs">
+        <div class="text-muted">
+          Mostrando <span class="text-main font-bold">{{ startRow() }}-{{ endRow() }}</span> de <span class="text-main font-bold">{{ totalItems() }}</span> artículos
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- Selector de tamaño de página -->
+          <span class="text-muted mr-1">Filas por página:</span>
+          <select 
+            [value]="pageSize()" 
+            (change)="onPageSizeChange($any($event.target).value)"
+            class="bg-surface border border-border text-main rounded px-2 py-1 outline-none cursor-pointer focus:border-primary/50"
+          >
+            <option [value]="10">10</option>
+            <option [value]="25">25</option>
+            <option [value]="50">50</option>
+            <option [value]="100">100</option>
+          </select>
+          
+          <div class="flex items-center gap-1 ml-4">
+            <button
+              type="button"
+              (click)="goToPage(1)"
+              [disabled]="page() === 1"
+              class="p-1.5 rounded border border-border bg-surface text-muted hover:text-main hover:bg-dark disabled:opacity-40 disabled:hover:bg-surface disabled:hover:text-muted transition-colors cursor-pointer"
+              title="Primera página"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              (click)="goToPage(page() - 1)"
+              [disabled]="page() === 1"
+              class="p-1.5 rounded border border-border bg-surface text-muted hover:text-main hover:bg-dark disabled:opacity-40 disabled:hover:bg-surface disabled:hover:text-muted transition-colors cursor-pointer"
+              title="Página anterior"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            <span class="px-3 py-1 bg-surface border border-border rounded text-main font-bold">
+              {{ page() }} / {{ totalPages() }}
+            </span>
+            
+            <button
+              type="button"
+              (click)="goToPage(page() + 1)"
+              [disabled]="page() >= totalPages()"
+              class="p-1.5 rounded border border-border bg-surface text-muted hover:text-main hover:bg-dark disabled:opacity-40 disabled:hover:bg-surface disabled:hover:text-muted transition-colors cursor-pointer"
+              title="Página siguiente"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              (click)="goToPage(totalPages())"
+              [disabled]="page() >= totalPages()"
+              class="p-1.5 rounded border border-border bg-surface text-muted hover:text-main hover:bg-dark disabled:opacity-40 disabled:hover:bg-surface disabled:hover:text-muted transition-colors cursor-pointer"
+              title="Última página"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   } @else {
     <div

@@ -99,7 +99,7 @@ export class InventoryStockService {
     value: number | null,
   ): number | null {
     if (userCanViewInventoryCost(user)) return value;
-    return 0;
+    return null;
   }
 
   /**
@@ -489,6 +489,329 @@ export class InventoryStockService {
         linkedRequisition: reqByItemId.get(r.itemId) ?? null,
       };
     });
+  }
+
+  async getStockByWarehousePaginated(
+    warehouseId: string,
+    user: any,
+    opts: {
+      location?: string;
+      page: number;
+      pageSize: number;
+      search?: string;
+      sort?: string;
+      dir: 'asc' | 'desc';
+      familyId?: string;
+      subcategoryId?: string;
+      status?: string;
+    },
+  ) {
+    const tenantId = user.tenantId as string;
+    await this.loadWarehouseForUser(warehouseId, user);
+
+    const page = Math.max(1, opts.page);
+    const pageSize = Math.min(100, Math.max(1, opts.pageSize));
+
+    const where: Prisma.ItemStockWhereInput = { warehouseId };
+
+    const search = opts.search?.trim();
+    if (search) {
+      where.OR = [
+        { item: { inventoryCode: { contains: search, mode: 'insensitive' as const } } },
+        { item: { partNumber: { contains: search, mode: 'insensitive' as const } } },
+        { item: { name: { contains: search, mode: 'insensitive' as const } } },
+        { item: { description: { contains: search, mode: 'insensitive' as const } } },
+        { location: { contains: search, mode: 'insensitive' as const } },
+      ];
+    }
+
+    if (opts.location?.trim()) {
+      where.location = { contains: opts.location.trim(), mode: 'insensitive' as const };
+    }
+
+    if (opts.subcategoryId) {
+      where.item = {
+        categoryId: opts.subcategoryId,
+      } as Prisma.InventoryItemWhereInput;
+    } else if (opts.familyId) {
+      where.item = {
+        itemCategory: {
+          OR: [
+            { id: opts.familyId },
+            { parentCategoryId: opts.familyId },
+          ],
+        },
+      } as Prisma.InventoryItemWhereInput;
+    }
+
+    const hasCostPerm = userCanViewInventoryCost(user);
+    let sort = opts.sort?.trim();
+    if (sort === 'unitCost' && !hasCostPerm) {
+      sort = 'name';
+    }
+
+    const isDerivedSort = ['availableQuantity', 'reservedQuantity', 'fieldDispatchOutstandingQty'].includes(sort || '');
+    const hasDerivedFilter = !!opts.status && opts.status !== 'all';
+    const useMemoryPagination = isDerivedSort || hasDerivedFilter;
+
+    let total = 0;
+    let totalValue: number | null = null;
+    let lowStockCount = 0;
+    let lowStockItems: any[] = [];
+    let paginatedData: any[] = [];
+
+    if (useMemoryPagination) {
+      const rows = await this.prisma.itemStock.findMany({
+        where,
+        include: {
+          item: {
+            include: {
+              itemCategory: {
+                select: {
+                  id: true,
+                  name: true,
+                  parentCategoryId: true,
+                  parentCategory: { select: { id: true, name: true } },
+                },
+              },
+              unitOfMeasure: {
+                select: { id: true, name: true, abbreviation: true },
+              },
+            },
+          },
+        },
+      });
+
+      const fieldOutstandingByItem = await this.mapFieldDispatchOutstandingForWarehouse(tenantId, warehouseId);
+      const reservedAgg = await this.prisma.stockReservation.groupBy({
+        by: ['itemId'],
+        where: { warehouseId },
+        _sum: { quantity: true },
+      });
+      const reservedByItemId = new Map(reservedAgg.map((a) => [a.itemId, a._sum.quantity ?? 0]));
+      const itemIds = [...new Set(rows.map((r) => r.itemId))];
+      const reqByItemId = await this.mapLatestRequisitionsByItemIds(tenantId, itemIds);
+
+      let data = rows.map((r) => {
+        const reservedQuantity = reservedByItemId.get(r.itemId) ?? 0;
+        const availableQuantity = r.quantity - reservedQuantity;
+        return {
+          ...r,
+          reservedQuantity,
+          availableQuantity,
+          fieldDispatchOutstandingQty: fieldOutstandingByItem.get(r.itemId) ?? 0,
+          unitCost: this.maskCostValue(user, r.unitCost != null ? Number(r.unitCost) : null),
+          item: this.ensureItemDescription(r.item),
+          linkedRequisition: reqByItemId.get(r.itemId) ?? null,
+        };
+      });
+
+      if (opts.status === 'critical') {
+        data = data.filter((s) => {
+          const min = Number(s.minStock ?? 0);
+          return min > 0 && s.availableQuantity <= min;
+        });
+      } else if (opts.status === 'field_pending') {
+        data = data.filter((s) => s.fieldDispatchOutstandingQty > 0);
+      }
+
+      total = data.length;
+      if (hasCostPerm) {
+        let sum = 0;
+        for (const s of data) sum += s.quantity * Number(s.unitCost || 0);
+        totalValue = sum;
+      }
+
+      const allLowStock = data.filter((s) => {
+        const min = Number(s.minStock ?? 0);
+        return min > 0 && s.availableQuantity <= min;
+      });
+      lowStockCount = allLowStock.length;
+      lowStockItems = allLowStock
+        .sort((a, b) => {
+          const defA = a.availableQuantity - Number(a.minStock ?? 0);
+          const defB = b.availableQuantity - Number(b.minStock ?? 0);
+          return defA - defB;
+        })
+        .slice(0, 10)
+        .map((s) => ({
+          id: s.id,
+          partNumber: s.item?.partNumber,
+          availableQuantity: s.availableQuantity,
+          minStock: s.minStock,
+        }));
+
+      const isAsc = opts.dir === 'asc';
+      if (sort) {
+        data.sort((a, b) => {
+          let valA: any = null;
+          let valB: any = null;
+
+          if (sort === 'inventoryCode') {
+            valA = a.item?.inventoryCode;
+            valB = b.item?.inventoryCode;
+          } else if (sort === 'partNumber') {
+            valA = a.item?.partNumber;
+            valB = b.item?.partNumber;
+          } else if (sort === 'name') {
+            valA = a.item?.name;
+            valB = b.item?.name;
+          } else if (sort === 'location') {
+            valA = a.location;
+            valB = b.location;
+          } else if (sort === 'quantity') {
+            valA = a.quantity;
+            valB = b.quantity;
+          } else if (sort === 'availableQuantity') {
+            valA = a.availableQuantity;
+            valB = b.availableQuantity;
+          } else if (sort === 'reservedQuantity') {
+            valA = a.reservedQuantity;
+            valB = b.reservedQuantity;
+          } else if (sort === 'fieldDispatchOutstandingQty') {
+            valA = a.fieldDispatchOutstandingQty;
+            valB = b.fieldDispatchOutstandingQty;
+          } else if (sort === 'minStock') {
+            valA = a.minStock;
+            valB = b.minStock;
+          } else if (sort === 'maxStock') {
+            valA = a.maxStock;
+            valB = b.maxStock;
+          } else if (sort === 'unitCost') {
+            valA = a.unitCost;
+            valB = b.unitCost;
+          }
+
+          if (valA === valB) return 0;
+          if (valA == null) return isAsc ? 1 : -1;
+          if (valB == null) return isAsc ? -1 : 1;
+
+          if (typeof valA === 'string' && typeof valB === 'string') {
+            return isAsc
+              ? valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' })
+              : valB.localeCompare(valA, undefined, { numeric: true, sensitivity: 'base' });
+          }
+
+          return isAsc ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
+        });
+      } else {
+        data.sort((a, b) => {
+          const nameA = a.item?.name ?? '';
+          const nameB = b.item?.name ?? '';
+          return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+        });
+      }
+
+      paginatedData = data.slice((page - 1) * pageSize, page * pageSize);
+
+    } else {
+      const lightRows = await this.prisma.itemStock.findMany({
+        where,
+        select: { id: true, itemId: true, quantity: true, minStock: true, unitCost: true, item: { select: { partNumber: true } } },
+      });
+      
+      const lightItemIds = [...new Set(lightRows.map((r) => r.itemId))];
+      const reservedAggLight = await this.prisma.stockReservation.groupBy({
+        by: ['itemId'],
+        where: { warehouseId, itemId: { in: lightItemIds } },
+        _sum: { quantity: true },
+      });
+      const reservedMapLight = new Map(reservedAggLight.map((a) => [a.itemId, a._sum.quantity ?? 0]));
+
+      total = lightRows.length;
+      let calcTotalValue = 0;
+      const allLowStock: any[] = [];
+
+      for (const r of lightRows) {
+        if (hasCostPerm) calcTotalValue += r.quantity * Number(r.unitCost || 0);
+        const min = Number(r.minStock ?? 0);
+        if (min > 0) {
+          const avail = r.quantity - (reservedMapLight.get(r.itemId) ?? 0);
+          if (avail <= min) {
+            allLowStock.push({ ...r, availableQuantity: avail });
+          }
+        }
+      }
+
+      if (hasCostPerm) totalValue = calcTotalValue;
+      lowStockCount = allLowStock.length;
+      lowStockItems = allLowStock
+        .sort((a, b) => (a.availableQuantity - Number(a.minStock ?? 0)) - (b.availableQuantity - Number(b.minStock ?? 0)))
+        .slice(0, 10)
+        .map((s) => ({
+          id: s.id,
+          partNumber: s.item?.partNumber,
+          availableQuantity: s.availableQuantity,
+          minStock: s.minStock,
+        }));
+
+      let orderBy: any = undefined;
+      if (sort) {
+        const dir = opts.dir === 'desc' ? 'desc' : 'asc';
+        if (sort === 'partNumber') orderBy = { item: { partNumber: dir } };
+        else if (sort === 'name') orderBy = { item: { name: dir } };
+        else if (sort === 'inventoryCode') orderBy = { item: { inventoryCode: dir } };
+        else if (sort === 'quantity') orderBy = { quantity: dir };
+        else if (sort === 'minStock') orderBy = { minStock: dir };
+        else if (sort === 'maxStock') orderBy = { maxStock: dir };
+        else if (sort === 'location') orderBy = { location: dir };
+        else if (sort === 'unitCost') orderBy = { unitCost: dir };
+      } else {
+        orderBy = { item: { name: 'asc' } };
+      }
+
+      const heavyRows = await this.prisma.itemStock.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          item: {
+            include: {
+              itemCategory: {
+                select: {
+                  id: true,
+                  name: true,
+                  parentCategoryId: true,
+                  parentCategory: { select: { id: true, name: true } },
+                },
+              },
+              unitOfMeasure: {
+                select: { id: true, name: true, abbreviation: true },
+              },
+            },
+          },
+        },
+      });
+
+      const heavyItemIds = [...new Set(heavyRows.map((r) => r.itemId))];
+      const fieldOutstandingByItem = await this.mapFieldDispatchOutstandingForWarehouse(tenantId, warehouseId);
+      const reqByItemId = await this.mapLatestRequisitionsByItemIds(tenantId, heavyItemIds);
+
+      paginatedData = heavyRows.map((r) => {
+        const reservedQuantity = reservedMapLight.get(r.itemId) ?? 0;
+        const availableQuantity = r.quantity - reservedQuantity;
+        return {
+          ...r,
+          reservedQuantity,
+          availableQuantity,
+          fieldDispatchOutstandingQty: fieldOutstandingByItem.get(r.itemId) ?? 0,
+          unitCost: this.maskCostValue(user, r.unitCost != null ? Number(r.unitCost) : null),
+          item: this.ensureItemDescription(r.item),
+          linkedRequisition: reqByItemId.get(r.itemId) ?? null,
+        };
+      });
+    }
+
+    return {
+      data: paginatedData,
+      total,
+      page,
+      pageSize,
+      totalValue,
+      lowStockCount,
+      lowStockItems,
+    };
   }
 
   /**

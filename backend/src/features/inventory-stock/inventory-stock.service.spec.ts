@@ -519,7 +519,7 @@ describe('InventoryStockService', () => {
         returnDto,
         userWithoutCostView,
       );
-      expect(result.unitCost).toBe(0);
+      expect(result.unitCost).toBeNull();
     });
 
     it('crea fila de stock con política del artículo si no existía saldo', async () => {
@@ -972,7 +972,7 @@ describe('InventoryStockService', () => {
         userWithoutCostView,
       );
 
-      expect(rows[0].unitCost).toBe(0);
+      expect(rows[0].unitCost).toBeNull();
     });
 
     it('filtra por ubicación parcial (ILIKE)', async () => {
@@ -989,6 +989,179 @@ describe('InventoryStockService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('getStockByWarehousePaginated', () => {
+    const stockItemId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const stockRow = {
+      id: 'stock-row-1',
+      warehouseId,
+      itemId: stockItemId,
+      quantity: 20,
+      unitCost: 500,
+      location: 'A-01',
+      item: {
+        id: stockItemId,
+        partNumber: 'PN-9',
+        name: 'Rodamiento',
+        description: 'Rodamiento axial',
+        itemCategory: {
+          id: 'cat-1',
+          name: 'Repuestos',
+          parentCategoryId: null,
+          parentCategory: null,
+        },
+        unitOfMeasure: { id: 'u1', name: 'UN', abbreviation: 'UN' },
+      },
+    };
+
+    function setupWarehouseAndStockPaginated(rowsCount = 1): void {
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
+      prisma.inventoryTransaction.groupBy
+        .mockResolvedValueOnce([
+          { itemId: stockItemId, _sum: { quantity: 10 } },
+        ] as never)
+        .mockResolvedValueOnce([
+          { itemId: stockItemId, _sum: { quantity: 3 } },
+        ] as never);
+      const rows = Array.from({ length: rowsCount }, (_, i) => ({
+        ...stockRow,
+        id: `stock-row-${i}`,
+        quantity: 10 + i,
+        item: { ...stockRow.item, id: `${stockItemId}-${i}`, name: `Rodamiento ${i}` }
+      }));
+      prisma.itemStock.findMany.mockImplementation(async (args) => { if (args?.select) return rows; let result = rows; if (args?.orderBy?.quantity === 'desc') { result = result.slice().sort((a,b) => b.quantity - a.quantity); } if (args?.skip !== undefined && args?.take !== undefined) { return result.slice(args.skip, args.skip + args.take) as never; } return result as never; });
+      prisma.itemStock.count.mockResolvedValue(rowsCount);
+      prisma.stockReservation.groupBy.mockResolvedValue([
+        { itemId: stockItemId, _sum: { quantity: 5 } },
+      ] as never);
+      prisma.requisitionItem.findMany.mockResolvedValue([] as never);
+    }
+
+    it('lanza NotFoundException si la bodega no existe', async () => {
+      prisma.warehouse.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getStockByWarehousePaginated(warehouseId, adminUser, { page: 1, pageSize: 25, dir: 'asc' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('devuelve resultados paginados con disponible, reservado y pendiente', async () => {
+      setupWarehouseAndStockPaginated(11);
+
+      const res = await service.getStockByWarehousePaginated(warehouseId, adminUser, {
+        page: 2,
+        pageSize: 10,
+        dir: 'asc',
+      });
+
+      expect(res.total).toBe(11);
+      expect(res.page).toBe(2);
+      expect(res.pageSize).toBe(10);
+      expect(res.data).toHaveLength(1);
+      expect(res.data[0].id).toBe('stock-row-10');
+      expect(res.data[0].reservedQuantity).toBe(5); // All rows look up stockItemId which has 5 reserved
+    });
+
+    it('enmascara unitCost sin permiso inventory:stock:view_cost', async () => {
+      setupWarehouseAndStockPaginated();
+
+      const res = await service.getStockByWarehousePaginated(
+        warehouseId,
+        userWithoutCostView,
+        { page: 1, pageSize: 10, dir: 'asc' }
+      );
+
+      expect(res.data[0].unitCost).toBeNull();
+    });
+
+    it('aplica filtros de búsqueda y ordenamiento', async () => {
+      setupWarehouseAndStockPaginated(5);
+
+      const res = await service.getStockByWarehousePaginated(warehouseId, adminUser, {
+        page: 1,
+        pageSize: 10,
+        search: 'rodamiento',
+        sort: 'quantity',
+        dir: 'desc',
+      });
+
+      // Rows are quantity: 10, 11, 12, 13, 14. Sorted desc should be 14, 13, 12, 11, 10
+      expect(res.data[0].quantity).toBe(14);
+      expect(res.data[4].quantity).toBe(10);
+
+      expect(prisma.itemStock.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                item: expect.objectContaining({
+                  name: { contains: 'rodamiento', mode: 'insensitive' },
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('calcula y enmascara totalValue segun permisos', async () => {
+      setupWarehouseAndStockPaginated(3); // quantity = 10, 11, 12; cost = 500
+
+      // Admin has permission -> totalValue = 10*500 + 11*500 + 12*500 = 16500
+      const resAdmin = await service.getStockByWarehousePaginated(warehouseId, adminUser, {
+        page: 1,
+        pageSize: 10,
+        dir: 'asc',
+      });
+      expect(resAdmin.totalValue).toBe(16500);
+
+      // Reset mocks for second call
+      setupWarehouseAndStockPaginated(3);
+      // User without permission -> totalValue = 0
+      const resNoCost = await service.getStockByWarehousePaginated(warehouseId, userWithoutCostView, {
+        page: 1,
+        pageSize: 10,
+        dir: 'asc',
+      });
+      expect(resNoCost.totalValue).toBeNull();
+    });
+
+    it('limita lowStockItems a 10 elementos ordenados por severidad del deficit', async () => {
+      prisma.warehouse.findFirst.mockResolvedValue({
+        id: warehouseId,
+        tenantId,
+        contractId,
+      } as never);
+      prisma.inventoryTransaction.groupBy.mockResolvedValue([] as never);
+      prisma.stockReservation.groupBy.mockResolvedValue([] as never);
+      prisma.requisitionItem.findMany.mockResolvedValue([] as never);
+
+      // Create 15 items under minimum stock with different deficits
+      const rows = Array.from({ length: 15 }, (_, i) => ({
+        ...stockRow,
+        id: `stock-row-${i}`,
+        quantity: 5,
+        minStock: 10 + i, // minStock from 10 to 24.
+        item: { ...stockRow.item, id: `${stockItemId}-${i}`, name: `Item ${i}` }
+      }));
+      prisma.itemStock.findMany.mockResolvedValue(rows as never);
+
+      const res = await service.getStockByWarehousePaginated(warehouseId, adminUser, {
+        page: 1,
+        pageSize: 10,
+        dir: 'asc',
+      });
+
+      expect(res.lowStockCount).toBe(15);
+      expect(res.lowStockItems).toHaveLength(10);
+      expect(res.lowStockItems[0].minStock).toBe(24);
+      expect(res.lowStockItems[9].minStock).toBe(15);
     });
   });
 
@@ -1069,7 +1242,7 @@ describe('InventoryStockService', () => {
       expect(result.total).toBe(1);
       expect(result.data[0].physicalShortageQty).toBe(2);
       expect(result.data[0].debtValue).toBe(0);
-      expect(result.data[0].unitCost).toBe(0);
+      expect(result.data[0].unitCost).toBeNull();
     });
   });
 

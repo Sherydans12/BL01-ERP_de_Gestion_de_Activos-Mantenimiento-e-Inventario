@@ -57,6 +57,17 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 
 **Pruebas unitarias:** `enrichTransactionsTrace` en `inventory-stock.service.spec.ts` — [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md) §3.2. Recepción → kardex: `warehouse-receipts.service.spec.ts` §4.8.
 
+## Paginación y Búsqueda de Stock por Bodega (Tablero de Control de Stock)
+
+- **Endpoint:** `GET /inventory-stock/warehouse/:warehouseId` (activado si recibe parámetros de consulta).
+- **Parámetros:** `page` (default 1), `pageSize` (default 25, máx. 100), `search` (búsqueda multi-token server-side), `sort` (ordenamiento remoto sobre el total filtrado), `dir` (`asc` | `desc`), `familyId`, `subcategoryId`, `location`, `status` (`critical` | `field_pending`).
+- **Respuesta:** `{ data: ItemStock[], total: number, page: number, pageSize: number, totalValue: number, lowStockCount: number, lowStockItems: any[] }`.
+- **Reglas de Servidor:**
+  1. **Evitar Carga Masiva:** Evita que el navegador procese e renderice de golpe miles de artículos. La lista se segmenta en el backend.
+  2. **Ordenamiento de Derivados:** Los ordenamientos de columnas como `availableQuantity`, `reservedQuantity` o `unitCost` se calculan sobre la lista completa *antes* de rebanar (`slice`), asegurando que las distintas páginas mantengan el orden correcto.
+  3. **Enmascaramiento de Costos:** Se evalúa `userCanViewInventoryCost(user)`. De no cumplirse, `unitCost` y `totalValue` se fuerzan a `0`.
+  4. **Tope de Alertas Críticas (`lowStockItems`):** Para evitar payloads gigantescos, las alertas de stock crítico en los metadatos se acotan a los **primeros 10 artículos** con mayor déficit bajo el mínimo.
+
 ## Ajustes de inventario
 
 - Movimientos `type = ADJUST` con referencias según implementación (`INVENTORY_ADJUSTMENT` u otros); detalle en UI con modal de ajuste en `inventory-item-form`. No confundir con transferencias.

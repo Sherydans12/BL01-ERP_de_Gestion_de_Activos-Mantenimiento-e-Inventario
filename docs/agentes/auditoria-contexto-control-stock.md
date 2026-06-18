@@ -100,7 +100,7 @@ Todos los endpoints exigen autenticación a través de `JwtAuthGuard` y control 
 | `GET` | `/warehouse/:warehouseId/pending-regularization` | `INVENTORY_STOCK_READ` | Obtiene listado paginado de saldos negativos o transacciones marcadas como `isPendingRegularization = true` en una bodega. |
 | `GET` | `/warehouse/:warehouseId/item/:itemId/stock-position` | `INVENTORY_STOCK_READ` | Retorna la ubicación y cantidad disponible para un artículo específico en una bodega para flujos manuales de inventario. |
 | `GET` | `/warehouse/:warehouseId/item/:itemId/reservations` | `INVENTORY_STOCK_READ` | Lista todas las reservas de stock (`StockReservation`) asociadas a un artículo, detallando la correlativa de la Orden de Trabajo responsable. |
-| `GET` | `/warehouse/:warehouseId` | `INVENTORY_STOCK_READ` | Lista el stock de todos los artículos de una bodega, con filtro opcional por ubicación física. |
+| `GET` | `/warehouse/:warehouseId` | `INVENTORY_STOCK_READ` | Retorna el stock de la bodega de forma paginada si se reciben parámetros de consulta, o la lista completa (compatibilidad legacy) si no. Soporta búsqueda multi-token, filtros por familia/categoría/ubicación/estado y ordenamiento remoto. |
 | `GET` | `/warehouse/:warehouseId/physical-count-sheet/pdf` | `INVENTORY_STOCK_READ` | Genera una hoja de conteo físico en formato PDF a ciegas (sin mostrar saldos del sistema) ordenado por ubicación. |
 | `GET` | `/warehouse/:warehouseId/transactions` | `INVENTORY_STOCK_READ` | Obtiene el historial de movimientos (Kardex). Si no se provee `itemId`, retorna los últimos 100 movimientos; si se provee, retorna un listado paginado enriquecido mediante `enrichTransactionsTrace`. |
 | `GET` | `/pending` | `INVENTORY_STOCK_READ` | Lista transacciones pendientes de regularización (stock negativo global del tenant). |
@@ -108,6 +108,79 @@ Todos los endpoints exigen autenticación a través de `JwtAuthGuard` y control 
 | `POST` | `/transaction` | `INVENTORY_STOCK_ADJUST` | Procesa un movimiento manual directo (`IN`, `OUT`, `ADJUST`, `WORK_ORDER_ISSUE`). Implementa exclusión mutua mediante transacciones serializables en la base de datos. |
 | `POST` | `/return` | `INVENTORY_STOCK_ADJUST` | Devolución atómica a bodega (`WORK_ORDER_RETURN`) vinculada a una OT, validando no exceder el consumo original. |
 | `PUT` | `/warehouse/:warehouseId/item/:itemId/levels` | `INVENTORY_STOCK_ADJUST` | Actualiza la política de inventario (`minStock`, `maxStock`) y la ubicación física en `ItemStock`. |
+
+### 3.1.1 Contrato Detallado de Paginación de Stock (`GET /warehouse/:warehouseId`)
+
+Cuando la consulta incluye parámetros de paginación o filtrado, el endpoint ejecuta una paginación real de extremo a extremo, evitando sobrecargar la memoria del navegador y del servidor con listados masivos.
+
+#### Parámetros Admitidos (Query Params):
+* `page` (número): Índice de página, por defecto `1` (min: `1`).
+* `pageSize` (número): Tamaño de página, por defecto `25` (min: `1`, tope máximo en backend: `100`).
+* `search` (string): Búsqueda multi-token en servidor (busca en código, número de parte, nombre, descripción y ubicación).
+* `sort` (string): Campo por el cual ordenar. Valores soportados: `inventoryCode`, `partNumber`, `name`, `location`, `quantity`, `availableQuantity`, `reservedQuantity`, `minStock`, `maxStock`, `unitCost`.
+* `dir` (string): Dirección del ordenamiento (`asc` | `desc`). Por defecto `asc`.
+* `location` (string): Filtro exacto o parcial por ubicación física de bodega.
+* `familyId` (string): Filtro por familia de artículos (categorías de nivel superior).
+* `subcategoryId` (string): Filtro por categoría/subcategoría de artículos.
+* `status` (string): Estados especiales de negocio:
+  * `critical`: Artículos con stock disponible inferior o igual a su stock mínimo establecido (`availableQuantity <= minStock` con `minStock > 0`).
+  * `field_pending`: Artículos con despacho a terreno pendiente de retorno (`fieldDispatchOutstandingQty > 0`).
+
+#### Estructura Final de la Respuesta Paginada:
+```json
+{
+  "data": [
+    {
+      "id": "uuid-item-stock",
+      "warehouseId": "uuid-warehouse",
+      "itemId": "uuid-item",
+      "quantity": 150.0,
+      "unitCost": 1250.5,
+      "minStock": 20.0,
+      "maxStock": 500.0,
+      "location": "A-12-3",
+      "reservedQuantity": 15.0,
+      "availableQuantity": 135.0,
+      "fieldDispatchOutstandingQty": 0.0,
+      "item": {
+        "id": "uuid-item",
+        "inventoryCode": "IN0001",
+        "name": "Filtro de Aire Aceite",
+        "description": "Filtro de Aire Aceite motor principal",
+        "partNumber": "123-ABC",
+        "itemCategory": {
+          "id": "uuid-cat",
+          "name": "Filtros",
+          "parentCategoryId": null,
+          "parentCategory": null
+        },
+        "unitOfMeasure": {
+          "id": "uuid-uom",
+          "name": "Unidad",
+          "abbreviation": "UN"
+        }
+      },
+      "linkedRequisition": null
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 25,
+  "totalValue": 187575.0,
+  "lowStockCount": 0,
+  "lowStockItems": []
+}
+```
+
+#### Reglas de Negocio Implementadas en Paginación:
+1. **Ordenamiento de Campos Derivados:** El ordenamiento por `availableQuantity`, `reservedQuantity`, `quantity` y `unitCost` se calcula a nivel de servidor sobre el conjunto completo filtrado *antes* de realizar el `skip/take` de la página. Esto garantiza que la navegación de páginas (`page=1`, `page=2`, etc.) sea consistente con el orden seleccionado.
+2. **Enmascaramiento de Costos:** Si el usuario no cuenta con privilegios para visualizar costos de inventario (`userCanViewInventoryCost === false`), la API retorna `unitCost: 0` para cada artículo y la propiedad `totalValue` se calcula como `0`.
+3. **Control y Límite de `lowStockItems`:** Para evitar payload excesivo en bodegas con cientos de alertas, la propiedad `lowStockItems` devuelve únicamente los primeros **10 artículos** con mayor déficit bajo el mínimo (ordenados por la diferencia `availableQuantity - minStock` de forma ascendente). La cantidad total real de alertas se reporta en `lowStockCount`.
+4. **Búsqueda Multi-token:** La búsqueda en servidor desglosa la cadena de búsqueda y realiza coincidencias en base de datos de manera insensible a mayúsculas sobre múltiples campos relacionados del artículo (`inventoryCode`, `partNumber`, `name`, `description`) y el casillero (`location`).
+
+#### Compatibilidad con Consumidores Existentes:
+* **Formulario de OT / Lubricantes M1:** Para no afectar el autocargado de repuestos y validación local de stock, el endpoint del controlador conserva compatibilidad hacia atrás. Si la petición no especifica parámetros de paginación (`page` / `pageSize` / `search` / `sort` / `dir` / `familyId` / `subcategoryId` / `status`), el backend ejecuta la consulta tradicional completa `getStockByWarehouse` sin rebanar la lista, manteniendo intactos los contratos previos.
+* **Picker Global de Artículos:** El formulario de lubricantes (M1) y otras pantallas utilizan el `GlobalItemPickerComponent` que se autoabastece del endpoint del catálogo general de artículos, por lo que no dependen de la paginación de la bodega activa en el tablero.
 
 ### 3.2 Endpoints de `InventoryAdjustmentController` (`/api/inventory-adjustments`)
 
