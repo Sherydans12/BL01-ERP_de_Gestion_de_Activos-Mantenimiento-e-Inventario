@@ -550,9 +550,10 @@ export class InventoryStockService {
       sort = 'name';
     }
 
-    const isDerivedSort = ['availableQuantity', 'reservedQuantity', 'fieldDispatchOutstandingQty'].includes(sort || '');
-    const hasDerivedFilter = !!opts.status && opts.status !== 'all';
-    const useMemoryPagination = isDerivedSort || hasDerivedFilter;
+    // Keep total, filtered rows, and visible page in the same query path.
+    // The previous split light/heavy query path could report a total while
+    // returning an empty page, leaving the dashboard footer populated but no rows.
+    const useMemoryPagination = true;
 
     let total = 0;
     let totalValue: number | null = null;
