@@ -27,4 +27,31 @@ describe('StockDashboardComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('renders stock rows even when item relation is missing', () => {
+    component.selectedWarehouseId.set('warehouse-1');
+    component.totalItems.set(1);
+    component.stockItems.set([
+      {
+        id: 'stock-1',
+        itemId: 'item-orphan',
+        item: undefined,
+        quantity: 7,
+        minStock: 0,
+        maxStock: 0,
+        unitCost: null,
+        location: null,
+        reservedQuantity: 0,
+        availableQuantity: 7,
+        fieldDispatchOutstandingQty: 0,
+      } as any,
+    ]);
+
+    expect(() => fixture.detectChanges()).not.toThrow();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('SIN-PN');
+    expect(text).toContain('Artículo sin ficha');
+    expect(text).toContain('7');
+  });
 });

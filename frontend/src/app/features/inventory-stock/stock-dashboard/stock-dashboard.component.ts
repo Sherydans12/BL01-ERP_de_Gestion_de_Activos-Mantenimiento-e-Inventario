@@ -988,12 +988,34 @@ export class StockDashboardComponent implements OnInit {
   itemDescriptionLabel(item: {
     description?: string | null;
     name?: string | null;
-  }): string | null {
+  } | null | undefined): string | null {
     const description = String(item?.description ?? '').trim();
     if (!description) return null;
     const name = String(item?.name ?? '').trim().toLowerCase();
     if (description.toLowerCase() === name) return null;
     return description;
+  }
+
+  private normalizeStockRow(row: any): any {
+    const item = row?.item ?? {};
+    const itemId = item.id ?? row?.itemId ?? '';
+    return {
+      ...row,
+      item: {
+        ...item,
+        id: itemId,
+        inventoryCode: item.inventoryCode ?? null,
+        partNumber: item.partNumber ?? 'SIN-PN',
+        name: item.name ?? 'Artículo sin ficha',
+        description: item.description ?? null,
+        itemCategory: item.itemCategory ?? null,
+        unitOfMeasure: item.unitOfMeasure ?? null,
+      },
+    };
+  }
+
+  private normalizeStockRows(rows: any[] | null | undefined): any[] {
+    return (rows ?? []).map((row) => this.normalizeStockRow(row));
   }
 
   loadWarehouses() {
@@ -1091,10 +1113,10 @@ export class StockDashboardComponent implements OnInit {
       .subscribe({
         next: (res) => {
           if (this.stockRequestSeq !== currentSeq) return;
-          this.stockItems.set(res.data);
+          this.stockItems.set(this.normalizeStockRows(res.data));
           this.totalItems.set(res.total);
           this.serverTotalStockValue.set(res.totalValue ?? null);
-          this.serverLowStockAlerts.set(res.lowStockItems ?? []);
+          this.serverLowStockAlerts.set(this.normalizeStockRows(res.lowStockItems));
           this.stockLoading.set(false);
           this.refreshPendingCount();
           this.loadInventoryRecordAccuracy(warehouseId);
@@ -1496,10 +1518,10 @@ export class StockDashboardComponent implements OnInit {
   }
 
   openKardexModal(row: {
-    item: { partNumber?: string; name?: string; id: string };
+    item?: { partNumber?: string; name?: string; id?: string };
   }) {
     const wh = this.selectedWarehouseId();
-    if (!wh) return;
+    if (!wh || !row?.item?.id) return;
     const w = this.warehouses().find((x) => x.id === wh);
     this.kardexContext.set({
       itemId: row.item.id,
@@ -1663,6 +1685,7 @@ export class StockDashboardComponent implements OnInit {
   }
 
   openCatalogDetailFromRow(itemId: string) {
+    if (!itemId) return;
     this.catalogDetailOpen.set(true);
     this.catalogDetailLoading.set(true);
     this.catalogDetailItem.set(null);

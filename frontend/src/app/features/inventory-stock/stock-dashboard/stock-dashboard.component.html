@@ -380,7 +380,7 @@
         <p class="text-xs text-error">
           {{ lowStockAlerts().length }} artículo(s) bajo stock mínimo:
           @for (a of lowStockAlerts().slice(0, 5); track a.id) {
-            <strong>{{ a.item.partNumber }}</strong> (disp. {{ stockAvailable(a) | number:'1.0-2' }} / mín. {{ a.minStock }}){{ $last ? '' : ', ' }}
+            <strong>{{ a.item?.partNumber || "SIN-PN" }}</strong> (disp. {{ stockAvailable(a) | number:'1.0-2' }} / mín. {{ a.minStock }}){{ $last ? '' : ', ' }}
           }
           @if (lowStockAlerts().length > 5) { <span>y {{ lowStockAlerts().length - 5 }} más...</span> }
         </p>
@@ -591,19 +591,19 @@
                   <button
                     type="button"
                     class="group w-full max-w-md text-left rounded-xl border border-transparent -mx-0.5 px-2 py-2 transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 active:scale-[0.995]"
-                    (click)="openCatalogDetailFromRow(s.item.id)"
+                    (click)="openCatalogDetailFromRow(s.item?.id || '')"
                     title="Ver detalle del artículo (catálogo maestro)"
                   >
-                    @if (s.item.inventoryCode?.trim()) {
+                    @if (s.item?.inventoryCode?.trim()) {
                       <div class="font-mono text-[11px] text-emerald-400/90 font-semibold group-hover:text-emerald-300/95 transition-colors">
                         {{ s.item.inventoryCode }}
                       </div>
                     }
                     <div class="font-mono text-primary font-bold group-hover:text-primary/95 transition-colors">
-                      {{ s.item.partNumber }}
+                      {{ s.item?.partNumber || "SIN-PN" }}
                     </div>
                     <div class="text-main truncate max-w-xs group-hover:text-main transition-colors">
-                      {{ s.item.name }}
+                      {{ s.item?.name || "Artículo sin ficha" }}
                     </div>
                     @if (itemDescriptionLabel(s.item); as itemDesc) {
                       <div class="text-[11px] text-muted uppercase tracking-wide max-w-xs truncate">
@@ -672,17 +672,17 @@
                   }
                 </td>
                 <td class="py-4 px-6 text-xs uppercase">
-                  @if (s.item.itemCategory?.parentCategory) {
+                  @if (s.item?.itemCategory?.parentCategory) {
                     <span class="text-main/90">{{ s.item.itemCategory.parentCategory.name }}</span>
                     <span class="text-muted"> · </span>
                   }
-                  {{ s.item.itemCategory?.name || "—" }}
+                  {{ s.item?.itemCategory?.name || "—" }}
                 </td>
                 <td class="py-4 px-3 text-center align-middle">
                   <span
                     class="font-mono font-bold text-main bg-dark px-2 py-1 rounded border border-border text-xs"
                   >
-                    {{ s.quantity | number:'1.0-4' }} {{ s.item.unitOfMeasure?.abbreviation ?? "—" }}
+                    {{ s.quantity | number:'1.0-4' }} {{ s.item?.unitOfMeasure?.abbreviation ?? "—" }}
                   </span>
                 </td>
                 <td class="py-4 px-3 text-center align-middle">
