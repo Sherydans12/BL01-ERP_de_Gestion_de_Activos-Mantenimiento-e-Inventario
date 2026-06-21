@@ -140,12 +140,102 @@ describe('InventoryAdjustmentService', () => {
           type: 'ADJUST',
           quantity: -2,
           referenceType: 'INVENTORY_ADJUSTMENT',
-          notes: expect.stringContaining('Error de conteo'),
+          notes: expect.stringContaining(
+            'Ajuste por inventario (conteo / hallazgo)',
+          ),
         }),
         adminUser,
       );
       expect(stockService.performTransactionCore).not.toHaveBeenCalled();
       expect(result.transaction.id).toBe('adj-1');
+    });
+
+    it('delega en performTransaction con delta positivo y label correcto', async () => {
+      setupWarehouseAndItem(10, 12);
+      stockService.performTransaction.mockResolvedValue({
+        stock: { quantity: 13 },
+        transaction: { id: 'adj-2' },
+      } as never);
+
+      const result = await service.create(
+        baseDto({ newPhysicalQuantity: 13, reason: 'CONTEO' }),
+        adminUser,
+      );
+
+      expect(stockService.performTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'ADJUST',
+          quantity: 3,
+          referenceType: 'INVENTORY_ADJUSTMENT',
+          notes: expect.stringContaining(
+            'Ajuste por inventario (conteo / hallazgo)',
+          ),
+        }),
+        adminUser,
+      );
+      expect(result.transaction.id).toBe('adj-2');
+    });
+  });
+
+  describe('create — ENTREGA_EPP', () => {
+    it('permite delta negativo y guarda label Entrega de EPP', async () => {
+      setupWarehouseAndItem(10, 12);
+      stockService.performTransaction.mockResolvedValue({
+        stock: { quantity: 6 },
+        transaction: { id: 'adj-epp' },
+      } as never);
+
+      const result = await service.create(
+        baseDto({
+          reason: 'ENTREGA_EPP',
+          newPhysicalQuantity: 6,
+          comment: 'Entrega de EPP a cuadrilla de turno.',
+        }),
+        adminUser,
+      );
+
+      expect(stockService.performTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'ADJUST',
+          quantity: -4,
+          referenceType: 'INVENTORY_ADJUSTMENT',
+          notes: expect.stringContaining('Ajuste [Entrega de EPP]'),
+        }),
+        adminUser,
+      );
+      expect(result.transaction.id).toBe('adj-epp');
+    });
+
+    it('rechaza delta positivo', async () => {
+      setupWarehouseAndItem(10, 12);
+
+      await expect(
+        service.create(
+          baseDto({
+            reason: 'ENTREGA_EPP',
+            newPhysicalQuantity: 12,
+            comment: 'Entrega de EPP a cuadrilla de turno.',
+          }),
+          adminUser,
+        ),
+      ).rejects.toThrow(/solo aplica cuando el ajuste reduce/);
+      expect(stockService.performTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rechaza delta cero con mensaje de EPP', async () => {
+      setupWarehouseAndItem(10, 12);
+
+      await expect(
+        service.create(
+          baseDto({
+            reason: 'ENTREGA_EPP',
+            newPhysicalQuantity: 10,
+            comment: 'Entrega de EPP a cuadrilla de turno.',
+          }),
+          adminUser,
+        ),
+      ).rejects.toThrow(/solo aplica cuando el ajuste reduce/);
+      expect(stockService.performTransaction).not.toHaveBeenCalled();
     });
   });
 

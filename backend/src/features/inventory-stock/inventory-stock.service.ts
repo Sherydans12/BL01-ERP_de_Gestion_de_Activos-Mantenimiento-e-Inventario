@@ -1701,10 +1701,20 @@ export class InventoryStockService {
       type: 'ADJUST',
       referenceType: 'INVENTORY_ADJUSTMENT',
       date: { gte: since },
-      notes: {
-        contains: 'Ajuste [Error de conteo]',
-        mode: 'insensitive',
-      },
+      OR: [
+        {
+          notes: {
+            contains: 'Ajuste [Error de conteo]',
+            mode: 'insensitive',
+          },
+        },
+        {
+          notes: {
+            contains: 'Ajuste [Ajuste por inventario (conteo / hallazgo)]',
+            mode: 'insensitive',
+          },
+        },
+      ],
     };
     if (opts?.warehouseId) {
       whereAdj.warehouseId = opts.warehouseId;

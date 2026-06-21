@@ -1271,6 +1271,7 @@
                   <option value="CONTEO">Ajuste por inventario (conteo / hallazgo)</option>
                   <option value="MERMAS">Merma o pérdida</option>
                   <option value="DANO">Daño</option>
+                  <option value="ENTREGA_EPP">Entrega de EPP</option>
                   <option value="SALDO_PENDIENTE">Saldo pendiente (compra / recepción incompleta)</option>
                 </select>
               </div>
@@ -1641,7 +1642,14 @@
                               class="text-[10px] uppercase tracking-wide text-amber-400/90 block mb-0.5"
                               >Nota de auditoría</span
                             >
-                            <div class="whitespace-pre-wrap">{{ t.notes }}</div>
+                            <div>
+                              <span class="text-amber-400/90">Motivo:</span>
+                              {{ parseAdjustmentNotes(t.notes).reason || "Ajuste" }}
+                            </div>
+                            <div class="whitespace-pre-wrap">
+                              <span class="text-amber-400/90">Comentario:</span>
+                              {{ parseAdjustmentNotes(t.notes).comment || "—" }}
+                            </div>
                           </div>
                         }
                       </td>

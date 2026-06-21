@@ -176,7 +176,12 @@ export class InventoryStockService {
     warehouseId: string;
     itemId: string;
     newPhysicalQuantity: number;
-    reason: 'MERMAS' | 'CONTEO' | 'DANO' | 'SALDO_PENDIENTE';
+    reason:
+      | 'MERMAS'
+      | 'CONTEO'
+      | 'DANO'
+      | 'SALDO_PENDIENTE'
+      | 'ENTREGA_EPP';
     comment: string;
     purchaseOrderId?: string;
     purchaseReceiptId?: string;

@@ -9,6 +9,18 @@ Añadí entradas con fecha cuando un chat o una reunión fije algo importante. F
 - Consecuencias: …
 ```
 
+## 2026-06-20 — Motivos contables de ajustes manuales en Kardex
+- **Contexto:** Auditoría de Kardex detectó que el motivo `CONTEO` se guardaba/mostraba como `Error de conteo`, distinto del label seleccionado por el usuario en `/app/inventario/stock` (`Ajuste por inventario (conteo / hallazgo)`). Además se necesitaba un motivo operacional para rebajas por entrega de EPP.
+- **Decisión:**
+  - `CONTEO` se guarda y muestra como `Ajuste por inventario (conteo / hallazgo)`.
+  - Se agrega `ENTREGA_EPP` con label `Entrega de EPP`.
+  - `ENTREGA_EPP` solo permite ajustes con delta negativo; delta cero o positivo se rechaza.
+  - El parser frontend de `InventoryTransaction.notes` mantiene compatibilidad con notas antiguas `Ajuste [Error de conteo]: ...`, normalizándolas al label vigente.
+  - Kardex global del artículo y Kardex por bodega/artículo muestran el motivo real del ajuste manual; no lo infieren por signo.
+- **Consecuencias:**
+  - No hay migración de schema: el motivo sigue en `notes` por compatibilidad.
+  - Tests backend/frontend cubren `CONTEO`, `ENTREGA_EPP` y normalización de notas antiguas.
+
 ## 2026-06-18 — Excel de inventario solo para stock
 - **Contexto:** La auditoria del flujo Excel de inventario detecto que el importador permitia crear, editar y eliminar articulos, ademas de ajustar stock. Esto mezclaba el maestro estructural de articulos con una herramienta operativa de bodega.
 - **Decision:**

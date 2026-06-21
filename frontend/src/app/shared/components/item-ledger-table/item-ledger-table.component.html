@@ -133,7 +133,7 @@
                           class="text-left text-primary cursor-pointer hover:text-primary font-medium text-main transition-colors text-xs"
                           title="Hacer clic para vista rápida"
                         >
-                          {{ ref.label }}
+                          {{ ref.kind === 'INVENTORY_ADJUSTMENT' ? movementTitle(row) : ref.label }}
                         </button>
                       } @else {
                         <span class="text-main">{{ ref.label }}</span>

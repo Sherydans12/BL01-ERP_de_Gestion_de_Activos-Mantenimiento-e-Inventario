@@ -2,9 +2,9 @@
 
 Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El **foco actual del proyecto** está en el backend de dominio (212 tests); el frontend tiene sobre todo **smoke** (`should be created`).
 
-**Última actualización:** 2026-06-18 (W2W multi-contrato)
+**Última actualización:** 2026-06-20 (motivos contables Kardex)
 
-**Suite ejecutable hoy:** **187 tests** verificados con `npm run test:ci` el 2026-06-07.
+**Suite ejecutable hoy:** **203 tests** verificados con `npm run test:ci` el 2026-06-20.
 
 ---
 
@@ -31,10 +31,12 @@ Complementa el índice maestro [pruebas-unitarias.md](pruebas-unitarias.md). El 
 | `core/services/warehouses/warehouses.service.spec.ts` | Servicio | Smoke + `getWarehousesForTransfer()` usa `scope=transfer` |
 | `core/services/inventory-stock/inventory-stock.service.spec.ts` | Servicio | Smoke |
 | `core/services/inventory-items/inventory-items.service.spec.ts` | Servicio | Smoke |
+| `core/utils/inventory-adjustment-notes.spec.ts` | Util | Normaliza `Error de conteo` legacy a `Ajuste por inventario (conteo / hallazgo)` y reconoce `Entrega de EPP` |
 | `features/inventory-items/inventory-item-list.component.spec.ts` | Componente | Smoke |
 | `features/inventory-items/inventory-item-form.component.spec.ts` | Componente | Smoke |
-| `features/inventory-stock/stock-dashboard.component.spec.ts` | Componente | Smoke |
+| `features/inventory-stock/stock-dashboard.component.spec.ts` | Componente | Smoke + títulos de Kardex por bodega para `CONTEO` legacy y `ENTREGA_EPP` |
 | `features/inventory-transfer/inventory-transfer.component.spec.ts` | Componente | Carga bodegas W2W por scope, origen A/destino B, usuario solo A, `canConfirmReception` por destino |
+| `shared/components/item-ledger-table/item-ledger-table.component.spec.ts` | Componente | Kardex global muestra motivo normalizado para `CONTEO` legacy y `ENTREGA_EPP` |
 | `features/warehouses/warehouse-form.component.spec.ts` | Componente | Smoke |
 | `features/warehouses/warehouse-list.component.spec.ts` | Componente | Smoke |
 | `features/maintenance-kits/kit-form.component.spec.ts` | Componente | Smoke |

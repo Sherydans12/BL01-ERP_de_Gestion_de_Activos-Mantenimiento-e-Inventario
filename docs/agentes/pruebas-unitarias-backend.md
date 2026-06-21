@@ -4,13 +4,13 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 
 **Índice maestro (reglas + flujo agente + watch):** [pruebas-unitarias.md](pruebas-unitarias.md) · Regla Cursor: `.cursor/rules/testing-baselogic.mdc`
 
-**Última actualización:** 2026-06-18 (W2W multi-contrato + scope de bodegas)
+**Última actualización:** 2026-06-20 (motivos contables de ajustes manuales)
 
 ---
 
 ## 0. Cómo vamos (cobertura dominio crítico)
 
-**Suite ejecutable hoy:** **412 tests** en **25** archivos (sin PostgreSQL real; verificado con `npm run test:domain` el 2026-06-08).
+**Suite ejecutable hoy:** **498 tests** en **27** archivos (sin PostgreSQL real; verificado con `npm run test:domain` el 2026-06-20).
 
 | Módulo | Avance estimado | Tests | Estado |
 |--------|-----------------|-------|--------|
@@ -24,7 +24,7 @@ Inventario vivo de **servicios críticos**, archivos `.spec.ts` y convenciones p
 | **Inventario — ledger artículo** | ~75 % `findItemLedger` | 7 | Referencias + `ITEM_GENESIS` última página (§3.5) |
 | **Inventario — transferencias W2W** | ~95 % mutación/recepción | 25 | W2W + alcance contrato en origen/destino y `getTransferById` (§3.3) |
 | **Inventario — bodegas** | ~45 % alcance contractual | 3 | `scope=transfer` y hardening de `contractFilter` (§3.3.1) |
-| **Inventario — ajustes / saldo pendiente** | ~75 % `create` | 12 | `CONTEO`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
+| **Inventario — ajustes / saldo pendiente** | ~80 % `create` | 16 | `CONTEO`, `ENTREGA_EPP`, `SALDO_PENDIENTE` + sync recepción/OC (§3.4) |
 | **Compras — recepción bodega** | ~92 % flujo físico | 19 | `confirm` + imputación equipo OC (§4.8) |
 | **Compras — gobernanza OC** | ~92 % firma/edición/SRC | 54 | ACL, elegibles recepción, ciclo OC (§4.4) |
 | **Compras — 3-way / facturas** | ~90 % | 30 | CRUD factura + 3-way + pago (§4) |
@@ -202,7 +202,7 @@ Si el servicio importa helpers puros o con Prisma, usar `jest.mock('ruta/al/help
 | `features/inventory-items/inventory-items.service.spec.ts` | **Inventario — catálogo + ledger** | **23** | `search`, `create`, `update`, `quickCreate`, ledger (§3.5) |
 | `features/inventory-transfer/inventory-transfer.service.spec.ts` | **Inventario — W2W** | **25** | Mutación, recepción, listado, ABAC origen/destino (§3.3) |
 | `features/warehouses/warehouses.service.spec.ts` | **Inventario — bodegas** | **3** | `scope=transfer`, admin tenant-wide, usuario sin contratos |
-| `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **12** | `CONTEO`, `SALDO_PENDIENTE`, sync compras (§3.4) |
+| `features/inventory-adjustment/inventory-adjustment.service.spec.ts` | **Inventario — ajustes** | **16** | `CONTEO`, `ENTREGA_EPP`, `SALDO_PENDIENTE`, sync compras (§3.4) |
 | `features/purchases/warehouse-receipts.service.spec.ts` | **Compras — recepción** | **17** | `findAll`, `create`, `updateItems`, `confirm` (§4.8) |
 | `features/tenant-roles/tenant-role-defaults.spec.ts` | **Compras — `resolveApprovalPolicyForUser`** | **5** | Función pura ACL (ver §4) |
 | `features/tenant-roles/tenant-roles.service.spec.ts` | **Roles PBAC — eliminación segura** | **4** | Reemplazo obligatorio, compatibilidad de `baseRole`, reasignación transaccional |
@@ -291,12 +291,13 @@ Mocks: `InventoryStockService.clearPendingRegularizationFlags`; `inventory-item-
 
 ### 3.4 Spec: `inventory-adjustment.service.spec.ts`
 
-**Última ejecución:** 12 passed (2026-05-22).
+**Última ejecución:** 16 passed en spec focalizado; suite dominio completa 498 passed (2026-06-20).
 
 | Bloque | Casos |
 |--------|-------|
 | Validaciones | Rol; comentario; MERMAS/DANO mín. 15 chars; SALDO sin OC/recepción; sin delta; bodega |
-| `CONTEO` | `performTransaction` con `ADJUST` y `INVENTORY_ADJUSTMENT` |
+| `CONTEO` | `performTransaction` con `ADJUST` y `INVENTORY_ADJUSTMENT`; delta positivo/negativo guardan label `Ajuste por inventario (conteo / hallazgo)` |
+| `ENTREGA_EPP` | Permite delta negativo; rechaza delta positivo o cero antes de crear kardex |
 | `SALDO_PENDIENTE` | Guía `PENDING`; bodega distinta; pendiente insuficiente; **transacción única** (`performTransactionCore` + `syncSaldoPendienteIntoReceiptAndPo`); guía `COMPLETED` + OC `RECEIVED` |
 
 Mock: `InventoryStockService.performTransaction` / `performTransactionCore`.

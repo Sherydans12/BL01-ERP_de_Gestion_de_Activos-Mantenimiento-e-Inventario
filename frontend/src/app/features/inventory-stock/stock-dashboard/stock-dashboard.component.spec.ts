@@ -54,4 +54,24 @@ describe('StockDashboardComponent', () => {
     expect(text).toContain('Artículo sin ficha');
     expect(text).toContain('7');
   });
+
+  it('muestra motivo normalizado en kardex por bodega para ajustes de conteo antiguos', () => {
+    const title = component.kardexMovementTitle({
+      type: 'ADJUST',
+      referenceType: 'INVENTORY_ADJUSTMENT',
+      notes: 'Ajuste [Error de conteo]: diferencia de inventario',
+    });
+
+    expect(title).toBe('Ajuste por inventario (conteo / hallazgo)');
+  });
+
+  it('muestra Entrega de EPP en kardex por bodega', () => {
+    const title = component.kardexMovementTitle({
+      type: 'ADJUST',
+      referenceType: 'INVENTORY_ADJUSTMENT',
+      notes: 'Ajuste [Entrega de EPP]: entrega a operador',
+    });
+
+    expect(title).toBe('Entrega de EPP');
+  });
 });

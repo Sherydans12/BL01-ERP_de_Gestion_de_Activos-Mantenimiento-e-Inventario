@@ -72,6 +72,15 @@ Validación de cantidad: si la UoM del artículo no admite decimales, el servici
 ## Ajustes de inventario
 
 - Movimientos `type = ADJUST` con referencias según implementación (`INVENTORY_ADJUSTMENT` u otros); detalle en UI con modal de ajuste en `inventory-item-form`. No confundir con transferencias.
+- Motivos contables manuales vigentes en `POST /inventory-adjustments`:
+  - `CONTEO` → `Ajuste por inventario (conteo / hallazgo)`.
+  - `MERMAS` → `Merma o pérdida`.
+  - `DANO` → `Daño`.
+  - `SALDO_PENDIENTE` → `Saldo pendiente`.
+  - `ENTREGA_EPP` → `Entrega de EPP`.
+- `ENTREGA_EPP` solo aplica a ajustes que reducen stock físico (`delta < 0`); el backend rechaza delta positivo o cero con mensaje explícito.
+- El motivo se persiste en `InventoryTransaction.notes` como `Ajuste [<label>]: <comentario>` para ajustes manuales `INVENTORY_ADJUSTMENT`. El parser frontend `parseInventoryAdjustmentNotes` conserva compatibilidad con notas antiguas `Ajuste [Error de conteo]: ...`, pero las muestra como `Ajuste por inventario (conteo / hallazgo)`.
+- Kardex global de artículo y Kardex por bodega/artículo muestran el motivo real del ajuste manual como título/detalle visible; no infieren motivo por signo del movimiento.
 
 ## Excel operativo de stock
 

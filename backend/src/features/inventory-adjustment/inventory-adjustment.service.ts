@@ -16,6 +16,7 @@ export const ADJUSTMENT_REASON_CODES = [
   'CONTEO',
   'DANO',
   'SALDO_PENDIENTE',
+  'ENTREGA_EPP',
 ] as const;
 
 export type AdjustmentReasonCode = (typeof ADJUSTMENT_REASON_CODES)[number];
@@ -32,11 +33,12 @@ export interface CreateInventoryAdjustmentDto {
   purchaseReceiptId?: string;
 }
 
-const REASON_LABEL: Record<AdjustmentReasonCode, string> = {
-  MERMAS: 'Mermas',
-  CONTEO: 'Error de conteo',
+export const ADJUSTMENT_REASON_LABEL: Record<AdjustmentReasonCode, string> = {
+  MERMAS: 'Merma o pérdida',
+  CONTEO: 'Ajuste por inventario (conteo / hallazgo)',
   DANO: 'Daño',
   SALDO_PENDIENTE: 'Saldo pendiente',
+  ENTREGA_EPP: 'Entrega de EPP',
 };
 
 /** Para MERMAS/DANO se exige explicación auditable (no basta un comentario de un carácter). */
@@ -250,6 +252,12 @@ export class InventoryAdjustmentService {
     const cpp = Number(currentStock?.unitCost ?? 0);
     const delta = dto.newPhysicalQuantity - previousQty;
 
+    if (dto.reason === 'ENTREGA_EPP' && delta >= 0) {
+      throw new BadRequestException(
+        'Entrega de EPP solo aplica cuando el ajuste reduce el stock físico.',
+      );
+    }
+
     if (Math.abs(delta) < 1e-9) {
       throw new BadRequestException(
         'No hay diferencia entre el stock actual y la cantidad física indicada.',
@@ -335,7 +343,7 @@ export class InventoryAdjustmentService {
       referenceId = receipt.id;
       referenceType = 'PURCHASE_RECEIPT';
     } else {
-      const reasonLabel = REASON_LABEL[dto.reason];
+      const reasonLabel = ADJUSTMENT_REASON_LABEL[dto.reason];
       notes = `Ajuste [${reasonLabel}]: ${comment}`;
       referenceType = 'INVENTORY_ADJUSTMENT';
     }

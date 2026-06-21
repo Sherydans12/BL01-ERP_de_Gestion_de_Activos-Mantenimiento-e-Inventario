@@ -61,6 +61,7 @@ import {
   FIELD_DISPATCH_REFERENCE_TYPE,
   FIELD_RETURN_REFERENCE_TYPE,
 } from '../../../core/constants/inventory-field-dispatch';
+import { parseInventoryAdjustmentNotes } from '../../../core/utils/inventory-adjustment-notes';
 
 @Component({
   selector: 'app-stock-dashboard',
@@ -885,6 +886,9 @@ export class StockDashboardComponent implements OnInit {
     if (r === 'SALDO_PENDIENTE') {
       return 'Indique OC y recepción de esta bodega; comentario obligatorio (mín. 2 caracteres).';
     }
+    if (r === 'ENTREGA_EPP') {
+      return 'Solo permite reducir stock por entrega de elementos de protección personal.';
+    }
     return 'Obligatorio para auditoría (mín. 2 caracteres).';
   }
 
@@ -904,6 +908,12 @@ export class StockDashboardComponent implements OnInit {
     if (!stockChanged) {
       this.notificationService.info(
         'Indique un stock físico distinto al de sistema para registrar la corrección.',
+      );
+      return;
+    }
+    if (v.reason === 'ENTREGA_EPP' && diff >= 0) {
+      this.notificationService.error(
+        'Entrega de EPP solo aplica cuando el ajuste reduce el stock físico.',
       );
       return;
     }
@@ -946,6 +956,12 @@ export class StockDashboardComponent implements OnInit {
       this.notificationService.info('No hay cambios en el stock físico.');
       return;
     }
+    if (v.reason === 'ENTREGA_EPP' && diff >= 0) {
+      this.notificationService.error(
+        'Entrega de EPP solo aplica cuando el ajuste reduce el stock físico.',
+      );
+      return;
+    }
 
     const adjPayload: Parameters<
       InventoryStockService['createPhysicalAdjustment']
@@ -953,7 +969,9 @@ export class StockDashboardComponent implements OnInit {
       warehouseId: wh,
       itemId: row.item.id,
       newPhysicalQuantity: Number(v.newPhysical),
-      reason: v.reason as 'MERMAS' | 'CONTEO' | 'DANO' | 'SALDO_PENDIENTE',
+      reason: v.reason as Parameters<
+        InventoryStockService['createPhysicalAdjustment']
+      >[0]['reason'],
       comment: String(v.comment).trim(),
     };
     if (v.reason === 'SALDO_PENDIENTE') {
@@ -1732,10 +1750,14 @@ export class StockDashboardComponent implements OnInit {
   kardexMovementTitle(t: {
     type?: string;
     referenceType?: string | null;
+    notes?: string | null;
     trace?: { saldoPendienteAdjust?: boolean };
   }): string {
     if (t?.type === 'ADJUST' && t?.trace?.saldoPendienteAdjust) {
       return 'Ajuste · saldo pendiente (recepción)';
+    }
+    if (t?.type === 'ADJUST' && t?.referenceType === 'INVENTORY_ADJUSTMENT') {
+      return parseInventoryAdjustmentNotes(t.notes ?? null).reason || 'Ajuste';
     }
     const ref = String(t?.referenceType ?? '').trim();
     if (t?.type === 'OUT' && ref === FIELD_DISPATCH_REFERENCE_TYPE) {
@@ -1745,6 +1767,13 @@ export class StockDashboardComponent implements OnInit {
       return 'Reingreso desde terreno';
     }
     return this.transactionTypeLabel(t.type);
+  }
+
+  parseAdjustmentNotes(notes: string | null): {
+    reason: string;
+    comment: string;
+  } {
+    return parseInventoryAdjustmentNotes(notes);
   }
 
   /** Cantidad con signo en kardex por bodega (consumos/salidas negativos). */

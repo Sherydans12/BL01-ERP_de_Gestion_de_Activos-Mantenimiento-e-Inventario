@@ -2,7 +2,7 @@
 
 Documento **canónico** para humanos y agentes Cursor. El inventario detallado del backend vive en [pruebas-unitarias-backend.md](pruebas-unitarias-backend.md); el frontend en [pruebas-unitarias-frontend.md](pruebas-unitarias-frontend.md).
 
-**Última actualización:** 2026-06-08
+**Última actualización:** 2026-06-20
 
 ---
 
@@ -56,7 +56,7 @@ Prioridad de ejecución: **archivo tocado** → **`test:domain`** → suite comp
 
 ## 4. Estado actual (dominio crítico)
 
-**412 tests** en **25 archivos**, sin DB real (`npm run test:domain`).
+**498 tests** en **27 archivos**, sin DB real (`npm run test:domain`).
 
 ```bash
 cd backend
@@ -83,7 +83,7 @@ Guía: [compras-pbac-pruebas-api-e2e.md](compras-pbac-pruebas-api-e2e.md).
 
 ## 5. Suite completa (`npm test`)
 
-Desde 2026-05-22 la suite completa pasa (~220 tests): smoke auth/users/sites con mocks de dependencias y `backend/test/jest-setup.ts` (mock ESM de `file-type`). **CI en GitHub** (`.github/workflows/ci.yml`): lint + build backend/frontend + **`npm run test:domain`** (412 tests) — ver [entornos-git-despliegue.md](entornos-git-despliegue.md) §3.
+Desde 2026-05-22 la suite completa pasa (~220 tests): smoke auth/users/sites con mocks de dependencias y `backend/test/jest-setup.ts` (mock ESM de `file-type`). **CI en GitHub** (`.github/workflows/ci.yml`): lint + build backend/frontend + **`npm run test:domain`** (498 tests al 2026-06-20) — ver [entornos-git-despliegue.md](entornos-git-despliegue.md) §3.
 
 ---
 

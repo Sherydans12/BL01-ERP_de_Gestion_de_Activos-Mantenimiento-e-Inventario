@@ -131,6 +131,9 @@ export class ItemLedgerTableComponent implements OnInit {
     if (row.type === 'ADJUST' && row.reference?.kind === 'ADJUST_SALDO_PENDIENTE') {
       return 'Ajuste · saldo pendiente (recepción)';
     }
+    if (row.type === 'ADJUST' && row.reference?.kind === 'INVENTORY_ADJUSTMENT') {
+      return this.parseAdjustmentNotes(row.notes).reason || 'Ajuste';
+    }
     return this.typeLabel(row.type);
   }
 
